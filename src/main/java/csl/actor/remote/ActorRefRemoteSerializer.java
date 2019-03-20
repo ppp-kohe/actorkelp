@@ -4,9 +4,11 @@ import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.Serializer;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
+import csl.actor.Actor;
 import csl.actor.ActorRef;
+import csl.actor.ActorRefLocalNamed;
 
-public class ActorRefRemoteSerializer extends Serializer<ActorRef> {
+public class ActorRefRemoteSerializer<RefType extends ActorRef> extends Serializer<RefType> {
     protected ActorSystemRemote remoteSystem;
 
     public ActorRefRemoteSerializer(ActorSystemRemote remoteSystem) {
@@ -14,12 +16,21 @@ public class ActorRefRemoteSerializer extends Serializer<ActorRef> {
     }
 
     @Override
-    public void write(Kryo kryo, Output output, ActorRef actorRef) {
-
+    public void write(Kryo kryo, Output output, RefType actorRef) {
+        ActorAddress addr = null;
+        if (actorRef instanceof ActorRefRemote) {
+            addr = ((ActorRefRemote) actorRef).getAddress();
+        } else if (actorRef instanceof ActorRefLocalNamed) {
+            addr = remoteSystem.getServerAddress().getActor(((ActorRefLocalNamed) actorRef).getName());
+        } else if (actorRef instanceof Actor) {
+            addr = remoteSystem.getServerAddress().getActor(((Actor) actorRef).getName());
+        }
+        kryo.writeObjectOrNull(output, addr, ActorRef.class);
     }
 
     @Override
-    public ActorRef read(Kryo kryo, Input input, Class<? extends ActorRef> aClass) {
-        return null;
+    public RefType read(Kryo kryo, Input input, Class<? extends RefType> aClass) {
+        ActorAddress o = kryo.readObject(input, ActorAddress.class);
+        return aClass.cast(new ActorRefRemote(remoteSystem, o));
     }
 }

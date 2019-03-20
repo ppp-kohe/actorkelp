@@ -1,6 +1,10 @@
 package csl.actor;
 
-import java.util.concurrent.*;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class ActorSystemDefault implements ActorSystem {
@@ -10,9 +14,22 @@ public class ActorSystemDefault implements ActorSystem {
     protected ExecutorService executorService;
     protected AtomicInteger processingCount;
     protected int throughput;
+    protected Map<String, Actor> namedActorMap;
 
     public ActorSystemDefault() {
         initSystem();
+    }
+
+    public int getThreads() {
+        return threads;
+    }
+
+    public int getThroughput() {
+        return throughput;
+    }
+
+    public PollTime getTime() {
+        return time;
     }
 
     protected void initSystem() {
@@ -22,6 +39,7 @@ public class ActorSystemDefault implements ActorSystem {
         initSystemThreads();
         initSystemExecutorService();
         initSystemProcessingCount();
+        initNamedActorMap();
     }
     protected void initThroughput() {
         this.throughput = 5;
@@ -39,19 +57,27 @@ public class ActorSystemDefault implements ActorSystem {
         processingCount = new AtomicInteger();
     }
 
+    protected void initNamedActorMap() {
+        this.namedActorMap = new ConcurrentHashMap<>();
+    }
+
     @Override
     public void send(Message<?> message) {
         Actor targetActor = resolveActor(message.getTarget());
         if (targetActor != null) {
             startProcessMessageSubsequently(targetActor, message);
         } else {
-            //TODO dead letter
+            sendDeadLetter(message);
         }
+    }
+
+    public void sendDeadLetter(Message<?> message) {
+        System.err.println("DEAD-LETTER " + message);
     }
 
     public void startProcessMessageSubsequently(Actor target, Message<?> message) {
         target.getMailbox().offer(message);
-        executorService.submit(() -> processMessageSubsequently(target));
+        execute(() -> processMessageSubsequently(target));
     }
 
     protected void processMessageSubsequently(Actor actor) {
@@ -84,13 +110,32 @@ public class ActorSystemDefault implements ActorSystem {
     public Actor resolveActor(ActorRef ref) {
         if (ref instanceof Actor) {
             return (Actor) ref;
+        } else if (ref instanceof ActorRefLocalNamed) {
+            return resolveActorLocalNamed((ActorRefLocalNamed) ref);
+
         } else {
             return null; //TODO
         }
     }
 
+    public void register(Actor actor) {
+        String name = actor.getName();
+        if (name != null) {
+            namedActorMap.put(name, actor);
+        }
+    }
+
+    public Actor resolveActorLocalNamed(ActorRefLocalNamed ref) {
+        return namedActorMap.get(ref.getName());
+    }
+
     public void startProcessMessage(Actor targetActor, Message<?> message) {
-        executorService.submit(() -> targetActor.offerAndProcess(message));
+        execute(() -> targetActor.offerAndProcess(message));
+    }
+
+    @Override
+    public void execute(Runnable task) {
+        executorService.execute(task);
     }
 
     public void stop() {

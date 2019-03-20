@@ -2,28 +2,29 @@ package csl.actor.remote;
 
 import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.io.ByteBufferOutput;
-import csl.actor.Actor;
-import csl.actor.ActorRef;
-import csl.actor.ActorSystem;
-import csl.actor.Message;
+import csl.actor.*;
+import io.netty.channel.EventLoopGroup;
 
-import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
-import java.nio.channels.ServerSocketChannel;
-import java.nio.channels.SocketChannel;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class ActorSystemRemote implements ActorSystem {
-    protected ActorSystem localSystem;
+    protected ActorSystemDefault localSystem;
 
-    protected InetSocketAddress serverAddress;
-    protected ServerSocketChannel serverChannel;
-    protected Map<Object, Connection> connectionMap;
-    protected ActorRefRemoteSerializer refSerializer;
+    protected ActorAddress.ActorAddressRemote serverAddress;
+
+    protected ObjectMessageServer server;
+    protected ObjectMessageClient client;
+
+    protected Map<Object, ConnectionActor> connectionMap;
     protected Kryo serializer;
 
-    public ActorSystemRemote(ActorSystem localSystem) {
+    public ActorSystemRemote() {
+        this(new ActorSystemDefaultForRemote());
+    }
+
+    public ActorSystemRemote(ActorSystemDefault localSystem) {
         this.localSystem = localSystem;
         init();
     }
@@ -31,6 +32,7 @@ public class ActorSystemRemote implements ActorSystem {
     protected void init() {
         initConnectionMap();
         initSerializer();
+        initServerAndClient();
     }
 
     protected void initConnectionMap() {
@@ -38,20 +40,48 @@ public class ActorSystemRemote implements ActorSystem {
     }
 
     protected void initSerializer() {
-        serializer = new Kryo();
-        serializer.register(Message.class);
-        refSerializer = new ActorRefRemoteSerializer(this);
-        serializer.register(ActorRef.class, refSerializer);
+        serializer = new KryoBuilder()
+                .setSystem(this)
+                .build();
     }
 
-    public void start(InetSocketAddress serverAddress) {
+    protected void initServerAndClient() {
+        server = new ObjectMessageServer();
+        server.setReceiver(this::receive);
+        client = new ObjectMessageClient();
+        if (this.localSystem instanceof ActorSystemDefaultForRemote) {
+            ActorSystemDefaultForRemote r = (ActorSystemDefaultForRemote) localSystem;
+            server.setLeaderThreads(r.getServerLeaderThreads());
+            server.setWorkerThreads(r.getServerWorkerThreads());
+            client.setThreads(r.getClientThreads());
+        }
+        server.setSerializer(serializer);
+        client.setSerializer(serializer);
+    }
+
+    public void start(int port) {
+        start(ActorAddress.create("localhost", port));
+    }
+
+    public void start(ActorAddress.ActorAddressRemote serverAddress) {
         this.serverAddress = serverAddress;
         try {
-            this.serverChannel = ServerSocketChannel.open().bind(serverAddress);
+
+            server.setHost(serverAddress.getHost())
+                    .setPort(serverAddress.getPort());
+            server.start();
         } catch (Exception ex) {
             throw new RuntimeException(ex);
         }
-        //TODO accept forever
+    }
+
+    public ActorAddress.ActorAddressRemote getServerAddress() {
+        return serverAddress;
+    }
+
+    @Override
+    public void execute(Runnable task) {
+        localSystem.execute(task);
     }
 
     @Override
@@ -59,22 +89,28 @@ public class ActorSystemRemote implements ActorSystem {
         ActorRef target = message.getTarget();
         if (target instanceof ActorRefRemote) {
             ActorAddress addr = ((ActorRefRemote) target).getAddress();
-            connectionMap.computeIfAbsent(addr.getKey(), k -> createConnection(addr))
-                    .tell(message, null);
+            ConnectionActor a = connectionMap.computeIfAbsent(addr.getKey(), k -> createConnection(addr));
+            if (a != null) {
+                a.tell(message, null);
+            } else {
+                localSystem.sendDeadLetter(message);
+            }
         } else {
             localSystem.send(message);
         }
     }
 
-    protected Connection createConnection(ActorAddress addr) {
-        return new Connection(localSystem, this, addr);
-    }
-
-    public SocketChannel createChannel(String host, int port) {
-        try {
-            return SocketChannel.open(InetSocketAddress.createUnresolved(host, port));
-        }catch (Exception ex) {
-            throw new RuntimeException(ex);
+    protected ConnectionActor createConnection(ActorAddress addr) {
+        if (addr instanceof ActorAddress.ActorAddressRemote) {
+            try {
+                return new ConnectionActor(localSystem, this, (ActorAddress.ActorAddressRemote) addr);
+            } catch (InterruptedException ex) {
+                //TODO report
+                ex.printStackTrace();
+                return null;
+            }
+        } else {
+            return null;
         }
     }
 
@@ -85,15 +121,96 @@ public class ActorSystemRemote implements ActorSystem {
         return output.getByteBuffer();
     }
 
-    public static class Connection extends Actor {
+    public Kryo getSerializer() {
+        return serializer;
+    }
+
+    public ObjectMessageServer getServer() {
+        return server;
+    }
+
+    public ObjectMessageClient getClient() {
+        return client;
+    }
+
+    public void receive(Object msg) {
+        if (msg instanceof Message<?>) {
+            Message<?> m = (Message)  msg;
+            localSystem.send(new Message<>(
+                    localize(m.getTarget()),
+                    m.getSender(),
+                    m.getData()));
+        } else {
+            //error
+            System.err.println("receive unintended object: " + msg);
+        }
+    }
+
+    public ActorRef localize(ActorRef ref) {
+        if (ref instanceof ActorRefLocalNamed) {
+            return ref;
+        } else if (ref instanceof ActorRefRemote) {
+            ActorAddress addr = ((ActorRefRemote) ref).getAddress();
+            String localName = null;
+            if (addr instanceof ActorAddress.ActorAddressRemoteActor) {
+                localName = ((ActorAddress.ActorAddressRemoteActor) addr).getActorName();
+            }
+            return new ActorRefLocalNamed(this, localName);
+        } else {
+            return ref;
+        }
+    }
+
+
+
+    public void register(Actor actor) {
+        localSystem.register(actor);
+    }
+
+
+    /**
+     * default threads:
+     * <ul>
+     *    <li>procs : availableProcessors()</li>
+     *    <li>systemThreads : procs / 2 //{@link ActorSystemDefault#threads}</li>
+     *    <li>server.leader : 1         // {@link ObjectMessageServer#setLeaderThreads(int)} </li>
+     *    <li>server.worker : procs / 2 // {@link ObjectMessageServer#setWorkerThreads(int)} (EventLoopGroup)} </li>
+     *    <li>client.group  : procs / 2 // {@link ObjectMessageClient#setGroup(EventLoopGroup)} (EventLoopGroup)}</li>
+     * </ul>
+     */
+    public static class ActorSystemDefaultForRemote extends ActorSystemDefault {
+        @Override
+        protected void initSystemThreads() {
+            this.threads = Runtime.getRuntime().availableProcessors() / 2;
+        }
+
+        public int getServerLeaderThreads() {
+            return 1;
+        }
+
+        public int getServerWorkerThreads() {
+            return getThreads();
+        }
+
+        public int getClientThreads() {
+            return getThreads();
+        }
+    }
+
+    public static class ConnectionActor extends Actor {
         protected ActorSystemRemote remoteSystem;
         protected ActorAddress address;
-        protected SocketChannel channel;
+        protected ObjectMessageClient.ObjectMessageConnection connection;
 
-        public Connection(ActorSystem system, ActorSystemRemote remoteSystem, ActorAddress address) {
+        public ConnectionActor(ActorSystem system, ActorSystemRemote remoteSystem, ActorAddress.ActorAddressRemote address)
+            throws InterruptedException {
             super(system);
             this.remoteSystem = remoteSystem;
             this.address = address;
+            connection = remoteSystem.getClient().connect()
+                    .setHost(address.getHost())
+                    .setPort(address.getPort())
+                    .open();
         }
 
         @Override
@@ -102,24 +219,7 @@ public class ActorSystemRemote implements ActorSystem {
         }
 
         public void send(Message<?> message) {
-            if (channel != null && !channel.isConnected()) {
-                try {
-                    channel.close();
-                } catch (Exception ex) {
-                    throw new RuntimeException(ex);
-                }
-                channel = null;
-            }
-            if (channel == null) {
-                if (address instanceof ActorAddress.ActorAddressDefault) {
-                    channel = ((ActorAddress.ActorAddressDefault) address).createChannel(remoteSystem);
-                }
-            }
-            try {
-                channel.write(remoteSystem.serialize(message));
-            } catch (Exception ex) {
-                throw new RuntimeException(ex);
-            }
+            connection.write(message);
         }
     }
 }

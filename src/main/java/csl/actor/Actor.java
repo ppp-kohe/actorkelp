@@ -3,10 +3,23 @@ package csl.actor;
 public abstract class Actor implements ActorRef {
     protected ActorSystem system;
     protected Mailbox mailbox;
+    protected String name;
 
     public Actor(ActorSystem system) {
+        this(system, null);
+    }
+
+    public Actor(ActorSystem system, String name) {
         this.system = system;
+        this.name = name;
+        if (system != null && name != null) {
+            system.register(this);
+        }
         initMailbox();
+    }
+
+    public String getName() {
+        return name;
     }
 
     protected void initMailbox() {
@@ -40,6 +53,6 @@ public abstract class Actor implements ActorRef {
 
     @Override
     public void tell(Object data, ActorRef sender) {
-        system.send(new Message<Object>(this, sender, data));
+        system.send(new Message<>(this, sender, data));
     }
 }
