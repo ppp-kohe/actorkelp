@@ -35,7 +35,7 @@ public class ActorBehaviorBuilder {
 
     public static class ActorBehaviorNothing implements ActorBehavior {
         @Override
-        public boolean process(Message<?> message) {
+        public boolean process(Actor self, Message<?> message) {
             return false;
         }
     }
@@ -50,11 +50,11 @@ public class ActorBehaviorBuilder {
         }
 
         @Override
-        public boolean process(Message<?> message) {
-            if (left.process(message)) {
+        public boolean process(Actor self, Message<?> message) {
+            if (left.process(self, message)) {
                 return true;
             } else {
-                return right.process(message);
+                return right.process(self, message);
             }
         }
     }
@@ -69,7 +69,7 @@ public class ActorBehaviorBuilder {
         }
 
         @Override
-        public boolean process(Message<?> message) {
+        public boolean process(Actor self, Message<?> message) {
             Object d = message.getData();
             if (dataType.isInstance(d)) {
                 handler.accept(dataType.cast(d), message.getSender());
@@ -88,7 +88,7 @@ public class ActorBehaviorBuilder {
         }
 
         @Override
-        public boolean process(Message<?> message) {
+        public boolean process(Actor self, Message<?> message) {
             handler.accept(message.getData(), message.getSender());
             return true;
         }

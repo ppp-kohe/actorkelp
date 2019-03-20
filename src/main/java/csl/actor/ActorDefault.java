@@ -25,6 +25,6 @@ public abstract class ActorDefault extends Actor {
 
     @Override
     protected void processMessage(Message<?> message) {
-        behavior.process(message);
+        behavior.process(this, message);
     }
 }

@@ -25,7 +25,7 @@ public class ActorRefRemoteSerializer<RefType extends ActorRef> extends Serializ
         } else if (actorRef instanceof Actor) {
             addr = remoteSystem.getServerAddress().getActor(((Actor) actorRef).getName());
         }
-        kryo.writeObjectOrNull(output, addr, ActorRef.class);
+        kryo.writeObjectOrNull(output, addr, ActorAddress.class);
     }
 
     @Override
