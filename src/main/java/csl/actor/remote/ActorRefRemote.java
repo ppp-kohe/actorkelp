@@ -21,4 +21,12 @@ public class ActorRefRemote implements ActorRef {
     public void tell(Object data, ActorRef sender) {
         system.send(new Message<>(this, sender, data));
     }
+
+    @Override
+    public String toString() {
+        return "ActorRefRemote(" +
+                "" + system +
+                ", " + address +
+                ')';
+    }
 }

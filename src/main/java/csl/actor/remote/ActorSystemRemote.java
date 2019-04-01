@@ -2,12 +2,15 @@ package csl.actor.remote;
 
 import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.io.ByteBufferOutput;
+import com.esotericsoftware.kryo.util.Pool;
 import csl.actor.*;
 import io.netty.channel.EventLoopGroup;
 
 import java.nio.ByteBuffer;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Function;
+import java.util.function.Supplier;
 
 public class ActorSystemRemote implements ActorSystem {
     protected ActorSystemDefault localSystem;
@@ -18,14 +21,19 @@ public class ActorSystemRemote implements ActorSystem {
     protected ObjectMessageClient client;
 
     protected Map<Object, ConnectionActor> connectionMap;
-    protected Kryo serializer;
+
+    protected Function<ActorSystemRemote, Kryo> serializer;
+    protected Pool<Kryo> serializerPool;
+
+    public static boolean debugLog = System.getProperty("csl.actor.debug", "false").equals("true");
 
     public ActorSystemRemote() {
-        this(new ActorSystemDefaultForRemote());
+        this(new ActorSystemDefaultForRemote(), KryoBuilder.builder());
     }
 
-    public ActorSystemRemote(ActorSystemDefault localSystem) {
+    public ActorSystemRemote(ActorSystemDefault localSystem, Function<ActorSystemRemote, Kryo> serializer) {
         this.localSystem = localSystem;
+        this.serializer = serializer;
         init();
     }
 
@@ -40,9 +48,16 @@ public class ActorSystemRemote implements ActorSystem {
     }
 
     protected void initSerializer() {
-        serializer = new KryoBuilder()
-                .setSystem(this)
-                .build();
+        serializerPool = new Pool<Kryo>(true, false) {
+            @Override
+            protected Kryo create() {
+                return createSerializer();
+            }
+        };
+    }
+
+    public Kryo createSerializer() {
+        return serializer.apply(this);
     }
 
     protected void initServerAndClient() {
@@ -55,8 +70,8 @@ public class ActorSystemRemote implements ActorSystem {
             server.setWorkerThreads(r.getServerWorkerThreads());
             client.setThreads(r.getClientThreads());
         }
-        server.setSerializer(serializer);
-        client.setSerializer(serializer);
+        server.setSerializer(getSerializer());
+        client.setSerializer(getSerializer());
     }
 
     public void start(int port) {
@@ -64,7 +79,7 @@ public class ActorSystemRemote implements ActorSystem {
     }
 
     public void start(ActorAddress.ActorAddressRemote serverAddress) {
-        this.serverAddress = serverAddress;
+        setServerAddress(serverAddress);
         try {
 
             server.setHost(serverAddress.getHost())
@@ -75,8 +90,28 @@ public class ActorSystemRemote implements ActorSystem {
         }
     }
 
+    public void startWithoutWait(int port) {
+        startWithoutWait(ActorAddress.create("localhost", port));
+    }
+
+    public void startWithoutWait(ActorAddress.ActorAddressRemote serverAddress) {
+        setServerAddress(serverAddress);
+        try {
+
+            server.setHost(serverAddress.getHost())
+                    .setPort(serverAddress.getPort());
+            server.startWithoutWait();
+        } catch (Exception ex) {
+            throw new RuntimeException(ex);
+        }
+    }
+
     public ActorAddress.ActorAddressRemote getServerAddress() {
         return serverAddress;
+    }
+
+    public void setServerAddress(ActorAddress.ActorAddressRemote serverAddress) {
+        this.serverAddress = serverAddress;
     }
 
     @Override
@@ -89,12 +124,14 @@ public class ActorSystemRemote implements ActorSystem {
         ActorRef target = message.getTarget();
         if (target instanceof ActorRefRemote) {
             ActorAddress addr = ((ActorRefRemote) target).getAddress();
+            log("send to remote %s", addr);
             ConnectionActor a = connectionMap.computeIfAbsent(addr.getKey(), k -> createConnection(addr));
             if (a != null) {
                 a.tell(message, null);
             } else {
                 localSystem.sendDeadLetter(message);
             }
+            log("send finish to remote %s", addr);
         } else {
             localSystem.send(message);
         }
@@ -103,9 +140,9 @@ public class ActorSystemRemote implements ActorSystem {
     protected ConnectionActor createConnection(ActorAddress addr) {
         if (addr instanceof ActorAddress.ActorAddressRemote) {
             try {
+                log("createConnection: %s", addr);
                 return new ConnectionActor(localSystem, this, (ActorAddress.ActorAddressRemote) addr);
             } catch (InterruptedException ex) {
-                //TODO report
                 ex.printStackTrace();
                 return null;
             }
@@ -114,15 +151,22 @@ public class ActorSystemRemote implements ActorSystem {
         }
     }
 
+    public static void log(String msg, Object... args) {
+        if (debugLog) {
+            System.err.println("\033[38;5;33m" + String.format(msg, args) + "\033[0m");
+        }
+    }
+
+
     public ByteBuffer serialize(Message<?> message) {
         ByteBufferOutput output = new ByteBufferOutput();
-        serializer.writeObject(output, message);
+        serializerPool.obtain().writeObject(output, message);
         output.close();
         return output.getByteBuffer();
     }
 
-    public Kryo getSerializer() {
-        return serializer;
+    public Supplier<Kryo> getSerializer() {
+        return serializerPool::obtain;
     }
 
     public ObjectMessageServer getServer() {
@@ -136,13 +180,13 @@ public class ActorSystemRemote implements ActorSystem {
     public void receive(Object msg) {
         if (msg instanceof Message<?>) {
             Message<?> m = (Message)  msg;
+            log("receive-remote: %s", m);
             localSystem.send(new Message<>(
                     localize(m.getTarget()),
                     m.getSender(),
                     m.getData()));
         } else {
-            //error
-            System.err.println("receive unintended object: " + msg);
+            log("receive unintended object: %s", msg);
         }
     }
 
@@ -167,6 +211,19 @@ public class ActorSystemRemote implements ActorSystem {
         localSystem.register(actor);
     }
 
+    public ActorRefRemote getRef(String host, int port, String actorName) {
+        return getRef(ActorAddress.create(host, port, actorName));
+    }
+
+    public ActorRefRemote getRef(ActorAddress addr) {
+        return new ActorRefRemote(this, addr);
+    }
+
+    @Override
+    public String toString() {
+        return getClass().getSimpleName() + "@" + Integer.toHexString(System.identityHashCode(this)) +
+                "(" + localSystem + ", address=" + serverAddress + ")";
+    }
 
     /**
      * default threads:
@@ -219,7 +276,9 @@ public class ActorSystemRemote implements ActorSystem {
         }
 
         public void send(Message<?> message) {
+            log("%s write %s", this, message);
             connection.write(message);
+            log("%s after write", this);
         }
     }
 }

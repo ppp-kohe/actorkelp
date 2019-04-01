@@ -3,9 +3,20 @@ package csl.actor;
 public abstract class ActorDefault extends Actor {
     protected ActorBehavior behavior;
 
+
+    public ActorDefault(ActorSystem system, String name, ActorBehavior behavior) {
+        super(system, name);
+        this.behavior = behavior;
+    }
+
     public ActorDefault(ActorSystem system, ActorBehavior behavior) {
         super(system);
         this.behavior = behavior;
+    }
+
+    public ActorDefault(ActorSystem system, String name) {
+        super(system, name);
+        this.behavior = initBehavior();
     }
 
     public ActorDefault(ActorSystem system) {

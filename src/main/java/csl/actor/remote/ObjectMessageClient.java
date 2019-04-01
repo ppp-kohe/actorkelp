@@ -14,9 +14,10 @@ import io.netty.handler.codec.MessageToByteEncoder;
 import io.netty.util.ReferenceCountUtil;
 
 import java.io.Closeable;
+import java.util.function.Supplier;
 
 public class ObjectMessageClient implements Closeable {
-    protected Kryo serializer;
+    protected Supplier<Kryo> serializer;
 
     protected Bootstrap bootstrap;
     protected int threads = 4;
@@ -24,8 +25,9 @@ public class ObjectMessageClient implements Closeable {
 
     protected String host = "localhost";
     protected int port = 38888;
+    protected boolean started;
 
-    public ObjectMessageClient setSerializer(Kryo serializer) {
+    public ObjectMessageClient setSerializer(Supplier<Kryo> serializer) {
         this.serializer = serializer;
         return this;
     }
@@ -54,12 +56,13 @@ public class ObjectMessageClient implements Closeable {
         initSerializer();
         initGroup();
         initBootstrap();
+        started = true;
         return this;
     }
 
     protected void initSerializer() {
         if (serializer == null) {
-            serializer = new Kryo();
+            serializer = ObjectMessageServer.defaultSerializer::obtain;
         }
     }
 
@@ -76,11 +79,18 @@ public class ObjectMessageClient implements Closeable {
             .handler(new ClientInitializer(this));
     }
 
-    public Kryo getSerializer() {
+    public boolean isStarted() {
+        return started;
+    }
+
+    public Supplier<Kryo> getSerializer() {
         return serializer;
     }
 
     public ObjectMessageConnection connect() {
+        if (!isStarted()) {
+            start();
+        }
         return new ObjectMessageConnection(this)
                 .setHost(host)
                 .setPort(port);
@@ -157,7 +167,6 @@ public class ObjectMessageClient implements Closeable {
         protected void initChannel(SocketChannel ch) throws Exception {
             ch.pipeline()
                     .addLast(
-                            //new LoggingHandler(LogLevel.INFO),
                             new LengthFieldPrepender(4, false),
                             new QueueClientHandler(owner.getSerializer()),
                             new ResponseHandler());
@@ -165,18 +174,17 @@ public class ObjectMessageClient implements Closeable {
     }
 
     public static class QueueClientHandler extends MessageToByteEncoder<Object> {
-        protected Kryo serializer;
+        protected Supplier<Kryo> serializer;
 
-        public QueueClientHandler(Kryo serializer) {
+        public QueueClientHandler(Supplier<Kryo> serializer) {
             this.serializer = serializer;
         }
 
         @Override
         protected void encode(ChannelHandlerContext ctx, Object msg, ByteBuf out) throws Exception {
             Output output = new Output(new ByteBufOutputStream(out));
-            serializer.writeClassAndObject(output, msg);
+            serializer.get().writeClassAndObject(output, msg);
             output.flush();
-            //System.err.println("writable " + out.writableBytes() + " " + out.writerIndex());
         }
     }
 
@@ -194,6 +202,8 @@ public class ObjectMessageClient implements Closeable {
                 } finally {
                     ReferenceCountUtil.release(buf);
                 }
+            } else {
+                System.err.println("? " + msg);
             }
         }
     }

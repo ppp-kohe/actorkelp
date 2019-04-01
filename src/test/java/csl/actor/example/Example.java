@@ -14,10 +14,10 @@ public class Example {
         root.tell(0, root);
     }
 
-    static class MyActor extends ActorDefault {
+    public static class MyActor extends ActorDefault {
         ActorRef ref;
         public MyActor(ActorSystem system, ActorRef link) {
-            super(system);
+            super(system, "example");
             this.ref = link;
         }
 
@@ -34,7 +34,7 @@ public class Example {
         }
 
         public void hello(Integer n) {
-            System.err.println("hello " + n + " " + this +" : " + Thread.currentThread().getName());
+            System.err.println("hello " + n + " " + this +" : " + Thread.currentThread().getName() + " : " + system);
             try {
                 Thread.sleep(500);
             } catch (Exception ex) {
@@ -45,7 +45,9 @@ public class Example {
                 return;
             }
             if (ref != null) {
-                ref.tell(n + 1, this);
+                int v = n + 1;
+                System.err.println(" -> " + v + " -> " + ref);
+                ref.tell(v, this);
             }
         }
     }

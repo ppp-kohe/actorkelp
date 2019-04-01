@@ -32,6 +32,11 @@ public class ActorSystemDefault implements ActorSystem {
         return time;
     }
 
+    @Override
+    public String toString() {
+        return getClass().getSimpleName() + "@" + Integer.toHexString(System.identityHashCode(this));
+    }
+
     protected void initSystem() {
         shutdown = false;
         initThroughput();

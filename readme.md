@@ -96,6 +96,7 @@
         * `KryoBuilder`: 利用すると思われるデータのクラスを片っ端から登録する
             * (元はakka対応のコードなのだが、全ての登録の必要性がakkaのためだか覚えてない)
         * `ActorRefRemoteSerializer` : `ActorRef`のシリアライズ
+        * `ActorSystemRemote`の`serizlier`は`Function<ActorSystemRemote,Kryo>`で, デフォルトでは`KryoBuilder.builder()`だが追加クラスを書いた場合, これをすり替える
 
     * `ActorRefRemote`は`ActorAddress`を持つ
 
@@ -103,6 +104,7 @@
             * `ActorAddressRemote`は`ActorRemoteSystem`が自身の名前として保持する
         * シリアライズでは`Actor`、`ActorRefLocalNamed`は`ActorSystemRemote`から自身のアドレスを取り出してアクター名と組み合わせ`ActorAddress`として書き出す
             * 復元は単に`ActorRefRemote`にする。転送された時点で別のホストなのでこれでよく、ローカルに戻すのは`ActorSystemRemote#localize`で明示的に行う
+        * `ActorSystemRemote#getRef(host,port,name)`でリモートのactorが参照できる
 
     * `ActorSystemRemote#recieve(Object)`: 受信した場合に呼び出される
 

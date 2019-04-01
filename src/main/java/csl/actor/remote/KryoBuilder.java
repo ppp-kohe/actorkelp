@@ -27,26 +27,39 @@ import java.time.chrono.*;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.*;
+import java.util.function.Function;
 import java.util.regex.Pattern;
 
 public class KryoBuilder {
     protected ActorSystemRemote system;
+    protected Kryo kryo;
+
+    public KryoBuilder setKryo(Kryo kryo) {
+        this.kryo = kryo;
+        return this;
+    }
 
     public KryoBuilder setSystem(ActorSystemRemote system) {
         this.system = system;
         return this;
     }
 
+    public static Function<ActorSystemRemote, Kryo> builder() {
+        return (sys) ->
+            new KryoBuilder().setSystem(sys)
+                    .build();
+    }
+
     @SuppressWarnings("unchecked")
     public Kryo build() {
-        Kryo kryo = new Kryo();
+        Kryo kryo = (this.kryo == null ? new Kryo() : this.kryo);
         kryo.setRegistrationRequired(false);
         kryo.setInstantiatorStrategy(new DefaultInstantiatorStrategy(new StdInstantiatorStrategy()));
 
-        kryo.addDefaultSerializer(ActorRef.class, new ActorRefRemoteSerializer(system));
+        kryo.addDefaultSerializer(ActorRef.class, new ActorRefRemoteSerializer<>(system));
 
         register(kryo, getDefaultSerializerClasses());
-        registerWithSerializable(kryo, getBaseClasses());
+        register(kryo, getBaseClasses());
 
         registerObjectStream(kryo, EnumMap.class);
         registerObjectStream(kryo, SimpleTimeZone.class);
@@ -59,7 +72,7 @@ public class KryoBuilder {
 
         kryo.register(BitSet.class, new BitSetSerializer());
 
-        kryo.register(ActorRef.class, new ActorRefRemoteSerializer(system)); //??
+        kryo.register(ActorRef.class, new ActorRefRemoteSerializer<>(system)); //??
 
         register(kryo, getActorClasses());
         return kryo;

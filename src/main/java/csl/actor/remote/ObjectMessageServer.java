@@ -2,6 +2,7 @@ package csl.actor.remote;
 
 import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.io.Input;
+import com.esotericsoftware.kryo.util.Pool;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufInputStream;
@@ -17,6 +18,7 @@ import io.netty.handler.logging.LoggingHandler;
 import java.io.Closeable;
 import java.nio.ByteBuffer;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 public class ObjectMessageServer implements Closeable {
     public static void main(String[] args) {
@@ -27,7 +29,7 @@ public class ObjectMessageServer implements Closeable {
 
     protected String host = null;
     protected int port = 38888;
-    protected Kryo serializer;
+    protected Supplier<Kryo> serializer;
 
     protected int leaderThreads = 1;
     protected int workerThreads = 4;
@@ -73,14 +75,21 @@ public class ObjectMessageServer implements Closeable {
         return this;
     }
 
-    public ObjectMessageServer setSerializer(Kryo serializer) {
+    public ObjectMessageServer setSerializer(Supplier<Kryo> serializer) {
         this.serializer = serializer;
         return this;
     }
 
+    public static Pool<Kryo> defaultSerializer = new Pool<Kryo>(true, false, 8) {
+        @Override
+        protected Kryo create() {
+            return new Kryo();
+        }
+    };
+
     protected void initSerializer() {
         if (serializer == null) {
-            serializer = new Kryo();
+            serializer = defaultSerializer::obtain;
         }
     }
 
@@ -128,9 +137,11 @@ public class ObjectMessageServer implements Closeable {
     protected void initBootstrap() {
         bootstrap = new ServerBootstrap();
         bootstrap.group(leaderGroup, workerGroup)
-                .channel(NioServerSocketChannel.class)
-                .handler(new LoggingHandler(LogLevel.INFO))
-                .childHandler(new ServerInitializer(this));
+                .channel(NioServerSocketChannel.class);
+        if (ActorSystemRemote.debugLog) {
+            bootstrap.handler(new LoggingHandler(LogLevel.INFO));
+        }
+        bootstrap.childHandler(new ServerInitializer(this));
     }
 
     protected void initChannel() throws InterruptedException {
@@ -149,7 +160,7 @@ public class ObjectMessageServer implements Closeable {
         channel.channel().close();
     }
 
-    public Kryo getSerializer() {
+    public Supplier<Kryo> getSerializer() {
         return serializer;
     }
 
@@ -167,10 +178,11 @@ public class ObjectMessageServer implements Closeable {
         @Override
         protected void initChannel(SocketChannel socketChannel) throws Exception {
             //length[4] + contents[length]
-            socketChannel.pipeline()
-                    .addLast(
-                            new LoggingHandler(LogLevel.INFO),
-                            new LengthFieldBasedFrameDecoder(
+            ChannelPipeline pipeline = socketChannel.pipeline();
+            if (ActorSystemRemote.debugLog) {
+                pipeline.addLast(new LoggingHandler(LogLevel.INFO));
+            }
+            pipeline.addLast(new LengthFieldBasedFrameDecoder(
                                     Integer.MAX_VALUE,
                                     0, 4, 0, 0),
                             new QueueServerHandler(owner.getSerializer(), owner.getReceiver()));
@@ -178,11 +190,11 @@ public class ObjectMessageServer implements Closeable {
     }
 
     public static class QueueServerHandler extends SimpleChannelInboundHandler {
-        protected Kryo serializer;
+        protected Supplier<Kryo> serializer;
         protected Consumer<Object> receiver;
         protected ByteBuf response;
 
-        public QueueServerHandler(Kryo serializer, Consumer<Object> receiver) {
+        public QueueServerHandler(Supplier<Kryo> serializer, Consumer<Object> receiver) {
             this.serializer = serializer;
             this.receiver = receiver;
             ByteBuffer b = ByteBuffer.allocate(4);
@@ -196,15 +208,17 @@ public class ObjectMessageServer implements Closeable {
             if (msg instanceof ByteBuf) {
                 ByteBuf buf = (ByteBuf) msg;
                 int length = buf.readInt();
-                //System.err.println("bytes  "+ buf.readableBytes() + " len " + length);
+                ActorSystemRemote.log("bytes %,d  len %,d", buf.readableBytes(), length);
                 Input input = new Input(new ByteBufInputStream(buf, length));
-                Object value = serializer.readClassAndObject(input);
+                Object value = serializer.get().readClassAndObject(input);
                 if (receiver != null) {
                     receiver.accept(value);
                 }
                 ctx.writeAndFlush(response);
+
+                ActorSystemRemote.log("read finish");
             } else {
-                //System.err.println("ignore " + msg);
+                ActorSystemRemote.log("ignore %s", msg);
             }
         }
 
