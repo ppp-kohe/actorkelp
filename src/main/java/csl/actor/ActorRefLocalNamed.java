@@ -4,6 +4,10 @@ public class ActorRefLocalNamed implements ActorRef {
     protected ActorSystem system;
     protected String name;
 
+    public static ActorRefLocalNamed get(ActorSystem system, String name) {
+        return new ActorRefLocalNamed(system, name);
+    }
+
     public ActorRefLocalNamed(ActorSystem system, String name) {
         this.system = system;
         this.name = name;

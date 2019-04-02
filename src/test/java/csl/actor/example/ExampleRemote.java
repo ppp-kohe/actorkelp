@@ -1,5 +1,6 @@
 package csl.actor.example;
 
+import csl.actor.remote.ActorRefRemote;
 import csl.actor.remote.ActorSystemRemote;
 
 import java.io.BufferedReader;
@@ -31,7 +32,7 @@ public class ExampleRemote {
             ActorSystemRemote sys = new ActorSystemRemote();
             sys.startWithoutWait(p);
 
-            Example.MyActor a = new Example.MyActor(sys, sys.getRef(host, lp, "example"));
+            Example.MyActor a = new Example.MyActor(sys, ActorRefRemote.get(sys, host, lp, "example"));
             if (args.length >= 3) {
                 String msgVal = args[2];
                 System.err.println("init value " + msgVal);

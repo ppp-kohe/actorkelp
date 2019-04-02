@@ -9,12 +9,12 @@ public class ActorAddress {
         return this;
     }
 
-    public static ActorAddressRemote create(String host, int port) {
+    public static ActorAddressRemote get(String host, int port) {
         return new ActorAddressRemote(host, port);
     }
 
-    public static ActorAddressRemoteActor create(String host, int port, String name) {
-        return create(host, port).getActor(name);
+    public static ActorAddressRemoteActor get(String host, int port, String name) {
+        return get(host, port).getActor(name);
     }
 
     public static class ActorAddressRemote extends ActorAddress implements Serializable {

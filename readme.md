@@ -28,8 +28,8 @@
 
     * ```java
         class MyActor extends ActorDefault {
-            MyActor(ActorSystem system) {
-                super(system);
+            MyActor(ActorSystem system, String name) {
+                super(system, name);
             }
             @Override
             protected ActorBehavior initBehavior() {
@@ -46,7 +46,7 @@
 
 * `Actor`にはStringの名前を設定可能: `ActorSystem`の`register(Actor)`で登録し、 `ActorRef`である  ` ActorRefLocalNamed` により解決できる
 
-    * remoteのためには名前をつける必要がある
+    * remoteのためには名前をつける必要がある: `ActorDefault(system,name)`で`name`が設定されれば自動的に登録
     * //TODO unregister, actor shutdown
 
 * `remote`パッケージ
@@ -74,7 +74,7 @@
             * `QueueClientHandler`: encoder。書き込みには`Output`を`ByteBufOutputStream`でラップ
             * `ResponseHandler`: 送信レスポンス `200`を読み取る
 
-    * `ActorSystemDefaultForRemote`: スレッド数を決める
+    * `ActorSystemDefaultForRemote`: スレッド数を決める`ActorSystem`。 `ActorSystemRemote`はデフォルトではこれをラップする
 
         * プロセッサの約1.5倍のスレッド
         * おそらくスレッドプールは共有しないほうがいい
@@ -90,25 +90,31 @@
             * このactorに`tell(message, null)`をする: すると`Message(ConnectionActor,null,Message)`となる
             * このactorの`processMessage(Message)`は中の`Message` を取り出し`ObjectMessageConnection`に書き込みを行う
             * //TODO client自体でEventLoopGroupにより複数スレッド持つのでactorにするのは無駄か
+            * `ObjectMessageConnection`は`Channel`をconnectするが、これは一定期間でcloseする模様。//TODO 今の所, `isWritable()`でチェックして再取得しているが
 
     * シリアライゼーションにはkryoを使う
 
         * `KryoBuilder`: 利用すると思われるデータのクラスを片っ端から登録する
-            * (元はakka対応のコードなのだが、全ての登録の必要性がakkaのためだか覚えてない)
-        * `ActorRefRemoteSerializer` : `ActorRef`のシリアライズ
+            * 登録するとシリアライズした時にクラス名でなくint番号にできる
+        * `Kryo`はthread-safeでない。`ActorSystemRemote`では`Pool<Kryo>`としてスレッドごとにキャッシュ
+        * `ActorRefRemoteSerializer` : `ActorRef`のシリアライズ。`ActorAddress`としてシリアライズする。
         * `ActorSystemRemote`の`serizlier`は`Function<ActorSystemRemote,Kryo>`で, デフォルトでは`KryoBuilder.builder()`だが追加クラスを書いた場合, これをすり替える
 
     * `ActorRefRemote`は`ActorAddress`を持つ
 
+        * `ActorRefRemote.get(system,host,name,port)`で生成する
+            * ローカルのアクターの場合は`Actor`の実装クラスそのままが利用でき、
+            * リモートを参照する場合は`ActorRefRemote.get`を使い参照を得る。
+            * 未解決のローカルのアクターとして`ActorRefLocalNamed.get(system,name)`が使える。
         * `ActorAddress`はホスト、ポートの`ActorAddressRemote`と、そのホスト、ポート、アクター名の`ActorAddressRemoteActor`どちらかで、`ActorRefRemote`は後者でないと意味がない
             * `ActorAddressRemote`は`ActorRemoteSystem`が自身の名前として保持する
         * シリアライズでは`Actor`、`ActorRefLocalNamed`は`ActorSystemRemote`から自身のアドレスを取り出してアクター名と組み合わせ`ActorAddress`として書き出す
             * 復元は単に`ActorRefRemote`にする。転送された時点で別のホストなのでこれでよく、ローカルに戻すのは`ActorSystemRemote#localize`で明示的に行う
-        * `ActorSystemRemote#getRef(host,port,name)`でリモートのactorが参照できる
 
-    * `ActorSystemRemote#recieve(Object)`: 受信した場合に呼び出される
+    * `ActorSystemRemote#recieve(Object)`: 受信した場合に呼び出される。`ObjectMessageServer#receiver`としてセットされる
 
-        * `Message`に反応し、対象を`localize(ActorRef)`してメッセージを作り直してローカルで実行する
+        * `Message`に反応し、対象を`localize(ActorRef)`してメッセージを作り直してローカルで実行する。対象はこの`receive`した`ActorSystem`のローカルなアクターであるはず
+            * //TODO 結局、このやり方だと対象しかローカルにならないので、メッセージの中にローカルな参照が別にあってもそれはリモート参照として扱われる。シリアライズ復元時にチェックするかか`ActorRefRemote`にローカル判定を入れる必要がある
         * `localze`は`ActorAddressRemoteActor`の名前から`ActorRefLocalNamed`を作る。host名は見ない
 
         

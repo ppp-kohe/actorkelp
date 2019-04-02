@@ -75,7 +75,7 @@ public class ActorSystemRemote implements ActorSystem {
     }
 
     public void start(int port) {
-        start(ActorAddress.create("localhost", port));
+        start(ActorAddress.get("localhost", port));
     }
 
     public void start(ActorAddress.ActorAddressRemote serverAddress) {
@@ -91,7 +91,7 @@ public class ActorSystemRemote implements ActorSystem {
     }
 
     public void startWithoutWait(int port) {
-        startWithoutWait(ActorAddress.create("localhost", port));
+        startWithoutWait(ActorAddress.get("localhost", port));
     }
 
     public void startWithoutWait(ActorAddress.ActorAddressRemote serverAddress) {
@@ -209,14 +209,6 @@ public class ActorSystemRemote implements ActorSystem {
 
     public void register(Actor actor) {
         localSystem.register(actor);
-    }
-
-    public ActorRefRemote getRef(String host, int port, String actorName) {
-        return getRef(ActorAddress.create(host, port, actorName));
-    }
-
-    public ActorRefRemote getRef(ActorAddress addr) {
-        return new ActorRefRemote(this, addr);
     }
 
     @Override

@@ -22,8 +22,11 @@ import java.util.function.Supplier;
 
 public class ObjectMessageServer implements Closeable {
     public static void main(String[] args) {
-        new ObjectMessageServer()
-                .setReceiver(System.out::println)
+        ObjectMessageServer server = new ObjectMessageServer();
+        if (args.length > 0) {
+            server.setPort(Integer.valueOf(args[0]));
+        }
+        server.setReceiver(System.out::println)
                 .start();
     }
 
@@ -39,6 +42,8 @@ public class ObjectMessageServer implements Closeable {
     protected ChannelFuture channel;
 
     protected Consumer<Object> receiver;
+
+    public static boolean debugTraceLog = System.getProperty("csl.actor.trace.server", "false").equals("true");
 
     public ObjectMessageServer setLeaderThreads(int leaderThreads) {
         this.leaderThreads = leaderThreads;
@@ -138,8 +143,8 @@ public class ObjectMessageServer implements Closeable {
         bootstrap = new ServerBootstrap();
         bootstrap.group(leaderGroup, workerGroup)
                 .channel(NioServerSocketChannel.class);
-        if (ActorSystemRemote.debugLog) {
-            bootstrap.handler(new LoggingHandler(LogLevel.INFO));
+        if (debugTraceLog) {
+            bootstrap.handler(new LoggingHandler(ObjectMessageServer.class, LogLevel.INFO));
         }
         bootstrap.childHandler(new ServerInitializer(this));
     }
@@ -179,8 +184,8 @@ public class ObjectMessageServer implements Closeable {
         protected void initChannel(SocketChannel socketChannel) throws Exception {
             //length[4] + contents[length]
             ChannelPipeline pipeline = socketChannel.pipeline();
-            if (ActorSystemRemote.debugLog) {
-                pipeline.addLast(new LoggingHandler(LogLevel.INFO));
+            if (debugTraceLog) {
+                pipeline.addLast(new LoggingHandler(ObjectMessageServer.class, LogLevel.INFO));
             }
             pipeline.addLast(new LengthFieldBasedFrameDecoder(
                                     Integer.MAX_VALUE,

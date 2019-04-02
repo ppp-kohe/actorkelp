@@ -8,6 +8,14 @@ public class ActorRefRemote implements ActorRef {
     protected ActorSystem system;
     protected ActorAddress address;
 
+    public static ActorRefRemote get(ActorSystem system, String host, int port, String name) {
+        return get(system, ActorAddress.get(host, port, name));
+    }
+
+    public static ActorRefRemote get(ActorSystem system, ActorAddress address) {
+        return new ActorRefRemote(system, address);
+    }
+
     public ActorRefRemote(ActorSystem system, ActorAddress address) {
         this.system = system;
         this.address = address;

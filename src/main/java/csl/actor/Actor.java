@@ -30,6 +30,10 @@ public abstract class Actor implements ActorRef {
         return mailbox;
     }
 
+    public ActorSystem getSystem() {
+        return system;
+    }
+
     public void offer(Message<?> message) {
         mailbox.offer(message);
     }

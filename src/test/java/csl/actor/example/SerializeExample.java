@@ -34,7 +34,7 @@ public class SerializeExample {
 
     public void run() throws Exception {
         ActorSystemRemote sys = new ActorSystemRemote();
-        sys.setServerAddress(ActorAddress.create("hello-world", 12345));
+        sys.setServerAddress(ActorAddress.get("hello-world", 12345));
         Kryo k = sys.getSerializer().get();
 
         writeRead(k, "hello");
@@ -73,7 +73,7 @@ public class SerializeExample {
         bs.set(129);
         writeRead(k, bs);
 
-        writeRead(k, ActorAddress.create("hello", 12345));
+        writeRead(k, ActorAddress.get("hello", 12345));
 
         ActorRef a = new ExampleActor(sys, "hello");
         writeRead(k, a, (l,r) -> {

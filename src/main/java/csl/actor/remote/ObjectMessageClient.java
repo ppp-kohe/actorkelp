@@ -2,6 +2,7 @@ package csl.actor.remote;
 
 import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.io.Output;
+import csl.actor.ActorSystem;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufOutputStream;
@@ -11,6 +12,8 @@ import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.codec.LengthFieldPrepender;
 import io.netty.handler.codec.MessageToByteEncoder;
+import io.netty.handler.logging.LogLevel;
+import io.netty.handler.logging.LoggingHandler;
 import io.netty.util.ReferenceCountUtil;
 
 import java.io.Closeable;
@@ -26,6 +29,8 @@ public class ObjectMessageClient implements Closeable {
     protected String host = "localhost";
     protected int port = 38888;
     protected boolean started;
+
+    public static boolean debugTraceLog = System.getProperty("csl.actor.trace.client", "false").equals("true");
 
     public ObjectMessageClient setSerializer(Supplier<Kryo> serializer) {
         this.serializer = serializer;
@@ -108,7 +113,7 @@ public class ObjectMessageClient implements Closeable {
         protected ObjectMessageClient client;
         protected String host;
         protected int port;
-        protected ChannelFuture channel;
+        protected Channel channel;
 
         public ObjectMessageConnection(ObjectMessageClient client) {
             this.client = client;
@@ -125,25 +130,33 @@ public class ObjectMessageClient implements Closeable {
         }
 
         public ObjectMessageConnection open() throws InterruptedException {
-            channel = client.getBootstrap().connect(host, port).sync();
+            channel = client.getBootstrap()
+                    .connect(host, port)
+                    .sync()
+                    .channel();
             return this;
         }
 
         public ObjectMessageConnection write(Object msg) {
-            if (channel == null) {
+            if (channel == null || !channel.isWritable()) {
                 try {
+                    close();
                     open();
                 } catch (InterruptedException ex) {
                     throw new RuntimeException(ex);
                 }
             }
-            channel.channel().writeAndFlush(msg);
+            ActorSystemRemote.log("connection channel %s:%d open=%s, active=%s, writable=%s", host, port,
+                    channel.isOpen(), channel.isActive(),
+                    channel.isWritable());
+            channel.writeAndFlush(msg);
             return this;
         }
 
         public void close() {
-            if (channel != null) {
-                channel.channel().closeFuture();
+            if (channel != null && channel.isOpen()) {
+                ActorSystemRemote.log("connection close: %s:%d", host, port);
+                channel.close();
                 channel = null;
             }
         }
@@ -165,9 +178,11 @@ public class ObjectMessageClient implements Closeable {
          */
         @Override
         protected void initChannel(SocketChannel ch) throws Exception {
-            ch.pipeline()
-                    .addLast(
-                            new LengthFieldPrepender(4, false),
+            ChannelPipeline pipeline = ch.pipeline();
+            if (debugTraceLog) {
+                pipeline.addLast(new LoggingHandler(ObjectMessageClient.class, LogLevel.INFO));
+            }
+            pipeline.addLast(new LengthFieldPrepender(4, false),
                             new QueueClientHandler(owner.getSerializer()),
                             new ResponseHandler());
         }
