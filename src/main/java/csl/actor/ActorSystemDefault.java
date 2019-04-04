@@ -81,7 +81,7 @@ public class ActorSystemDefault implements ActorSystem {
     }
 
     public void startProcessMessageSubsequently(Actor target, Message<?> message) {
-        target.getMailbox().offer(message);
+        target.offer(message);
         execute(() -> processMessageSubsequently(target));
     }
 
@@ -93,10 +93,7 @@ public class ActorSystemDefault implements ActorSystem {
         try {
             processingCount.incrementAndGet();
             for (int i = 0; isProcessContinue(i); ++i) {
-                Message<?> message = actor.getMailbox().poll();
-                if (message != null) {
-                    startProcessMessage(actor, message);
-                } else {
+                if (!actor.processMessageNext()) {
                     break;
                 }
             }
@@ -132,10 +129,6 @@ public class ActorSystemDefault implements ActorSystem {
 
     public Actor resolveActorLocalNamed(ActorRefLocalNamed ref) {
         return namedActorMap.get(ref.getName());
-    }
-
-    public void startProcessMessage(Actor targetActor, Message<?> message) {
-        execute(() -> targetActor.offerAndProcess(message));
     }
 
     @Override

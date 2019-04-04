@@ -38,11 +38,6 @@ public abstract class Actor implements ActorRef {
         mailbox.offer(message);
     }
 
-    public boolean offerAndProcess(Message<?> message) {
-        offer(message);
-        return processMessageNext();
-    }
-
     public boolean processMessageNext() {
         Message<?> message = mailbox.poll();
         if (message != null) {
