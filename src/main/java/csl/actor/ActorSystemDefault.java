@@ -86,22 +86,23 @@ public class ActorSystemDefault implements ActorSystem {
     }
 
     protected void processMessageSubsequently(Actor actor) {
-        processMessageSubsequently(actor, null);
-    }
-
-    protected void processMessageSubsequently(Actor actor, Runnable postProcess) {
-        try {
+        if (actor.processMessageBefore()) {
             processingCount.incrementAndGet();
-            for (int i = 0; isProcessContinue(i); ++i) {
-                if (!actor.processMessageNext()) {
-                    break;
+            boolean remainingMessages = false;
+            try {
+                for (int i = 0; isProcessContinue(i); ++i) {
+                    remainingMessages = actor.processMessageNext();
+                    if (!remainingMessages) {
+                        break;
+                    }
                 }
+            } finally {
+                actor.processMessageAfter();
+                if (remainingMessages) {
+                    execute(() -> processMessageSubsequently(actor));
+                }
+                processingCount.decrementAndGet();
             }
-            if (postProcess != null) {
-                postProcess.run();
-            }
-        } finally {
-            processingCount.decrementAndGet();
         }
     }
 
