@@ -3,17 +3,22 @@ package csl.actor.msgassoc;
 import csl.actor.*;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 
 public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
-    protected Consumer<List<Supplier<KeyHistograms.Histogram>>> histogramFactoriesTarget;
+    protected BiConsumer<List<Supplier<KeyHistograms.Histogram>>, MailboxReplicable.HistogramSelector> histogramFactoriesTarget;
     protected List<Supplier<KeyHistograms.Histogram>> histogramFactories = new ArrayList<>();
+    protected List<MailboxReplicable.HistogramSelector> histogramSelectors = new ArrayList<>();
 
-    public ActorBehaviorBuilderKeyValue(Consumer<List<Supplier<KeyHistograms.Histogram>>> histogramFactoriesTarget) {
+    public ActorBehaviorBuilderKeyValue(
+            BiConsumer<List<Supplier<KeyHistograms.Histogram>>,
+                       MailboxReplicable.HistogramSelector> histogramFactoriesTarget) {
         this.histogramFactoriesTarget = histogramFactoriesTarget;
     }
 
@@ -44,7 +49,9 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
     @Override
     public ActorBehavior build() {
         ActorBehavior b = super.build();
-        histogramFactoriesTarget.accept(getHistogramFactories());
+        histogramFactoriesTarget.accept(
+                getHistogramFactories(),
+                new HistogramSelectorList(histogramSelectors));
         return b;
     }
 
@@ -69,9 +76,14 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
         return histogramFactories;
     }
 
+    public ActorBehaviorBuilderKeyValue addMatchKeySelector(MailboxReplicable.HistogramSelector histogramSelector) {
+        histogramSelectors.add(histogramSelector);
+        return this;
+    }
+
     public static class RelayToCollect<KeyType> {
         protected ActorBehaviorBuilderKeyValue builder;
-        protected List<AssociatedMessage<KeyType, ?>> messages;
+        protected List<KeyExtractor<KeyType, ?>> messages;
         protected Supplier<KeyHistograms.Histogram> histogramFactory;
 
         public RelayToCollect(ActorBehaviorBuilderKeyValue builder) {
@@ -83,7 +95,7 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
         public <ValueType> RelayToCollect<KeyType> or(
                 Class<ValueType> valueType,
                 Function<ValueType, KeyType> keyExtractorFromValue) {
-            messages.add(new AssociatedMessage<>(valueType, keyExtractorFromValue));
+            messages.add(new KeyExtractorClass<>(valueType, keyExtractorFromValue));
             return this;
         }
 
@@ -97,11 +109,16 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
         }
     }
 
-    public static class AssociatedMessage<KeyType, ValueType> {
+    public interface KeyExtractor<KeyType, ValueType> {
+        boolean matchValue(Object value);
+        KeyType toKey(ValueType v);
+    }
+
+    public static class KeyExtractorClass<KeyType, ValueType> implements KeyExtractor<KeyType, ValueType> {
         protected Class<ValueType> valueType;
         protected Function<ValueType, KeyType> keyExtractorFromValue;
 
-        public AssociatedMessage(Class<ValueType> valueType, Function<ValueType, KeyType> keyExtractorFromValue) {
+        public KeyExtractorClass(Class<ValueType> valueType, Function<ValueType, KeyType> keyExtractorFromValue) {
             this.valueType = valueType;
             this.keyExtractorFromValue = keyExtractorFromValue;
         }
@@ -113,14 +130,24 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
         public Function<ValueType, KeyType> getKeyExtractorFromValue() {
             return keyExtractorFromValue;
         }
+
+        @Override
+        public boolean matchValue(Object value) {
+            return valueType.isInstance(value);
+        }
+
+        @Override
+        public KeyType toKey(ValueType v) {
+            return keyExtractorFromValue.apply(v);
+        }
     }
 
     public static class RelayToBehavior<KeyType> {
         protected ActorBehaviorBuilderKeyValue builder;
-        protected List<AssociatedMessage<KeyType, ?>> messages;
+        protected List<KeyExtractor<KeyType, ?>> messages;
         protected int machKeyEntryId;
 
-        public RelayToBehavior(ActorBehaviorBuilderKeyValue builder, List<AssociatedMessage<KeyType, ?>> messages,
+        public RelayToBehavior(ActorBehaviorBuilderKeyValue builder, List<KeyExtractor<KeyType, ?>> messages,
                                Supplier<KeyHistograms.Histogram> histogramFactory) {
             this.builder = builder;
             this.messages = messages;
@@ -130,22 +157,68 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
         @SuppressWarnings("unchecked")
         public <ValueType1, ValueType2> ActorBehaviorBuilderKeyValue forEachPair(
                 BiConsumer<ValueType1, ValueType2> handler) {
-            AssociatedMessage<KeyType, ValueType1> m1 = (AssociatedMessage<KeyType, ValueType1>) messages.get(0);
-            AssociatedMessage<KeyType, ValueType2> m2 = (AssociatedMessage<KeyType, ValueType2>) messages.get(1);
+            KeyExtractor<KeyType, ValueType1> m1 = (KeyExtractor<KeyType, ValueType1>) messages.get(0);
+            KeyExtractor<KeyType, ValueType2> m2 = (KeyExtractor<KeyType, ValueType2>) messages.get(1);
             //TODO check size of messages
-            return builder.with(new ActorBehaviorMatchKeyTwo<>(machKeyEntryId,
-                    m1.getValueType(), m2.getValueType(),
-                    m1.getKeyExtractorFromValue(), m2.getKeyExtractorFromValue(),
-                    handler));
+            return builder.with(new ActorBehaviorMatchKeyTwo<>(machKeyEntryId, m1, m2, handler))
+                        .addMatchKeySelector(new HistogramSelectorList(machKeyEntryId, m1, m2));
         }
 
         @SuppressWarnings("unchecked")
         public <ValueType> ActorBehaviorBuilderKeyValue forEachList(
                 int threshold, BiConsumer<KeyType, List<ValueType>> handler) {
-            AssociatedMessage<KeyType, ValueType> m = (AssociatedMessage<KeyType, ValueType>) messages.get(0);
+            KeyExtractor<KeyType, ValueType> m = (KeyExtractor<KeyType, ValueType>) messages.get(0);
             //TODO check size of messages
-            return builder.with(new ActorBehaviorMatchKeyList<>(machKeyEntryId,
-                    threshold, m.getValueType(), m.getKeyExtractorFromValue(), handler));
+            return builder.with(new ActorBehaviorMatchKeyList<>(machKeyEntryId, threshold, m, handler))
+                    .addMatchKeySelector(new HistogramSelectorDefault(machKeyEntryId, m));
+        }
+    }
+
+    public static class HistogramSelectorDefault implements MailboxReplicable.HistogramSelector {
+        protected int matchKeyEntryId;
+        protected KeyExtractor<?,?> keyExtractor;
+
+        public HistogramSelectorDefault(int matchKeyEntryId, KeyExtractor<?, ?> keyExtractor) {
+            this.matchKeyEntryId = matchKeyEntryId;
+            this.keyExtractor = keyExtractor;
+        }
+
+        public boolean match(Object value) {
+            return keyExtractor.matchValue(value);
+        }
+
+        @Override
+        public int select(Object value) {
+            if (match(value)) {
+                return matchKeyEntryId;
+            } else {
+                return -1;
+            }
+        }
+    }
+
+    public static class HistogramSelectorList implements MailboxReplicable.HistogramSelector {
+        protected List<MailboxReplicable.HistogramSelector> selectors;
+
+        public HistogramSelectorList(List<MailboxReplicable.HistogramSelector> selectors) {
+            this.selectors = selectors;
+        }
+
+        public HistogramSelectorList(int matchKeyEntryId, KeyExtractor<?,?>... keyExtractors) {
+            selectors = Arrays.stream(keyExtractors)
+                    .map(ke -> new HistogramSelectorDefault(matchKeyEntryId, ke))
+                    .collect(Collectors.toList());
+        }
+
+        @Override
+        public int select(Object value) {
+            for (MailboxReplicable.HistogramSelector s : selectors) {
+                int m = s.select(s);
+                if (m != -1) {
+                    return m;
+                }
+            }
+            return -1;
         }
     }
 
@@ -155,59 +228,123 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
         public ActorBehaviorMatchKey(int matchKeyEntryId) {
             this.matchKeyEntryId = matchKeyEntryId;
         }
+
+        protected void put(Actor self, KeyType key, Object value) {
+            MailboxReplicable m = ((ActorReplicable) self).getMailboxAsReplicable();
+            m.putMessageTable(matchKeyEntryId, key, value);
+            m.addActiveAssociation(this);
+        }
+
+        public abstract boolean processTable(MailboxReplicable m);
     }
 
-    public static class ActorBehaviorMatchKeyTwo<KeyType, ValueType1, ValueType2> extends ActorBehaviorMatchKey<KeyType> {
-        protected int matchKeyEntryId;
-        protected Class<ValueType1> valueType1;
-        protected Class<ValueType2> valueType2;
-        protected Function<ValueType1, KeyType> keyExtractorFromValue1;
-        protected Function<ValueType2, KeyType> keyExtractorFromValue2;
+    public static class ActorBehaviorMatchKeyTwo<KeyType, ValueType1, ValueType2> extends ActorBehaviorMatchKey<KeyType>
+                    implements MailboxReplicable.ValueInTableMatcher {
+        protected KeyExtractor<KeyType, ValueType1> keyExtractorFromValue1;
+        protected KeyExtractor<KeyType, ValueType2> keyExtractorFromValue2;
 
         protected BiConsumer<ValueType1, ValueType2> handler;
 
         public ActorBehaviorMatchKeyTwo(int matchKeyEntryId,
-                                        Class<ValueType1> valueType1,
-                                        Class<ValueType2> valueType2,
-                                        Function<ValueType1, KeyType> keyExtractorFromValue1,
-                                        Function<ValueType2, KeyType> keyExtractorFromValue2,
+                                        KeyExtractor<KeyType, ValueType1> keyExtractorFromValue1,
+                                        KeyExtractor<KeyType, ValueType2> keyExtractorFromValue2,
                                         BiConsumer<ValueType1, ValueType2> handler) {
             super(matchKeyEntryId);
-            this.matchKeyEntryId = matchKeyEntryId;
-            this.valueType1 = valueType1;
-            this.valueType2 = valueType2;
             this.keyExtractorFromValue1 = keyExtractorFromValue1;
             this.keyExtractorFromValue2 = keyExtractorFromValue2;
             this.handler = handler;
         }
 
+        @SuppressWarnings("unchecked")
         @Override
         public boolean process(Actor self, Message<?> message) {
-            //TODO
+            Object value = message.getData();
+            KeyType key;
+            if (keyExtractorFromValue1.matchValue(value)) {
+                key = keyExtractorFromValue1.toKey((ValueType1) value);
+            } else if (keyExtractorFromValue2.matchValue(value)) {
+                key = keyExtractorFromValue2.toKey((ValueType2) value);
+            } else {
+                return false;
+            }
+
+            put(self, key, value);
+            return true;
+        }
+
+        @SuppressWarnings("unchecked")
+        @Override
+        public boolean processTable(MailboxReplicable m) {
+            Object[] values = m.takeFromTable(matchKeyEntryId, this);
+            if (values != null) {
+                handler.accept((ValueType1) values[0], (ValueType2) values[1]);
+                return true;
+            }
             return false;
+        }
+
+        @Override
+        public int valueSizeInTable() {
+            return 2;
+        }
+
+        @Override
+        public boolean matchValueInTable(int index, Object value) {
+            if (index == 0) {
+                return keyExtractorFromValue1.matchValue(value);
+            } else if (index == 1) {
+                return keyExtractorFromValue2.matchValue(value);
+            } else {
+                return false;
+            }
         }
     }
 
-    public static class ActorBehaviorMatchKeyList<KeyType, ValueType> extends ActorBehaviorMatchKey<KeyType> {
+    public static class ActorBehaviorMatchKeyList<KeyType, ValueType> extends ActorBehaviorMatchKey<KeyType>
+            implements MailboxReplicable.ValueInTableMatcher {
         protected int threshold = 3;
-        protected Class<ValueType> type;
-        protected Function<ValueType, KeyType> keyExtractorFromValue;
+        protected KeyExtractor<KeyType, ValueType> keyExtractorFromValue;
         protected BiConsumer<KeyType, List<ValueType>> handler;
 
         public ActorBehaviorMatchKeyList(int matchKeyEntryId, int threshold,
-                                         Class<ValueType> type, Function<ValueType, KeyType> keyExtractorFromValue,
+                                         KeyExtractor<KeyType, ValueType> keyExtractorFromValue,
                                          BiConsumer<KeyType, List<ValueType>> handler) {
             super(matchKeyEntryId);
             this.threshold = threshold;
-            this.type = type;
             this.keyExtractorFromValue = keyExtractorFromValue;
             this.handler = handler;
         }
 
+        @SuppressWarnings("unchecked")
         @Override
         public boolean process(Actor self, Message<?> message) {
-            //TODO
+            Object value = message.getData();
+            KeyType key;
+            if (keyExtractorFromValue.matchValue(value)) {
+                key = keyExtractorFromValue.toKey((ValueType) value);
+            } else {
+                return false;
+            }
+            put(self, key, value);
+            return true;
+        }
+
+        @Override
+        public boolean processTable(MailboxReplicable m) {
+            Object[] values = m.takeFromTable(matchKeyEntryId, this);
+            //TODO custom extraction with key
             return false;
         }
+
+        @Override
+        public int valueSizeInTable() {
+            return threshold;
+        }
+
+        @Override
+        public boolean matchValueInTable(int index, Object value) {
+            return keyExtractorFromValue.matchValue(value);
+        }
+
     }
 }

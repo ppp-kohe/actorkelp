@@ -3,7 +3,9 @@ package csl.actor.msgassoc;
 import csl.actor.*;
 
 import java.io.Serializable;
+import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 
@@ -32,7 +34,7 @@ public abstract class ActorReplicable extends ActorDefault implements Cloneable 
 
     @Override
     protected ActorBehaviorBuilderKeyValue behaviorBuilder() {
-        return new ActorBehaviorBuilderKeyValue(ls -> getMailboxAsReplicable().initTable(ls));
+        return new ActorBehaviorBuilderKeyValue((ls, sel) -> getMailboxAsReplicable().initMessageTable(ls, sel));
     }
 
     @Override
@@ -46,6 +48,14 @@ public abstract class ActorReplicable extends ActorDefault implements Cloneable 
 
     public MailboxReplicable getMailboxAsReplicable() {
         return (MailboxReplicable) mailbox;
+    }
+
+    @Override
+    public boolean processMessageNext() {
+        if (getMailboxAsReplicable().processTable()) {
+            return true;
+        }
+        return super.processMessageNext();
     }
 
     public interface State {
@@ -65,22 +75,20 @@ public abstract class ActorReplicable extends ActorDefault implements Cloneable 
         public void becomeRouter(ActorReplicable self, Message<?> message) {
             ActorReplicable a1 = self.createClone();
             ActorReplicable a2 = self.createClone();
-            self.getMailboxAsReplicable().splitMessageTableToReplicas(a1, a2);
+            self.getMailboxAsReplicable().splitMessageTableIntoReplicas(a1, a2);
 
+            self.state = new StateRouter(self, a1, a2);
             a1.tell(message.getData(), self); //TODO pass self as sender. Is this OK?
-
-            self.state = new StateRouter(self);
         }
     }
 
     public static class StateRouter implements State {
-        protected Object dividingPoints;
-        protected Map<Class<?>, Function<?,?>> classToFunction;
+        protected List<MailboxReplicable.Split> splits;
+        protected Random random = new Random();
 
-        public StateRouter(ActorReplicable self) {
+        public StateRouter(ActorReplicable self, ActorReplicable a1, ActorReplicable a2) {
             MailboxReplicable mailbox = self.getMailboxAsReplicable();
-            classToFunction = mailbox.createClassFunctionMap();
-            dividingPoints = mailbox.createDividingPoints();
+            splits = mailbox.createSplits(a1, a2);
         }
 
         @Override
@@ -88,24 +96,26 @@ public abstract class ActorReplicable extends ActorDefault implements Cloneable 
             if (message.getData() instanceof RequestNewReplica) {
                 updatePoints(self, (RequestNewReplica) message.getData());
             } else {
-                route(message);
+                route(self, message);
             }
         }
 
         public void updatePoints(ActorReplicable self, RequestNewReplica request) {
             ActorReplicable replica = self.createClone();
             replica.state = new StateReplica(self);
-            //TODO dividingPoints
-
+            List<Comparable<?>> splitPoints = request.getNewSplitPoints();
+            for (int i = 0, size = splits.size(); i < size; ++i) {
+                splits.set(i, splits.get(i).updatePoint(splitPoints.get(i), replica));
+            }
         }
 
-        public void route(Message<?> message) {
-            Class<?> messageClass = message.getData().getClass();
-            Function<?,?> func = classToFunction.get(messageClass);
-            if (func == null) {
-                //TODO dividingPoints sendRandom(messageClass)
+        public void route(ActorReplicable self, Message<?> message) {
+            int target = self.getMailboxAsReplicable().getHistogramSelector().select(message.getData());
+            MailboxReplicable.Split split;
+            if (target == -1) {
+                splits.get(random.nextInt(splits.size())).sendNonKey(message);
             } else {
-                //TODO dividingPoints.send(message, func)
+                splits.get(target).send(message);
             }
         }
     }
@@ -128,7 +138,7 @@ public abstract class ActorReplicable extends ActorDefault implements Cloneable 
 
         public void requestNewReplica(ActorReplicable self) {
             requested = true;
-            router.tell(new RequestNewReplica(), self);
+            router.tell(new RequestNewReplica(self.getMailboxAsReplicable().createSplitPoints(), self), self);
         }
     }
 
@@ -150,6 +160,20 @@ public abstract class ActorReplicable extends ActorDefault implements Cloneable 
     }
 
     public static class RequestNewReplica implements Serializable {
+        protected List<Comparable<?>> newSplitPoints;
+        protected ActorRef actorRef;
 
+        public RequestNewReplica(List<Comparable<?>> newSplitPoints, ActorRef actorRef) {
+            this.newSplitPoints = newSplitPoints;
+            this.actorRef = actorRef;
+        }
+
+        public List<Comparable<?>> getNewSplitPoints() {
+            return newSplitPoints;
+        }
+
+        public ActorRef getActorRef() {
+            return actorRef;
+        }
     }
 }

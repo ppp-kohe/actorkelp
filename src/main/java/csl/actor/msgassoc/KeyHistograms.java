@@ -8,8 +8,8 @@ public class KeyHistograms {
 
     public interface Histogram {
         void put(Object v);
-        Comparable<?> findDividingPoint();
-        int compareToDividingPoint(Object v1, Comparable<?> v2);
+        Comparable<?> findSplitPoint();
+        int compareToSplitPoint(Object v, Comparable<?> splitPoint);
 
         Histogram create();
     }
@@ -24,7 +24,7 @@ public class KeyHistograms {
             counts.compute((Comparable<?>) v, (k,count) -> count == null ? 0L : (count + 1L));
         }
 
-        public Comparable<?> findDividingPoint() {
+        public Comparable<?> findSplitPoint() {
             long acc = 0;
 
             long half = total / 2L;
@@ -42,8 +42,8 @@ public class KeyHistograms {
 
         @SuppressWarnings({"unchecked", "rawtypes"})
         @Override
-        public int compareToDividingPoint(Object v1, Comparable<?> v2) {
-            return ((Comparable) v1).compareTo(v2);
+        public int compareToSplitPoint(Object v, Comparable<?> splitPoint) {
+            return ((Comparable) v).compareTo(splitPoint);
         }
 
         @Override
@@ -64,8 +64,8 @@ public class KeyHistograms {
         }
 
         @Override
-        public int compareToDividingPoint(Object v1, Comparable<?> v2) {
-            return super.compareToDividingPoint(toKey(v1), v2);
+        public int compareToSplitPoint(Object v, Comparable<?> splitPoint) {
+            return super.compareToSplitPoint(toKey(v), splitPoint);
         }
 
         @Override
