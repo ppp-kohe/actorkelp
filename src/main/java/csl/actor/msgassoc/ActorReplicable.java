@@ -4,10 +4,8 @@ import csl.actor.*;
 
 import java.io.Serializable;
 import java.util.List;
-import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.function.Function;
 
 public abstract class ActorReplicable extends ActorDefault implements Cloneable {
     protected State state;
@@ -83,12 +81,12 @@ public abstract class ActorReplicable extends ActorDefault implements Cloneable 
     }
 
     public static class StateRouter implements State {
-        protected List<MailboxReplicable.Split> splits;
+        protected List<MailboxReplicable.SplitTreeRoot> splits;
         protected Random random = new Random();
 
         public StateRouter(ActorReplicable self, ActorReplicable a1, ActorReplicable a2) {
             MailboxReplicable mailbox = self.getMailboxAsReplicable();
-            splits = mailbox.createSplits(a1, a2);
+            splits = mailbox.createSplits(a1, a2, random);
         }
 
         @Override
@@ -105,13 +103,12 @@ public abstract class ActorReplicable extends ActorDefault implements Cloneable 
             replica.state = new StateReplica(self);
             List<Comparable<?>> splitPoints = request.getNewSplitPoints();
             for (int i = 0, size = splits.size(); i < size; ++i) {
-                splits.set(i, splits.get(i).updatePoint(splitPoints.get(i), replica));
+                splits.get(i).updatePoint(splitPoints.get(i), replica);
             }
         }
 
         public void route(ActorReplicable self, Message<?> message) {
             int target = self.getMailboxAsReplicable().getHistogramSelector().select(message.getData());
-            MailboxReplicable.Split split;
             if (target == -1) {
                 splits.get(random.nextInt(splits.size())).sendNonKey(message);
             } else {
@@ -151,7 +148,7 @@ public abstract class ActorReplicable extends ActorDefault implements Cloneable 
         try {
             ActorReplicable a = (ActorReplicable) super.clone();
             a.processLock = new AtomicBoolean(false);
-            //TODO share behavior
+            //share behavior
             a.initMailboxForClone();
             return a;
         } catch (CloneNotSupportedException ce) {

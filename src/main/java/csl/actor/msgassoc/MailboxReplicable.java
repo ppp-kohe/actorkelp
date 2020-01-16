@@ -5,8 +5,9 @@ import csl.actor.MailboxDefault;
 import csl.actor.Message;
 
 import java.util.*;
+import java.util.function.BiConsumer;
+import java.util.function.BiFunction;
 import java.util.function.Supplier;
-import java.util.stream.IntStream;
 
 public class MailboxReplicable extends MailboxDefault implements Cloneable {
     protected int threshold = 1000;
@@ -65,10 +66,10 @@ public class MailboxReplicable extends MailboxDefault implements Cloneable {
         }
     }
 
-    public List<Split> createSplits(ActorReplicable a1, ActorReplicable a2) {
-        List<Split> splits = new ArrayList<>(entries.length);
+    public List<SplitTreeRoot> createSplits(ActorReplicable a1, ActorReplicable a2, Random random) {
+        List<SplitTreeRoot> splits = new ArrayList<>(entries.length);
         for (EntryTable e : entries) {
-            splits.add(e.createSplit(a1, a2));
+            splits.add(e.createSplitRoot(a1, a2, random));
         }
         return splits;
     }
@@ -96,6 +97,17 @@ public class MailboxReplicable extends MailboxDefault implements Cloneable {
 
     public Object[] takeFromTable(int entryId, ValueInTableMatcher matcher) {
         return entries[entryId].take(matcher);
+    }
+
+    public boolean processWithTakingFromTable(int entryId, ValueInTableMatcher matcher, BiConsumer<Object, List<Object>> handler) {
+        return entries[entryId].processWithTaking(matcher, (k,vs) -> {
+            if (vs == null) {
+                return false;
+            } else {
+                handler.accept(k, Arrays.asList(vs));
+                return true;
+            }
+        });
     }
 
     public interface ValueInTableMatcher {
@@ -140,6 +152,10 @@ public class MailboxReplicable extends MailboxDefault implements Cloneable {
             return histogram.findSplitPoint();
         }
 
+        public SplitTreeRoot createSplitRoot(ActorReplicable a1, ActorReplicable a2, Random random) {
+            return new SplitTreeRoot(createSplit(a1, a2), histogram, random);
+        }
+
         public Split createSplit(ActorReplicable a1, ActorReplicable a2) {
             return new SplitTree(findSplitPoint(),
                     new SplitActor(a1),
@@ -147,7 +163,12 @@ public class MailboxReplicable extends MailboxDefault implements Cloneable {
         }
 
         public Object[] take(ValueInTableMatcher matcher) {
-            for (List<Object> storeList : table.values()) {
+            return processWithTaking(matcher, (k,vs) -> vs);
+        }
+
+        public <Ret> Ret processWithTaking(ValueInTableMatcher matcher, BiFunction<Object, Object[], Ret> handler) {
+            for (Map.Entry<Object,List<Object>> e : table.entrySet()) {
+                List<Object> storeList = e.getValue();
                 int dataSize = matcher.valueSizeInTable();
                 Object[] values = new Object[dataSize];
                 int[] removeIndices = new int[dataSize];
@@ -168,19 +189,44 @@ public class MailboxReplicable extends MailboxDefault implements Cloneable {
                 }
 
                 if (found == dataSize) {
-                    IntStream.range(0, dataSize)
-                            .forEach(i -> storeList.remove(removeIndices[dataSize - i - 1]));
-                    return values;
+                    for (int i = dataSize - 1; i >= 0; --i) {
+                        storeList.remove(removeIndices[i]);
+                    }
+                    return handler.apply(e.getKey(), values);
                 }
             }
-            return null;
+            return handler.apply(null, null);
+        }
+    }
+
+    public static class SplitTreeRoot {
+        protected Split split;
+        protected KeyHistograms.Histogram histogram;
+        protected Random random;
+
+        public SplitTreeRoot(Split split, KeyHistograms.Histogram histogram, Random random) {
+            this.split = split;
+            this.histogram = histogram;
+            this.random = random;
+        }
+
+        public void updatePoint(Comparable<?> newSplitPoint, ActorRef actorRef) {
+            split = split.updatePoint(newSplitPoint, actorRef);
+        }
+
+        public void send(Message<?> message) {
+            split.send(message, histogram);
+        }
+
+        public void sendNonKey(Message<?> message) {
+            split.sendNonKey(message, random);
         }
     }
 
     public interface Split {
         Split updatePoint(Comparable<?> newSplitPoint, ActorRef actorRef);
-        void send(Message<?> message);
-        void sendNonKey(Message<?> message);
+        void send(Message<?> message, KeyHistograms.Histogram histogram);
+        void sendNonKey(Message<?> message, Random random);
     }
 
     public static class SplitActor implements Split {
@@ -196,13 +242,13 @@ public class MailboxReplicable extends MailboxDefault implements Cloneable {
         }
 
         @Override
-        public void send(Message<?> message) {
+        public void send(Message<?> message, KeyHistograms.Histogram histogram) {
             actorRef.tell(message.getData(), message.getSender());
         }
 
         @Override
-        public void sendNonKey(Message<?> message) {
-            send(message);
+        public void sendNonKey(Message<?> message, Random random) {
+            actorRef.tell(message.getData(), message.getSender());
         }
     }
 
@@ -229,15 +275,22 @@ public class MailboxReplicable extends MailboxDefault implements Cloneable {
         }
 
         @Override
-        public void send(Message<?> message) {
-            //TODO compare by histogram?
-
+        public void send(Message<?> message, KeyHistograms.Histogram histogram) {
+            if (histogram.compareToSplitPoint(message.getData(), point) < 0) {
+                left.send(message, histogram);
+            } else {
+                right.send(message, histogram);
+            }
         }
 
         @Override
-        public void sendNonKey(Message<?> message) {
-            //TODO
-            left.send(message);
+        public void sendNonKey(Message<?> message, Random random) {
+            if (random.nextBoolean()) {
+                left.sendNonKey(message, random);
+            } else {
+                right.sendNonKey(message, random);
+            }
         }
     }
+
 }
