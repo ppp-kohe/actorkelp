@@ -7,7 +7,7 @@ import java.util.List;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-public abstract class ActorReplicable extends ActorDefault implements Cloneable {
+public abstract class ActorReplicable extends ActorAggregation implements Cloneable {
     protected State state;
 
     public ActorReplicable(ActorSystem system, String name, ActorBehavior behavior) {
@@ -31,11 +31,6 @@ public abstract class ActorReplicable extends ActorDefault implements Cloneable 
     }
 
     @Override
-    protected ActorBehaviorBuilderKeyValue behaviorBuilder() {
-        return new ActorBehaviorBuilderKeyValue((ls, sel) -> getMailboxAsReplicable().initMessageTable(ls, sel));
-    }
-
-    @Override
     protected void initMailbox() {
         mailbox = new MailboxReplicable();
     }
@@ -46,14 +41,6 @@ public abstract class ActorReplicable extends ActorDefault implements Cloneable 
 
     public MailboxReplicable getMailboxAsReplicable() {
         return (MailboxReplicable) mailbox;
-    }
-
-    @Override
-    public boolean processMessageNext() {
-        if (getMailboxAsReplicable().processTable()) {
-            return true;
-        }
-        return super.processMessageNext();
     }
 
     public interface State {

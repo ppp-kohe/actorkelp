@@ -12,13 +12,13 @@ import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
-    protected BiConsumer<List<Supplier<KeyHistograms.Histogram>>, MailboxReplicable.HistogramSelector> histogramFactoriesTarget;
+    protected BiConsumer<List<Supplier<KeyHistograms.Histogram>>, MailboxAggregation.HistogramSelector> histogramFactoriesTarget;
     protected List<Supplier<KeyHistograms.Histogram>> histogramFactories = new ArrayList<>();
-    protected List<MailboxReplicable.HistogramSelector> histogramSelectors = new ArrayList<>();
+    protected List<MailboxAggregation.HistogramSelector> histogramSelectors = new ArrayList<>();
 
     public ActorBehaviorBuilderKeyValue(
             BiConsumer<List<Supplier<KeyHistograms.Histogram>>,
-                       MailboxReplicable.HistogramSelector> histogramFactoriesTarget) {
+                    MailboxAggregation.HistogramSelector> histogramFactoriesTarget) {
         this.histogramFactoriesTarget = histogramFactoriesTarget;
     }
 
@@ -76,7 +76,7 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
         return histogramFactories;
     }
 
-    public ActorBehaviorBuilderKeyValue addMatchKeySelector(MailboxReplicable.HistogramSelector histogramSelector) {
+    public ActorBehaviorBuilderKeyValue addMatchKeySelector(MailboxAggregation.HistogramSelector histogramSelector) {
         histogramSelectors.add(histogramSelector);
         return this;
     }
@@ -197,7 +197,7 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
         }
     }
 
-    public static class HistogramSelectorDefault implements MailboxReplicable.HistogramSelector {
+    public static class HistogramSelectorDefault implements MailboxAggregation.HistogramSelector {
         protected int matchKeyEntryId;
         protected KeyExtractor<?,?> keyExtractor;
 
@@ -220,10 +220,10 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
         }
     }
 
-    public static class HistogramSelectorList implements MailboxReplicable.HistogramSelector {
-        protected List<MailboxReplicable.HistogramSelector> selectors;
+    public static class HistogramSelectorList implements MailboxAggregation.HistogramSelector {
+        protected List<MailboxAggregation.HistogramSelector> selectors;
 
-        public HistogramSelectorList(List<MailboxReplicable.HistogramSelector> selectors) {
+        public HistogramSelectorList(List<MailboxAggregation.HistogramSelector> selectors) {
             this.selectors = selectors;
         }
 
@@ -235,7 +235,7 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
 
         @Override
         public int select(Object value) {
-            for (MailboxReplicable.HistogramSelector s : selectors) {
+            for (MailboxAggregation.HistogramSelector s : selectors) {
                 int m = s.select(s);
                 if (m != -1) {
                     return m;
@@ -253,16 +253,16 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
         }
 
         protected void put(Actor self, KeyType key, Object value) {
-            MailboxReplicable m = ((ActorReplicable) self).getMailboxAsReplicable();
+            MailboxAggregation m = (MailboxAggregation) self.getMailbox();
             m.putMessageTable(matchKeyEntryId, key, value);
             m.addActiveAssociation(this);
         }
 
-        public abstract boolean processTable(MailboxReplicable m);
+        public abstract boolean processTable(MailboxAggregation m);
     }
 
     public static class ActorBehaviorMatchKeyTwo<KeyType, ValueType1, ValueType2> extends ActorBehaviorMatchKey<KeyType>
-                    implements MailboxReplicable.ValueInTableMatcher {
+                    implements MailboxAggregation.ValueInTableMatcher {
         protected KeyExtractor<KeyType, ValueType1> keyExtractorFromValue1;
         protected KeyExtractor<KeyType, ValueType2> keyExtractorFromValue2;
 
@@ -297,7 +297,7 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
 
         @SuppressWarnings("unchecked")
         @Override
-        public boolean processTable(MailboxReplicable m) {
+        public boolean processTable(MailboxAggregation m) {
             Object[] values = m.takeFromTable(matchKeyEntryId, this);
             if (values != null) {
                 handler.accept((ValueType1) values[0], (ValueType2) values[1]);
@@ -325,7 +325,7 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
 
 
     public static class ActorBehaviorMatchKeyThree<KeyType, ValueType1, ValueType2, ValueType3> extends ActorBehaviorMatchKey<KeyType>
-            implements MailboxReplicable.ValueInTableMatcher {
+            implements MailboxAggregation.ValueInTableMatcher {
         protected KeyExtractor<KeyType, ValueType1> keyExtractorFromValue1;
         protected KeyExtractor<KeyType, ValueType2> keyExtractorFromValue2;
         protected KeyExtractor<KeyType, ValueType3> keyExtractorFromValue3;
@@ -365,7 +365,7 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
 
         @SuppressWarnings("unchecked")
         @Override
-        public boolean processTable(MailboxReplicable m) {
+        public boolean processTable(MailboxAggregation m) {
             Object[] values = m.takeFromTable(matchKeyEntryId, this);
             if (values != null) {
                 handler.accept((ValueType1) values[0], (ValueType2) values[1], (ValueType3) values[2]);
@@ -394,7 +394,7 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
     }
 
     public static class ActorBehaviorMatchKeyFour<KeyType, ValueType1, ValueType2, ValueType3, ValueType4> extends ActorBehaviorMatchKey<KeyType>
-            implements MailboxReplicable.ValueInTableMatcher {
+            implements MailboxAggregation.ValueInTableMatcher {
         protected KeyExtractor<KeyType, ValueType1> keyExtractorFromValue1;
         protected KeyExtractor<KeyType, ValueType2> keyExtractorFromValue2;
         protected KeyExtractor<KeyType, ValueType3> keyExtractorFromValue3;
@@ -439,7 +439,7 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
 
         @SuppressWarnings("unchecked")
         @Override
-        public boolean processTable(MailboxReplicable m) {
+        public boolean processTable(MailboxAggregation m) {
             Object[] values = m.takeFromTable(matchKeyEntryId, this);
             if (values != null) {
                 handler.accept((ValueType1) values[0], (ValueType2) values[1], (ValueType3) values[2], (ValueType4) values[3]);
@@ -480,7 +480,7 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
     }
 
     public static class ActorBehaviorMatchKeyList<KeyType, ValueType> extends ActorBehaviorMatchKey<KeyType>
-            implements MailboxReplicable.ValueInTableMatcher {
+            implements MailboxAggregation.ValueInTableMatcher {
         protected int threshold = 3;
         protected KeyExtractor<KeyType, ValueType> keyExtractorFromValue;
         protected BiConsumer<KeyType, List<ValueType>> handler;
@@ -510,7 +510,7 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
 
         @SuppressWarnings("unchecked")
         @Override
-        public boolean processTable(MailboxReplicable m) {
+        public boolean processTable(MailboxAggregation m) {
             return m.processWithTakingFromTable(matchKeyEntryId, this, (k,vs) ->
                 handler.accept((KeyType) k, (List<ValueType>) vs));
         }
