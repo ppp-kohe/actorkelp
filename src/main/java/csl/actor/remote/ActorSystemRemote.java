@@ -211,6 +211,15 @@ public class ActorSystemRemote implements ActorSystem {
         localSystem.register(actor);
     }
 
+    public void unregister(String actorName) {
+        localSystem.unregister(actorName);
+    }
+
+    @Override
+    public Actor resolveActorLocalNamed(ActorRefLocalNamed ref) {
+        return localSystem.resolveActorLocalNamed(ref);
+    }
+
     @Override
     public String toString() {
         return getClass().getSimpleName() + "@" + Integer.toHexString(System.identityHashCode(this)) +

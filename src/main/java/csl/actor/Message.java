@@ -30,4 +30,13 @@ public class Message<DataType> implements Serializable {
     public String toString() {
         return "Message(" + target + " ! " + data + " <- " + sender + ")";
     }
+
+    /**
+     * the special message intended to start processing of the target
+     */
+    public static class MessageNone extends Message<Void> {
+        public MessageNone(ActorRef target) {
+            super(target, null, null);
+        }
+    }
 }

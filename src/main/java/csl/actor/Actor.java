@@ -3,10 +3,10 @@ package csl.actor;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public abstract class Actor implements ActorRef {
-    protected ActorSystem system;
+    protected transient ActorSystem system;
     protected Mailbox mailbox;
     protected String name;
-    protected AtomicBoolean processLock = new AtomicBoolean(false);
+    protected transient AtomicBoolean processLock = new AtomicBoolean(false);
 
     public Actor(ActorSystem system) {
         this(system, null);

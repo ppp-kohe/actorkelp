@@ -81,7 +81,9 @@ public class ActorSystemDefault implements ActorSystem {
     }
 
     public void startProcessMessageSubsequently(Actor target, Message<?> message) {
-        target.offer(message);
+        if (!(message instanceof Message.MessageNone)) {
+            target.offer(message);
+        }
         execute(() -> processMessageSubsequently(target));
     }
 
@@ -126,6 +128,10 @@ public class ActorSystemDefault implements ActorSystem {
         if (name != null) {
             namedActorMap.put(name, actor);
         }
+    }
+
+    public void unregister(String actorName) {
+        namedActorMap.remove(actorName);
     }
 
     public Actor resolveActorLocalNamed(ActorRefLocalNamed ref) {

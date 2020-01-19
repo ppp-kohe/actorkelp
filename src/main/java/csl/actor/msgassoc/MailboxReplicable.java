@@ -3,10 +3,8 @@ package csl.actor.msgassoc;
 import csl.actor.ActorRef;
 import csl.actor.Message;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Random;
+import java.io.Serializable;
+import java.util.*;
 
 public class MailboxReplicable extends MailboxAggregation {
     protected int threshold = 1000;
@@ -30,7 +28,7 @@ public class MailboxReplicable extends MailboxAggregation {
         }
     }
 
-    public List<SplitTreeRoot> createSplits(ActorReplicable a1, ActorReplicable a2, Random random) {
+    public List<SplitTreeRoot> createSplits(ActorRef a1, ActorRef a2, Random random) {
         List<SplitTreeRoot> splits = new ArrayList<>(entries.length);
         for (EntryTable e : entries) {
             splits.add(((EntryTableReplicable) e).createSplitRoot(a1, a2, random));
@@ -46,7 +44,7 @@ public class MailboxReplicable extends MailboxAggregation {
         return splitPoints;
     }
 
-    public static class EntryTableReplicable extends EntryTable {
+    public static class EntryTableReplicable extends EntryTable implements Serializable {
 
         public EntryTableReplicable(KeyHistograms.Histogram histogram) {
             super(histogram);
@@ -74,11 +72,11 @@ public class MailboxReplicable extends MailboxAggregation {
             return histogram.findSplitPoint();
         }
 
-        public SplitTreeRoot createSplitRoot(ActorReplicable a1, ActorReplicable a2, Random random) {
+        public SplitTreeRoot createSplitRoot(ActorRef a1, ActorRef a2, Random random) {
             return new SplitTreeRoot(createSplit(a1, a2), histogram, random);
         }
 
-        public Split createSplit(ActorReplicable a1, ActorReplicable a2) {
+        public Split createSplit(ActorRef a1, ActorRef a2) {
             return new SplitTree(findSplitPoint(),
                     new SplitActor(a1),
                     new SplitActor(a2));
@@ -97,7 +95,7 @@ public class MailboxReplicable extends MailboxAggregation {
         }
 
         public void updatePoint(Comparable<?> newSplitPoint, ActorRef actorRef) {
-            split = split.updatePoint(newSplitPoint, actorRef);
+            split = split.updatePoint(newSplitPoint, actorRef, histogram);
         }
 
         public void send(Message<?> message) {
@@ -110,7 +108,7 @@ public class MailboxReplicable extends MailboxAggregation {
     }
 
     public interface Split {
-        Split updatePoint(Comparable<?> newSplitPoint, ActorRef actorRef);
+        Split updatePoint(Comparable<?> newSplitPoint, ActorRef actorRef, KeyHistograms.Histogram histogram);
         void send(Message<?> message, KeyHistograms.Histogram histogram);
         void sendNonKey(Message<?> message, Random random);
     }
@@ -123,7 +121,7 @@ public class MailboxReplicable extends MailboxAggregation {
         }
 
         @Override
-        public Split updatePoint(Comparable<?> newSplitPoint, ActorRef actorRef) {
+        public Split updatePoint(Comparable<?> newSplitPoint, ActorRef actorRef, KeyHistograms.Histogram histogram) {
             return new SplitTree(newSplitPoint, this, new SplitActor(actorRef));
         }
 
@@ -149,13 +147,12 @@ public class MailboxReplicable extends MailboxAggregation {
             this.right = right;
         }
 
-        @SuppressWarnings({"rawtypes", "unchecked"})
         @Override
-        public Split updatePoint(Comparable<?> newSplitPoint, ActorRef actorRef) {
-            if (((Comparable) point).compareTo(newSplitPoint) > 0) {
-                left = left.updatePoint(newSplitPoint, actorRef);
+        public Split updatePoint(Comparable<?> newSplitPoint, ActorRef actorRef, KeyHistograms.Histogram histogram) {
+            if (histogram.compareSplitPoints(newSplitPoint, point) < 0) {
+                left = left.updatePoint(newSplitPoint, actorRef, histogram);
             } else {
-                right = right.updatePoint(newSplitPoint, actorRef);
+                right = right.updatePoint(newSplitPoint, actorRef, histogram);
             }
             return this;
         }
@@ -179,4 +176,15 @@ public class MailboxReplicable extends MailboxAggregation {
         }
     }
 
+    public void serializeTo(ActorReplicable.ActorReplicableSerializableState state) {
+        state.messages = queue.toArray(new Message[0]);
+        state.entries = entries;
+        state.threshold = threshold;
+    }
+
+    public void deserializeFrom(ActorReplicable.ActorReplicableSerializableState state) {
+        queue.addAll(Arrays.asList(state.messages));
+        entries = state.entries;
+        threshold = state.threshold;
+    }
 }

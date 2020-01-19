@@ -10,6 +10,7 @@ public class KeyHistograms {
         void put(Object v);
         Comparable<?> findSplitPoint();
         int compareToSplitPoint(Object v, Comparable<?> splitPoint);
+        int compareSplitPoints(Comparable<?> v1, Comparable<?> v2);
 
         Histogram create();
     }
@@ -44,6 +45,12 @@ public class KeyHistograms {
         @Override
         public int compareToSplitPoint(Object v, Comparable<?> splitPoint) {
             return ((Comparable) v).compareTo(splitPoint);
+        }
+
+        @SuppressWarnings({"unchecked", "rawtypes"})
+        @Override
+        public int compareSplitPoints(Comparable<?> v1, Comparable<?> v2) {
+            return ((Comparable) v1).compareTo(v2);
         }
 
         @Override
