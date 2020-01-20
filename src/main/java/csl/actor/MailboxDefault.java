@@ -3,15 +3,15 @@ package csl.actor;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
 public class MailboxDefault extends Mailbox {
-    protected ConcurrentLinkedQueue<Message> queue = new ConcurrentLinkedQueue<>();
+    protected ConcurrentLinkedQueue<Message<?>> queue = new ConcurrentLinkedQueue<>();
 
     @Override
-    public void offer(Message message) {
+    public void offer(Message<?> message) {
         queue.offer(message);
     }
 
     @Override
-    public Message poll() {
+    public Message<?> poll() {
         return queue.poll();
     }
 }

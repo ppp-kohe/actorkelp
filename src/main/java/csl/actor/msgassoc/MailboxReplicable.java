@@ -10,7 +10,16 @@ public class MailboxReplicable extends MailboxAggregation {
     protected int threshold = 1000;
 
     public boolean isOverThreshold() {
-        return queue.size() > threshold;
+        return queue.size() > threshold && hasMultiplePoints();
+    }
+
+    public boolean hasMultiplePoints() {
+        for (EntryTable e : entries) {
+            if (e.hasMultiplePoints()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @Override

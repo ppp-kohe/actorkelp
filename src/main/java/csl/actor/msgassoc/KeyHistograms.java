@@ -1,18 +1,21 @@
 package csl.actor.msgassoc;
 
+import java.io.Serializable;
 import java.util.Map;
 import java.util.Objects;
 import java.util.TreeMap;
 
 public class KeyHistograms {
 
-    public interface Histogram {
+    public interface Histogram extends Serializable {
         void put(Object v);
         Comparable<?> findSplitPoint();
         int compareToSplitPoint(Object v, Comparable<?> splitPoint);
         int compareSplitPoints(Comparable<?> v1, Comparable<?> v2);
 
         Histogram create();
+
+        boolean hasMultiplePoints();
     }
 
     public static class HistogramComparable implements Histogram {
@@ -56,6 +59,11 @@ public class KeyHistograms {
         @Override
         public Histogram create() {
             return new HistogramComparable();
+        }
+
+        @Override
+        public boolean hasMultiplePoints() {
+            return counts.size() > 1;
         }
     }
 

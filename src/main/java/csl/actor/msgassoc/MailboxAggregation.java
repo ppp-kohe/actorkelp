@@ -142,5 +142,9 @@ public class MailboxAggregation extends MailboxDefault {
             }
             return handler.apply(null, null);
         }
+
+        public boolean hasMultiplePoints() {
+            return histogram.hasMultiplePoints();
+        }
     }
 }
