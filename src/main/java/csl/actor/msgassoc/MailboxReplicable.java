@@ -13,6 +13,14 @@ public class MailboxReplicable extends MailboxAggregation {
         return queue.size() > threshold && hasMultiplePoints();
     }
 
+    public boolean isEmpty() {
+        return queue.isEmpty();
+    }
+
+    public int getThreshold() {
+        return threshold;
+    }
+
     public boolean hasMultiplePoints() {
         for (EntryTable e : entries) {
             if (e.hasMultiplePoints()) {
@@ -43,14 +51,6 @@ public class MailboxReplicable extends MailboxAggregation {
             splits.add(((EntryTableReplicable) e).createSplitRoot(a1, a2, random));
         }
         return splits;
-    }
-
-    public List<Comparable<?>> createSplitPoints() {
-        List<Comparable<?>> splitPoints = new ArrayList<>(entries.length);
-        for (EntryTable e : entries) {
-            splitPoints.add(((EntryTableReplicable) e).findSplitPoint());
-        }
-        return splitPoints;
     }
 
     public static class EntryTableReplicable extends EntryTable implements Serializable {
@@ -103,8 +103,16 @@ public class MailboxReplicable extends MailboxAggregation {
             this.random = random;
         }
 
-        public void updatePoint(Comparable<?> newSplitPoint, ActorRef actorRef) {
-            split = split.updatePoint(newSplitPoint, actorRef, histogram);
+        public Comparable<?> getSplitPoint() {
+            if (split instanceof SplitTree) {
+                return ((SplitTree) split).getPoint();
+            } else {
+                return null; //never
+            }
+        }
+
+        public void updatePoint(Comparable<?> newSplitPoint, ActorRef left, ActorRef right) {
+            split = split.updatePoint(newSplitPoint, left, right, histogram);
         }
 
         public void send(Message<?> message) {
@@ -117,7 +125,7 @@ public class MailboxReplicable extends MailboxAggregation {
     }
 
     public interface Split {
-        Split updatePoint(Comparable<?> newSplitPoint, ActorRef actorRef, KeyHistograms.Histogram histogram);
+        Split updatePoint(Comparable<?> newSplitPoint, ActorRef left, ActorRef right, KeyHistograms.Histogram histogram);
         void send(Message<?> message, KeyHistograms.Histogram histogram);
         void sendNonKey(Message<?> message, Random random);
     }
@@ -130,8 +138,8 @@ public class MailboxReplicable extends MailboxAggregation {
         }
 
         @Override
-        public Split updatePoint(Comparable<?> newSplitPoint, ActorRef actorRef, KeyHistograms.Histogram histogram) {
-            return new SplitTree(newSplitPoint, this, new SplitActor(actorRef));
+        public Split updatePoint(Comparable<?> newSplitPoint, ActorRef left, ActorRef right, KeyHistograms.Histogram histogram) {
+            return new SplitTree(newSplitPoint, new SplitActor(left), new SplitActor(right));
         }
 
         @Override
@@ -156,12 +164,16 @@ public class MailboxReplicable extends MailboxAggregation {
             this.right = right;
         }
 
+        public Comparable<?> getPoint() {
+            return point;
+        }
+
         @Override
-        public Split updatePoint(Comparable<?> newSplitPoint, ActorRef actorRef, KeyHistograms.Histogram histogram) {
+        public Split updatePoint(Comparable<?> newSplitPoint, ActorRef la, ActorRef ra, KeyHistograms.Histogram histogram) {
             if (histogram.compareSplitPoints(newSplitPoint, point) < 0) {
-                left = left.updatePoint(newSplitPoint, actorRef, histogram);
+                left = left.updatePoint(newSplitPoint, la, ra, histogram);
             } else {
-                right = right.updatePoint(newSplitPoint, actorRef, histogram);
+                right = right.updatePoint(newSplitPoint, la, ra, histogram);
             }
             return this;
         }

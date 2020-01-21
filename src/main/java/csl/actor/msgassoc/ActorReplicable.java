@@ -6,6 +6,7 @@ import java.io.Serializable;
 import java.util.List;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Collectors;
 
 public abstract class ActorReplicable extends ActorAggregation implements Cloneable {
     protected State state;
@@ -104,21 +105,19 @@ public abstract class ActorReplicable extends ActorAggregation implements Clonea
 
         @Override
         public void processMessage(ActorReplicable self, Message<?> message) {
-            if (message.getData() instanceof RequestNewReplica) {
-                updatePoints(self, (RequestNewReplica) message.getData());
+            if (message.getData() instanceof RequestUpdateSplits) {
+                updatePoints(self, (RequestUpdateSplits) message.getData());
             } else {
                 route(self, message);
             }
         }
 
-        public void updatePoints(ActorReplicable self, RequestNewReplica request) {
-            ActorReplicable replica = self.createClone();
-            replica.state = new StateReplica(self);
+        public void updatePoints(ActorReplicable self, RequestUpdateSplits request) {
             List<Comparable<?>> splitPoints = request.getNewSplitPoints();
-
-            ActorRef newActor = place(self.getPlacement(), replica);
+            ActorRef left = request.getLeft();
+            ActorRef right = request.getRight();
             for (int i = 0, size = splits.size(); i < size; ++i) {
-                splits.get(i).updatePoint(splitPoints.get(i), newActor);
+                splits.get(i).updatePoint(splitPoints.get(i), left, right);
             }
         }
 
@@ -134,7 +133,6 @@ public abstract class ActorReplicable extends ActorAggregation implements Clonea
 
     public static class StateReplica implements State {
         protected ActorRef router;
-        protected boolean requested;
 
         public StateReplica(ActorRef router) {
             this.router = router;
@@ -143,8 +141,9 @@ public abstract class ActorReplicable extends ActorAggregation implements Clonea
         @Override
         public void processMessage(ActorReplicable self, Message<?> message) {
             self.behavior.process(self, message);
-            if (!requested && self.getMailboxAsReplicable().isOverThreshold()) {
-                requestNewReplica(self);
+
+            if (self.getMailboxAsReplicable().isOverThreshold()) {
+                createReplica(self);
             }
         }
 
@@ -152,9 +151,55 @@ public abstract class ActorReplicable extends ActorAggregation implements Clonea
             return router;
         }
 
-        public void requestNewReplica(ActorReplicable self) {
-            requested = true;
-            router.tell(new RequestNewReplica(self.getMailboxAsReplicable().createSplitPoints()), self);
+        public void createReplica(ActorReplicable self) {
+            ActorReplicable r1 = self.createClone();
+            ActorReplicable r2 = self.createClone();
+            r1.state = new StateReplica(router);
+            r2.state = new StateReplica(router);
+            self.getMailboxAsReplicable().splitMessageTableIntoReplicas(r1, r2);
+
+            ActorPlacement placement = self.getPlacement();
+
+            self.state = new StateRouterTemporary(self,
+                    placement.place(r1),
+                    placement.place(r2), router);
+        }
+    }
+
+    public static class StateRouterTemporary extends StateRouter {
+        protected ActorRef router;
+        protected ActorRef left;
+        protected ActorRef right;
+        public StateRouterTemporary(ActorReplicable self, ActorRef a1, ActorRef a2, ActorRef router) {
+            super(self, a1, a2);
+            this.router = router;
+            this.left = a1;
+            this.right = a2;
+        }
+
+        @Override
+        public void processMessage(ActorReplicable self, Message<?> message) {
+            super.processMessage(self, message);
+            processFurtherMessages(self);
+
+            if (self.getMailboxAsReplicable().isEmpty()) {
+                router.tell(new RequestUpdateSplits(toSplitPoints(), left, right), self);
+            }
+        }
+
+        protected void processFurtherMessages(ActorReplicable self) {
+            //here we can manually process further messages on self for quickly delivering messages
+            MailboxReplicable mailbox = self.getMailboxAsReplicable();
+            int processLimit = Math.max(10, mailbox.getThreshold() / 10);
+            for (int i = 0; !mailbox.isEmpty() && i < processLimit; ++i) {
+                super.processMessage(self, mailbox.poll());
+            }
+        }
+
+        protected List<Comparable<?>> toSplitPoints() {
+            return splits.stream()
+                    .map(MailboxReplicable.SplitTreeRoot::getSplitPoint)
+                    .collect(Collectors.toList());
         }
     }
 
@@ -181,15 +226,27 @@ public abstract class ActorReplicable extends ActorAggregation implements Clonea
         return state;
     }
 
-    public static class RequestNewReplica implements Serializable {
+    public static class RequestUpdateSplits implements Serializable {
         protected List<Comparable<?>> newSplitPoints;
+        protected ActorRef left;
+        protected ActorRef right;
 
-        public RequestNewReplica(List<Comparable<?>> newSplitPoints) {
+        public RequestUpdateSplits(List<Comparable<?>> newSplitPoints, ActorRef left, ActorRef right) {
             this.newSplitPoints = newSplitPoints;
+            this.left = left;
+            this.right = right;
         }
 
         public List<Comparable<?>> getNewSplitPoints() {
             return newSplitPoints;
+        }
+
+        public ActorRef getLeft() {
+            return left;
+        }
+
+        public ActorRef getRight() {
+            return right;
         }
     }
 
