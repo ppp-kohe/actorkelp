@@ -8,18 +8,26 @@ import java.util.function.BiFunction;
 import java.util.function.Supplier;
 
 public class MailboxAggregation extends MailboxDefault {
-    protected EntryTable[] entries; //consider performance
+    @Deprecated  protected EntryTable[] entries; //consider performance //TODO remove
     protected HistogramSelector histogramSelector;
 
     protected Set<ActorBehaviorBuilderKeyValue.ActorBehaviorMatchKey<?>> activeAssociations = new HashSet<>();
+
+    protected KeyHistograms.HistogramTree[] tables;
 
     public MailboxAggregation create() {
         try {
             MailboxAggregation m = (MailboxAggregation) super.clone();
             int size = entries.length;
+            //TODO remove
             m.entries = new EntryTable[size];
             for (int i = 0; i < size; ++i) {
                 m.entries[i] = entries[i].create();
+            }
+
+            m.tables = new KeyHistograms.HistogramTree[size];
+            for (int i = 0; i < size; ++i) {
+                m.tables[i] = tables[i].create();
             }
             return m;
         } catch (CloneNotSupportedException cne) {
@@ -37,20 +45,28 @@ public class MailboxAggregation extends MailboxDefault {
         int select(Object value);
     }
 
-    public void initMessageTable(List<Supplier<KeyHistograms.Histogram>> histogramFactories, HistogramSelector histogramSelector) {
+    public void initMessageTable(List<Supplier<KeyHistograms.Histogram>> histogramFactories, List<KeyHistograms.KeyComparator<?>> keyComparators, HistogramSelector histogramSelector) {
         this.histogramSelector = histogramSelector;
         int size = histogramFactories.size();
+        tables = new KeyHistograms.HistogramTree[size];
+        for (int i = 0; i < size; ++i) {
+            tables[i] = new KeyHistograms.HistogramTree(keyComparators.get(i));
+        }
+
+        //TODO remove
         entries = new EntryTable[size];
         for (int i = 0; i < size; ++i) {
             entries[i] = createTable(histogramFactories.get(i).get());
         }
     }
 
-    protected EntryTable createTable(KeyHistograms.Histogram histogram) {
+    //TODO remove
+    @Deprecated protected EntryTable createTable(KeyHistograms.Histogram histogram) {
         return new EntryTable(histogram);
     }
 
-    public void putMessageTable(int entryId, Object key, Object value) {
+    //TODO remove
+    @Deprecated public void putMessageTable(int entryId, Object key, Object value) {
         entries[entryId].put(key, value);
     }
 
@@ -67,11 +83,17 @@ public class MailboxAggregation extends MailboxDefault {
         return false;
     }
 
-    public Object[] takeFromTable(int entryId, ValueInTableMatcher matcher) {
+    public KeyHistograms.HistogramTree getTable(int entryId) {
+        return tables[entryId];
+    }
+
+    //TODO remove
+    @Deprecated  public Object[] takeFromTable(int entryId, ValueInTableMatcher matcher) {
         return entries[entryId].take(matcher);
     }
 
-    public boolean processWithTakingFromTable(int entryId, ValueInTableMatcher matcher, BiConsumer<Object, List<Object>> handler) {
+    //TODO remove
+    @Deprecated  public boolean processWithTakingFromTable(int entryId, ValueInTableMatcher matcher, BiConsumer<Object, List<Object>> handler) {
         return entries[entryId].processWithTaking(matcher, (k,vs) -> {
             if (vs == null) {
                 return false;
@@ -82,12 +104,13 @@ public class MailboxAggregation extends MailboxDefault {
         });
     }
 
-    public interface ValueInTableMatcher {
+    @Deprecated public interface ValueInTableMatcher {
         int valueSizeInTable();
         boolean matchValueInTable(int index, Object value);
     }
 
-    public static class EntryTable {
+    //TODO remove
+    @Deprecated  public static class EntryTable {
         protected Map<Object, List<Object>> table;
         protected KeyHistograms.Histogram histogram;
 
@@ -112,7 +135,9 @@ public class MailboxAggregation extends MailboxDefault {
         }
 
         public <Ret> Ret processWithTaking(ValueInTableMatcher matcher, BiFunction<Object, Object[], Ret> handler) {
-            for (Map.Entry<Object,List<Object>> e : table.entrySet()) {
+            for (Iterator<Map.Entry<Object,List<Object>>> ei = table.entrySet().iterator();
+                 ei.hasNext();) {
+                Map.Entry<Object,List<Object>> e = ei.next();
                 List<Object> storeList = e.getValue();
                 int dataSize = matcher.valueSizeInTable();
                 Object[] values = new Object[dataSize];
@@ -136,6 +161,9 @@ public class MailboxAggregation extends MailboxDefault {
                 if (found == dataSize) {
                     for (int i = dataSize - 1; i >= 0; --i) {
                         storeList.remove(removeIndices[i]);
+                    }
+                    if (storeList.isEmpty()) {
+                        ei.remove();
                     }
                     return handler.apply(e.getKey(), values);
                 }

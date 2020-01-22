@@ -82,13 +82,13 @@ public abstract class ActorReplicable extends ActorAggregation implements Clonea
             ActorReplicable a2 = self.createClone();
             a1.state = new StateReplica(self);
             a2.state = new StateReplica(self);
-            self.getMailboxAsReplicable().splitMessageTableIntoReplicas(a1, a2);
+            List<Object> splitPoints = self.getMailboxAsReplicable().splitMessageTableIntoReplicas(a1, a2);
 
             ActorPlacement placement = self.getPlacement();
 
             StateRouter r = new StateRouter(self,
                     place(placement, a1),
-                    place(placement, a2));
+                    place(placement, a2), splitPoints);
             self.state = r;
             r.route(self, message);
         }
@@ -98,9 +98,9 @@ public abstract class ActorReplicable extends ActorAggregation implements Clonea
         protected List<MailboxReplicable.SplitTreeRoot> splits;
         protected Random random = new Random();
 
-        public StateRouter(ActorReplicable self, ActorRef a1, ActorRef a2) {
+        public StateRouter(ActorReplicable self, ActorRef a1, ActorRef a2, List<Object> splitPoints) {
             MailboxReplicable mailbox = self.getMailboxAsReplicable();
-            splits = mailbox.createSplits(a1, a2, random);
+            splits = mailbox.createSplits(a1, a2, random, splitPoints);
         }
 
         @Override
@@ -113,7 +113,7 @@ public abstract class ActorReplicable extends ActorAggregation implements Clonea
         }
 
         public void updatePoints(ActorReplicable self, RequestUpdateSplits request) {
-            List<Comparable<?>> splitPoints = request.getNewSplitPoints();
+            List<Object> splitPoints = request.getNewSplitPoints();
             ActorRef left = request.getLeft();
             ActorRef right = request.getRight();
             for (int i = 0, size = splits.size(); i < size; ++i) {
@@ -156,13 +156,13 @@ public abstract class ActorReplicable extends ActorAggregation implements Clonea
             ActorReplicable r2 = self.createClone();
             r1.state = new StateReplica(router);
             r2.state = new StateReplica(router);
-            self.getMailboxAsReplicable().splitMessageTableIntoReplicas(r1, r2);
+            List<Object> splitPoints = self.getMailboxAsReplicable().splitMessageTableIntoReplicas(r1, r2);
 
             ActorPlacement placement = self.getPlacement();
 
             self.state = new StateRouterTemporary(self,
                     placement.place(r1),
-                    placement.place(r2), router);
+                    placement.place(r2), router, splitPoints);
         }
     }
 
@@ -170,8 +170,8 @@ public abstract class ActorReplicable extends ActorAggregation implements Clonea
         protected ActorRef router;
         protected ActorRef left;
         protected ActorRef right;
-        public StateRouterTemporary(ActorReplicable self, ActorRef a1, ActorRef a2, ActorRef router) {
-            super(self, a1, a2);
+        public StateRouterTemporary(ActorReplicable self, ActorRef a1, ActorRef a2, ActorRef router, List<Object> splitPoints) {
+            super(self, a1, a2, splitPoints);
             this.router = router;
             this.left = a1;
             this.right = a2;
@@ -196,7 +196,7 @@ public abstract class ActorReplicable extends ActorAggregation implements Clonea
             }
         }
 
-        protected List<Comparable<?>> toSplitPoints() {
+        protected List<Object> toSplitPoints() {
             return splits.stream()
                     .map(MailboxReplicable.SplitTreeRoot::getSplitPoint)
                     .collect(Collectors.toList());
@@ -227,17 +227,17 @@ public abstract class ActorReplicable extends ActorAggregation implements Clonea
     }
 
     public static class RequestUpdateSplits implements Serializable {
-        protected List<Comparable<?>> newSplitPoints;
+        protected List<Object> newSplitPoints;
         protected ActorRef left;
         protected ActorRef right;
 
-        public RequestUpdateSplits(List<Comparable<?>> newSplitPoints, ActorRef left, ActorRef right) {
+        public RequestUpdateSplits(List<Object> newSplitPoints, ActorRef left, ActorRef right) {
             this.newSplitPoints = newSplitPoints;
             this.left = left;
             this.right = right;
         }
 
-        public List<Comparable<?>> getNewSplitPoints() {
+        public List<Object> getNewSplitPoints() {
             return newSplitPoints;
         }
 
@@ -314,6 +314,7 @@ public abstract class ActorReplicable extends ActorAggregation implements Clonea
                 .newInstance(system, String.format("%s_%d", state.name, num));
             r.state = new StateReplica(state.router);
             r.getMailboxAsReplicable().deserializeFrom(state);
+            system.send(new Message.MessageNone(r));
             return r;
         } catch (Exception ex) {
             ex.printStackTrace();
@@ -326,7 +327,9 @@ public abstract class ActorReplicable extends ActorAggregation implements Clonea
         public String name;
         public ActorRef router;
         public Message<?>[] messages;
-        public MailboxReplicable.EntryTable[] entries;
+        public KeyHistograms.HistogramTree[] tables;
+        //TODO remove
+        @Deprecated public MailboxReplicable.EntryTable[] entries;
         public int threshold;
     }
 }
