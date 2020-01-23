@@ -26,7 +26,7 @@ public abstract class ActorAggregation extends ActorDefault {
 
     @Override
     protected ActorBehaviorBuilderKeyValue behaviorBuilder() {
-        return new ActorBehaviorBuilderKeyValue((ls, ks, sel) -> getMailboxAsAggregation().initMessageTable(ls, ks, sel));
+        return new ActorBehaviorBuilderKeyValue((ps) -> getMailboxAsAggregation().initMessageTable(ps));
     }
 
     public MailboxAggregation getMailboxAsAggregation() {

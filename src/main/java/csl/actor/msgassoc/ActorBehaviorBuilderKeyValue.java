@@ -6,19 +6,16 @@ import java.util.*;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Function;
-import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
-    protected TriConsumer<List<Supplier<KeyHistograms.Histogram>>, List<MailboxAggregation.HistogramProcessor>,MailboxAggregation.HistogramSelector> histogramFactoriesTarget;
+    protected Consumer<List<MailboxAggregation.HistogramProcessor>> histogramProcessorsTarget;
     protected Map<Integer, MailboxAggregation.HistogramProcessor> processors = new HashMap<>();
 
 
     public ActorBehaviorBuilderKeyValue(
-            TriConsumer<List<Supplier<KeyHistograms.Histogram>>,
-                    List<MailboxAggregation.HistogramProcessor>,
-                    MailboxAggregation.HistogramSelector> histogramFactoriesTarget) {
-        this.histogramFactoriesTarget = histogramFactoriesTarget;
+            Consumer<List<MailboxAggregation.HistogramProcessor>> histogramProcessorsTarget) {
+        this.histogramProcessorsTarget = histogramProcessorsTarget;
     }
 
     @Override
@@ -48,13 +45,11 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
     @Override
     public ActorBehavior build() {
         ActorBehavior b = super.build();
-        histogramFactoriesTarget.accept(
-                getHistogramFactories(),
+        histogramProcessorsTarget.accept(
                 processors.entrySet().stream()
                     .sorted(Map.Entry.comparingByKey())
                     .map(Map.Entry::getValue)
-                    .collect(Collectors.toList()),
-                new HistogramSelectorList(histogramSelectors));
+                    .collect(Collectors.toList()));
         return b;
     }
 
@@ -65,15 +60,12 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
 
     public <ValueType, KeyType extends Comparable<KeyType>> RelayToCollect<KeyType> matchKeyOrdered(
             Class<ValueType> valueType, Function<ValueType, KeyType> keyExtractorFromValue) {
-        return new RelayToCollectOrdered<KeyType>(this).or(valueType, keyExtractorFromValue)
-                .withHistogram(KeyHistograms.HistogramComparable::new); //TODO remove
+        return new RelayToCollectOrdered<KeyType>(this).or(valueType, keyExtractorFromValue);
     }
 
-    public int nextMatchKeyEntry(Supplier<KeyHistograms.Histogram> histogramFactory) {
+    public int nextMatchKeyEntry() {
         int id = processors.size();
         processors.put(id, null); //null value for preserving the id
-
-        histogramFactories.add(histogramFactory); //TODO remove
         return id;
     }
 
@@ -92,13 +84,10 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
     public static class RelayToCollect<KeyType> {
         protected ActorBehaviorBuilderKeyValue builder;
         protected List<KeyExtractor<KeyType, ?>> messages;
-        @Deprecated
-        protected Supplier<KeyHistograms.Histogram> histogramFactory;
 
         public RelayToCollect(ActorBehaviorBuilderKeyValue builder) {
             this.builder = builder;
             this.messages = new ArrayList<>();
-            this.histogramFactory = KeyHistograms.HistogramNonComparable::new;
         }
 
         public <ValueType> RelayToCollect<KeyType> or(
@@ -108,18 +97,12 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
             return this;
         }
 
-        @Deprecated
-        public RelayToCollect<KeyType> withHistogram(Supplier<KeyHistograms.Histogram> histogramFactory) {
-            this.histogramFactory = histogramFactory;
-            return this;
-        }
-
         public RelayToBehavior<KeyType> collect() {
             return collect(new KeyComparatorDefault<>());
         }
 
         public RelayToBehavior<KeyType> collect(KeyHistograms.KeyComparator<KeyType> keyComparator) {
-            return new RelayToBehavior<>(builder, messages, keyComparator, histogramFactory);
+            return new RelayToBehavior<>(builder, messages, keyComparator);
         }
     }
 
@@ -174,12 +157,11 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
         protected KeyHistograms.KeyComparator<KeyType> keyComparator;
 
         public RelayToBehavior(ActorBehaviorBuilderKeyValue builder, List<KeyExtractor<KeyType, ?>> messages,
-                               KeyHistograms.KeyComparator<KeyType> keyComparator,
-                               Supplier<KeyHistograms.Histogram> histogramFactory) {
+                               KeyHistograms.KeyComparator<KeyType> keyComparator) {
             this.builder = builder;
             this.messages = messages;
             this.keyComparator = keyComparator;
-            this.machKeyEntryId = builder.nextMatchKeyEntry(histogramFactory); //determines the entry id here
+            this.machKeyEntryId = builder.nextMatchKeyEntry(); //determines the entry id here
         }
 
         @SuppressWarnings("unchecked")
@@ -188,8 +170,7 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
             KeyExtractor<KeyType, ValueType1> m1 = (KeyExtractor<KeyType, ValueType1>) messages.get(0);
             KeyExtractor<KeyType, ValueType2> m2 = (KeyExtractor<KeyType, ValueType2>) messages.get(1);
             //TODO check size of messages
-            return builder.withProcessor(machKeyEntryId, new ActorBehaviorMatchKeyTwo<>(machKeyEntryId, keyComparator, m1, m2, handler))
-                        .addMatchKeySelector(new HistogramSelectorList(machKeyEntryId, m1, m2));
+            return builder.withProcessor(machKeyEntryId, new ActorBehaviorMatchKeyTwo<>(machKeyEntryId, keyComparator, m1, m2, handler));
         }
 
         @SuppressWarnings("unchecked")
@@ -199,8 +180,7 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
             KeyExtractor<KeyType, ValueType2> m2 = (KeyExtractor<KeyType, ValueType2>) messages.get(1);
             KeyExtractor<KeyType, ValueType3> m3 = (KeyExtractor<KeyType, ValueType3>) messages.get(2);
             //TODO check size of messages
-            return builder.withProcessor(machKeyEntryId, new ActorBehaviorMatchKeyThree<>(machKeyEntryId, keyComparator, m1, m2, m3, handler))
-                    .addMatchKeySelector(new HistogramSelectorList(machKeyEntryId, m1, m2, m3));
+            return builder.withProcessor(machKeyEntryId, new ActorBehaviorMatchKeyThree<>(machKeyEntryId, keyComparator, m1, m2, m3, handler));
         }
 
         @SuppressWarnings("unchecked")
@@ -211,8 +191,7 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
             KeyExtractor<KeyType, ValueType3> m3 = (KeyExtractor<KeyType, ValueType3>) messages.get(2);
             KeyExtractor<KeyType, ValueType4> m4 = (KeyExtractor<KeyType, ValueType4>) messages.get(3);
             //TODO check size of messages
-            return builder.withProcessor(machKeyEntryId, new ActorBehaviorMatchKeyFour<>(machKeyEntryId, keyComparator, m1, m2, m3, m4, handler))
-                    .addMatchKeySelector(new HistogramSelectorList(machKeyEntryId, m1, m2, m3, m4));
+            return builder.withProcessor(machKeyEntryId, new ActorBehaviorMatchKeyFour<>(machKeyEntryId, keyComparator, m1, m2, m3, m4, handler));
         }
 
         @SuppressWarnings("unchecked")
@@ -220,8 +199,7 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
                 int threshold, BiConsumer<KeyType, List<ValueType>> handler) {
             KeyExtractor<KeyType, ValueType> m = (KeyExtractor<KeyType, ValueType>) messages.get(0);
             //TODO check size of messages
-            return builder.withProcessor(machKeyEntryId, new ActorBehaviorMatchKeyList<>(machKeyEntryId, threshold, keyComparator, m, handler))
-                    .addMatchKeySelector(new HistogramSelectorDefault(machKeyEntryId, m));
+            return builder.withProcessor(machKeyEntryId, new ActorBehaviorMatchKeyList<>(machKeyEntryId, threshold, keyComparator, m, handler));
         }
     }
 
@@ -239,10 +217,6 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
 
         protected void put(Actor self, KeyType key, Comparable<?> position, Object value) {
             MailboxAggregation m = (MailboxAggregation) self.getMailbox();
-            //TODO remove
-            m.putMessageTable(matchKeyEntryId, key, value);
-            m.addActiveAssociation(this);
-
             this.putPosition = position;
             this.putValue = value;
             m.getTable(matchKeyEntryId).put(key, this);
@@ -274,8 +248,7 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
         }
     }
 
-    public static class ActorBehaviorMatchKeyTwo<KeyType, ValueType1, ValueType2> extends ActorBehaviorMatchKey<KeyType>
-                    implements MailboxAggregation.ValueInTableMatcher {
+    public static class ActorBehaviorMatchKeyTwo<KeyType, ValueType1, ValueType2> extends ActorBehaviorMatchKey<KeyType> {
         protected KeyExtractor<KeyType, ValueType1> keyExtractorFromValue1;
         protected KeyExtractor<KeyType, ValueType2> keyExtractorFromValue2;
 
@@ -324,13 +297,6 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
                 next.consume((BiConsumer<Object,Object>) handler);
                 return true;
             }
-
-            //TODO remove
-            Object[] values = m.takeFromTable(matchKeyEntryId, this);
-            if (values != null) {
-                handler.accept((ValueType1) values[0], (ValueType2) values[1]);
-                return true;
-            }
             return false;
         }
 
@@ -354,24 +320,6 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
                 return keyExtractorFromValue2.toKey((ValueType2) value);
             } else {
                 return null;
-            }
-        }
-
-        //TODO remove
-        @Deprecated
-        @Override
-        public int valueSizeInTable() {
-            return 2;
-        }
-        @Deprecated
-        @Override
-        public boolean matchValueInTable(int index, Object value) {
-            if (index == 0) {
-                return keyExtractorFromValue1.matchValue(value);
-            } else if (index == 1) {
-                return keyExtractorFromValue2.matchValue(value);
-            } else {
-                return false;
             }
         }
     }
@@ -410,8 +358,7 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
     }
 
 
-    public static class ActorBehaviorMatchKeyThree<KeyType, ValueType1, ValueType2, ValueType3> extends ActorBehaviorMatchKey<KeyType>
-            implements MailboxAggregation.ValueInTableMatcher {
+    public static class ActorBehaviorMatchKeyThree<KeyType, ValueType1, ValueType2, ValueType3> extends ActorBehaviorMatchKey<KeyType> {
         protected KeyExtractor<KeyType, ValueType1> keyExtractorFromValue1;
         protected KeyExtractor<KeyType, ValueType2> keyExtractorFromValue2;
         protected KeyExtractor<KeyType, ValueType3> keyExtractorFromValue3;
@@ -466,13 +413,6 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
                 next.consume((TriConsumer<Object,Object,Object>) handler);
                 return true;
             }
-
-            //TODO remove
-            Object[] values = m.takeFromTable(matchKeyEntryId, this);
-            if (values != null) {
-                handler.accept((ValueType1) values[0], (ValueType2) values[1], (ValueType3) values[2]);
-                return true;
-            }
             return false;
         }
 
@@ -500,26 +440,6 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
                 return keyExtractorFromValue3.toKey((ValueType3) value);
             } else {
                 return null;
-            }
-        }
-
-        //TODO remove
-        @Deprecated
-        @Override
-        public int valueSizeInTable() {
-            return 3;
-        }
-        @Deprecated
-        @Override
-        public boolean matchValueInTable(int index, Object value) {
-            if (index == 0) {
-                return keyExtractorFromValue1.matchValue(value);
-            } else if (index == 1) {
-                return keyExtractorFromValue2.matchValue(value);
-            } else if (index == 2) {
-                return keyExtractorFromValue3.matchValue(value);
-            } else {
-                return false;
             }
         }
     }
@@ -563,8 +483,7 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
         }
     }
 
-    public static class ActorBehaviorMatchKeyFour<KeyType, ValueType1, ValueType2, ValueType3, ValueType4> extends ActorBehaviorMatchKey<KeyType>
-            implements MailboxAggregation.ValueInTableMatcher {
+    public static class ActorBehaviorMatchKeyFour<KeyType, ValueType1, ValueType2, ValueType3, ValueType4> extends ActorBehaviorMatchKey<KeyType> {
         protected KeyExtractor<KeyType, ValueType1> keyExtractorFromValue1;
         protected KeyExtractor<KeyType, ValueType2> keyExtractorFromValue2;
         protected KeyExtractor<KeyType, ValueType3> keyExtractorFromValue3;
@@ -625,13 +544,6 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
                 next.consume((QuadConsumer<Object,Object,Object,Object>) handler);
                 return true;
             }
-
-            //TODO
-            Object[] values = m.takeFromTable(matchKeyEntryId, this);
-            if (values != null) {
-                handler.accept((ValueType1) values[0], (ValueType2) values[1], (ValueType3) values[2], (ValueType4) values[3]);
-                return true;
-            }
             return false;
         }
 
@@ -663,28 +575,6 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
                 return keyExtractorFromValue4.toKey((ValueType4) value);
             } else {
                 return null;
-            }
-        }
-
-        //TODO remove
-        @Deprecated
-        @Override
-        public int valueSizeInTable() {
-            return 4;
-        }
-        @Deprecated
-        @Override
-        public boolean matchValueInTable(int index, Object value) {
-            if (index == 0) {
-                return keyExtractorFromValue1.matchValue(value);
-            } else if (index == 1) {
-                return keyExtractorFromValue2.matchValue(value);
-            } else if (index == 2) {
-                return keyExtractorFromValue3.matchValue(value);
-            } else if (index == 3) {
-                return keyExtractorFromValue4.matchValue(value);
-            } else {
-                return false;
             }
         }
     }
@@ -742,8 +632,7 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
         void accept(V1 a, V2 b, V3 c, V4 d);
     }
 
-    public static class ActorBehaviorMatchKeyList<KeyType, ValueType> extends ActorBehaviorMatchKey<KeyType>
-            implements MailboxAggregation.ValueInTableMatcher {
+    public static class ActorBehaviorMatchKeyList<KeyType, ValueType> extends ActorBehaviorMatchKey<KeyType> {
         protected KeyExtractor<KeyType, ValueType> keyExtractorFromValue;
         protected BiConsumer<KeyType, List<ValueType>> handler;
 
@@ -782,10 +671,7 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
                 next.consume(putRequiredSize, (BiConsumer) handler);
                 return true;
             }
-
-            //TODO remove
-            return m.processWithTakingFromTable(matchKeyEntryId, this, (k,vs) ->
-                handler.accept((KeyType) k, (List<ValueType>) vs));
+            return false;
         }
 
         @Override
@@ -801,18 +687,6 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
         @Override
         public Object extractKeyFromValue(Object value, Object position) {
             return keyExtractorFromValue.toKey((ValueType) value);
-        }
-
-        //TODO remove
-        @Deprecated
-        @Override
-        public int valueSizeInTable() {
-            return putRequiredSize;
-        }
-        @Deprecated
-        @Override
-        public boolean matchValueInTable(int index, Object value) {
-            return keyExtractorFromValue.matchValue(value);
         }
     }
 
@@ -843,73 +717,6 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
                 vs.add(values.poll());
             }
             handler.accept(key, vs);
-        }
-    }
-
-
-    //TODO remove
-    @Deprecated
-    protected List<Supplier<KeyHistograms.Histogram>> histogramFactories = new ArrayList<>();
-    @Deprecated  protected List<MailboxAggregation.HistogramSelector> histogramSelectors = new ArrayList<>();
-
-
-    @Deprecated
-    public List<Supplier<KeyHistograms.Histogram>> getHistogramFactories() {
-        return histogramFactories;
-    }
-
-    @Deprecated
-    public ActorBehaviorBuilderKeyValue addMatchKeySelector(MailboxAggregation.HistogramSelector histogramSelector) {
-        histogramSelectors.add(histogramSelector);
-        return this;
-    }
-    @Deprecated
-    public static class HistogramSelectorDefault implements MailboxAggregation.HistogramSelector {
-        protected int matchKeyEntryId;
-        protected KeyExtractor<?,?> keyExtractor;
-
-        public HistogramSelectorDefault(int matchKeyEntryId, KeyExtractor<?, ?> keyExtractor) {
-            this.matchKeyEntryId = matchKeyEntryId;
-            this.keyExtractor = keyExtractor;
-        }
-
-        public boolean match(Object value) {
-            return keyExtractor.matchValue(value);
-        }
-
-        @Override
-        public int select(Object value) {
-            if (match(value)) {
-                return matchKeyEntryId;
-            } else {
-                return -1;
-            }
-        }
-    }
-
-    @Deprecated
-    public static class HistogramSelectorList implements MailboxAggregation.HistogramSelector {
-        protected List<MailboxAggregation.HistogramSelector> selectors;
-
-        public HistogramSelectorList(List<MailboxAggregation.HistogramSelector> selectors) {
-            this.selectors = selectors;
-        }
-
-        public HistogramSelectorList(int matchKeyEntryId, KeyExtractor<?,?>... keyExtractors) {
-            selectors = Arrays.stream(keyExtractors)
-                    .map(ke -> new HistogramSelectorDefault(matchKeyEntryId, ke))
-                    .collect(Collectors.toList());
-        }
-
-        @Override
-        public int select(Object value) {
-            for (MailboxAggregation.HistogramSelector s : selectors) {
-                int m = s.select(s);
-                if (m != -1) {
-                    return m;
-                }
-            }
-            return -1;
         }
     }
 }

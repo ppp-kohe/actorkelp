@@ -4,93 +4,6 @@ import java.io.Serializable;
 import java.util.*;
 
 public class KeyHistograms {
-    //TODO remove
-    @Deprecated public interface Histogram extends Serializable {
-        void put(Object v);
-        Comparable<?> findSplitPoint();
-        int compareToSplitPoint(Object v, Comparable<?> splitPoint);
-        int compareSplitPoints(Comparable<?> v1, Comparable<?> v2);
-
-        Histogram create();
-
-        boolean hasMultiplePoints();
-    }
-
-    //TODO remove
-    @Deprecated public static class HistogramComparable implements Histogram {
-        protected long total;
-        protected TreeMap<Comparable<?>, Long> counts = new TreeMap<>();
-
-        @Override
-        public void put(Object v) {
-            total++;
-            counts.compute((Comparable<?>) v, (k,count) -> count == null ? 0L : (count + 1L));
-        }
-
-        public Comparable<?> findSplitPoint() {
-            long acc = 0;
-
-            long half = total / 2L;
-
-            Comparable<?> last = null;
-            for (Map.Entry<Comparable<?>, Long> e : counts.entrySet()) {
-                last = e.getKey();
-                acc += e.getValue();
-                if (acc >= half) {
-                    return last;
-                }
-            }
-            return last;
-        }
-
-        @SuppressWarnings({"unchecked", "rawtypes"})
-        @Override
-        public int compareToSplitPoint(Object v, Comparable<?> splitPoint) {
-            return ((Comparable) v).compareTo(splitPoint);
-        }
-
-        @SuppressWarnings({"unchecked", "rawtypes"})
-        @Override
-        public int compareSplitPoints(Comparable<?> v1, Comparable<?> v2) {
-            return ((Comparable) v1).compareTo(v2);
-        }
-
-        @Override
-        public Histogram create() {
-            return new HistogramComparable();
-        }
-
-        @Override
-        public boolean hasMultiplePoints() {
-            return counts.size() > 1;
-        }
-    }
-
-    //TODO remove
-    @Deprecated public static class HistogramNonComparable extends HistogramComparable {
-        @Override
-        public void put(Object v) {
-            Comparable<?> hc = toKey(v);
-            super.put(hc);
-        }
-
-        public Comparable<?> toKey(Object v) {
-            return Objects.hashCode(v);
-        }
-
-        @Override
-        public int compareToSplitPoint(Object v, Comparable<?> splitPoint) {
-            return super.compareToSplitPoint(toKey(v), splitPoint);
-        }
-
-        @Override
-        public Histogram create() {
-            return new HistogramNonComparable();
-        }
-    }
-
-    /////////////////
-
     public static class HistogramTree implements Serializable {
         public HistogramNode root;
         public KeyComparator<?> comparator;
@@ -135,13 +48,8 @@ public class KeyHistograms {
         }
 
         public Object splitPoint(HistogramTree splitRight) {
-            //TODO
+            //TODO is there any case such that the tree has no keys?
             return root.keyEnd();
-        }
-
-        @SuppressWarnings("unchecked")
-        public boolean compareSplitPoints(Object l, Object r) {
-            return ((KeyComparator<Object>) comparator).compare(l, r) <= 0;
         }
 
         public void complete(HistogramNodeLeaf n) {
@@ -183,6 +91,11 @@ public class KeyHistograms {
 
         HistogramNode put(KeyComparator<?> comparator, Object key, HistogramPutContext context);
 
+        /**
+         * @param comparator the comparator
+         * @param key a compared key
+         * @return comparator.compare(key, this.key)
+         */
         int keyIn(KeyComparator<?> comparator, Object key);
         Object keyStart();
         Object keyEnd();
@@ -261,9 +174,9 @@ public class KeyHistograms {
                 int i = (start + end) / 2;
                 HistogramNode n = children.get(i);
                 int c = n.keyIn(comparator, key);
-                if (c < 0) {
+                if (c > 0) {
                     start = i + 1;
-                } else if (c > 0) {
+                } else if (c < 0) {
                     end = i - 1;
                 } else {
                     //found
@@ -346,6 +259,12 @@ public class KeyHistograms {
                 parent.reduce(size);
             }
         }
+
+        @Override
+        public String toString() {
+            return String.format("%s(size=%,d, keys=%s..%s)",
+                    getClass().getSimpleName(), size, keyStart, keyEnd);
+        }
     }
 
 
@@ -421,6 +340,12 @@ public class KeyHistograms {
             if (parent != null) {
                 parent.reduce(removedSize);
             }
+        }
+
+        @Override
+        public String toString() {
+            return String.format("%s(size=%,d, keys=%s)",
+                    getClass().getSimpleName(), size, key);
         }
     }
 

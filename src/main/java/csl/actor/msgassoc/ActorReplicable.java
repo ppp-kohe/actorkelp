@@ -328,8 +328,6 @@ public abstract class ActorReplicable extends ActorAggregation implements Clonea
         public ActorRef router;
         public Message<?>[] messages;
         public List<KeyHistograms.HistogramTree> tables;
-        //TODO remove
-        @Deprecated public MailboxReplicable.EntryTable[] entries;
         public int threshold;
     }
 }
