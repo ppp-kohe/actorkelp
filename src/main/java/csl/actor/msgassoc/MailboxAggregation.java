@@ -80,6 +80,10 @@ public class MailboxAggregation extends MailboxDefault {
         return tables[entryId].getTree();
     }
 
+    public int getTableSize() {
+        return tables.length;
+    }
+
     public HistogramSelection selectTable(Object value) {
         HistogramSelection s = new HistogramSelection();
         int i = 0;

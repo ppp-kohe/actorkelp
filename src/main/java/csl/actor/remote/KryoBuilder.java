@@ -50,6 +50,14 @@ public class KryoBuilder {
                     .build();
     }
 
+    public Kryo getKryo() {
+        return kryo;
+    }
+
+    public ActorSystemRemote getSystem() {
+        return system;
+    }
+
     @SuppressWarnings("unchecked")
     public Kryo build() {
         Kryo kryo = (this.kryo == null ? new Kryo() : this.kryo);

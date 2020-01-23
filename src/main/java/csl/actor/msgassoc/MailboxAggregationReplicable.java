@@ -9,7 +9,7 @@ import java.util.List;
 import java.util.Random;
 import java.util.stream.Collectors;
 
-public class MailboxReplicable extends MailboxAggregation {
+public class MailboxAggregationReplicable extends MailboxAggregation {
     protected int threshold = 1000;
 
     public boolean isOverThreshold() {
@@ -33,9 +33,9 @@ public class MailboxReplicable extends MailboxAggregation {
         return false;
     }
 
-    public List<Object> splitMessageTableIntoReplicas(ActorReplicable a1, ActorReplicable a2) {
-        MailboxReplicable m1 = a1.getMailboxAsReplicable();
-        MailboxReplicable m2 = a2.getMailboxAsReplicable();
+    public List<Object> splitMessageTableIntoReplicas(ActorAggregationReplicable a1, ActorAggregationReplicable a2) {
+        MailboxAggregationReplicable m1 = a1.getMailboxAsReplicable();
+        MailboxAggregationReplicable m2 = a2.getMailboxAsReplicable();
 
         int size = tables.length;
         List<Object> splitPoints = new ArrayList<>(size);
@@ -67,6 +67,18 @@ public class MailboxReplicable extends MailboxAggregation {
             this.split = split;
             this.processor = processor;
             this.random = random;
+        }
+
+        public Split getSplit() {
+            return split;
+        }
+
+        public HistogramProcessor getProcessor() {
+            return processor;
+        }
+
+        public Random getRandom() {
+            return random;
         }
 
         public Object getSplitPoint() {
@@ -104,6 +116,10 @@ public class MailboxReplicable extends MailboxAggregation {
             this.actorRef = actorRef;
         }
 
+        public ActorRef getActorRef() {
+            return actorRef;
+        }
+
         @Override
         public Split updatePoint(Object newSplitPoint, ActorRef left, ActorRef right, HistogramProcessor processor) {
             return new SplitTree(newSplitPoint, new SplitActor(left), new SplitActor(right));
@@ -133,6 +149,14 @@ public class MailboxReplicable extends MailboxAggregation {
 
         public Object getPoint() {
             return point;
+        }
+
+        public Split getLeft() {
+            return left;
+        }
+
+        public Split getRight() {
+            return right;
         }
 
         @Override
@@ -169,7 +193,7 @@ public class MailboxReplicable extends MailboxAggregation {
         }
     }
 
-    public void serializeTo(ActorReplicable.ActorReplicableSerializableState state) {
+    public void serializeTo(ActorAggregationReplicable.ActorReplicableSerializableState state) {
         state.messages = queue.toArray(new Message[0]);
         state.threshold = threshold;
         state.tables = Arrays.stream(tables)
@@ -177,7 +201,7 @@ public class MailboxReplicable extends MailboxAggregation {
                 .collect(Collectors.toList());
     }
 
-    public void deserializeFrom(ActorReplicable.ActorReplicableSerializableState state) {
+    public void deserializeFrom(ActorAggregationReplicable.ActorReplicableSerializableState state) {
         queue.addAll(Arrays.asList(state.messages));
         threshold = state.threshold;
         int i = 0;

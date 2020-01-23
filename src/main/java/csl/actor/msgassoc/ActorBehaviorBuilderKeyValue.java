@@ -324,7 +324,15 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
         }
     }
 
-    public static class HistogramNodeLeafTwo extends KeyHistograms.HistogramNodeLeaf {
+    public static abstract class HistogramNodeLeafN extends KeyHistograms.HistogramNodeLeaf {
+        public HistogramNodeLeafN(Object key, KeyHistograms.HistogramPutContext context) {
+            super(key, context);
+        }
+
+        public abstract List<KeyHistograms.HistogramLeafList> getValueList();
+    }
+
+    public static class HistogramNodeLeafTwo extends HistogramNodeLeafN {
         protected KeyHistograms.HistogramLeafList values1;
         protected KeyHistograms.HistogramLeafList values2;
 
@@ -354,6 +362,10 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
 
         public void consume(BiConsumer<Object,Object> handler) {
             handler.accept(values1.poll(), values2.poll());
+        }
+
+        public List<KeyHistograms.HistogramLeafList> getValueList() {
+            return Arrays.asList(values1, values2);
         }
     }
 
@@ -445,7 +457,7 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
     }
 
 
-    public static class HistogramNodeLeafThree extends KeyHistograms.HistogramNodeLeaf {
+    public static class HistogramNodeLeafThree extends HistogramNodeLeafN {
         protected KeyHistograms.HistogramLeafList values1;
         protected KeyHistograms.HistogramLeafList values2;
         protected KeyHistograms.HistogramLeafList values3;
@@ -480,6 +492,10 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
 
         public void consume(TriConsumer<Object,Object,Object> handler) {
             handler.accept(values1.poll(), values2.poll(), values3.poll());
+        }
+
+        public List<KeyHistograms.HistogramLeafList> getValueList() {
+            return Arrays.asList(values1, values2, values3);
         }
     }
 
@@ -580,7 +596,7 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
     }
 
 
-    public static class HistogramNodeLeafFour extends KeyHistograms.HistogramNodeLeaf {
+    public static class HistogramNodeLeafFour extends HistogramNodeLeafN {
         protected KeyHistograms.HistogramLeafList values1;
         protected KeyHistograms.HistogramLeafList values2;
         protected KeyHistograms.HistogramLeafList values3;
@@ -619,6 +635,10 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
 
         public void consume(QuadConsumer<Object,Object,Object,Object> handler) {
             handler.accept(values1.poll(), values2.poll(), values3.poll(), values4.poll());
+        }
+
+        public List<KeyHistograms.HistogramLeafList> getValueList() {
+            return Arrays.asList(values1, values2, values3, values4);
         }
     }
 
@@ -690,7 +710,7 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
         }
     }
 
-    public static class HistogramNodeLeafList extends KeyHistograms.HistogramNodeLeaf {
+    public static class HistogramNodeLeafList extends HistogramNodeLeafN {
         protected KeyHistograms.HistogramLeafList values;
         public HistogramNodeLeafList(Object key, KeyHistograms.HistogramPutContext context) {
             super(key, context);
@@ -717,6 +737,10 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
                 vs.add(values.poll());
             }
             handler.accept(key, vs);
+        }
+
+        public List<KeyHistograms.HistogramLeafList> getValueList() {
+            return Collections.singletonList(values);
         }
     }
 }

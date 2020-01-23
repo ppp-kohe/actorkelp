@@ -130,6 +130,10 @@ public interface ActorPlacement {
         public abstract Serializable toSerializable(Actor a, long num);
 
         public abstract Actor fromSerializable(Serializable s, long num);
+
+        public PlacementStrategy getStrategy() {
+            return strategy;
+        }
     }
 
     class AddressList implements Serializable {
@@ -204,6 +208,18 @@ public interface ActorPlacement {
         public synchronized long getNextLocalNumber() {
             ++totalCount;
             ++count;
+            return totalCount;
+        }
+
+        public int getLocalLimit() {
+            return localLimit;
+        }
+
+        public int getCount() {
+            return count;
+        }
+
+        public long getTotalCount() {
             return totalCount;
         }
     }

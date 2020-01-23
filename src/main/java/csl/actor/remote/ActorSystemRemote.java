@@ -74,6 +74,18 @@ public class ActorSystemRemote implements ActorSystem {
         client.setSerializer(getSerializer());
     }
 
+    public ActorSystemDefault getLocalSystem() {
+        return localSystem;
+    }
+
+    public Pool<Kryo> getSerializerPool() {
+        return serializerPool;
+    }
+
+    public Map<Object, ConnectionActor> getConnectionMap() {
+        return connectionMap;
+    }
+
     public void start(int port) {
         start(ActorAddress.get("localhost", port));
     }

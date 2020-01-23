@@ -138,6 +138,18 @@ public class ActorSystemDefault implements ActorSystem {
         return namedActorMap.get(ref.getName());
     }
 
+    public Map<String, Actor> getNamedActorMap() {
+        return namedActorMap;
+    }
+
+    public ExecutorService getExecutorService() {
+        return executorService;
+    }
+
+    public AtomicInteger getProcessingCount() {
+        return processingCount;
+    }
+
     @Override
     public void execute(Runnable task) {
         executorService.execute(task);

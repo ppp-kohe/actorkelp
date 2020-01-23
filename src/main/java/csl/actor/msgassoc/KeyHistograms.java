@@ -5,8 +5,8 @@ import java.util.*;
 
 public class KeyHistograms {
     public static class HistogramTree implements Serializable {
-        public HistogramNode root;
-        public KeyComparator<?> comparator;
+        protected HistogramNode root;
+        protected KeyComparator<?> comparator;
 
         protected LinkedList<HistogramNodeLeaf> completed = new LinkedList<>();
 
@@ -63,6 +63,14 @@ public class KeyHistograms {
                 return completed.removeFirst();
             }
         }
+
+        public HistogramNode getRoot() {
+            return root;
+        }
+
+        public KeyComparator<?> getComparator() {
+            return comparator;
+        }
     }
 
     public static abstract class HistogramPutContext {
@@ -109,7 +117,7 @@ public class KeyHistograms {
 
     public static class HistogramNodeTree implements HistogramNode {
         protected HistogramNodeTree parent;
-        public List<HistogramNode> children;
+        protected List<HistogramNode> children;
         protected long size;
         protected Object keyStart;
         protected Object keyEnd;
@@ -123,6 +131,14 @@ public class KeyHistograms {
             this.children = new ArrayList<>(TREE_LIMIT);
             this.children.addAll(Arrays.asList(children));
             updateChildren();
+        }
+
+        public List<HistogramNode> getChildren() {
+            return children;
+        }
+
+        public HistogramNodeTree getParent() {
+            return parent;
         }
 
         @Override
@@ -270,13 +286,21 @@ public class KeyHistograms {
 
     public static abstract class HistogramNodeLeaf implements HistogramNode {
         protected HistogramNodeTree parent;
-        public Object key;
+        protected Object key;
         protected long size;
 
         public HistogramNodeLeaf(Object key, HistogramPutContext context) {
             this.key = key;
             initStruct();
             putValue(context);
+        }
+
+        public Object getKey() {
+            return key;
+        }
+
+        public HistogramNodeTree getParent() {
+            return parent;
         }
 
         @Override
@@ -419,9 +443,9 @@ public class KeyHistograms {
         }
     }
 
-    public static class HistogramLeafList {
-        public HistogramLeafCell head;
-        public HistogramLeafCell tail;
+    public static class HistogramLeafList implements Iterable<Object>, Serializable {
+        protected HistogramLeafCell head;
+        protected HistogramLeafCell tail;
 
         public static HistogramLeafList add(HistogramLeafList list, Object v) {
             if (list == null) {
@@ -454,9 +478,36 @@ public class KeyHistograms {
             }
             return v;
         }
+
+        public long count() {
+            long n = 0;
+            HistogramLeafCell cell = head;
+            while (cell != null) {
+                cell = cell.next;
+                ++n;
+            }
+            return n;
+        }
+
+        public Iterator<Object> iterator() {
+            return new Iterator<>() {
+                HistogramLeafCell next = head;
+                @Override
+                public boolean hasNext() {
+                    return next != null;
+                }
+
+                @Override
+                public Object next() {
+                    Object v = next.value;
+                    next = next.next;
+                    return v;
+                }
+            };
+        }
     }
 
-    public static class HistogramLeafCell {
+    public static class HistogramLeafCell implements Serializable {
         public Object value;
         public HistogramLeafCell next;
 

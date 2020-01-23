@@ -8,46 +8,46 @@ import java.util.Random;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
-public abstract class ActorReplicable extends ActorAggregation implements Cloneable {
+public abstract class ActorAggregationReplicable extends ActorAggregation implements Cloneable {
     protected State state;
 
-    public ActorReplicable(ActorSystem system, String name, ActorBehavior behavior) {
+    public ActorAggregationReplicable(ActorSystem system, String name, ActorBehavior behavior) {
         super(system, name, behavior);
         state = new StateDefault();
     }
 
-    public ActorReplicable(ActorSystem system, ActorBehavior behavior) {
+    public ActorAggregationReplicable(ActorSystem system, ActorBehavior behavior) {
         super(system, behavior);
         state = new StateDefault();
     }
 
-    public ActorReplicable(ActorSystem system, String name) {
+    public ActorAggregationReplicable(ActorSystem system, String name) {
         super(system, name);
         state = new StateDefault();
     }
 
-    public ActorReplicable(ActorSystem system) {
+    public ActorAggregationReplicable(ActorSystem system) {
         super(system);
         state = new StateDefault();
     }
 
     @Override
     protected void initMailbox() {
-        mailbox = new MailboxReplicable();
+        mailbox = new MailboxAggregationReplicable();
     }
 
     protected void initMailboxForClone() {
         mailbox = getMailboxAsReplicable().create();
     }
 
-    public MailboxReplicable getMailboxAsReplicable() {
-        return (MailboxReplicable) mailbox;
+    public MailboxAggregationReplicable getMailboxAsReplicable() {
+        return (MailboxAggregationReplicable) mailbox;
     }
 
     public interface State {
-        void processMessage(ActorReplicable self, Message<?> message);
+        void processMessage(ActorAggregationReplicable self, Message<?> message);
 
-        default ActorRef place(ActorPlacement placement, ActorReplicable a) {
+        default ActorRef place(ActorPlacement placement, ActorAggregationReplicable a) {
             if (placement != null) {
                 return placement.place(a);
             } else {
@@ -69,7 +69,7 @@ public abstract class ActorReplicable extends ActorAggregation implements Clonea
 
     public static class StateDefault implements State {
         @Override
-        public void processMessage(ActorReplicable self, Message<?> message) {
+        public void processMessage(ActorAggregationReplicable self, Message<?> message) {
             if (self.getMailboxAsReplicable().isOverThreshold()) {
                 becomeRouter(self, message);
             } else {
@@ -77,9 +77,9 @@ public abstract class ActorReplicable extends ActorAggregation implements Clonea
             }
         }
 
-        public void becomeRouter(ActorReplicable self, Message<?> message) {
-            ActorReplicable a1 = self.createClone();
-            ActorReplicable a2 = self.createClone();
+        public void becomeRouter(ActorAggregationReplicable self, Message<?> message) {
+            ActorAggregationReplicable a1 = self.createClone();
+            ActorAggregationReplicable a2 = self.createClone();
             a1.state = new StateReplica(self);
             a2.state = new StateReplica(self);
             List<Object> splitPoints = self.getMailboxAsReplicable().splitMessageTableIntoReplicas(a1, a2);
@@ -95,16 +95,16 @@ public abstract class ActorReplicable extends ActorAggregation implements Clonea
     }
 
     public static class StateRouter implements State {
-        protected List<MailboxReplicable.SplitTreeRoot> splits;
+        protected List<MailboxAggregationReplicable.SplitTreeRoot> splits;
         protected Random random = new Random();
 
-        public StateRouter(ActorReplicable self, ActorRef a1, ActorRef a2, List<Object> splitPoints) {
-            MailboxReplicable mailbox = self.getMailboxAsReplicable();
+        public StateRouter(ActorAggregationReplicable self, ActorRef a1, ActorRef a2, List<Object> splitPoints) {
+            MailboxAggregationReplicable mailbox = self.getMailboxAsReplicable();
             splits = mailbox.createSplits(a1, a2, random, splitPoints);
         }
 
         @Override
-        public void processMessage(ActorReplicable self, Message<?> message) {
+        public void processMessage(ActorAggregationReplicable self, Message<?> message) {
             if (message.getData() instanceof RequestUpdateSplits) {
                 updatePoints(self, (RequestUpdateSplits) message.getData());
             } else {
@@ -112,7 +112,7 @@ public abstract class ActorReplicable extends ActorAggregation implements Clonea
             }
         }
 
-        public void updatePoints(ActorReplicable self, RequestUpdateSplits request) {
+        public void updatePoints(ActorAggregationReplicable self, RequestUpdateSplits request) {
             List<Object> splitPoints = request.getNewSplitPoints();
             ActorRef left = request.getLeft();
             ActorRef right = request.getRight();
@@ -121,13 +121,21 @@ public abstract class ActorReplicable extends ActorAggregation implements Clonea
             }
         }
 
-        public void route(ActorReplicable self, Message<?> message) {
+        public void route(ActorAggregationReplicable self, Message<?> message) {
             MailboxAggregation.HistogramSelection target = self.getMailboxAsReplicable().selectTable(message.getData());
             if (target == null) {
                 splits.get(random.nextInt(splits.size())).sendNonKey(message);
             } else {
                 splits.get(target.entryId).send(message, target.position);
             }
+        }
+
+        public Random getRandom() {
+            return random;
+        }
+
+        public List<MailboxAggregationReplicable.SplitTreeRoot> getSplits() {
+            return splits;
         }
     }
 
@@ -139,7 +147,7 @@ public abstract class ActorReplicable extends ActorAggregation implements Clonea
         }
 
         @Override
-        public void processMessage(ActorReplicable self, Message<?> message) {
+        public void processMessage(ActorAggregationReplicable self, Message<?> message) {
             self.behavior.process(self, message);
 
             if (self.getMailboxAsReplicable().isOverThreshold()) {
@@ -151,9 +159,9 @@ public abstract class ActorReplicable extends ActorAggregation implements Clonea
             return router;
         }
 
-        public void createReplica(ActorReplicable self) {
-            ActorReplicable r1 = self.createClone();
-            ActorReplicable r2 = self.createClone();
+        public void createReplica(ActorAggregationReplicable self) {
+            ActorAggregationReplicable r1 = self.createClone();
+            ActorAggregationReplicable r2 = self.createClone();
             r1.state = new StateReplica(router);
             r2.state = new StateReplica(router);
             List<Object> splitPoints = self.getMailboxAsReplicable().splitMessageTableIntoReplicas(r1, r2);
@@ -170,7 +178,7 @@ public abstract class ActorReplicable extends ActorAggregation implements Clonea
         protected ActorRef router;
         protected ActorRef left;
         protected ActorRef right;
-        public StateRouterTemporary(ActorReplicable self, ActorRef a1, ActorRef a2, ActorRef router, List<Object> splitPoints) {
+        public StateRouterTemporary(ActorAggregationReplicable self, ActorRef a1, ActorRef a2, ActorRef router, List<Object> splitPoints) {
             super(self, a1, a2, splitPoints);
             this.router = router;
             this.left = a1;
@@ -178,7 +186,7 @@ public abstract class ActorReplicable extends ActorAggregation implements Clonea
         }
 
         @Override
-        public void processMessage(ActorReplicable self, Message<?> message) {
+        public void processMessage(ActorAggregationReplicable self, Message<?> message) {
             super.processMessage(self, message);
             processFurtherMessages(self);
 
@@ -187,9 +195,9 @@ public abstract class ActorReplicable extends ActorAggregation implements Clonea
             }
         }
 
-        protected void processFurtherMessages(ActorReplicable self) {
+        protected void processFurtherMessages(ActorAggregationReplicable self) {
             //here we can manually process further messages on self for quickly delivering messages
-            MailboxReplicable mailbox = self.getMailboxAsReplicable();
+            MailboxAggregationReplicable mailbox = self.getMailboxAsReplicable();
             int processLimit = Math.max(10, mailbox.getThreshold() / 10);
             for (int i = 0; !mailbox.isEmpty() && i < processLimit; ++i) {
                 super.processMessage(self, mailbox.poll());
@@ -198,8 +206,20 @@ public abstract class ActorReplicable extends ActorAggregation implements Clonea
 
         protected List<Object> toSplitPoints() {
             return splits.stream()
-                    .map(MailboxReplicable.SplitTreeRoot::getSplitPoint)
+                    .map(MailboxAggregationReplicable.SplitTreeRoot::getSplitPoint)
                     .collect(Collectors.toList());
+        }
+
+        public ActorRef getRouter() {
+            return router;
+        }
+
+        public ActorRef getLeft() {
+            return left;
+        }
+
+        public ActorRef getRight() {
+            return right;
         }
     }
 
@@ -208,9 +228,9 @@ public abstract class ActorReplicable extends ActorAggregation implements Clonea
         state.processMessage(this, message);
     }
 
-    public ActorReplicable createClone() {
+    public ActorAggregationReplicable createClone() {
         try {
-            ActorReplicable a = (ActorReplicable) super.clone();
+            ActorAggregationReplicable a = (ActorAggregationReplicable) super.clone();
             //if the actor has the name, it copies the reference to the name,
             // but it does not register the actor
             a.processLock = new AtomicBoolean(false);
@@ -266,8 +286,8 @@ public abstract class ActorReplicable extends ActorAggregation implements Clonea
 
         @Override
         public Serializable toSerializable(Actor a, long num) {
-            if (a instanceof ActorReplicable) {
-                return ((ActorReplicable) a).toSerializable(num);
+            if (a instanceof ActorAggregationReplicable) {
+                return ((ActorAggregationReplicable) a).toSerializable(num);
             } else {
                 return null;
             }
@@ -276,7 +296,7 @@ public abstract class ActorReplicable extends ActorAggregation implements Clonea
         @Override
         public Actor fromSerializable(Serializable s, long num) {
             if (s instanceof ActorReplicableSerializableState) {
-                return ActorReplicable.fromSerializable(getSystem(), (ActorReplicableSerializableState) s, num);
+                return ActorAggregationReplicable.fromSerializable(getSystem(), (ActorReplicableSerializableState) s, num);
             } else {
                 return null;
             }
@@ -299,7 +319,7 @@ public abstract class ActorReplicable extends ActorAggregation implements Clonea
             state.router = ((StateReplica) s).getRouter();
         }
 
-        MailboxReplicable r = getMailboxAsReplicable();
+        MailboxAggregationReplicable r = getMailboxAsReplicable();
         r.serializeTo(state);
         return state;
     }
@@ -308,9 +328,9 @@ public abstract class ActorReplicable extends ActorAggregation implements Clonea
         return new ActorReplicableSerializableState();
     }
 
-    public static ActorReplicable fromSerializable(ActorSystem system, ActorReplicableSerializableState state, long num) {
+    public static ActorAggregationReplicable fromSerializable(ActorSystem system, ActorReplicableSerializableState state, long num) {
         try {
-            ActorReplicable r = state.actorType.getConstructor(ActorSystem.class, String.class)
+            ActorAggregationReplicable r = state.actorType.getConstructor(ActorSystem.class, String.class)
                 .newInstance(system, String.format("%s_%d", state.name, num));
             r.state = new StateReplica(state.router);
             r.getMailboxAsReplicable().deserializeFrom(state);
@@ -323,7 +343,7 @@ public abstract class ActorReplicable extends ActorAggregation implements Clonea
     }
 
     public static class ActorReplicableSerializableState implements Serializable {
-        public Class<? extends ActorReplicable> actorType;
+        public Class<? extends ActorAggregationReplicable> actorType;
         public String name;
         public ActorRef router;
         public Message<?>[] messages;

@@ -29,14 +29,14 @@ public class DelayedLabelManual {
 
         ActorSystem system = new ActorSystemDefault();
         ResultActor resultActor = new ResultActor(system, out, startTime, numInstances);
-        ActorRef learnerActor = learnerActor(system, resultActor);
+        ActorRef learnerActor = learnerActor(system, resultActor, numInstances);
 
         for (Object i : inputs) {
             learnerActor.tell(i, null);
         }
     }
 
-    public ActorRef learnerActor(ActorSystem system, ActorRef resultActor) {
+    public ActorRef learnerActor(ActorSystem system, ActorRef resultActor, int numInstances) {
         return new LearnerActor(system, resultActor);
     }
 

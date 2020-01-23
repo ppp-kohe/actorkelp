@@ -13,6 +13,10 @@ public class ActorRefLocalNamed implements ActorRef {
         this.name = name;
     }
 
+    public ActorSystem getSystem() {
+        return system;
+    }
+
     public String getName() {
         return name;
     }

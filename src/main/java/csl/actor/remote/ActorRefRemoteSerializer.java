@@ -28,6 +28,10 @@ public class ActorRefRemoteSerializer<RefType extends ActorRef> extends Serializ
         kryo.writeClassAndObject(output, addr);
     }
 
+    public ActorSystemRemote getRemoteSystem() {
+        return remoteSystem;
+    }
+
     @SuppressWarnings("unchecked")
     @Override
     public RefType read(Kryo kryo, Input input, Class<? extends RefType> aClass) {

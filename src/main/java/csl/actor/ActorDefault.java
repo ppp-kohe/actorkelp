@@ -38,4 +38,8 @@ public abstract class ActorDefault extends Actor {
     protected void processMessage(Message<?> message) {
         behavior.process(this, message);
     }
+
+    public ActorBehavior getBehavior() {
+        return behavior;
+    }
 }
