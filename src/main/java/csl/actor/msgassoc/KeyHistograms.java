@@ -4,7 +4,7 @@ import java.io.Serializable;
 import java.util.*;
 
 public class KeyHistograms {
-
+    //TODO remove
     @Deprecated public interface Histogram extends Serializable {
         void put(Object v);
         Comparable<?> findSplitPoint();
@@ -16,6 +16,7 @@ public class KeyHistograms {
         boolean hasMultiplePoints();
     }
 
+    //TODO remove
     @Deprecated public static class HistogramComparable implements Histogram {
         protected long total;
         protected TreeMap<Comparable<?>, Long> counts = new TreeMap<>();
@@ -65,6 +66,7 @@ public class KeyHistograms {
         }
     }
 
+    //TODO remove
     @Deprecated public static class HistogramNonComparable extends HistogramComparable {
         @Override
         public void put(Object v) {
@@ -104,11 +106,14 @@ public class KeyHistograms {
             this.comparator = comparator;
         }
 
-        public HistogramTree create() {
-            return new HistogramTree(comparator);
+        public boolean hasMultiplePoints() {
+            if (root == null) {
+                return false;
+            } else {
+                return !root.keyStart().equals(root.keyEnd());
+            }
         }
 
-        //TODO constructing the context
         public void put(Object key, HistogramPutContext context) {
             context.putCompletionReceiver = this;
             if (root == null) {
@@ -169,7 +174,7 @@ public class KeyHistograms {
         }
     }
 
-    public interface KeyComparator<KeyType> extends Serializable {
+    public interface KeyComparator<KeyType> extends Serializable, Comparator<KeyType> {
         int compare(KeyType key1, KeyType key2);
     }
 

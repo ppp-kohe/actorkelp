@@ -122,11 +122,11 @@ public abstract class ActorReplicable extends ActorAggregation implements Clonea
         }
 
         public void route(ActorReplicable self, Message<?> message) {
-            int target = self.getMailboxAsReplicable().getHistogramSelector().select(message.getData());
-            if (target == -1) {
+            MailboxAggregation.HistogramSelection target = self.getMailboxAsReplicable().selectTable(message.getData());
+            if (target == null) {
                 splits.get(random.nextInt(splits.size())).sendNonKey(message);
             } else {
-                splits.get(target).send(message);
+                splits.get(target.entryId).send(message, target.position);
             }
         }
     }
@@ -327,7 +327,7 @@ public abstract class ActorReplicable extends ActorAggregation implements Clonea
         public String name;
         public ActorRef router;
         public Message<?>[] messages;
-        public KeyHistograms.HistogramTree[] tables;
+        public List<KeyHistograms.HistogramTree> tables;
         //TODO remove
         @Deprecated public MailboxReplicable.EntryTable[] entries;
         public int threshold;

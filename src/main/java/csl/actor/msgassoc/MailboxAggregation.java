@@ -8,12 +8,7 @@ import java.util.function.BiFunction;
 import java.util.function.Supplier;
 
 public class MailboxAggregation extends MailboxDefault {
-    @Deprecated  protected EntryTable[] entries; //consider performance //TODO remove
-    protected HistogramSelector histogramSelector;
-
-    protected Set<ActorBehaviorBuilderKeyValue.ActorBehaviorMatchKey<?>> activeAssociations = new HashSet<>();
-
-    protected KeyHistograms.HistogramTree[] tables;
+    protected HistogramEntry[] tables;
 
     public MailboxAggregation create() {
         try {
@@ -25,7 +20,7 @@ public class MailboxAggregation extends MailboxDefault {
                 m.entries[i] = entries[i].create();
             }
 
-            m.tables = new KeyHistograms.HistogramTree[size];
+            m.tables = new HistogramEntry[size];
             for (int i = 0; i < size; ++i) {
                 m.tables[i] = tables[i].create();
             }
@@ -40,24 +35,116 @@ public class MailboxAggregation extends MailboxDefault {
     }
 
 
-    @FunctionalInterface
-    public interface HistogramSelector {
-        int select(Object value);
+
+    public interface HistogramProcessor {
+        KeyHistograms.KeyComparator<?> getKeyComparator();
+        boolean processTable(MailboxAggregation m);
+        Object selectFromValue(Object value);
+        Object extractKeyFromValue(Object value, Object position);
     }
 
-    public void initMessageTable(List<Supplier<KeyHistograms.Histogram>> histogramFactories, List<KeyHistograms.KeyComparator<?>> keyComparators, HistogramSelector histogramSelector) {
-        this.histogramSelector = histogramSelector;
-        int size = histogramFactories.size();
-        tables = new KeyHistograms.HistogramTree[size];
+
+    public static class HistogramEntry {
+        HistogramProcessor processor;
+        KeyHistograms.HistogramTree tree;
+
+        public HistogramEntry(HistogramProcessor p) {
+            this.processor = p;
+            tree = new KeyHistograms.HistogramTree(p.getKeyComparator());
+        }
+
+        public HistogramEntry create() {
+            return new HistogramEntry(processor);
+        }
+
+        public KeyHistograms.HistogramTree getTree() {
+            return tree;
+        }
+
+        public void setTree(KeyHistograms.HistogramTree tree) {
+            this.tree = tree;
+        }
+
+        public boolean processTable(MailboxAggregation m) {
+            return processor.processTable(m);
+        }
+
+        public HistogramProcessor getProcessor() {
+            return processor;
+        }
+    }
+
+    public void initMessageTable(List<Supplier<KeyHistograms.Histogram>> histogramFactories, List<HistogramProcessor> processors, HistogramSelector histogramSelector) {
+        int size = processors.size();
+        tables = new HistogramEntry[size];
         for (int i = 0; i < size; ++i) {
-            tables[i] = new KeyHistograms.HistogramTree(keyComparators.get(i));
+            tables[i] = new HistogramEntry(processors.get(i));
         }
 
         //TODO remove
+        this.histogramSelector = histogramSelector;
         entries = new EntryTable[size];
         for (int i = 0; i < size; ++i) {
             entries[i] = createTable(histogramFactories.get(i).get());
         }
+    }
+
+    public boolean processTable() {
+        //TODO remove
+        for (ActorBehaviorBuilderKeyValue.ActorBehaviorMatchKey<?> a : activeAssociations) {
+            if (a.processTable(this)) {
+                return true;
+            }
+        }
+        for (HistogramEntry e : tables) {
+            if (e.processTable(this)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public KeyHistograms.HistogramTree getTable(int entryId) {
+        return tables[entryId].getTree();
+    }
+
+    public HistogramSelection selectTable(Object value) {
+        HistogramSelection s = new HistogramSelection();
+        int i = 0;
+        for (HistogramEntry e : tables) {
+            Object position = e.getProcessor().selectFromValue(value);
+            if (position != null) {
+                s.entryId = i;
+                s.position = position;
+                return s;
+            }
+            ++i;
+        }
+        return null;
+    }
+
+    public static class HistogramSelection {
+        public int entryId;
+        public Object position;
+
+        public HistogramSelection() { }
+
+        public HistogramSelection(int entryId, Object position) {
+            this.entryId = entryId;
+            this.position = position;
+        }
+    }
+
+    @Deprecated  protected EntryTable[] entries; //consider performance //TODO remove
+    @Deprecated protected HistogramSelector histogramSelector;
+
+    @Deprecated  protected Set<ActorBehaviorBuilderKeyValue.ActorBehaviorMatchKey<?>> activeAssociations = new HashSet<>();
+
+
+    //TODO remove
+    @Deprecated @FunctionalInterface
+    public interface HistogramSelector {
+        int select(Object value);
     }
 
     //TODO remove
@@ -70,21 +157,10 @@ public class MailboxAggregation extends MailboxDefault {
         entries[entryId].put(key, value);
     }
 
+    //TODO remove
+    @Deprecated
     public void addActiveAssociation(ActorBehaviorBuilderKeyValue.ActorBehaviorMatchKey<?> assoc) {
         activeAssociations.add(assoc); //TODO deactivation : count down ?
-    }
-
-    public boolean processTable() {
-        for (ActorBehaviorBuilderKeyValue.ActorBehaviorMatchKey<?> a : activeAssociations) {
-            if (a.processTable(this)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    public KeyHistograms.HistogramTree getTable(int entryId) {
-        return tables[entryId];
     }
 
     //TODO remove
@@ -104,6 +180,7 @@ public class MailboxAggregation extends MailboxDefault {
         });
     }
 
+    //TODO remove
     @Deprecated public interface ValueInTableMatcher {
         int valueSizeInTable();
         boolean matchValueInTable(int index, Object value);
