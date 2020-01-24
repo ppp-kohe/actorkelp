@@ -265,8 +265,8 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
         }
 
         @Override
-        public KeyHistograms.HistogramNodeLeaf createLeaf(Object key) {
-            return new HistogramNodeLeafTwo(key, this);
+        public KeyHistograms.HistogramNodeLeaf createLeaf(Object key, int height) {
+            return new HistogramNodeLeafTwo(key, this, height);
         }
 
         @SuppressWarnings("unchecked")
@@ -325,8 +325,8 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
     }
 
     public static abstract class HistogramNodeLeafN extends KeyHistograms.HistogramNodeLeaf {
-        public HistogramNodeLeafN(Object key, KeyHistograms.HistogramPutContext context) {
-            super(key, context);
+        public HistogramNodeLeafN(Object key, KeyHistograms.HistogramPutContext context, int height) {
+            super(key, context, height);
         }
 
         public abstract List<KeyHistograms.HistogramLeafList> getValueList();
@@ -336,8 +336,8 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
         protected KeyHistograms.HistogramLeafList values1;
         protected KeyHistograms.HistogramLeafList values2;
 
-        public HistogramNodeLeafTwo(Object key, KeyHistograms.HistogramPutContext context) {
-            super(key, context);
+        public HistogramNodeLeafTwo(Object key, KeyHistograms.HistogramPutContext context, int height) {
+            super(key, context, height);
         }
 
         @Override
@@ -361,6 +361,7 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
         }
 
         public void consume(BiConsumer<Object,Object> handler) {
+            afterTake(2);
             handler.accept(values1.poll(), values2.poll());
         }
 
@@ -390,8 +391,8 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
         }
 
         @Override
-        public KeyHistograms.HistogramNodeLeaf createLeaf(Object key) {
-            return new HistogramNodeLeafThree(key, this);
+        public KeyHistograms.HistogramNodeLeaf createLeaf(Object key, int height) {
+            return new HistogramNodeLeafThree(key, this, height);
         }
 
         @SuppressWarnings("unchecked")
@@ -462,8 +463,8 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
         protected KeyHistograms.HistogramLeafList values2;
         protected KeyHistograms.HistogramLeafList values3;
 
-        public HistogramNodeLeafThree(Object key, KeyHistograms.HistogramPutContext context) {
-            super(key, context);
+        public HistogramNodeLeafThree(Object key, KeyHistograms.HistogramPutContext context, int height) {
+            super(key, context, height);
         }
 
         @Override
@@ -491,6 +492,7 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
         }
 
         public void consume(TriConsumer<Object,Object,Object> handler) {
+            afterTake(3);
             handler.accept(values1.poll(), values2.poll(), values3.poll());
         }
 
@@ -522,8 +524,8 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
         }
 
         @Override
-        public KeyHistograms.HistogramNodeLeaf createLeaf(Object key) {
-            return new HistogramNodeLeafFour(key, this);
+        public KeyHistograms.HistogramNodeLeaf createLeaf(Object key, int height) {
+            return new HistogramNodeLeafFour(key, this, height);
         }
 
         @SuppressWarnings("unchecked")
@@ -602,8 +604,8 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
         protected KeyHistograms.HistogramLeafList values3;
         protected KeyHistograms.HistogramLeafList values4;
 
-        public HistogramNodeLeafFour(Object key, KeyHistograms.HistogramPutContext context) {
-            super(key, context);
+        public HistogramNodeLeafFour(Object key, KeyHistograms.HistogramPutContext context, int height) {
+            super(key, context, height);
         }
 
         @Override
@@ -634,6 +636,7 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
         }
 
         public void consume(QuadConsumer<Object,Object,Object,Object> handler) {
+            afterTake(4);
             handler.accept(values1.poll(), values2.poll(), values3.poll(), values4.poll());
         }
 
@@ -665,8 +668,8 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
         }
 
         @Override
-        public KeyHistograms.HistogramNodeLeaf createLeaf(Object key) {
-            return new HistogramNodeLeafList(key, this);
+        public KeyHistograms.HistogramNodeLeaf createLeaf(Object key, int height) {
+            return new HistogramNodeLeafList(key, this, height);
         }
 
         @SuppressWarnings("unchecked")
@@ -712,8 +715,8 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
 
     public static class HistogramNodeLeafList extends HistogramNodeLeafN {
         protected KeyHistograms.HistogramLeafList values;
-        public HistogramNodeLeafList(Object key, KeyHistograms.HistogramPutContext context) {
-            super(key, context);
+        public HistogramNodeLeafList(Object key, KeyHistograms.HistogramPutContext context, int height) {
+            super(key, context, height);
         }
 
         @Override
@@ -736,6 +739,7 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
             for (int i = 0; i < requiredSize; ++i) {
                 vs.add(values.poll());
             }
+            afterTake(requiredSize);
             handler.accept(key, vs);
         }
 

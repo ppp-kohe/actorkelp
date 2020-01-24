@@ -118,8 +118,8 @@ public class ActorToGraph {
             return n.fromEdge(from);
         } else if (node instanceof KeyHistograms.HistogramNodeTree) {
             return saveTree(from, (KeyHistograms.HistogramNodeTree) node);
-        } else if (node instanceof ActorBehaviorBuilderKeyValue.HistogramNodeLeafN) {
-            return saveLeafN(from, (ActorBehaviorBuilderKeyValue.HistogramNodeLeafN) node);
+        } else if (node instanceof KeyHistograms.HistogramNodeLeaf) {
+            return saveLeafN(from, (KeyHistograms.HistogramNodeLeaf) node);
         } else {
             return null;
         }
@@ -127,11 +127,22 @@ public class ActorToGraph {
 
     protected GraphEdge saveTree(GraphNode from, KeyHistograms.HistogramNodeTree t) {
         List<List<String>> table = new ArrayList<>();
-        table.add(Arrays.asList("", "start", "end", "size"));
-        table.add(Arrays.asList("tree", Objects.toString(t.keyStart()), Objects.toString(t.keyEnd()), String.format("%,d", t.size())));
+        table.add(Arrays.asList("height=" + t.height(), "start", "end", "size", "sizet"));
+
+        String cIdx;
+        if (t.getParent() != null) {
+            cIdx = String.format("%,d", t.getParent().getChildren().indexOf(t));
+        } else {
+            cIdx = "null";
+        }
+        table.add(Arrays.asList("cIdx=" + cIdx, Objects.toString(t.keyStart()), Objects.toString(t.keyEnd()), String.format("%,d", t.size()), ""));
         int i = 0;
+        long subTotal = 0;
         for (KeyHistograms.HistogramNode n : t.getChildren()) {
-            table.add(Arrays.asList("child" + i, Objects.toString(n.keyStart()), Objects.toString(n.keyEnd()), String.format("%,d", t.size())));
+            subTotal += n.size();
+            table.add(Arrays.asList("child" + i, Objects.toString(n.keyStart()), Objects.toString(n.keyEnd()),
+                    String.format("%,d", n.size()),
+                    String.format("%,d", subTotal)));
             ++i;
         }
 
@@ -144,15 +155,23 @@ public class ActorToGraph {
         return e;
     }
 
-    protected GraphEdge saveLeafN(GraphNode from, ActorBehaviorBuilderKeyValue.HistogramNodeLeafN l) {
+    protected GraphEdge saveLeafN(GraphNode from, KeyHistograms.HistogramNodeLeaf l) {
         List<List<String>> table = new ArrayList<>();
         int vi = 0;
+        table.add(Arrays.asList("height", String.format("%,d", l.height())));
+        if (l.getParent() != null) {
+            table.add(Arrays.asList("childIdx", String.format("%,d", l.getParent().getChildren().indexOf(l))));
+        } else {
+            table.add(Arrays.asList("childIdx", "null"));
+        }
         table.add(Arrays.asList("key", Objects.toString(l.getKey())));
         table.add(Arrays.asList("size", String.format("%,d", l.size())));
-        for (KeyHistograms.HistogramLeafList list : l.getValueList()) {
-            long n = list.count();
-            table.add(Arrays.asList("v" + vi +".count", String.format("%,d", n)));
-            ++vi;
+        if (l instanceof ActorBehaviorBuilderKeyValue.HistogramNodeLeafN) {
+            for (KeyHistograms.HistogramLeafList list : ((ActorBehaviorBuilderKeyValue.HistogramNodeLeafN) l).getValueList()) {
+                long n = list.count();
+                table.add(Arrays.asList("v" + vi + ".count", String.format("%,d", n)));
+                ++vi;
+            }
         }
 
         GraphNode n = createNode();
