@@ -7,6 +7,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 public class DelayedLabelManual {
     public static void main(String[] args) {
@@ -29,14 +30,14 @@ public class DelayedLabelManual {
 
         ActorSystem system = new ActorSystemDefault();
         ResultActor resultActor = new ResultActor(system, out, startTime, numInstances);
-        ActorRef learnerActor = learnerActor(system, resultActor, numInstances);
+        ActorRef learnerActor = learnerActor(system, out, resultActor, numInstances);
 
         for (Object i : inputs) {
             learnerActor.tell(i, null);
         }
     }
 
-    public ActorRef learnerActor(ActorSystem system, ActorRef resultActor, int numInstances) {
+    public ActorRef learnerActor(ActorSystem system, PrintWriter out, ActorRef resultActor, int numInstances) {
         return new LearnerActor(system, resultActor);
     }
 
@@ -56,18 +57,18 @@ public class DelayedLabelManual {
         @Override
         protected ActorBehavior initBehavior() {
             return behaviorBuilder()
-                    .match(Integer.class, this::receive)
+                    .matchWithSender(Integer.class, this::receive)
                     .build();
         }
 
-        public void receive(int next) {
+        public void receive(int next, ActorRef sender) {
             finishedInstances = Math.max(finishedInstances, next);
             if (numInstances <= finishedInstances) {
                 Duration d = Duration.between(startTime, Instant.now());
                 out.println(String.format("#finish: %,d %s", finishedInstances, d));
+                sender.tell(new Finish(finishedInstances), this);
                 //finish
                 //((ActorSystemDefault) getSystem()).stop();
-                System.exit(0);
             }
         }
     }
@@ -91,6 +92,7 @@ public class DelayedLabelManual {
             return behaviorBuilder()
                     .match(FeatureInstance.class, this::testAndKeep)
                     .match(LabelInstance.class, this::train)
+                    .match(Finish.class, this::finish)
                     .build();
         }
 
@@ -102,7 +104,11 @@ public class DelayedLabelManual {
             double[] vs = featureBuffer.remove(i.getId());
             DataInstance di = new DataInstance(i.getId(), vs, i.getLabel());
 
-            model.train(di);
+            model.train(di, this);
+        }
+
+        public void finish(Finish f) {
+            System.exit(0);
         }
     }
 
@@ -115,11 +121,19 @@ public class DelayedLabelManual {
             this.resultActor = resultActor;
         }
 
-        public void train(DataInstance di) {
+        public void train(DataInstance di, ActorRef sender) {
             ++numSamples;
             model.computeIfAbsent(di.getLabel(), l -> new LearnerEntry(l, di.getVector().length))
                     .add(di);
-            resultActor.tell(numSamples, null);
+            resultActor.tell(numSamples, sender);
+        }
+    }
+
+    public static class Finish {
+        public long numInstances;
+
+        public Finish(long numInstances) {
+            this.numInstances = numInstances;
         }
     }
 
@@ -206,7 +220,13 @@ public class DelayedLabelManual {
         Random r = new Random(seed);
         ArrayList<DelayedData> res = new ArrayList<>(instances * 2);
 
+        List<Integer> ids = IntStream.range(0, instances)
+                .boxed()
+                .collect(Collectors.toList());
+        Collections.shuffle(ids);
+
         for (int i = 0; i < instances; ++i) {
+            int id = ids.get(i);
             long featureTime;
             long labelTime;
             if (i < delay) {
@@ -217,8 +237,8 @@ public class DelayedLabelManual {
                 labelTime = 2 * i + delay;
             }
             double[] data = r.doubles(vectorLength, 0, 1.0).toArray();
-            res.add(new DelayedData(featureTime, new FeatureInstance(i, data)));
-            res.add(new DelayedData(labelTime, new LabelInstance(i, r.nextInt(classes))));
+            res.add(new DelayedData(featureTime, new FeatureInstance(id, data)));
+            res.add(new DelayedData(labelTime, new LabelInstance(id, r.nextInt(classes))));
         }
 
         return res.stream()

@@ -265,7 +265,7 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
         }
 
         @Override
-        public KeyHistograms.HistogramNodeLeaf createLeaf(Object key, int height) {
+        protected KeyHistograms.HistogramNodeLeaf createLeaf(Object key, int height) {
             return new HistogramNodeLeafTwo(key, this, height);
         }
 
@@ -292,9 +292,10 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
         @SuppressWarnings("unchecked")
         @Override
         public boolean processTable(MailboxAggregation m) {
-            HistogramNodeLeafTwo next = ((HistogramNodeLeafTwo) m.getTable(matchKeyEntryId).takeCompleted());
+            KeyHistograms.HistogramTree tree = m.getTable(matchKeyEntryId);
+            HistogramNodeLeafTwo next = ((HistogramNodeLeafTwo) tree.takeCompleted());
             if (next != null) {
-                next.consume((BiConsumer<Object,Object>) handler);
+                next.consume(tree, (BiConsumer<Object,Object>) handler);
                 return true;
             }
             return false;
@@ -360,8 +361,8 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
             return !values1.isEmpty() && !values2.isEmpty();
         }
 
-        public void consume(BiConsumer<Object,Object> handler) {
-            afterTake(2);
+        public void consume(KeyHistograms.HistogramTree tree, BiConsumer<Object, Object> handler) {
+            afterTake(2, tree);
             handler.accept(values1.poll(), values2.poll());
         }
 
@@ -391,7 +392,7 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
         }
 
         @Override
-        public KeyHistograms.HistogramNodeLeaf createLeaf(Object key, int height) {
+        protected KeyHistograms.HistogramNodeLeaf createLeaf(Object key, int height) {
             return new HistogramNodeLeafThree(key, this, height);
         }
 
@@ -421,9 +422,10 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
         @SuppressWarnings("unchecked")
         @Override
         public boolean processTable(MailboxAggregation m) {
-            HistogramNodeLeafThree next = ((HistogramNodeLeafThree) m.getTable(matchKeyEntryId).takeCompleted());
+            KeyHistograms.HistogramTree tree = m.getTable(matchKeyEntryId);
+            HistogramNodeLeafThree next = ((HistogramNodeLeafThree) tree.takeCompleted());
             if (next != null) {
-                next.consume((TriConsumer<Object,Object,Object>) handler);
+                next.consume(tree, (TriConsumer<Object,Object,Object>) handler);
                 return true;
             }
             return false;
@@ -491,8 +493,8 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
             return !values1.isEmpty() && !values2.isEmpty() && !values3.isEmpty();
         }
 
-        public void consume(TriConsumer<Object,Object,Object> handler) {
-            afterTake(3);
+        public void consume(KeyHistograms.HistogramTree tree, TriConsumer<Object, Object, Object> handler) {
+            afterTake(3, tree);
             handler.accept(values1.poll(), values2.poll(), values3.poll());
         }
 
@@ -524,7 +526,7 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
         }
 
         @Override
-        public KeyHistograms.HistogramNodeLeaf createLeaf(Object key, int height) {
+        protected KeyHistograms.HistogramNodeLeaf createLeaf(Object key, int height) {
             return new HistogramNodeLeafFour(key, this, height);
         }
 
@@ -557,9 +559,10 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
         @SuppressWarnings("unchecked")
         @Override
         public boolean processTable(MailboxAggregation m) {
-            HistogramNodeLeafFour next = ((HistogramNodeLeafFour) m.getTable(matchKeyEntryId).takeCompleted());
+            KeyHistograms.HistogramTree tree = m.getTable(matchKeyEntryId);
+            HistogramNodeLeafFour next = ((HistogramNodeLeafFour) tree.takeCompleted());
             if (next != null) {
-                next.consume((QuadConsumer<Object,Object,Object,Object>) handler);
+                next.consume(tree, (QuadConsumer<Object,Object,Object,Object>) handler);
                 return true;
             }
             return false;
@@ -635,8 +638,8 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
             return !values1.isEmpty() && !values2.isEmpty() && !values3.isEmpty() && !values4.isEmpty();
         }
 
-        public void consume(QuadConsumer<Object,Object,Object,Object> handler) {
-            afterTake(4);
+        public void consume(KeyHistograms.HistogramTree tree, QuadConsumer<Object, Object, Object, Object> handler) {
+            afterTake(4, tree);
             handler.accept(values1.poll(), values2.poll(), values3.poll(), values4.poll());
         }
 
@@ -668,7 +671,7 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
         }
 
         @Override
-        public KeyHistograms.HistogramNodeLeaf createLeaf(Object key, int height) {
+        protected KeyHistograms.HistogramNodeLeaf createLeaf(Object key, int height) {
             return new HistogramNodeLeafList(key, this, height);
         }
 
@@ -689,9 +692,10 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
         @SuppressWarnings({"unchecked", "rawtypes"})
         @Override
         public boolean processTable(MailboxAggregation m) {
-            HistogramNodeLeafList next = ((HistogramNodeLeafList) m.getTable(matchKeyEntryId).takeCompleted());
+            KeyHistograms.HistogramTree tree = m.getTable(matchKeyEntryId);
+            HistogramNodeLeafList next = (HistogramNodeLeafList) tree.takeCompleted();
             if (next != null) {
-                next.consume(putRequiredSize, (BiConsumer) handler);
+                next.consume(putRequiredSize, tree, (BiConsumer) handler);
                 return true;
             }
             return false;
@@ -734,12 +738,12 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
             return context.putRequiredSize >= size;
         }
 
-        public void consume(int requiredSize, BiConsumer<Object,List<Object>> handler) {
+        public void consume(int requiredSize, KeyHistograms.HistogramTree tree, BiConsumer<Object,List<Object>> handler) {
             List<Object> vs = new ArrayList<>(requiredSize);
             for (int i = 0; i < requiredSize; ++i) {
                 vs.add(values.poll());
             }
-            afterTake(requiredSize);
+            afterTake(requiredSize, tree);
             handler.accept(key, vs);
         }
 

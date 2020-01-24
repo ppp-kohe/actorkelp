@@ -2,6 +2,7 @@ package csl.actor.msgassoc;
 
 import csl.actor.MailboxDefault;
 
+import java.util.Arrays;
 import java.util.List;
 
 public class MailboxAggregation extends MailboxDefault {
@@ -82,6 +83,22 @@ public class MailboxAggregation extends MailboxDefault {
 
     public int getTableSize() {
         return tables.length;
+    }
+
+    public List<HistogramEntry> getTableEntries() {
+        return Arrays.asList(tables);
+    }
+
+    public int prune(long greaterThanLeafSize, double lessThanNonZeroLeafRate) {
+        int pruneCount = 0;
+        for (HistogramEntry e : tables) {
+            KeyHistograms.HistogramTree t = e.getTree();
+            if (t.getLeafSize() > greaterThanLeafSize && t.getLeafSizeNonZeroRate() < lessThanNonZeroLeafRate) {
+                t.prune();
+                pruneCount++;
+            }
+        }
+        return pruneCount;
     }
 
     public HistogramSelection selectTable(Object value) {
