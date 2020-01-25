@@ -13,6 +13,7 @@ public class ObjectMessageExample {
 
         new Thread() {public void run() {
             ObjectMessageServer server = new ObjectMessageServer();
+            ObjectMessageExample.server = server;
             server.setPort(30000);
             server.setReceiver(ObjectMessageExample::receive);
             System.err.println("server start");
@@ -33,12 +34,23 @@ public class ObjectMessageExample {
         con.write("!!!");
         Thread.sleep(1000);
         System.out.println("FINISH received=" + received);
+
+        con.write("close");
+        con.close();
+        client.close();
     }
 
     static List<Object> received = new ArrayList<>();
+    static ObjectMessageServer server;
 
     static void receive(Object obj) {
         received.add(obj);
         System.out.println("RECEIVE " + obj);
+
+        if (obj.equals("close")) {
+            server.close();
+        }
     }
+
+
 }

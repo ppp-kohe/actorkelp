@@ -57,6 +57,16 @@ public class ActorBehaviorBuilder {
                 return right.process(self, message);
             }
         }
+
+        /** @return implementation field getter */
+        public ActorBehavior getLeft() {
+            return left;
+        }
+
+        /** @return implementation field getter */
+        public ActorBehavior getRight() {
+            return right;
+        }
     }
 
     public static class ActorBehaviorMatch<DataType> implements ActorBehavior {
@@ -78,6 +88,16 @@ public class ActorBehaviorBuilder {
                 return false;
             }
         }
+
+        /** @return implementation field getter */
+        public Class<DataType> getDataType() {
+            return dataType;
+        }
+
+        /** @return implementation field getter */
+        public BiConsumer<DataType, ActorRef> getHandler() {
+            return handler;
+        }
     }
 
     public static class ActorBehaviorAny implements ActorBehavior {
@@ -91,6 +111,11 @@ public class ActorBehaviorBuilder {
         public boolean process(Actor self, Message<?> message) {
             handler.accept(message.getData(), message.getSender());
             return true;
+        }
+
+        /** @return implementation field getter */
+        public BiConsumer<Object, ActorRef> getHandler() {
+            return handler;
         }
     }
 }

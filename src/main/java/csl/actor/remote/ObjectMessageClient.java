@@ -57,6 +57,26 @@ public class ObjectMessageClient implements Closeable {
         return this;
     }
 
+    /** @return implementation field getter */
+    public int getThreads() {
+        return threads;
+    }
+
+    /** @return implementation field getter */
+    public EventLoopGroup getGroup() {
+        return group;
+    }
+
+    /** @return implementation field getter */
+    public String getHost() {
+        return host;
+    }
+
+    /** @return implementation field getter */
+    public int getPort() {
+        return port;
+    }
+
     public ObjectMessageClient start() {
         initSerializer();
         initGroup();
@@ -93,8 +113,11 @@ public class ObjectMessageClient implements Closeable {
     }
 
     public ObjectMessageConnection connect() {
-        if (!isStarted()) {
-            start();
+        synchronized (this) {
+            if (!isStarted()) {
+                ActorSystemRemote.log("client-connect start %s", this);
+                start();
+            }
         }
         return new ObjectMessageConnection(this)
                 .setHost(host)
@@ -106,7 +129,9 @@ public class ObjectMessageClient implements Closeable {
     }
 
     public void close() {
-        group.shutdownGracefully();
+        if (group != null) {
+            group.shutdownGracefully();
+        }
     }
 
     public static class ObjectMessageConnection implements Closeable {
@@ -160,6 +185,26 @@ public class ObjectMessageClient implements Closeable {
                 channel = null;
             }
         }
+
+        /** @return implementation field getter */
+        public ObjectMessageClient getClient() {
+            return client;
+        }
+
+        /** @return implementation field getter */
+        public String getHost() {
+            return host;
+        }
+
+        /** @return implementation field getter */
+        public int getPort() {
+            return port;
+        }
+
+        /** @return implementation field getter */
+        public Channel getChannel() {
+            return channel;
+        }
     }
 
     public static class ClientInitializer extends ChannelInitializer<SocketChannel> {
@@ -172,12 +217,11 @@ public class ObjectMessageClient implements Closeable {
         /**
          * append 4 bytes (BigEndian) int length of subsequent bytes,
          *  receives int response
-         * @param ch
-         * @throws Exception
+         * @param ch a channel
          * @see ChannelPipeline
          */
         @Override
-        protected void initChannel(SocketChannel ch) throws Exception {
+        protected void initChannel(SocketChannel ch) {
             ChannelPipeline pipeline = ch.pipeline();
             if (debugTraceLog) {
                 pipeline.addLast(new LoggingHandler(ObjectMessageClient.class, LogLevel.INFO));
@@ -185,6 +229,11 @@ public class ObjectMessageClient implements Closeable {
             pipeline.addLast(new LengthFieldPrepender(4, false),
                             new QueueClientHandler(owner.getSerializer()),
                             new ResponseHandler());
+        }
+
+        /** @return implementation field getter */
+        public ObjectMessageClient getOwner() {
+            return owner;
         }
     }
 
@@ -200,6 +249,11 @@ public class ObjectMessageClient implements Closeable {
             Output output = new Output(new ByteBufOutputStream(out));
             serializer.get().writeClassAndObject(output, msg);
             output.flush();
+        }
+
+        /** @return implementation field getter */
+        public Supplier<Kryo> getSerializer() {
+            return serializer;
         }
     }
 

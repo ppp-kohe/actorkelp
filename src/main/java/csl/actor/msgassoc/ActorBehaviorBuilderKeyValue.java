@@ -80,7 +80,6 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
         return with(behavior);
     }
 
-
     public static class RelayToCollect<KeyType> {
         protected ActorBehaviorBuilderKeyValue builder;
         protected List<KeyExtractor<KeyType, ?>> messages;

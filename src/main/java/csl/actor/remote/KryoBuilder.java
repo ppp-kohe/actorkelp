@@ -6,6 +6,7 @@ import com.esotericsoftware.kryo.Registration;
 import com.esotericsoftware.kryo.Serializer;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
+import com.esotericsoftware.kryo.serializers.ClosureSerializer;
 import com.esotericsoftware.kryo.serializers.FieldSerializer;
 import com.esotericsoftware.kryo.serializers.JavaSerializer;
 import com.esotericsoftware.kryo.util.DefaultInstantiatorStrategy;
@@ -16,6 +17,7 @@ import org.objenesis.strategy.StdInstantiatorStrategy;
 
 import java.io.File;
 import java.io.Serializable;
+import java.lang.invoke.SerializedLambda;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.net.*;
@@ -50,10 +52,12 @@ public class KryoBuilder {
                     .build();
     }
 
+    /** @return implementation field getter */
     public Kryo getKryo() {
         return kryo;
     }
 
+    /** @return implementation field getter */
     public ActorSystemRemote getSystem() {
         return system;
     }
@@ -68,6 +72,9 @@ public class KryoBuilder {
 
         register(kryo, getDefaultSerializerClasses());
         register(kryo, getBaseClasses());
+
+        kryo.register(SerializedLambda.class);
+        kryo.register(ClosureSerializer.Closure.class, new ClosureSerializer());
 
         registerObjectStream(kryo, EnumMap.class);
         registerObjectStream(kryo, SimpleTimeZone.class);

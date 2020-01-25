@@ -31,8 +31,8 @@ public class MailboxAggregation extends MailboxDefault {
 
 
     public static class HistogramEntry {
-        HistogramProcessor processor;
-        KeyHistograms.HistogramTree tree;
+        protected HistogramProcessor processor;
+        protected KeyHistograms.HistogramTree tree;
 
         public HistogramEntry(HistogramProcessor p) {
             this.processor = p;
@@ -85,6 +85,7 @@ public class MailboxAggregation extends MailboxDefault {
         return tables.length;
     }
 
+    /** @return implementation field getter */
     public List<HistogramEntry> getTableEntries() {
         return Arrays.asList(tables);
     }

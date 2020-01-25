@@ -21,6 +21,7 @@ public class ActorRefRemote implements ActorRef {
         this.address = address;
     }
 
+    /** @return implementation field getter */
     public ActorSystem getSystem() {
         return system;
     }

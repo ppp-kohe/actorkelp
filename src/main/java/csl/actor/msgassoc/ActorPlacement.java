@@ -6,28 +6,46 @@ import csl.actor.remote.ActorRefRemote;
 import csl.actor.remote.ActorSystemRemote;
 
 import java.io.Serializable;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
+import java.util.stream.Collectors;
 
 public interface ActorPlacement {
     String PLACEMENT_NAME = ActorPlacement.class.getName() + ".placement";
 
     ActorRef place(Actor a);
 
+    static Object lazyToString(Supplier<String> s) {
+        return new Object() {
+            @Override
+            public String toString() {
+                return s.get();
+            }
+        };
+    }
+
     abstract class PlacemenActor extends ActorDefault implements ActorPlacement {
         protected List<ActorAddress.ActorAddressRemoteActor> cluster = new ArrayList<>();
         protected PlacementStrategy strategy;
 
+        public static boolean debugLog = System.getProperty("csl.actor.debug", "false").equals("true");
+
+        public static void log(String msg, Object... args) {
+            if (debugLog) {
+                System.err.println("\033[38;5;34m" + Instant.now() + ": " + String.format(msg, args) + "\033[0m");
+            }
+        }
+
         public PlacemenActor(ActorSystem system, String name) {
             super(system, name);
-            if (system instanceof ActorSystemRemote) {
-                cluster.add(((ActorSystemRemote) system).getServerAddress().getActor(name));
-            }
             strategy = initStrategy();
         }
 
-        abstract PlacementStrategy initStrategy();
+        protected abstract PlacementStrategy initStrategy();
 
         public List<ActorAddress.ActorAddressRemoteActor> getCluster() {
             return cluster;
@@ -55,10 +73,26 @@ public interface ActorPlacement {
             receive(new AddressList(masterActor), null);
         }
 
+        public ActorAddress.ActorAddressRemoteActor getSelfAddress() {
+            if (getSystem() instanceof ActorSystemRemote) {
+                return ((ActorSystemRemote) getSystem()).getServerAddress().getActor(getName());
+            } else {
+                return null;
+            }
+        }
+
         public void receive(AddressList list, ActorRef sender) {
+            log("%s on %s receive: \n   %s \n from %s", this, getSystem(),
+                    ActorPlacement.lazyToString(() ->
+                            list.getCluster().stream()
+                            .map(Objects::toString)
+                            .collect(Collectors.joining("\n   "))), sender);
+
+            ActorAddress.ActorAddressRemoteActor self = getSelfAddress();
+
             boolean added = false;
             for (ActorAddress.ActorAddressRemoteActor a : list.getCluster()) {
-                if (!cluster.contains(a)) {
+                if (!cluster.contains(a) && (self == null || !self.equals(a))) {
                     cluster.add(a);
                     added = true;
                 }
@@ -73,13 +107,15 @@ public interface ActorPlacement {
             if (sender instanceof ActorRefRemote) {
                 excluded.add((ActorAddress.ActorAddressRemoteActor) ((ActorRefRemote) sender).getAddress());
             }
-            if (getSystem() instanceof ActorSystemRemote) {
-                excluded.add(((ActorSystemRemote) getSystem()).getServerAddress().getActor(getName()));
+            AddressList addressListToOthers = new AddressList(new ArrayList<>(cluster));
+            ActorAddress.ActorAddressRemoteActor selfAddress = getSelfAddress();
+            if (selfAddress != null) {
+                addressListToOthers.getCluster().add(selfAddress);
             }
             for (ActorAddress.ActorAddressRemoteActor r : cluster) {
                 if (!excluded.contains(r)) {
                     ActorRefRemote.get(getSystem(), r.getActor(getName()))
-                            .tell(new AddressList(cluster), this);
+                            .tell(addressListToOthers, this);
                 }
             }
         }
@@ -100,6 +136,7 @@ public interface ActorPlacement {
                 return placeLocal(a);
             }
             try {
+                log("%s on %s place(%d):\n   move %s to %s", this, getSystem(), retryCount, a, target);
                 return ResponsiveCalls.<ActorRef>send(getSystem(),
                         ActorRefRemote.get(getSystem(), target),
                         new ActorCreationRequest(s)).get(2, TimeUnit.SECONDS);
@@ -131,6 +168,7 @@ public interface ActorPlacement {
 
         public abstract Actor fromSerializable(Serializable s, long num);
 
+        /** @return implementation field getter */
         public PlacementStrategy getStrategy() {
             return strategy;
         }
@@ -185,16 +223,16 @@ public interface ActorPlacement {
 
         @Override
         public synchronized ActorAddress.ActorAddressRemoteActor getNextAddress(PlacemenActor pa, Actor a, int retryCount) {
-            if (retryCount > 0) {
+            if (retryCount > 0 && localLimit != 0) {
                 count += (localLimit - count % localLimit);
             }
             if (0 <= count && count < localLimit) {
                 ++count;
                 return null; //local
             } else {
-                int clusterIndex = count / localLimit;
-                ++count;
                 List<ActorAddress.ActorAddressRemoteActor> cluster = pa.getCluster();
+                int clusterIndex = (localLimit == 0 ? (count % cluster.size()) : (count / localLimit));
+                ++count;
                 if (0 <= clusterIndex && clusterIndex < cluster.size()) {
                     return cluster.get(clusterIndex);
                 } else {
@@ -211,14 +249,17 @@ public interface ActorPlacement {
             return totalCount;
         }
 
+        /** @return implementation field getter */
         public int getLocalLimit() {
             return localLimit;
         }
 
+        /** @return implementation field getter */
         public int getCount() {
             return count;
         }
 
+        /** @return implementation field getter */
         public long getTotalCount() {
             return totalCount;
         }

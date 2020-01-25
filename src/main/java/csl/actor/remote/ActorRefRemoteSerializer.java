@@ -28,6 +28,7 @@ public class ActorRefRemoteSerializer<RefType extends ActorRef> extends Serializ
         kryo.writeClassAndObject(output, addr);
     }
 
+    /** @return implementation field getter */
     public ActorSystemRemote getRemoteSystem() {
         return remoteSystem;
     }

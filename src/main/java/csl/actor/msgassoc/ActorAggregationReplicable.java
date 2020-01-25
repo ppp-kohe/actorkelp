@@ -130,10 +130,12 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
             }
         }
 
+        /** @return impelemtation field getter */
         public Random getRandom() {
             return random;
         }
 
+        /** @return impelemtation field getter */
         public List<MailboxAggregationReplicable.SplitTreeRoot> getSplits() {
             return splits;
         }
@@ -210,14 +212,17 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
                     .collect(Collectors.toList());
         }
 
+        /** @return impelemtation field getter */
         public ActorRef getRouter() {
             return router;
         }
 
+        /** @return impelemtation field getter */
         public ActorRef getLeft() {
             return left;
         }
 
+        /** @return impelemtation field getter */
         public ActorRef getRight() {
             return right;
         }
@@ -280,7 +285,7 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
         }
 
         @Override
-        PlacementStrategy initStrategy() {
+        protected PlacementStrategy initStrategy() {
             return new PlacementStrategyRoundRobin();
         }
 

@@ -1,13 +1,11 @@
 package csl.actor.msgassoc;
 
-import csl.actor.ActorBehavior;
-import csl.actor.ActorDefault;
-import csl.actor.ActorRef;
-import csl.actor.ActorSystem;
+import csl.actor.*;
 import csl.actor.remote.ActorAddress;
 import csl.actor.remote.ActorRefRemote;
 
 import java.io.Serializable;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicLong;
@@ -138,6 +136,7 @@ public class ResponsiveCalls {
         @Override
         protected ActorBehavior initBehavior() {
             return behaviorBuilder()
+                    .match(ActorSystemDefault.DeadLetter.class, this::fail)
                     .matchWithSender(Object.class, this::receive)
                     .build();
         }
@@ -154,6 +153,27 @@ public class ResponsiveCalls {
                     resultHolder.completeExceptionally(ce);
                 }
             }
+        }
+
+        public void fail(ActorSystemDefault.DeadLetter l) {
+            resultHolder.completeExceptionally(new DeadLetterException(l));
+        }
+
+        public CompletableFuture<T> getResultHolder() {
+            return resultHolder;
+        }
+    }
+
+    public static class DeadLetterException extends RuntimeException {
+        protected ActorSystemDefault.DeadLetter letter;
+
+        public DeadLetterException(ActorSystemDefault.DeadLetter letter) {
+            super(Objects.toString(letter));
+            this.letter = letter;
+        }
+
+        public ActorSystemDefault.DeadLetter getLetter() {
+            return letter;
         }
     }
 
@@ -201,7 +221,7 @@ public class ResponsiveCalls {
         }
     }
 
-    public interface ResponsiveCallable<T> {
+    public interface ResponsiveCallable<T> extends Serializable {
         T call(ResponsiveCallableActor self);
     }
 }

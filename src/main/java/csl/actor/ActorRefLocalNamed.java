@@ -13,6 +13,7 @@ public class ActorRefLocalNamed implements ActorRef {
         this.name = name;
     }
 
+    /** @return implementation field getter */
     public ActorSystem getSystem() {
         return system;
     }

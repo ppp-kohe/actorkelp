@@ -43,8 +43,8 @@ public class DelayedLabelManual {
 
     public static class ResultActor extends ActorDefault {
         Instant startTime;
-        int numInstances;
-        int finishedInstances;
+        long numInstances;
+        long finishedInstances;
         PrintWriter out;
 
         public ResultActor(ActorSystem system, PrintWriter out, Instant startTime, int numInstances) {
@@ -57,11 +57,11 @@ public class DelayedLabelManual {
         @Override
         protected ActorBehavior initBehavior() {
             return behaviorBuilder()
-                    .matchWithSender(Integer.class, this::receive)
+                    .matchWithSender(Long.class, this::receive)
                     .build();
         }
 
-        public void receive(int next, ActorRef sender) {
+        public void receive(long next, ActorRef sender) {
             finishedInstances = Math.max(finishedInstances, next);
             if (numInstances <= finishedInstances) {
                 Duration d = Duration.between(startTime, Instant.now());
@@ -113,7 +113,7 @@ public class DelayedLabelManual {
     }
 
     public static class LearnerModel {
-        int numSamples = 0;
+        long numSamples = 0;
         Map<Integer, LearnerEntry> model = new HashMap<>();
         ActorRef resultActor;
 
@@ -198,9 +198,9 @@ public class DelayedLabelManual {
     }
 
     public static class LearnerEntry {
-        int label;
-        double[] vector;
-        int count;
+        public int label;
+        public double[] vector;
+        public long count;
 
         public LearnerEntry(int label, int size) {
             this.label = label;
@@ -223,7 +223,7 @@ public class DelayedLabelManual {
         List<Integer> ids = IntStream.range(0, instances)
                 .boxed()
                 .collect(Collectors.toList());
-        Collections.shuffle(ids);
+        Collections.shuffle(ids, r);
 
         for (int i = 0; i < instances; ++i) {
             int id = ids.get(i);

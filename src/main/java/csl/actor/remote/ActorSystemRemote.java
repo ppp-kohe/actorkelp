@@ -6,7 +6,9 @@ import com.esotericsoftware.kryo.util.Pool;
 import csl.actor.*;
 import io.netty.channel.EventLoopGroup;
 
+import java.io.Serializable;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
@@ -61,6 +63,7 @@ public class ActorSystemRemote implements ActorSystem {
     }
 
     protected void initServerAndClient() {
+        log("initServerAndClient: %s", this);
         server = new ObjectMessageServer();
         server.setReceiver(this::receive);
         client = new ObjectMessageClient();
@@ -74,14 +77,22 @@ public class ActorSystemRemote implements ActorSystem {
         client.setSerializer(getSerializer());
     }
 
+    /** @return implementation field getter */
     public ActorSystemDefault getLocalSystem() {
         return localSystem;
     }
 
+    /** @return implementation field getter */
     public Pool<Kryo> getSerializerPool() {
         return serializerPool;
     }
 
+    /** @return implementation field getter */
+    public Function<ActorSystemRemote, Kryo> getSerializerFunction() {
+        return serializer;
+    }
+
+    /** @return implementation field getter */
     public Map<Object, ConnectionActor> getConnectionMap() {
         return connectionMap;
     }
@@ -102,8 +113,9 @@ public class ActorSystemRemote implements ActorSystem {
         }
     }
 
-    public void startWithoutWait(int port) {
+    public ActorSystemRemote startWithoutWait(int port) {
         startWithoutWait(ActorAddress.get("localhost", port));
+        return this;
     }
 
     public void startWithoutWait(ActorAddress.ActorAddressRemote serverAddress) {
@@ -191,7 +203,7 @@ public class ActorSystemRemote implements ActorSystem {
 
     public void receive(Object msg) {
         if (msg instanceof Message<?>) {
-            Message<?> m = (Message)  msg;
+            Message<?> m = (Message<?>)  msg;
             log("receive-remote: %s", m);
             localSystem.send(new Message<>(
                     localize(m.getTarget()),
@@ -219,10 +231,12 @@ public class ActorSystemRemote implements ActorSystem {
 
 
 
+    @Override
     public void register(Actor actor) {
         localSystem.register(actor);
     }
 
+    @Override
     public void unregister(String actorName) {
         localSystem.unregister(actorName);
     }
@@ -233,9 +247,26 @@ public class ActorSystemRemote implements ActorSystem {
     }
 
     @Override
+    public void close() {
+        try {
+            log("%s: close", this);
+            server.close();
+            new ArrayList<>(connectionMap.values())
+                    .forEach(ConnectionActor::close);
+            client.close();
+        } finally {
+            localSystem.close();
+        }
+    }
+
+    @Override
     public String toString() {
         return getClass().getSimpleName() + "@" + Integer.toHexString(System.identityHashCode(this)) +
                 "(" + localSystem + ", address=" + serverAddress + ")";
+    }
+
+    public void connectionClosed(ConnectionActor ca) {
+        connectionMap.remove(ca.getAddress().getKey(), ca);
     }
 
     /**
@@ -285,13 +316,39 @@ public class ActorSystemRemote implements ActorSystem {
 
         @Override
         protected void processMessage(Message<?> message) {
-            send((Message) message.getData());
+            send((Message<?>) message.getData());
         }
 
         public void send(Message<?> message) {
-            log("%s write %s", this, message);
-            connection.write(message);
-            log("%s after write", this);
+            if (message.getData() instanceof ConnectionClose) {
+                log("%s close", message);
+                close();
+            } else {
+                log("%s write %s", this, message);
+                connection.write(message);
+                log("%s after write", this);
+            }
+        }
+
+        public void close() {
+            connection.close();
+            remoteSystem.connectionClosed(this);
+        }
+
+        public ActorAddress getAddress() {
+            return address;
+        }
+
+        /** @return implementation field getter */
+        public ActorSystemRemote getRemoteSystem() {
+            return remoteSystem;
+        }
+
+        /** @return implementation field getter */
+        public ObjectMessageClient.ObjectMessageConnection getConnection() {
+            return connection;
         }
     }
+
+    public static class ConnectionClose implements Serializable { }
 }

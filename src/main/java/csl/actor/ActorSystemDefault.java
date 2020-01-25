@@ -1,5 +1,6 @@
 package csl.actor;
 
+import java.io.Serializable;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
@@ -77,7 +78,15 @@ public class ActorSystemDefault implements ActorSystem {
     }
 
     public void sendDeadLetter(Message<?> message) {
-        System.err.println("DEAD-LETTER " + message);
+        if (message.getSender() != null) {
+            message.getSender().tell(toDeadLetter(message), null);
+        } else {
+            System.err.println("DEAD-LETTER " + message);
+        }
+    }
+
+    protected Object toDeadLetter(Message<?> message) {
+        return new DeadLetter(message);
     }
 
     public void startProcessMessageSubsequently(Actor target, Message<?> message) {
@@ -138,14 +147,17 @@ public class ActorSystemDefault implements ActorSystem {
         return namedActorMap.get(ref.getName());
     }
 
+    /** @return implementation field getter */
     public Map<String, Actor> getNamedActorMap() {
         return namedActorMap;
     }
 
+    /** @return implementation field getter */
     public ExecutorService getExecutorService() {
         return executorService;
     }
 
+    /** @return implementation field getter */
     public AtomicInteger getProcessingCount() {
         return processingCount;
     }
@@ -155,7 +167,8 @@ public class ActorSystemDefault implements ActorSystem {
         executorService.execute(task);
     }
 
-    public void stop() {
+    @Override
+    public void close() {
         shutdown = true;
         executorService.shutdownNow();
     }
@@ -180,6 +193,23 @@ public class ActorSystemDefault implements ActorSystem {
         @Override
         public String toString() {
             return "time(" + value + ", " + unit + ")";
+        }
+    }
+
+    public static class DeadLetter implements Serializable {
+        protected Message<?> message;
+
+        public DeadLetter(Message<?> message) {
+            this.message = message;
+        }
+
+        public Message<?> getMessage() {
+            return message;
+        }
+
+        @Override
+        public String toString() {
+            return getClass().getSimpleName() + '(' + message + ')';
         }
     }
 }

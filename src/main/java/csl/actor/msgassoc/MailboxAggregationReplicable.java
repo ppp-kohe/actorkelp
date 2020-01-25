@@ -40,11 +40,11 @@ public class MailboxAggregationReplicable extends MailboxAggregation {
         int size = tables.length;
         List<Object> splitPoints = new ArrayList<>(size);
         for (int i = 0; i < size; ++i) {
-            KeyHistograms.HistogramTree lt = tables[i].getTree();
-            KeyHistograms.HistogramTree rt = lt.split();
+            KeyHistograms.HistogramTree rt = tables[i].getTree();
+            KeyHistograms.HistogramTree lt = rt.split();
             m1.tables[i].setTree(lt);
             m2.tables[i].setTree(rt);
-            splitPoints.add(lt.splitPoint(rt));
+            splitPoints.add(rt.splitPointAsRightHandSide(lt));
         }
         return splitPoints;
     }
@@ -53,7 +53,8 @@ public class MailboxAggregationReplicable extends MailboxAggregation {
         List<SplitTreeRoot> splits = new ArrayList<>(tables.length);
         int i = 0;
         for (HistogramEntry e : tables) {
-            splits.add(new SplitTreeRoot(new SplitTree(splitPoints.get(0), new SplitActor(a1), new SplitActor(a2)), e.getProcessor(), random));
+            splits.add(new SplitTreeRoot(new SplitTree(splitPoints.get(i), new SplitActor(a1), new SplitActor(a2)), e.getProcessor(), random));
+            ++i;
         }
         return splits;
     }
@@ -73,10 +74,12 @@ public class MailboxAggregationReplicable extends MailboxAggregation {
             return split;
         }
 
+        /** @return implementation field getter */
         public HistogramProcessor getProcessor() {
             return processor;
         }
 
+        /** @return implementation field getter */
         public Random getRandom() {
             return random;
         }
@@ -116,6 +119,7 @@ public class MailboxAggregationReplicable extends MailboxAggregation {
             this.actorRef = actorRef;
         }
 
+        /** @return implementation field getter */
         public ActorRef getActorRef() {
             return actorRef;
         }
@@ -151,10 +155,12 @@ public class MailboxAggregationReplicable extends MailboxAggregation {
             return point;
         }
 
+        /** @return implementation field getter */
         public Split getLeft() {
             return left;
         }
 
+        /** @return implementation field getter */
         public Split getRight() {
             return right;
         }
@@ -180,7 +186,8 @@ public class MailboxAggregationReplicable extends MailboxAggregation {
 
         @SuppressWarnings("unchecked")
         protected boolean compareKeyToPoint(Object key, HistogramProcessor processor) {
-            return ((KeyHistograms.KeyComparator<Object>) processor.getKeyComparator()).compare(key, point) <= 0;
+            //the split point is currently included in the right hand side by the implementation of HistogramTree.split
+            return ((KeyHistograms.KeyComparator<Object>) processor.getKeyComparator()).compare(key, point) < 0;
         }
 
         @Override

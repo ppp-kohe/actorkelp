@@ -15,6 +15,7 @@ public class MailboxDefault extends Mailbox {
         return queue.poll();
     }
 
+    /** @return implementation field getter */
     public ConcurrentLinkedQueue<Message<?>> getQueue() {
         return queue;
     }

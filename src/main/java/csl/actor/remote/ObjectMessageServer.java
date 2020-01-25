@@ -24,7 +24,7 @@ public class ObjectMessageServer implements Closeable {
     public static void main(String[] args) {
         ObjectMessageServer server = new ObjectMessageServer();
         if (args.length > 0) {
-            server.setPort(Integer.valueOf(args[0]));
+            server.setPort(Integer.parseInt(args[0]));
         }
         server.setReceiver(System.out::println)
                 .start();
@@ -83,6 +83,46 @@ public class ObjectMessageServer implements Closeable {
     public ObjectMessageServer setSerializer(Supplier<Kryo> serializer) {
         this.serializer = serializer;
         return this;
+    }
+
+    /** @return implementation field getter */
+    public String getHost() {
+        return host;
+    }
+
+    /** @return implementation field getter */
+    public int getPort() {
+        return port;
+    }
+
+    /** @return implementation field getter */
+    public int getLeaderThreads() {
+        return leaderThreads;
+    }
+
+    /** @return implementation field getter */
+    public int getWorkerThreads() {
+        return workerThreads;
+    }
+
+    /** @return implementation field getter */
+    public ServerBootstrap getBootstrap() {
+        return bootstrap;
+    }
+
+    /** @return implementation field getter */
+    public EventLoopGroup getLeaderGroup() {
+        return leaderGroup;
+    }
+
+    /** @return implementation field getter */
+    public EventLoopGroup getWorkerGroup() {
+        return workerGroup;
+    }
+
+    /** @return implementation field getter */
+    public ChannelFuture getChannel() {
+        return channel;
     }
 
     public static Pool<Kryo> defaultSerializer = new Pool<Kryo>(true, false, 8) {
@@ -163,6 +203,7 @@ public class ObjectMessageServer implements Closeable {
 
     public void close() {
         channel.channel().close();
+        closeGroups();
     }
 
     public Supplier<Kryo> getSerializer() {
@@ -192,9 +233,14 @@ public class ObjectMessageServer implements Closeable {
                                     0, 4, 0, 0),
                             new QueueServerHandler(owner.getSerializer(), owner.getReceiver()));
         }
+
+        /** @return implementation field getter */
+        public ObjectMessageServer getOwner() {
+            return owner;
+        }
     }
 
-    public static class QueueServerHandler extends SimpleChannelInboundHandler {
+    public static class QueueServerHandler extends SimpleChannelInboundHandler<Object> {
         protected Supplier<Kryo> serializer;
         protected Consumer<Object> receiver;
         protected ByteBuf response;
@@ -231,6 +277,21 @@ public class ObjectMessageServer implements Closeable {
         public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
             cause.printStackTrace();
             ctx.close();
+        }
+
+        /** @return implementation field getter */
+        public Supplier<Kryo> getSerializer() {
+            return serializer;
+        }
+
+        /** @return implementation field getter */
+        public Consumer<Object> getReceiver() {
+            return receiver;
+        }
+
+        /** @return implementation field getter */
+        public ByteBuf getResponse() {
+            return response;
         }
     }
 }

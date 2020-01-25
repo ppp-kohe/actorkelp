@@ -39,7 +39,15 @@ public abstract class ActorDefault extends Actor {
         behavior.process(this, message);
     }
 
+    /** @return implementation field getter */
     public ActorBehavior getBehavior() {
         return behavior;
+    }
+
+    @Override
+    public String toString() {
+        return getClass().getSimpleName() +
+                "@" + Integer.toHexString(System.identityHashCode(this))
+                + (name != null ? ("(" + name + ")") : "");
     }
 }
