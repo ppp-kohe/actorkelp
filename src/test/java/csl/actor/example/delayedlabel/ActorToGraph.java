@@ -108,6 +108,10 @@ public class ActorToGraph {
         }), saving);
     }
 
+    public static String idStr(Object o) {
+        return Integer.toHexString(System.identityHashCode(o));
+    }
+
     public GraphNode createNode(Actor a) {
         GraphNode n;
         synchronized (this) {
@@ -121,7 +125,7 @@ public class ActorToGraph {
         List<List<String>> table = new ArrayList<>();
         table.add(Arrays.asList("actor", a.getClass().getSimpleName()));
         table.add(Arrays.asList("name", Objects.toString(a.getName())));
-        table.add(Arrays.asList("idhash", Integer.toHexString(System.identityHashCode(a))));
+        table.add(Arrays.asList("idhash", idStr(a)));
         if (a.getMailbox() instanceof MailboxDefault) {
             table.add(Arrays.asList("queue", String.format("%,d", ((MailboxDefault) a.getMailbox()).getQueue().size())));
         }
@@ -130,18 +134,13 @@ public class ActorToGraph {
             ActorAggregation ag = (ActorAggregation) a;
             for (int i = 0, size = ag.getMailboxAsAggregation().getTableSize(); i < size; ++i) {
                 KeyHistograms.HistogramTree tree = ag.getMailboxAsAggregation().getTable(i);
+                table.add(Arrays.asList("t" + i + ".leafSize", String.format("%,d", tree.getLeafSize())));
+                table.add(Arrays.asList("t" + i + ".leafSizeNZ", String.format("%,d", tree.getLeafSizeNonZero())));
+                table.add(Arrays.asList("t" + i + ".leafSizeNZR", String.format("%1.2f", tree.getLeafSizeNonZeroRate())));
+                table.add(Arrays.asList("t" + i + ".completed", idStr(tree.getCompleted()) + " (" + tree.getCompleted().size() + ")"));
+                table.add(Arrays.asList("t" + i + ".processor", idStr(ag.getMailboxAsAggregation().getTableEntries().get(i).getProcessor())));
 
-                GraphNode tn = createNode();
-                tn.fromEdge(n).label = "table" + i;
-
-                List<List<String>> treeTable = new ArrayList<>();
-                treeTable.add(Arrays.asList("leafSize", String.format("%,d", tree.getLeafSize())));
-                treeTable.add(Arrays.asList("leafSizeNZ", String.format("%,d", tree.getLeafSizeNonZero())));
-                treeTable.add(Arrays.asList("leafSizeNZR", String.format("%1.2f", tree.getLeafSizeNonZeroRate())));
-                treeTable.add(Arrays.asList("completed", Integer.toHexString(System.identityHashCode(tree.getCompleted()))));
-                tn.tableLabel = treeTable;
-
-                GraphEdge e = save(tn, tree.getRoot());
+                GraphEdge e = save(n, tree.getRoot());
                 if (e != null) {
                     e.label = "root";
                 }
@@ -201,11 +200,11 @@ public class ActorToGraph {
             //
         } else if (s instanceof ActorAggregationReplicable.StateReplica) {
             ActorRef r = ((ActorAggregationReplicable.StateReplica) s).getRouter();
-            n.tableLabel.add(Arrays.asList("router", r == null ? "null" : Integer.toHexString(System.identityHashCode(r))));
+            n.tableLabel.add(Arrays.asList("router", r == null ? "null" : idStr(r)));
         } else if (s instanceof ActorAggregationReplicable.StateRouterTemporary) {
             ActorAggregationReplicable.StateRouterTemporary tmp = (ActorAggregationReplicable.StateRouterTemporary) s;
             ActorRef r = tmp.getRouter();
-            n.tableLabel.add(Arrays.asList("router", r == null ? "null" : Integer.toHexString(System.identityHashCode(r))));
+            n.tableLabel.add(Arrays.asList("router", r == null ? "null" : idStr(r)));
 
             link(n, tmp.getLeft(), "newLeft");
             link(n, tmp.getRight(), "newRight");
