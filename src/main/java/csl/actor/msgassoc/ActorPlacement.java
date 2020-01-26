@@ -155,7 +155,7 @@ public interface ActorPlacement {
             try {
                 res = fromSerializable(c.getData(), strategy.getNextLocalNumber());
             } catch (Throwable ex) {
-                res = new ResponsiveCalls.ResponsiveFailure(ex);
+                res = new ActorBehaviorBuilder.CallableFailure(ex);
             }
             sender.tell(res, this);
         }

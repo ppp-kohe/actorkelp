@@ -32,7 +32,7 @@ public class KeyHistograms {
             if (root == null) {
                 return false;
             } else {
-                return !root.keyStart().equals(root.keyEnd());
+                return leafSizeNonZero >= 2;
             }
         }
 
@@ -56,7 +56,27 @@ public class KeyHistograms {
             if (root == null) {
                 return new HistogramTree(comparator, treeLimit);
             } else {
-                return new HistogramTree(root.split(root.size(), 0), comparator, treeLimit);
+                HistogramTree left = new HistogramTree(root.split(root.size() / 2, 0), comparator, treeLimit);
+                leafSize = 0;
+                leafSizeNonZero = 0;
+                prune(true);
+                left.prune(true);
+
+                splitCompleted(this);
+                return left;
+            }
+        }
+
+        @SuppressWarnings("unchecked")
+        protected void splitCompleted(HistogramTree left) {
+            Object rightKey = splitPointAsRightHandSide(left);
+            for (Iterator<HistogramNodeLeaf> iter = completed.iterator(); iter.hasNext(); ) {
+                HistogramNodeLeaf l = iter.next();
+                if (((KeyComparator<Object>) comparator).compare(l.getKey(), rightKey) < 0) {
+                    //move to left
+                    left.complete(l);
+                    iter.remove();
+                }
             }
         }
 
@@ -87,12 +107,25 @@ public class KeyHistograms {
             return comparator;
         }
 
+        /** @return implementation field getter */
+        public LinkedList<HistogramNodeLeaf> getCompleted() {
+            return completed;
+        }
+
         public void prune() {
+            prune(false);
+        }
+
+        protected void prune(boolean countUpLeafSize) {
             if (root != null) {
-                if (root.prune(this)) {
+                if (root.prune(this, countUpLeafSize)) {
                     root = null;
                 }
             }
+        }
+
+        public int getTreeLimit() {
+            return treeLimit;
         }
 
         public void incrementLeafSize(int n) {
@@ -176,7 +209,7 @@ public class KeyHistograms {
 
         void setParent(HistogramNodeTree node);
 
-        boolean prune(HistogramTree tree);
+        boolean prune(HistogramTree tree, boolean countUpLeafSize);
     }
 
     public static final int TREE_LIMIT = 32;
@@ -419,9 +452,9 @@ public class KeyHistograms {
         }
 
         @Override
-        public boolean prune(HistogramTree tree) {
+        public boolean prune(HistogramTree tree, boolean countUpLeafSize) {
             boolean zero = (size == 0);
-            if (children.removeIf(c -> c.prune(tree))) {
+            if (children.removeIf(c -> c.prune(tree, countUpLeafSize))) {
                 if (!zero) {
                     updateKeys();
                 }
@@ -545,11 +578,17 @@ public class KeyHistograms {
         }
 
         @Override
-        public boolean prune(HistogramTree tree) {
+        public boolean prune(HistogramTree tree, boolean countUpLeafSize) {
             if (size == 0) {
-                tree.incrementLeafSize(-1);
+                if (!countUpLeafSize) {
+                    tree.incrementLeafSize(-1);
+                }
                 return true;
             } else {
+                if (countUpLeafSize) {
+                    tree.incrementLeafSize(1);
+                    tree.incrementLeafSizeNonZero(1);
+                }
                 return false;
             }
         }

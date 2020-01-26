@@ -1,5 +1,6 @@
 package csl.actor;
 
+import java.io.Serializable;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
@@ -28,6 +29,11 @@ public class ActorBehaviorBuilder {
     }
 
     public ActorBehavior build() {
+        return with(new ActorBehaviorCallable<>(CallableMessage.class))
+                .buildWithoutDefault();
+    }
+
+    public ActorBehavior buildWithoutDefault() {
         return behavior;
     }
 
@@ -116,6 +122,60 @@ public class ActorBehaviorBuilder {
         /** @return implementation field getter */
         public BiConsumer<Object, ActorRef> getHandler() {
             return handler;
+        }
+    }
+
+    //////
+
+    public static class ActorBehaviorCallable<DataType extends CallableMessage<?>> implements ActorBehavior {
+        protected Class<DataType> dataType;
+
+        public ActorBehaviorCallable(Class<DataType> dataType) {
+            this.dataType = dataType;
+        }
+
+        @Override
+        public boolean process(Actor self, Message<?> message) {
+            Object d = message.getData();
+            if (dataType.isInstance(d)) {
+                Object res;
+                ActorRef sender = message.getSender();
+                try {
+                    res = dataType.cast(d).call(self, sender);
+                } catch (Throwable ex) {
+                    res = new CallableFailure(ex);
+                }
+                if (sender != null && res != null) {
+                    sender.tell(res, self);
+                }
+                return true;
+            }
+            return false;
+        }
+    }
+
+    public interface CallableMessage<T> extends Serializable {
+        T call(Actor self, ActorRef sender);
+    }
+
+    public static <T> CallableMessage<T> callableMessage(CallableMessage<T> m) {
+        return m;
+    }
+
+    public static class CallableFailure implements Serializable {
+        protected Throwable error;
+
+        public CallableFailure(Throwable error) {
+            this.error = error;
+        }
+
+        public Throwable getError() {
+            return error;
+        }
+
+        @Override
+        public String toString() {
+            return "failure(" + error + ")";
         }
     }
 }

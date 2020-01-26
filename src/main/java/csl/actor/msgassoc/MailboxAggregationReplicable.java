@@ -16,10 +16,6 @@ public class MailboxAggregationReplicable extends MailboxAggregation {
         return queue.size() > threshold && hasMultiplePoints();
     }
 
-    public boolean isEmpty() {
-        return queue.isEmpty();
-    }
-
     public int getThreshold() {
         return threshold;
     }
@@ -44,6 +40,7 @@ public class MailboxAggregationReplicable extends MailboxAggregation {
             KeyHistograms.HistogramTree lt = rt.split();
             m1.tables[i].setTree(lt);
             m2.tables[i].setTree(rt);
+            tables[i] = tables[i].create();
             splitPoints.add(rt.splitPointAsRightHandSide(lt));
         }
         return splitPoints;

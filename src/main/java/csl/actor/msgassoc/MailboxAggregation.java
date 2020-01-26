@@ -4,13 +4,15 @@ import csl.actor.MailboxDefault;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
-public class MailboxAggregation extends MailboxDefault {
+public class MailboxAggregation extends MailboxDefault implements Cloneable {
     protected HistogramEntry[] tables;
 
     public MailboxAggregation create() {
         try {
             MailboxAggregation m = (MailboxAggregation) super.clone();
+            m.queue = new ConcurrentLinkedQueue<>();
             int size = tables.length;
             m.tables = new HistogramEntry[size];
             for (int i = 0; i < size; ++i) {
@@ -39,8 +41,13 @@ public class MailboxAggregation extends MailboxDefault {
             tree = new KeyHistograms.HistogramTree(p.getKeyComparator());
         }
 
+        public HistogramEntry(HistogramProcessor p, int treeLimit) {
+            this.processor = p;
+            tree = new KeyHistograms.HistogramTree(p.getKeyComparator(), treeLimit);
+        }
+
         public HistogramEntry create() {
-            return new HistogramEntry(processor);
+            return new HistogramEntry(processor, tree.getTreeLimit());
         }
 
         public KeyHistograms.HistogramTree getTree() {

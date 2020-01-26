@@ -57,12 +57,12 @@ public class DelayedLabelManual {
         @Override
         protected ActorBehavior initBehavior() {
             return behaviorBuilder()
-                    .matchWithSender(Long.class, this::receive)
+                    .matchWithSender(Integer.class, this::receive)
                     .build();
         }
 
-        public void receive(long next, ActorRef sender) {
-            finishedInstances = Math.max(finishedInstances, next);
+        public void receive(int next, ActorRef sender) {
+            finishedInstances++;
             if (numInstances <= finishedInstances) {
                 Duration d = Duration.between(startTime, Instant.now());
                 out.println(String.format("#finish: %,d %s", finishedInstances, d));
@@ -113,9 +113,9 @@ public class DelayedLabelManual {
     }
 
     public static class LearnerModel {
-        long numSamples = 0;
-        Map<Integer, LearnerEntry> model = new HashMap<>();
-        ActorRef resultActor;
+        public long numSamples = 0;
+        public Map<Integer, LearnerEntry> model = new HashMap<>();
+        public ActorRef resultActor;
 
         public LearnerModel(ActorRef resultActor) {
             this.resultActor = resultActor;
@@ -125,7 +125,8 @@ public class DelayedLabelManual {
             ++numSamples;
             model.computeIfAbsent(di.getLabel(), l -> new LearnerEntry(l, di.getVector().length))
                     .add(di);
-            resultActor.tell(numSamples, sender);
+            int id = di.getId();
+            resultActor.tell(id, sender);
         }
     }
 

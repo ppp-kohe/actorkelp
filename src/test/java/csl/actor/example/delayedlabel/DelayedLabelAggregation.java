@@ -9,6 +9,8 @@ import csl.actor.msgassoc.KeyHistograms;
 
 import java.io.File;
 import java.io.PrintWriter;
+import java.util.HashMap;
+import java.util.concurrent.atomic.AtomicLong;
 
 public class DelayedLabelAggregation extends DelayedLabelManual {
     public static void main(String[] args) {
@@ -21,23 +23,16 @@ public class DelayedLabelAggregation extends DelayedLabelManual {
     }
 
     public static class LernerActorAggregation extends ActorAggregation {
-        LearnerModel model;
-        int numInstances;
-        boolean debug = System.getProperty("debug", "").equals("true");
-        PrintWriter out;
+        LearnerAggregationSupport support;
 
         public LernerActorAggregation(ActorSystem system, String name, PrintWriter out, ActorRef resultActor, int numInstances) {
             super(system, name);
-            model = new LearnerModel(resultActor);
-            this.numInstances = numInstances;
-            this.out = out;
+            support = new LearnerAggregationSupport(this, out, resultActor, numInstances);
         }
 
         public LernerActorAggregation(ActorSystem system, PrintWriter out, ActorRef resultActor, int numInstances) {
             super(system);
-            model = new LearnerModel(resultActor);
-            this.numInstances = numInstances;
-            this.out = out;
+            support = new LearnerAggregationSupport(this, out, resultActor, numInstances);
         }
 
         @Override
@@ -52,38 +47,67 @@ public class DelayedLabelAggregation extends DelayedLabelManual {
         }
 
         public void train(FeatureInstance f, LabelInstance l) {
-            model.train(new DataInstance(f.getId(), f.getVector(), l.getLabel()), this);
+            support.train(f, l);
         }
 
-        long count = 0;
-        long pruneCount;
+        public void finish(Finish f) {
+            support.finish(f);
+        }
 
         @Override
         protected void processMessage(Message<?> message) {
-            ++count;
-            pruneCount += getMailboxAsAggregation().prune(32, 0.5);
-            if (debug && ((count % (numInstances / 10)) == 0 || count == numInstances)) {
-                ActorToGraph g = new ActorToGraph();
-                g.save(this);
+            support.processMessageBefore(message);
+            super.processMessage(message);
+        }
+    }
 
+    public static class LearnerAggregationSupport {
+        public LearnerModel model;
+        public int numInstances;
+        public boolean debug = System.getProperty("debug", "").equals("true");
+        public PrintWriter out;
+
+        public long count = 0;
+        public static AtomicLong pruneCount = new AtomicLong();
+
+        public ActorAggregation self;
+
+        public LearnerAggregationSupport(ActorAggregation self, PrintWriter out, ActorRef resultActor, int numInstances) {
+            this.self = self;
+            model = new LearnerModel(resultActor);
+            this.numInstances = numInstances;
+            this.out = out;
+        }
+
+        public LearnerAggregationSupport createClone(ActorAggregation self) {
+            LearnerAggregationSupport l = new LearnerAggregationSupport(self, out, model.resultActor, numInstances);
+            l.model.model = new HashMap<>(model.model);
+            l.model.numSamples = model.numSamples;
+            return l;
+        }
+
+        public void train(FeatureInstance f, LabelInstance l) {
+            model.train(new DataInstance(f.getId(), f.getVector(), l.getLabel()), self);
+        }
+
+        public void processMessageBefore(Message<?> message) {
+            ++count;
+            pruneCount.addAndGet(self.getMailboxAsAggregation().prune(32, 0.5));
+            if (debug && ((count % (numInstances / 10)) == 0 || count == numInstances)) {
                 File dir = new File("target/delayed-debug");
                 if (!dir.exists()) {
                     dir.mkdirs();
                 }
-
-                try (PrintWriter out = new PrintWriter(new File(dir, String.format("delayed-agg-%d.dot", count)))) {
-                    g.write(out);
-                } catch (Exception ex) {
-                    ex.printStackTrace();
-                }
+                String sn = self.getClass().getSimpleName();
+                File file = new File(dir, String.format("delayed-%s-%d.dot", sn, count));
+                new ActorToGraph(self.getSystem(), file).save(self).finish();
             }
-            super.processMessage(message);
         }
 
         public void finish(Finish f) {
-            KeyHistograms.HistogramTree tree = getMailboxAsAggregation().getTable(0);
+            KeyHistograms.HistogramTree tree = self.getMailboxAsAggregation().getTable(0);
             out.println(String.format("#prune-count: %,d : leaf=%,d, non-zero-leaf=%,d : %04f",
-                    pruneCount, tree.getLeafSize(), tree.getLeafSizeNonZero(), tree.getLeafSizeNonZeroRate()));
+                    pruneCount.get(), tree.getLeafSize(), tree.getLeafSizeNonZero(), tree.getLeafSizeNonZeroRate()));
             System.exit(0);
         }
     }

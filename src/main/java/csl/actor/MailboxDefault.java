@@ -15,6 +15,11 @@ public class MailboxDefault extends Mailbox {
         return queue.poll();
     }
 
+    @Override
+    public boolean isEmpty() {
+        return queue.isEmpty();
+    }
+
     /** @return implementation field getter */
     public ConcurrentLinkedQueue<Message<?>> getQueue() {
         return queue;

@@ -130,12 +130,12 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
             }
         }
 
-        /** @return impelemtation field getter */
+        /** @return implementation field getter */
         public Random getRandom() {
             return random;
         }
 
-        /** @return impelemtation field getter */
+        /** @return implementation field getter */
         public List<MailboxAggregationReplicable.SplitTreeRoot> getSplits() {
             return splits;
         }
@@ -171,8 +171,8 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
             ActorPlacement placement = self.getPlacement();
 
             self.state = new StateRouterTemporary(self,
-                    placement.place(r1),
-                    placement.place(r2), router, splitPoints);
+                    place(placement, r1),
+                    place(placement, r2), router, splitPoints);
         }
     }
 
@@ -180,11 +180,13 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
         protected ActorRef router;
         protected ActorRef left;
         protected ActorRef right;
+        protected boolean requested;
         public StateRouterTemporary(ActorAggregationReplicable self, ActorRef a1, ActorRef a2, ActorRef router, List<Object> splitPoints) {
             super(self, a1, a2, splitPoints);
             this.router = router;
             this.left = a1;
             this.right = a2;
+            requested = false;
         }
 
         @Override
@@ -192,8 +194,9 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
             super.processMessage(self, message);
             processFurtherMessages(self);
 
-            if (self.getMailboxAsReplicable().isEmpty()) {
+            if (!requested && self.getMailboxAsReplicable().isEmpty()) {
                 router.tell(new RequestUpdateSplits(toSplitPoints(), left, right), self);
+                requested = true;
             }
         }
 
@@ -212,17 +215,22 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
                     .collect(Collectors.toList());
         }
 
-        /** @return impelemtation field getter */
+        /** @return implementation field getter */
+        public boolean isRequested() {
+            return requested;
+        }
+
+        /** @return implementation field getter */
         public ActorRef getRouter() {
             return router;
         }
 
-        /** @return impelemtation field getter */
+        /** @return implementation field getter */
         public ActorRef getLeft() {
             return left;
         }
 
-        /** @return impelemtation field getter */
+        /** @return implementation field getter */
         public ActorRef getRight() {
             return right;
         }
@@ -230,7 +238,23 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
 
     @Override
     protected void processMessage(Message<?> message) {
-        state.processMessage(this, message);
+        if (isNoRoutingMessage(message)) {
+            super.processMessage(message);
+        } else {
+            state.processMessage(this, message);
+        }
+    }
+
+    protected boolean isNoRoutingMessage(Message<?> message) {
+        return message.getData() instanceof NoRouting;
+    }
+
+    public interface NoRouting { }
+
+    public interface CallableMessageNoRouting<T> extends ActorBehaviorBuilder.CallableMessage<T>, NoRouting { }
+
+    public static <T> CallableMessageNoRouting<T> callableNoRouting(CallableMessageNoRouting<T> t) {
+        return t;
     }
 
     public ActorAggregationReplicable createClone() {
@@ -239,13 +263,16 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
             //if the actor has the name, it copies the reference to the name,
             // but it does not register the actor
             a.processLock = new AtomicBoolean(false);
-            //share behavior
             a.initMailboxForClone();
+            a.behavior = a.initBehavior(); //recreate behavior with initMessageTable by ActorBehaviorBuilderKeyValue
+            a.initClone(this);
             return a;
         } catch (CloneNotSupportedException ce) {
             throw new RuntimeException(ce);
         }
     }
+
+    protected void initClone(ActorAggregationReplicable original) { }
 
     public State getState() {
         return state;

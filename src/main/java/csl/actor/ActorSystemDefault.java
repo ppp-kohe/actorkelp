@@ -93,7 +93,10 @@ public class ActorSystemDefault implements ActorSystem {
         if (!(message instanceof Message.MessageNone)) {
             target.offer(message);
         }
-        execute(() -> processMessageSubsequently(target));
+        //if (!target.processMessageLocked()) {
+        // TODO it needs to isEmptyMailbox() at (B) for the (A)->(B) & remainingMessages=false case
+            execute(() -> processMessageSubsequently(target));
+        //}
     }
 
     protected void processMessageSubsequently(Actor actor) {
@@ -107,9 +110,9 @@ public class ActorSystemDefault implements ActorSystem {
                         break;
                     }
                 }
-            } finally {
+            } finally { //(A)
                 actor.processMessageAfter();
-                if (remainingMessages) {
+                if (remainingMessages/* || !actor.isEmptyMailbox()*/) { //(B)
                     execute(() -> processMessageSubsequently(actor));
                 }
                 processingCount.decrementAndGet();

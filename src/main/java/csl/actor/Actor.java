@@ -45,6 +45,14 @@ public abstract class Actor implements ActorRef {
         return processLock.compareAndSet(false, true);
     }
 
+    public boolean processMessageLocked() {
+        return processLock.get();
+    }
+
+    public boolean isEmptyMailbox() {
+        return mailbox.isEmpty();
+    }
+
     public boolean processMessageNext() {
         Message<?> message = mailbox.poll();
         if (message != null) {

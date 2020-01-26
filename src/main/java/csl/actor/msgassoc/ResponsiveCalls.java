@@ -30,7 +30,7 @@ public class ResponsiveCalls {
      *            try {
      *              result = processMsg(msg);
      *            } catch (Throwable e) {
-     *              result = new ResponsiveFailure(e);
+     *              result = new CallableFailure(e);
      *            }
      *            m.getSender().tell(result, this);
      *        }
@@ -93,7 +93,7 @@ public class ResponsiveCalls {
      * @param <T> the result type
      * @return a future of the result
      */
-    public static <T> Future<T> send(ActorSystem system, ActorAddress.ActorAddressRemote target, String name, ResponsiveCallable<T> task) {
+    public static <T> Future<T> send(ActorSystem system, ActorAddress.ActorAddressRemote target, String name, ActorBehaviorBuilder.CallableMessage<T> task) {
         return send(system, ActorRefRemote.get(system, target.getActor(name)), task);
     }
 
@@ -112,7 +112,7 @@ public class ResponsiveCalls {
      * @param <T> the result type
      * @return a future of the result
      */
-    public static <T> Future<T> send(ActorSystem system, ActorAddress.ActorAddressRemote target, ResponsiveCallable<T> task) {
+    public static <T> Future<T> send(ActorSystem system, ActorAddress.ActorAddressRemote target, ActorBehaviorBuilder.CallableMessage<T> task) {
         return send(system, target, CALLABLE_NAME, task);
     }
 
@@ -144,8 +144,8 @@ public class ResponsiveCalls {
         @SuppressWarnings("unchecked")
         public void receive(Object v, ActorRef sender) {
             getSystem().unregister(getName());
-            if (v instanceof ResponsiveFailure) {
-                resultHolder.completeExceptionally(((ResponsiveFailure) v).getException());
+            if (v instanceof ActorBehaviorBuilder.CallableFailure) {
+                resultHolder.completeExceptionally(((ActorBehaviorBuilder.CallableFailure) v).getError());
             } else {
                 try {
                     resultHolder.complete((T) v);
@@ -177,23 +177,6 @@ public class ResponsiveCalls {
         }
     }
 
-    public static class ResponsiveFailure implements Serializable {
-        protected Throwable exception;
-
-        public ResponsiveFailure(Throwable exception) {
-            this.exception = exception;
-        }
-
-        public Throwable getException() {
-            return exception;
-        }
-
-        @Override
-        public String toString() {
-            return "failure(" + exception + ")";
-        }
-    }
-
     public static class ResponsiveCallableActor extends ActorDefault {
         public ResponsiveCallableActor(ActorSystem system, String name) {
             super(system, name);
@@ -206,22 +189,7 @@ public class ResponsiveCalls {
         @Override
         protected ActorBehavior initBehavior() {
             return behaviorBuilder()
-                    .matchWithSender(ResponsiveCallable.class, this::receive)
                     .build();
         }
-
-        public void receive(ResponsiveCallable<?> task, ActorRef sender) {
-            Object res;
-            try {
-                res = task.call(this);
-            } catch (Throwable ex) {
-                res = new ResponsiveFailure(ex);
-            }
-            sender.tell(res, this);
-        }
-    }
-
-    public interface ResponsiveCallable<T> extends Serializable {
-        T call(ResponsiveCallableActor self);
     }
 }

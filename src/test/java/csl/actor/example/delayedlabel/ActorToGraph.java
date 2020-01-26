@@ -5,15 +5,78 @@ import csl.actor.msgassoc.*;
 import csl.actor.remote.ActorRefRemote;
 import csl.actor.remote.ActorSystemRemote;
 
+import java.io.File;
 import java.io.PrintWriter;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 public class ActorToGraph {
     protected List<GraphNode> nodes = new ArrayList<>();
     protected Map<Object,GraphNode> nodeMap = new WeakHashMap<>();
 
-    public void save(ActorSystem sys) {
+    SavingActor saving;
+
+    public ActorToGraph(ActorSystem s, File file) {
+        saving = new SavingActor(s, file, this);
+    }
+
+    static class SavingActor extends ActorDefault {
+        ActorToGraph g;
+        Map<Integer,Boolean> finish = new ConcurrentHashMap<>();
+        File file;
+
+        public SavingActor(ActorSystem system, File file, ActorToGraph g) {
+            super(system);
+            this.file = file;
+            this.g = g;
+        }
+
+        @Override
+        protected ActorBehavior initBehavior() {
+            return behaviorBuilder()
+                    .match(Integer.class, this::receive)
+                    .build();
+        }
+
+        public void receive(int i) {
+            finish.put(i, true);
+            if (finish.values()
+                    .stream()
+                    .allMatch(p -> p)) {
+                write();
+            }
+        }
+
+        AtomicInteger ids = new AtomicInteger();
+
+        public int next() {
+            int i = ids.incrementAndGet();
+            finish.put(i, false);
+            return i;
+        }
+
+        public int getIds() {
+            return ids.get();
+        }
+
+        public void write() {
+            try (PrintWriter out = new PrintWriter(file)) {
+                g.write(out);
+            } catch (Exception ex) {
+                ex.printStackTrace();
+            }
+        }
+    }
+
+    public void finish() {
+        if (saving.getIds() == 0) {
+            saving.tell(-1, null);
+        }
+    }
+
+    public ActorToGraph save(ActorSystem sys) {
         if (sys instanceof ActorSystemDefault) {
 
             ActorSystemDefault sd = (ActorSystemDefault) sys;
@@ -23,15 +86,42 @@ public class ActorToGraph {
         } else if (sys instanceof ActorSystemRemote) {
             save(((ActorSystemRemote) sys).getLocalSystem());
         }
+        return this;
     }
 
-    public GraphNode save(Actor a) {
-        GraphNode n = createNode();
-        nodeMap.put(a, n);
+    public ActorToGraph save(Actor a) {
+        save(null, a, null);
+        return this;
+    }
 
+    public void save(GraphNode fn, Actor a, String label) {
+        int id = saving.next();
+        a.tell(ActorAggregationReplicable.callableNoRouting((self, from) -> {
+            GraphNode n = createNode(self);
+            if (fn != null) {
+                GraphEdge e = n.fromEdge(fn);
+                if (label != null) {
+                    e.label = label;
+                }
+            }
+            return id;
+        }), saving);
+    }
+
+    public GraphNode createNode(Actor a) {
+        GraphNode n;
+        synchronized (this) {
+            n = nodeMap.get(a);
+            if (n != null) {
+                return n;
+            }
+            n = createNode();
+            nodeMap.put(a, n);
+        }
         List<List<String>> table = new ArrayList<>();
         table.add(Arrays.asList("actor", a.getClass().getSimpleName()));
         table.add(Arrays.asList("name", Objects.toString(a.getName())));
+        table.add(Arrays.asList("idhash", Integer.toHexString(System.identityHashCode(a))));
         if (a.getMailbox() instanceof MailboxDefault) {
             table.add(Arrays.asList("queue", String.format("%,d", ((MailboxDefault) a.getMailbox()).getQueue().size())));
         }
@@ -40,9 +130,20 @@ public class ActorToGraph {
             ActorAggregation ag = (ActorAggregation) a;
             for (int i = 0, size = ag.getMailboxAsAggregation().getTableSize(); i < size; ++i) {
                 KeyHistograms.HistogramTree tree = ag.getMailboxAsAggregation().getTable(i);
-                GraphEdge e = save(n, tree.getRoot());
+
+                GraphNode tn = createNode();
+                tn.fromEdge(n).label = "table" + i;
+
+                List<List<String>> treeTable = new ArrayList<>();
+                treeTable.add(Arrays.asList("leafSize", String.format("%,d", tree.getLeafSize())));
+                treeTable.add(Arrays.asList("leafSizeNZ", String.format("%,d", tree.getLeafSizeNonZero())));
+                treeTable.add(Arrays.asList("leafSizeNZR", String.format("%1.2f", tree.getLeafSizeNonZeroRate())));
+                treeTable.add(Arrays.asList("completed", Integer.toHexString(System.identityHashCode(tree.getCompleted()))));
+                tn.tableLabel = treeTable;
+
+                GraphEdge e = save(tn, tree.getRoot());
                 if (e != null) {
-                    e.label = "table" + i;
+                    e.label = "root";
                 }
             }
             if (a instanceof ActorAggregationReplicable) {
@@ -52,35 +153,35 @@ public class ActorToGraph {
         return n;
     }
 
-    protected GraphEdge link(GraphNode from, ActorRef ref) {
-        GraphNode ex = nodeMap.get(from);
+    protected synchronized void link(GraphNode from, ActorRef ref, String edgeLabel) {
+        GraphNode ex = nodeMap.get(ref);
         if (ex != null) {
-            return ex.fromEdge(from);
+            ex.fromEdge(from).label = edgeLabel;
         } else {
             if (ref instanceof ActorRefLocalNamed) {
                 String name = ((ActorRefLocalNamed) ref).getName();
                 GraphNode n = createNode();
                 n.label = "refLocal:" + name;
                 nodeMap.put(ref, n);
-                return n.fromEdge(from);
+                n.fromEdge(from).label = edgeLabel;
             } else if (ref instanceof ActorRefRemote) {
                 GraphNode n = createNode();
                 n.label = "refRemote:" + ((ActorRefRemote) ref).getAddress();
                 nodeMap.put(ref, n);
-                return n.fromEdge(from);
+                n.fromEdge(from).label = edgeLabel;
             } else if (ref instanceof ActorAggregation) {
-                return save((ActorAggregation) ref).fromEdge(from);
+                save(from, (ActorAggregation) ref, edgeLabel);
             } else if (ref == null) {
                 GraphNode n = createNode();
                 n.label = "ref null";
-                return n.fromEdge(from);
+                n.fromEdge(from).label = edgeLabel;
             } else if (ref instanceof Actor) {
-                return save((Actor) ref).fromEdge(from);
+                save(from, (Actor) ref, edgeLabel);
             } else {
                 GraphNode n = createNode();
                 n.label = limitString("" + ref);
                 nodeMap.put(ref, n);
-                return n.fromEdge(from);
+                n.fromEdge(from).label = edgeLabel;
             }
         }
     }
@@ -99,15 +200,18 @@ public class ActorToGraph {
         if (s instanceof ActorAggregationReplicable.StateDefault) {
             //
         } else if (s instanceof ActorAggregationReplicable.StateReplica) {
-            link(n, ((ActorAggregationReplicable.StateReplica) s).getRouter()).label = "router";
+            ActorRef r = ((ActorAggregationReplicable.StateReplica) s).getRouter();
+            n.tableLabel.add(Arrays.asList("router", r == null ? "null" : Integer.toHexString(System.identityHashCode(r))));
         } else if (s instanceof ActorAggregationReplicable.StateRouterTemporary) {
             ActorAggregationReplicable.StateRouterTemporary tmp = (ActorAggregationReplicable.StateRouterTemporary) s;
-            link(n, tmp.getRouter()).label = "router";
-            link(n, tmp.getLeft()).label = "newLeft";
-            link(n, tmp.getRight()).label = "newRight";
-            tmp.getSplits().forEach(c -> saveSplitTree(n, c).label = "split");
+            ActorRef r = tmp.getRouter();
+            n.tableLabel.add(Arrays.asList("router", r == null ? "null" : Integer.toHexString(System.identityHashCode(r))));
+
+            link(n, tmp.getLeft(), "newLeft");
+            link(n, tmp.getRight(), "newRight");
+            tmp.getSplits().forEach(c -> saveSplitTree(n, c, "split"));
         } else if (s instanceof ActorAggregationReplicable.StateRouter) {
-            ((ActorAggregationReplicable.StateRouter) s).getSplits().forEach(c -> saveSplitTree(n, c).label = "split");
+            ((ActorAggregationReplicable.StateRouter) s).getSplits().forEach(c -> saveSplitTree(n, c,  "split"));
         }
     }
 
@@ -179,29 +283,27 @@ public class ActorToGraph {
         return n.fromEdge(from);
     }
 
-    protected GraphEdge saveSplitTree(GraphNode n, MailboxAggregationReplicable.SplitTreeRoot root) {
+    protected void saveSplitTree(GraphNode n, MailboxAggregationReplicable.SplitTreeRoot root, String edgeLabel) {
         MailboxAggregationReplicable.Split s = root.getSplit();
-        return saveSplit(n, s);
+        saveSplit(n, s, edgeLabel);
     }
 
-    protected GraphEdge saveSplit(GraphNode from, MailboxAggregationReplicable.Split s) {
+    protected void saveSplit(GraphNode from, MailboxAggregationReplicable.Split s, String edgeLabel) {
         if (s instanceof MailboxAggregationReplicable.SplitTree) {
             MailboxAggregationReplicable.SplitTree st = (MailboxAggregationReplicable.SplitTree) s;
             GraphNode n = createNode();
             n.label = "split:" + limitString(Objects.toString(st.getPoint()));
 
-            saveSplit(n, st.getLeft()).label = "left";
-            saveSplit(n, st.getRight()).label = "right";
+            saveSplit(n, st.getLeft(), "left");
+            saveSplit(n, st.getRight(), "right");
 
-            return n.fromEdge(from);
+            n.fromEdge(from).label = edgeLabel;
         } else if (s instanceof MailboxAggregationReplicable.SplitActor) {
-            return link(from, ((MailboxAggregationReplicable.SplitActor) s).getActorRef());
-        } else {
-            return null;
+            link(from, ((MailboxAggregationReplicable.SplitActor) s).getActorRef(), edgeLabel);
         }
     }
 
-    protected GraphNode createNode() {
+    protected synchronized GraphNode createNode() {
         GraphNode n = new GraphNode();
         n.id = nodes.size();
         nodes.add(n);
