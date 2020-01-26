@@ -126,17 +126,17 @@ public class DelayedLabelAggregationReplicable extends DelayedLabelManual {
                             self.getMailboxAsReplicable().getTable(0).getCompleted(),
                             self.getState()));
                     os.addAll(listObjects(self.getMailboxAsReplicable().getTableEntries().get(0).getTree().getRoot()));
+                    os.addAll(listBehavior(self.getBehavior()));
                     os.removeIf(Objects::isNull);
                     oss.add(os);
                 }
-
                 int i = 0;
                 for (List<Object> os : oss) {
                     int j = 0;
                     for (List<Object> os2: oss) {
                         if (os != os2) {
                             Set<Object> sh = new HashSet<>(os);
-                            sh.retainAll(os2);
+                            sh.removeIf(s -> os2.stream().noneMatch(o -> s == o));
                             if (!sh.isEmpty()) {
                                 log("  !!!! shared instances: " + toStr(processing.get(i)) + " vs "  + toStr(processing.get(j)) +  " : " +
                                         sh.stream().map(this::toStr).collect(Collectors.joining(", ", "[", "]")));
@@ -167,6 +167,22 @@ public class DelayedLabelAggregationReplicable extends DelayedLabelManual {
             return ls;
         }
 
+        private List<Object> listBehavior(ActorBehavior b) {
+            List<Object> ls = new ArrayList<>();
+            if (b instanceof ActorBehaviorBuilder.ActorBehaviorOr) {
+                ActorBehaviorBuilder.ActorBehaviorOr or = (ActorBehaviorBuilder.ActorBehaviorOr) b;
+                ls.addAll(listBehavior(or.getLeft()));
+                ls.addAll(listBehavior(or.getRight()));
+            } else if (b instanceof ActorBehaviorBuilderKeyValue.ActorBehaviorMatchKey) {
+                ActorBehaviorBuilderKeyValue.ActorBehaviorMatchKey<?> mk = (ActorBehaviorBuilderKeyValue.ActorBehaviorMatchKey<?>) b;
+                ls.add(mk);
+                ls.add(mk.putTree);
+                ls.add(mk.getKeyComparator());
+                ls.add(mk.getHandler());
+            }
+            return ls;
+        }
+
         private List<String> listObjectsToStr(int dep, KeyHistograms.HistogramNode n) {
             List<String> ls = new ArrayList<>();
             String indent = IntStream.range(0, dep).mapToObj(i -> "  ").collect(Collectors.joining());
@@ -185,7 +201,7 @@ public class DelayedLabelAggregationReplicable extends DelayedLabelManual {
         }
 
         private String toStrProc(Function<ActorAggregationReplicable,String> f) {
-            return processing.stream().map(f).collect(Collectors.joining(",", "[", "]"));
+            return processing.stream().map(f).collect(Collectors.joining(", ", "[", "]"));
         }
 
         private String behaviorStr(ActorBehavior b) {
@@ -193,7 +209,8 @@ public class DelayedLabelAggregationReplicable extends DelayedLabelManual {
                 ActorBehaviorBuilder.ActorBehaviorOr or = (ActorBehaviorBuilder.ActorBehaviorOr) b;
                 return behaviorStr(or.getLeft()) + " " + behaviorStr(or.getRight());
             } else if (b instanceof ActorBehaviorBuilderKeyValue.ActorBehaviorMatchKey) {
-                return toStr(b);
+                ActorBehaviorBuilderKeyValue.ActorBehaviorMatchKey<?> mk = (ActorBehaviorBuilderKeyValue.ActorBehaviorMatchKey<?>) b;
+                return toStr(b) + " (" + toStr(mk.putTree) + ", " + toStr(mk.getKeyComparator()) + ", " + toStr(mk.getHandler()) + ")";
             } else {
                 return "";
             }

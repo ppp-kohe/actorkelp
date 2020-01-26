@@ -154,7 +154,7 @@ public class KeyHistograms {
 
     public static abstract class HistogramPutContext {
         public int putRequiredSize;
-        public HistogramTree putTree;
+        public volatile HistogramTree putTree;
         public Comparable<?> putPosition;
         public Object putValue;
         public int putTreeLimit;

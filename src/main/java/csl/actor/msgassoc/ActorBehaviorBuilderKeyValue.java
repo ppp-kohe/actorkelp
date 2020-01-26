@@ -226,6 +226,8 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
             return keyComparator;
         }
 
+        public abstract List<KeyExtractor<KeyType,?>> getKeyExtractors();
+        public abstract Object getHandler();
     }
 
     public static class KeyComparatorOrdered<KeyType extends Comparable<KeyType>> implements KeyHistograms.KeyComparator<KeyType> {
@@ -321,6 +323,16 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
             } else {
                 return null;
             }
+        }
+
+        /** @return implementation field getter */
+        public List<KeyExtractor<KeyType,?>> getKeyExtractors() {
+            return Arrays.asList(keyExtractorFromValue1, keyExtractorFromValue2);
+        }
+
+        /** @return implementation field getter */
+        public BiConsumer<ValueType1, ValueType2> getHandler() {
+            return handler;
         }
     }
 
@@ -455,6 +467,16 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
             } else {
                 return null;
             }
+        }
+
+        /** @return implementation field getter */
+        public List<KeyExtractor<KeyType,?>> getKeyExtractors() {
+            return Arrays.asList(keyExtractorFromValue1, keyExtractorFromValue2, keyExtractorFromValue3);
+        }
+
+        /** @return implementation field getter */
+        public TriConsumer<ValueType1, ValueType2, ValueType3> getHandler() {
+            return handler;
         }
     }
 
@@ -597,6 +619,16 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
                 return null;
             }
         }
+
+        /** @return implementation field getter */
+        public List<KeyExtractor<KeyType,?>> getKeyExtractors() {
+            return Arrays.asList(keyExtractorFromValue1, keyExtractorFromValue2, keyExtractorFromValue3, keyExtractorFromValue4);
+        }
+
+        /** @return implementation field getter */
+        public QuadConsumer<ValueType1, ValueType2, ValueType3, ValueType4> getHandler() {
+            return handler;
+        }
     }
 
 
@@ -713,6 +745,16 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
         @Override
         public Object extractKeyFromValue(Object value, Object position) {
             return keyExtractorFromValue.toKey((ValueType) value);
+        }
+
+        /** @return implementation field getter */
+        public List<KeyExtractor<KeyType,?>> getKeyExtractors() {
+            return Collections.singletonList(keyExtractorFromValue);
+        }
+
+        /** @return implementation field getter */
+        public BiConsumer<KeyType, List<ValueType>> getHandler() {
+            return handler;
         }
     }
 
