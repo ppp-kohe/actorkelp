@@ -62,7 +62,7 @@ public class DelayedLabelAggregationReplicable extends DelayedLabelManual {
 
         public void finish(Finish f) {
             try {
-                Thread.sleep(3000);
+                Thread.sleep(1000);
             } catch (Exception ex) {
                 ex.printStackTrace();
             }

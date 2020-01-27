@@ -17,9 +17,11 @@ public class ActorToGraph {
     protected Map<Object,GraphNode> nodeMap = new WeakHashMap<>();
 
     SavingActor saving;
+    Actor self;
 
-    public ActorToGraph(ActorSystem s, File file) {
+    public ActorToGraph(ActorSystem s, File file, Actor self) {
         saving = new SavingActor(s, file, this);
+        this.self = self;
     }
 
     static class SavingActor extends ActorDefault {
@@ -95,17 +97,24 @@ public class ActorToGraph {
     }
 
     public void save(GraphNode fn, Actor a, String label) {
-        int id = saving.next();
-        a.tell(ActorAggregationReplicable.callableNoRouting((self, from) -> {
-            GraphNode n = createNode(self);
-            if (fn != null) {
-                GraphEdge e = n.fromEdge(fn);
-                if (label != null) {
-                    e.label = label;
-                }
+        if (a == self) {
+            saveTask(-1, fn, label, a);
+        } else {
+            int id = saving.next();
+            a.tell(CallableMessage.callableMessage((self, from) ->
+                    saveTask(id, fn, label, self)), saving);
+        }
+    }
+
+    private int saveTask(int id, GraphNode fn, String label, Actor self) {
+        GraphNode n = createNode(self);
+        if (fn != null) {
+            GraphEdge e = n.fromEdge(fn);
+            if (label != null) {
+                e.label = label;
             }
-            return id;
-        }), saving);
+        }
+        return id;
     }
 
     public static String idStr(Object o) {

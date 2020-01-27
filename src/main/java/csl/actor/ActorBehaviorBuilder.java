@@ -1,6 +1,5 @@
 package csl.actor;
 
-import java.io.Serializable;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
@@ -143,7 +142,7 @@ public class ActorBehaviorBuilder {
                 try {
                     res = dataType.cast(d).call(self, sender);
                 } catch (Throwable ex) {
-                    res = new CallableFailure(ex);
+                    res = new CallableMessage.CallableFailure(ex);
                 }
                 if (sender != null && res != null) {
                     sender.tell(res, self);
@@ -154,28 +153,5 @@ public class ActorBehaviorBuilder {
         }
     }
 
-    public interface CallableMessage<T> extends Serializable {
-        T call(Actor self, ActorRef sender);
-    }
 
-    public static <T> CallableMessage<T> callableMessage(CallableMessage<T> m) {
-        return m;
-    }
-
-    public static class CallableFailure implements Serializable {
-        protected Throwable error;
-
-        public CallableFailure(Throwable error) {
-            this.error = error;
-        }
-
-        public Throwable getError() {
-            return error;
-        }
-
-        @Override
-        public String toString() {
-            return "failure(" + error + ")";
-        }
-    }
 }

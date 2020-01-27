@@ -62,7 +62,7 @@ public class KeyHistograms {
                 prune(true);
                 left.prune(true);
 
-                splitCompleted(this);
+                splitCompleted(left);
                 return left;
             }
         }
@@ -154,7 +154,7 @@ public class KeyHistograms {
 
     public static abstract class HistogramPutContext {
         public int putRequiredSize;
-        public volatile HistogramTree putTree;
+        public HistogramTree putTree;
         public Comparable<?> putPosition;
         public Object putValue;
         public int putTreeLimit;

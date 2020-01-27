@@ -4,7 +4,6 @@ import csl.actor.*;
 import csl.actor.remote.ActorAddress;
 import csl.actor.remote.ActorRefRemote;
 
-import java.io.Serializable;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
@@ -93,7 +92,7 @@ public class ResponsiveCalls {
      * @param <T> the result type
      * @return a future of the result
      */
-    public static <T> Future<T> send(ActorSystem system, ActorAddress.ActorAddressRemote target, String name, ActorBehaviorBuilder.CallableMessage<T> task) {
+    public static <T> Future<T> send(ActorSystem system, ActorAddress.ActorAddressRemote target, String name, CallableMessage<T> task) {
         return send(system, ActorRefRemote.get(system, target.getActor(name)), task);
     }
 
@@ -112,7 +111,7 @@ public class ResponsiveCalls {
      * @param <T> the result type
      * @return a future of the result
      */
-    public static <T> Future<T> send(ActorSystem system, ActorAddress.ActorAddressRemote target, ActorBehaviorBuilder.CallableMessage<T> task) {
+    public static <T> Future<T> send(ActorSystem system, ActorAddress.ActorAddressRemote target, CallableMessage<T> task) {
         return send(system, target, CALLABLE_NAME, task);
     }
 
@@ -144,8 +143,8 @@ public class ResponsiveCalls {
         @SuppressWarnings("unchecked")
         public void receive(Object v, ActorRef sender) {
             getSystem().unregister(getName());
-            if (v instanceof ActorBehaviorBuilder.CallableFailure) {
-                resultHolder.completeExceptionally(((ActorBehaviorBuilder.CallableFailure) v).getError());
+            if (v instanceof CallableMessage.CallableFailure) {
+                resultHolder.completeExceptionally(((CallableMessage.CallableFailure) v).getError());
             } else {
                 try {
                     resultHolder.complete((T) v);

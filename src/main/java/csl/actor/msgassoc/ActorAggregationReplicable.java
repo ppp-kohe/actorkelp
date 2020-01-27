@@ -78,7 +78,6 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
         }
 
         public void becomeRouter(ActorAggregationReplicable self, Message<?> message) {
-            clear(self.behavior);
             ActorAggregationReplicable a1 = self.createClone();
             ActorAggregationReplicable a2 = self.createClone();
             a1.state = new StateReplica(self);
@@ -92,16 +91,6 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
                     place(placement, a2), splitPoints);
             self.state = r;
             r.route(self, message);
-        }
-
-        private void clear(ActorBehavior b) {
-            if (b instanceof ActorBehaviorBuilder.ActorBehaviorOr) {
-                ActorBehaviorBuilder.ActorBehaviorOr o = (ActorBehaviorBuilder.ActorBehaviorOr) b;
-                clear(o.getLeft());
-                clear(o.getRight());
-            } else if (b instanceof KeyHistograms.HistogramPutContext) {
-                ((KeyHistograms.HistogramPutContext) b).putTree = null;
-            }
         }
     }
 
@@ -257,14 +246,17 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
     }
 
     protected boolean isNoRoutingMessage(Message<?> message) {
-        return message.getData() instanceof NoRouting;
+        return message.getData() instanceof NoRouting ||
+                (message.getData() instanceof CallableMessage<?> &&
+                        !(message.getData() instanceof Routing));
     }
 
     public interface NoRouting { }
+    public interface Routing { }
 
-    public interface CallableMessageNoRouting<T> extends ActorBehaviorBuilder.CallableMessage<T>, NoRouting { }
+    public interface CallableMessageRouting<T> extends CallableMessage<T>, Routing { }
 
-    public static <T> CallableMessageNoRouting<T> callableNoRouting(CallableMessageNoRouting<T> t) {
+    public static <T> CallableMessageRouting<T> callableRouting(CallableMessageRouting<T> t) {
         return t;
     }
 

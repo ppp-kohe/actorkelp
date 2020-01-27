@@ -1,11 +1,7 @@
 package csl.actor.example.delayedlabel;
 
-import csl.actor.ActorBehavior;
-import csl.actor.ActorRef;
-import csl.actor.ActorSystem;
-import csl.actor.Message;
-import csl.actor.msgassoc.ActorAggregation;
-import csl.actor.msgassoc.KeyHistograms;
+import csl.actor.*;
+import csl.actor.msgassoc.*;
 
 import java.io.File;
 import java.io.PrintWriter;
@@ -71,9 +67,11 @@ public class DelayedLabelAggregation extends DelayedLabelManual {
         public static AtomicLong pruneCount = new AtomicLong();
 
         public ActorAggregation self;
+        public ActorAggregation root;
 
         public LearnerAggregationSupport(ActorAggregation self, PrintWriter out, ActorRef resultActor, int numInstances) {
             this.self = self;
+            this.root = self;
             model = new LearnerModel(resultActor);
             this.numInstances = numInstances;
             this.out = out;
@@ -83,6 +81,7 @@ public class DelayedLabelAggregation extends DelayedLabelManual {
             LearnerAggregationSupport l = new LearnerAggregationSupport(self, out, model.resultActor, numInstances);
             l.model.model = new HashMap<>(model.model);
             l.model.numSamples = model.numSamples;
+            l.root = root;
             return l;
         }
 
@@ -94,21 +93,34 @@ public class DelayedLabelAggregation extends DelayedLabelManual {
             ++count;
             pruneCount.addAndGet(self.getMailboxAsAggregation().prune(32, 0.5));
             if (debug && ((count % (numInstances / 10)) == 0 || count == numInstances)) {
-                File dir = new File("target/delayed-debug");
-                if (!dir.exists()) {
-                    dir.mkdirs();
-                }
-                String sn = self.getClass().getSimpleName();
-                File file = new File(dir, String.format("delayed-%s-%d.dot", sn, count));
-                new ActorToGraph(self.getSystem(), file).save(self).finish();
+                save(Long.toString(count));
             }
+        }
+
+        public void save(String count) {
+            File dir = new File("target/delayed-debug");
+            if (!dir.exists()) {
+                dir.mkdirs();
+            }
+            String sn = self.getClass().getSimpleName();
+            File file = new File(dir, String.format("delayed-%s-%s.dot", sn, count));
+            root.tell(CallableMessage.callableMessageConsumer((self, ref) ->
+                new ActorToGraph(self.getSystem(), file, self).save(self).finish()), null);
         }
 
         public void finish(Finish f) {
             KeyHistograms.HistogramTree tree = self.getMailboxAsAggregation().getTable(0);
             out.println(String.format("#prune-count: %,d : leaf=%,d, non-zero-leaf=%,d : %04f",
                     pruneCount.get(), tree.getLeafSize(), tree.getLeafSizeNonZero(), tree.getLeafSizeNonZeroRate()));
-            System.exit(0);
+            save("finish-" + f.numInstances);
+            root.tell(CallableMessage.callableMessageConsumer((self, ref) -> {
+                try {
+                    Thread.sleep(1000);
+                } catch (Exception ex) {
+                    ex.printStackTrace();
+                }
+                System.exit(0);
+            }), null);
         }
     }
 }

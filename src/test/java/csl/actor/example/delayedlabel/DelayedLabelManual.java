@@ -1,11 +1,15 @@
 package csl.actor.example.delayedlabel;
 
 import csl.actor.*;
+import csl.actor.msgassoc.ActorAggregationReplicable;
 
 import java.io.PrintWriter;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -31,6 +35,7 @@ public class DelayedLabelManual {
         ActorSystem system = new ActorSystemDefault();
         ResultActor resultActor = new ResultActor(system, out, startTime, numInstances);
         ActorRef learnerActor = learnerActor(system, out, resultActor, numInstances);
+        resultActor.setLearner(learnerActor);
 
         for (Object i : inputs) {
             learnerActor.tell(i, null);
@@ -46,12 +51,31 @@ public class DelayedLabelManual {
         long numInstances;
         long finishedInstances;
         PrintWriter out;
+        Instant lastTime;
+        ScheduledExecutorService exe;
+        ActorRef learner;
 
         public ResultActor(ActorSystem system, PrintWriter out, Instant startTime, int numInstances) {
             super(system);
             this.startTime = startTime;
             this.numInstances = numInstances;
             this.out = out;
+            this.lastTime = startTime;
+            exe = Executors.newSingleThreadScheduledExecutor();
+            exe.scheduleAtFixedRate(this::check, 1, 1, TimeUnit.SECONDS);
+        }
+
+        void check() {
+            Duration d = Duration.between(lastTime, Instant.now());
+            if (!d.minusSeconds(10).isNegative()) {
+                out.println(String.format("#not yet finished: %,d %s since-start:%s",
+                        finishedInstances, d, Duration.between(startTime, Instant.now())));
+                learner.tell(new Finish(finishedInstances), this);
+            }
+        }
+
+        public void setLearner(ActorRef learner) {
+            this.learner = learner;
         }
 
         @Override
@@ -63,10 +87,11 @@ public class DelayedLabelManual {
 
         public void receive(int next, ActorRef sender) {
             finishedInstances++;
+            lastTime = Instant.now();
             if (numInstances <= finishedInstances) {
                 Duration d = Duration.between(startTime, Instant.now());
                 out.println(String.format("#finish: %,d %s", finishedInstances, d));
-                sender.tell(new Finish(finishedInstances), this);
+                learner.tell(new Finish(finishedInstances), this);
                 //finish
                 //((ActorSystemDefault) getSystem()).stop();
             }
@@ -130,7 +155,7 @@ public class DelayedLabelManual {
         }
     }
 
-    public static class Finish {
+    public static class Finish implements ActorAggregationReplicable.NoRouting {
         public long numInstances;
 
         public Finish(long numInstances) {
