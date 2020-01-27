@@ -93,34 +93,37 @@ public class DelayedLabelAggregation extends DelayedLabelManual {
             ++count;
             pruneCount.addAndGet(self.getMailboxAsAggregation().prune(32, 0.5));
             if (debug && ((count % (numInstances / 10)) == 0 || count == numInstances)) {
-                save(Long.toString(count));
+                save(Long.toString(count), false);
             }
         }
 
-        public void save(String count) {
+        public void save(String count, boolean finish) {
             File dir = new File("target/delayed-debug");
             if (!dir.exists()) {
                 dir.mkdirs();
             }
             String sn = self.getClass().getSimpleName();
             File file = new File(dir, String.format("delayed-%s-%s.dot", sn, count));
-            root.tell(CallableMessage.callableMessageConsumer((self, ref) ->
-                new ActorToGraph(self.getSystem(), file, self).save(self).finish()), null);
+            root.tell(CallableMessage.callableMessageConsumer((self, ref) -> {
+                if (new ActorToGraph(self.getSystem(), file, self).save(self).finish()) {
+                    if (finish) {
+                        System.exit(0);
+                    }
+                } else {
+                    if (finish) {
+                        ActorToGraph.schedule(50000, () -> {
+                            System.exit(0);
+                        });
+                    }
+                }
+            }), null);
         }
 
         public void finish(Finish f) {
             KeyHistograms.HistogramTree tree = self.getMailboxAsAggregation().getTable(0);
             out.println(String.format("#prune-count: %,d : leaf=%,d, non-zero-leaf=%,d : %04f",
                     pruneCount.get(), tree.getLeafSize(), tree.getLeafSizeNonZero(), tree.getLeafSizeNonZeroRate()));
-            save("finish-" + f.numInstances);
-            root.tell(CallableMessage.callableMessageConsumer((self, ref) -> {
-                try {
-                    Thread.sleep(3000);
-                } catch (Exception ex) {
-                    ex.printStackTrace();
-                }
-                System.exit(0);
-            }), null);
+            save("finish-" + f.numInstances, true);
         }
     }
 }

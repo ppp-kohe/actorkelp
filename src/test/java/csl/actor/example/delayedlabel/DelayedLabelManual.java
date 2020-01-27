@@ -149,6 +149,7 @@ public class DelayedLabelManual {
                 out.println(String.format("#not yet finished: %,d %s since-start:%s",
                         finishedInstances, d, Duration.between(startTime, Instant.now())));
                 learner.tell(new Finish(finishedInstances), this);
+                exe.shutdown();
             }
         }
 

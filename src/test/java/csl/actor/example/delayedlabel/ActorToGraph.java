@@ -11,6 +11,7 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
@@ -30,7 +31,7 @@ public class ActorToGraph {
         ActorToGraph g;
         Map<Integer,Boolean> finish = new ConcurrentHashMap<>();
         File file;
-        boolean write;
+        public AtomicBoolean write = new AtomicBoolean();
 
         public SavingActor(ActorSystem system, File file, ActorToGraph g) {
             super(system);
@@ -67,30 +68,42 @@ public class ActorToGraph {
         }
 
         public boolean write() {
-            if (!write) {
+            if (!write.get()) {
                 try (PrintWriter out = new PrintWriter(file)) {
                     g.write(out);
                 } catch (Exception ex) {
                     ex.printStackTrace();
                 }
-                write = true;
+                write.set(true);
             }
-            return write;
+            return write.get();
         }
     }
 
-    public void finish() {
+    public boolean finish() {
         if (saving.getIds() == 0) {
             saving.tell(-1, null);
         }
+        schedule(10000, () -> {
+            saving.tell(CallableMessage.callableMessageConsumer((self,r) -> {
+                if (saving.write()) {
+                    System.err.println("#graph timeout saving");
+                }
+            }), null);
+        });
+        try {
+            Thread.sleep(500);
+        } catch (Exception ex) {
+            ex.printStackTrace();
+        }
+        return saving.write.get();
+    }
+
+    public static void schedule(long ms, Runnable r) {
         new Thread(() -> {
             try {
-                Thread.sleep(5_000);
-                saving.tell(CallableMessage.callableMessageConsumer((self,r) -> {
-                        if (saving.write()) {
-                            System.err.println("#graph timeout saving");
-                        }
-                }), null);
+                Thread.sleep(ms);
+                r.run();
             } catch (Exception e) {
                 e.printStackTrace();
             }
