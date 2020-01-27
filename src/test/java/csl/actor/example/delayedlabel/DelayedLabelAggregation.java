@@ -10,7 +10,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 public class DelayedLabelAggregation extends DelayedLabelManual {
     public static void main(String[] args) {
-        run(new DelayedLabelAggregation(), args);
+        new DelayedLabelAggregation().run(args);
     }
 
     @Override

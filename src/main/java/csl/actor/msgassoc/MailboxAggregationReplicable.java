@@ -10,7 +10,19 @@ import java.util.Random;
 import java.util.stream.Collectors;
 
 public class MailboxAggregationReplicable extends MailboxAggregation {
-    protected int threshold = 1000;
+    protected int threshold;
+
+    public MailboxAggregationReplicable() {
+        this(1000);
+    }
+
+    public MailboxAggregationReplicable(int threshold) {
+        this.threshold = threshold;
+    }
+
+    public void setThreshold(int threshold) {
+        this.threshold = threshold;
+    }
 
     public boolean isOverThreshold() {
         return queue.size() > threshold && hasMultiplePoints();

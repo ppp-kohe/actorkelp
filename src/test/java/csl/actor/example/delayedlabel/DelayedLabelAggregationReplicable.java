@@ -4,6 +4,7 @@ import csl.actor.*;
 import csl.actor.msgassoc.ActorAggregationReplicable;
 import csl.actor.msgassoc.ActorBehaviorBuilderKeyValue;
 import csl.actor.msgassoc.KeyHistograms;
+import csl.actor.msgassoc.MailboxAggregationReplicable;
 
 import java.io.PrintWriter;
 import java.time.Instant;
@@ -15,7 +16,17 @@ import java.util.stream.IntStream;
 
 public class DelayedLabelAggregationReplicable extends DelayedLabelManual {
     public static void main(String[] args) {
-        run(new DelayedLabelAggregationReplicable(), args);
+        new DelayedLabelAggregationReplicable().run(args);
+    }
+
+    static int threshold = 1000;
+
+    @Override
+    public void run(String... args) {
+        if (args.length >= 2) {
+            threshold = Integer.parseInt(args[1].replaceAll("_", ""));
+        }
+        super.run(args);
     }
 
     @Override
@@ -38,11 +49,12 @@ public class DelayedLabelAggregationReplicable extends DelayedLabelManual {
         public LernerActorAggregationReplicable(ActorSystem system, String name, PrintWriter out, ActorRef resultActor, int numInstances) {
             super(system, name);
             support = new DelayedLabelAggregation.LearnerAggregationSupport(this, out, resultActor, numInstances);
+            System.err.println(String.format("#threshold: %,d", threshold));
+            getMailboxAsReplicable().setThreshold(threshold);
         }
 
         public LernerActorAggregationReplicable(ActorSystem system, PrintWriter out, ActorRef resultActor, int numInstances) {
-            super(system);
-            support = new DelayedLabelAggregation.LearnerAggregationSupport(this, out, resultActor, numInstances);
+            this(system, null, out, resultActor, numInstances);
         }
 
         @Override

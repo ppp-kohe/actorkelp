@@ -18,23 +18,22 @@ import java.util.stream.IntStream;
 
 public class DelayedLabelManual {
     public static void main(String[] args) {
-        run(new DelayedLabelManual(), args);
+        new DelayedLabelManual().run(args);
     }
 
-    public static void run(DelayedLabelManual r, String... args) {
+    public void run(String... args) {
         String nums = args[0];
         int numInstances;
         String file = null;
         try {
             numInstances = Integer.parseInt(nums.replaceAll("_", ""));
         } catch (NumberFormatException ne) {
-            numInstances = r.readHead(nums);
+            numInstances = readHead(nums);
             file = nums;
         }
         PrintWriter out = new PrintWriter(System.out, true);
 
-
-        r.run(out, numInstances, file);
+        run(out, numInstances, file);
     }
 
     public int readHead(String file) {
@@ -67,9 +66,17 @@ public class DelayedLabelManual {
             out.println(String.format("#generateInput: %,d %s", numInstances, Duration.between(startGenTime, Instant.now())));
             return inputs.iterator();
         } else {
-            out.println(String.format("#readInput: %,d %s", numInstances, src));
+            Instant startGenTime = Instant.now();
+            List<Object> buf = new ArrayList<>(numInstances * 2);
+            for (Iterator<Object> i = readInputs(src); i.hasNext(); ) {
+                buf.add(i.next());
+            }
+            out.println(String.format("#readInput: %,d %s %s", numInstances, Duration.between(startGenTime, Instant.now()), src));
+            return buf.iterator();
         }
+    }
 
+    private Iterator<Object> readInputs(String src) {
         try {
             final BufferedReader r = Files.newBufferedReader(Paths.get(src));
             r.readLine(); //skip head
