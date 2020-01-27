@@ -3,7 +3,10 @@ package csl.actor.example.delayedlabel;
 import csl.actor.*;
 import csl.actor.msgassoc.ActorAggregationReplicable;
 
+import java.io.BufferedReader;
 import java.io.PrintWriter;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
@@ -20,15 +23,30 @@ public class DelayedLabelManual {
 
     public static void run(DelayedLabelManual r, String... args) {
         String nums = args[0];
-        int numInstances = Integer.parseInt(nums.replaceAll("_", ""));
+        int numInstances;
+        String file = null;
+        try {
+            numInstances = Integer.parseInt(nums.replaceAll("_", ""));
+        } catch (NumberFormatException ne) {
+            numInstances = r.readHead(nums);
+            file = nums;
+        }
         PrintWriter out = new PrintWriter(System.out, true);
-        r.run(out, numInstances);
+
+
+        r.run(out, numInstances, file);
     }
 
-    public void run(PrintWriter out, int numInstances) {
-        Instant startGenTime = Instant.now();
-        List<Object> inputs = generateInput(12345L, 100, 300, numInstances, 100);
-        out.println(String.format("#generateInput: %,d %s", numInstances, Duration.between(startGenTime, Instant.now())));
+    public int readHead(String file) {
+        try (BufferedReader r = Files.newBufferedReader(Paths.get(file))) {
+            return Integer.parseInt(r.readLine());
+        } catch (Exception ex) {
+            throw new RuntimeException(ex);
+        }
+    }
+
+    public void run(PrintWriter out, int numInstances, String src) {
+        Iterator<Object> inputs = inputs(out, numInstances, src);
 
         Instant startTime = Instant.now();
 
@@ -37,8 +55,61 @@ public class DelayedLabelManual {
         ActorRef learnerActor = learnerActor(system, out, resultActor, numInstances);
         resultActor.setLearner(learnerActor);
 
-        for (Object i : inputs) {
-            learnerActor.tell(i, null);
+        while (inputs.hasNext()) {
+            learnerActor.tell(inputs.next(), null);
+        }
+    }
+
+    public Iterator<Object> inputs(PrintWriter out, int numInstances, String src) {
+        if (src == null) {
+            Instant startGenTime = Instant.now();
+            List<Object> inputs = generateInput(12345L, 100, 300, numInstances, 100);
+            out.println(String.format("#generateInput: %,d %s", numInstances, Duration.between(startGenTime, Instant.now())));
+            return inputs.iterator();
+        } else {
+            out.println(String.format("#readInput: %,d %s", numInstances, src));
+        }
+
+        try {
+            final BufferedReader r = Files.newBufferedReader(Paths.get(src));
+            r.readLine(); //skip head
+            return new Iterator<Object>() {
+                String next = r.readLine();
+                @Override
+                public boolean hasNext() {
+                    return next != null;
+                }
+
+                @Override
+                public Object next() {
+                    String n = next;
+                    try {
+                        next = r.readLine();
+                        if (next == null) {
+                            r.close();
+                        }
+                    } catch (Exception ex) {
+                        ex.printStackTrace();
+                    }
+                    return parseLine(n);
+                }
+            };
+        } catch (Exception ex) {
+            throw new RuntimeException(ex);
+        }
+    }
+
+    public Object parseLine(String line) {
+        String[] cols = line.split(",");
+        if (cols[0].equals("L")) {
+            return new LabelInstance(Integer.parseInt(cols[1]), Integer.parseInt(cols[2]));
+        } else if (cols[0].equals("F")) {
+            return new FeatureInstance(Integer.parseInt(cols[1]), Arrays.stream(Arrays.copyOfRange(cols, 2, cols.length))
+                    .mapToDouble(Double::parseDouble)
+                    .toArray());
+        } else {
+            System.err.println("#error: " + line);
+            return null;
         }
     }
 

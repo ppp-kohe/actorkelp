@@ -115,7 +115,7 @@ public class DelayedLabelAggregation extends DelayedLabelManual {
             save("finish-" + f.numInstances);
             root.tell(CallableMessage.callableMessageConsumer((self, ref) -> {
                 try {
-                    Thread.sleep(1000);
+                    Thread.sleep(3000);
                 } catch (Exception ex) {
                     ex.printStackTrace();
                 }
