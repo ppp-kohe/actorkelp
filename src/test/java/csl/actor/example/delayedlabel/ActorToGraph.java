@@ -9,6 +9,8 @@ import java.io.File;
 import java.io.PrintWriter;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
@@ -28,6 +30,7 @@ public class ActorToGraph {
         ActorToGraph g;
         Map<Integer,Boolean> finish = new ConcurrentHashMap<>();
         File file;
+        boolean write;
 
         public SavingActor(ActorSystem system, File file, ActorToGraph g) {
             super(system);
@@ -63,12 +66,16 @@ public class ActorToGraph {
             return ids.get();
         }
 
-        public void write() {
-            try (PrintWriter out = new PrintWriter(file)) {
-                g.write(out);
-            } catch (Exception ex) {
-                ex.printStackTrace();
+        public boolean write() {
+            if (!write) {
+                try (PrintWriter out = new PrintWriter(file)) {
+                    g.write(out);
+                } catch (Exception ex) {
+                    ex.printStackTrace();
+                }
+                write = true;
             }
+            return write;
         }
     }
 
@@ -76,6 +83,18 @@ public class ActorToGraph {
         if (saving.getIds() == 0) {
             saving.tell(-1, null);
         }
+        new Thread(() -> {
+            try {
+                Thread.sleep(5_000);
+                saving.tell(CallableMessage.callableMessageConsumer((self,r) -> {
+                        if (saving.write()) {
+                            System.err.println("#graph timeout saving");
+                        }
+                }), null);
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }).start();
     }
 
     public ActorToGraph save(ActorSystem sys) {
