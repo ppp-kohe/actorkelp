@@ -105,9 +105,7 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
         protected Random random = new Random();
         protected int depth;
 
-        protected List<RequestUpdateSplitsPrepare> forecasts = new ArrayList<>();
-        protected List<RequestUpdateSplits> pending = new ArrayList<>();
-        protected int maxPendingSize;
+        protected RouterUpdate update = new RouterUpdate();
 
         public StateRouter(ActorAggregationReplicable self, ActorRef a1, ActorRef a2, List<Object> splitPoints, int depth) {
             MailboxAggregationReplicable mailbox = self.getMailboxAsReplicable();
@@ -118,46 +116,22 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
         @Override
         public void processMessage(ActorAggregationReplicable self, Message<?> message) {
             if (message.getData() instanceof RequestUpdateSplitsPrepare) {
-                forecasts.add((RequestUpdateSplitsPrepare) message.getData());
+                update.forecast((RequestUpdateSplitsPrepare) message.getData());
             } else if (message.getData() instanceof RequestUpdateSplits) {
-                availableRequests(self, (RequestUpdateSplits) message.getData());
+                update.request((RequestUpdateSplits) message.getData())
+                        .forEachRemaining(r -> updatePoints(self, r));
                 //updatePoints(self, (RequestUpdateSplits) message.getData());
             } else {
                 route(self, message);
             }
         }
 
-        public void availableRequests(ActorAggregationReplicable self, RequestUpdateSplits s) {
-            if (forecasts.stream()
-                    .anyMatch(p -> s.getDepth() >= p.getDepth())) {
-                pending.add(s);
-                maxPendingSize = Math.max(maxPendingSize, pending.size());
-            } else {
-                updatePoints(self, s);
-                for (RequestUpdateSplits ps : pending) {
-                    updatePoints(self, ps);
-                }
-                pending.clear();
-            }
-        }
-
         public void updatePoints(ActorAggregationReplicable self, RequestUpdateSplits request) {
-            removeForecast(request);
             List<Object> splitPoints = request.getNewSplitPoints();
             ActorRef left = request.getLeft();
             ActorRef right = request.getRight();
             for (int i = 0, size = splits.size(); i < size; ++i) {
                 splits.get(i).updatePoint(splitPoints.get(i), left, right);
-            }
-        }
-
-        public void removeForecast(RequestUpdateSplits s) {
-            for (Iterator<RequestUpdateSplitsPrepare> iter = forecasts.iterator(); iter.hasNext(); ) {
-                RequestUpdateSplitsPrepare p = iter.next();
-                if (s.getDepth() == p.getDepth()) {
-                    iter.remove();
-                    return;
-                }
             }
         }
 
@@ -186,17 +160,86 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
         }
 
         /** @return implementation field getter */
-        public List<RequestUpdateSplits> getPending() {
-            return pending;
+        public RouterUpdate getUpdate() {
+            return update;
+        }
+    }
+
+    public static class RouterUpdate {
+        protected TreeMap<Integer,RouterUpdateEntry> depthToEntry;
+        protected int minDepth;
+        protected int pendingSize;
+
+        public RouterUpdate() {
+            depthToEntry = new TreeMap<>();
+            minDepth = Integer.MAX_VALUE;
+            pendingSize = 0;
+        }
+
+        public void forecast(RequestUpdateSplitsPrepare p) {
+            depthToEntry.computeIfAbsent(p.getDepth(), RouterUpdateEntry::new)
+                .count++;
+            minDepth = Math.min(minDepth, p.getDepth());
+        }
+
+        public Iterator<RequestUpdateSplits> request(RequestUpdateSplits r) {
+            if (minDepth >= r.getDepth()) {
+                List<RequestUpdateSplits> list = new ArrayList<>(pendingSize);
+                int[] nextMinDepth = new int[] {Integer.MAX_VALUE};
+                depthToEntry.entrySet()
+                        .removeIf(e -> e.getValue().collect(list, nextMinDepth));
+                minDepth = nextMinDepth[0];
+                pendingSize = 0;
+                return list.iterator();
+            } else {
+                ++pendingSize;
+                depthToEntry.get(r.getDepth())
+                        .pending.add(r);
+                return Collections.emptyIterator();
+            }
+        }
+
+        public long forecastCount() {
+            return depthToEntry.values().stream()
+                    .mapToInt(e -> e.count)
+                    .sum();
         }
 
         /** @return implementation field getter */
-        public List<RequestUpdateSplitsPrepare> getForecasts() {
-            return forecasts;
+        public TreeMap<Integer, RouterUpdateEntry> getDepthToEntry() {
+            return depthToEntry;
         }
 
-        public int getMaxPendingSize() {
-            return maxPendingSize;
+        /** @return implementation field getter */
+        public int getMinDepth() {
+            return minDepth;
+        }
+
+        /** @return implementation field getter */
+        public int getPendingSize() {
+            return pendingSize;
+        }
+    }
+
+    public static class RouterUpdateEntry {
+        public int depth;
+        public int count;
+        public List<RequestUpdateSplits> pending = new ArrayList<>(3);
+
+        public RouterUpdateEntry(int depth) {
+            this.depth = depth;
+        }
+
+        public boolean collect(List<RequestUpdateSplits> target, int[] nonZero) {
+            target.addAll(pending);
+            count -= pending.size();
+            pending.clear();
+            if (count <= 0) {
+                return true;
+            } else {
+                nonZero[0] = Math.min(nonZero[0], depth);
+                return false;
+            }
         }
     }
 

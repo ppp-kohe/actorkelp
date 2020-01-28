@@ -258,7 +258,9 @@ public class ActorToGraph {
             link(n, tmp.getRight(), "newRight");
             tmp.getSplits().forEach(c -> saveSplitTree(n, c, "split"));
         } else if (s instanceof ActorAggregationReplicable.StateRouter) {
-            n.tableLabel.add(Arrays.asList("maxPending", Integer.toString(((ActorAggregationReplicable.StateRouter) s).getMaxPendingSize())));
+            ActorAggregationReplicable.RouterUpdate ru = ((ActorAggregationReplicable.StateRouter) s).getUpdate();
+            n.tableLabel.add(Arrays.asList("pending", Integer.toString(ru.getPendingSize())));
+            n.tableLabel.add(Arrays.asList("forecasts", Long.toString(ru.forecastCount())));
             ((ActorAggregationReplicable.StateRouter) s).getSplits().forEach(c -> saveSplitTree(n, c,  "split"));
         }
     }
