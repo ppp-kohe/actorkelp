@@ -89,26 +89,9 @@ public class DelayedLabelAggregationReplicable extends DelayedLabelManual {
             support = support.createClone(this);
         }
 
-        @Override
+/*        @Override
         public boolean processMessageNext() {
-            int n = rec.getAndIncrement();
-            if (n > 0) {
-                System.err.println(this + " re-entrance process " + n + " " + Thread.currentThread());
-            }
-            synchronized (DelayedLabelAggregationReplicable.class) {
-                processing.add(this);
-            }
-            try {
-                return super.processMessageNext();
-            } catch (Throwable ex) {
-                logActor(ex);
-                throw ex;
-            } finally {
-                rec.decrementAndGet();
-                synchronized (DelayedLabelAggregationReplicable.class) {
-                    processing.remove(this);
-                }
-            }
+            return super.processMessageNext();
         }
 
         private void logActor(Throwable ex) {
@@ -231,7 +214,7 @@ public class DelayedLabelAggregationReplicable extends DelayedLabelManual {
         private String toStr(Object o) {
             return o == null ? "null": (o.getClass().getSimpleName() + "@" + ActorToGraph.idStr(o));
         }
-
+*/
         @Override
         protected void processMessage(Message<?> message) {
             if (root == this) {

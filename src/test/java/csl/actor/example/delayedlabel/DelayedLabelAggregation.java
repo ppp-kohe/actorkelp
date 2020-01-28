@@ -123,6 +123,8 @@ public class DelayedLabelAggregation extends DelayedLabelManual {
             KeyHistograms.HistogramTree tree = self.getMailboxAsAggregation().getTable(0);
             out.println(String.format("#prune-count: %,d : leaf=%,d, non-zero-leaf=%,d : %04f",
                     pruneCount.get(), tree.getLeafSize(), tree.getLeafSizeNonZero(), tree.getLeafSizeNonZeroRate()));
+            out.println(String.format("#debug-free-memory: %,d bytes",
+                    Runtime.getRuntime().freeMemory()));
             save("finish-" + f.numInstances, true);
         }
     }
