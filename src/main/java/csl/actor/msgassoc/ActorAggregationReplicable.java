@@ -184,7 +184,8 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
 
         public Iterator<RequestUpdateSplits> request(RequestUpdateSplits r) {
             if (minDepth >= r.getDepth()) {
-                List<RequestUpdateSplits> list = new ArrayList<>(pendingSize);
+                List<RequestUpdateSplits> list = new ArrayList<>(pendingSize + 1);
+                list.add(r);
                 int[] nextMinDepth = new int[] {Integer.MAX_VALUE};
                 depthToEntry.entrySet()
                         .removeIf(e -> e.getValue().collect(list, nextMinDepth));
