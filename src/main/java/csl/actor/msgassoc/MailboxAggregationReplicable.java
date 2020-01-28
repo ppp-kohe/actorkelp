@@ -58,11 +58,11 @@ public class MailboxAggregationReplicable extends MailboxAggregation {
         return splitPoints;
     }
 
-    public List<SplitTreeRoot> createSplits(ActorRef a1, ActorRef a2, Random random, List<Object> splitPoints) {
+    public List<SplitTreeRoot> createSplits(ActorRef a1, ActorRef a2, Random random, List<Object> splitPoints, int depth) {
         List<SplitTreeRoot> splits = new ArrayList<>(tables.length);
         int i = 0;
         for (HistogramEntry e : tables) {
-            splits.add(new SplitTreeRoot(new SplitTree(splitPoints.get(i), new SplitActor(a1), new SplitActor(a2)), e.getProcessor(), random));
+            splits.add(new SplitTreeRoot(new SplitTree(splitPoints.get(i), new SplitActor(a1, depth + 1), new SplitActor(a2, depth + 1), depth), e.getProcessor(), random));
             ++i;
         }
         return splits;
@@ -119,13 +119,17 @@ public class MailboxAggregationReplicable extends MailboxAggregation {
         Split updatePoint(Object newSplitPoint, ActorRef left, ActorRef right, HistogramProcessor processor);
         void send(Message<?> message, Object key, HistogramProcessor processor);
         void sendNonKey(Message<?> message, Random random);
+
+        int getDepth();
     }
 
     public static class SplitActor implements Split {
         protected ActorRef actorRef;
+        protected int depth;
 
-        public SplitActor(ActorRef actorRef) {
+        public SplitActor(ActorRef actorRef, int depth) {
             this.actorRef = actorRef;
+            this.depth = depth;
         }
 
         /** @return implementation field getter */
@@ -134,8 +138,13 @@ public class MailboxAggregationReplicable extends MailboxAggregation {
         }
 
         @Override
+        public int getDepth() {
+            return depth;
+        }
+
+        @Override
         public Split updatePoint(Object newSplitPoint, ActorRef left, ActorRef right, HistogramProcessor processor) {
-            return new SplitTree(newSplitPoint, new SplitActor(left), new SplitActor(right));
+            return new SplitTree(newSplitPoint, new SplitActor(left, depth + 1), new SplitActor(right, depth + 1), depth);
         }
 
         @Override
@@ -153,11 +162,13 @@ public class MailboxAggregationReplicable extends MailboxAggregation {
         protected Object point;
         protected Split left;
         protected Split right;
+        protected int depth;
 
-        public SplitTree(Object point, Split left, Split right) {
+        public SplitTree(Object point, Split left, Split right, int depth) {
             this.point = point;
             this.left = left;
             this.right = right;
+            this.depth = depth;
         }
 
         public Object getPoint() {
@@ -172,6 +183,11 @@ public class MailboxAggregationReplicable extends MailboxAggregation {
         /** @return implementation field getter */
         public Split getRight() {
             return right;
+        }
+
+        @Override
+        public int getDepth() {
+            return depth;
         }
 
         @Override

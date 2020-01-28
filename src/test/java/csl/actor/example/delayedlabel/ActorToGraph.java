@@ -21,10 +21,16 @@ public class ActorToGraph {
 
     SavingActor saving;
     Actor self;
+    boolean saveLeafNode = false;
 
     public ActorToGraph(ActorSystem s, File file, Actor self) {
         saving = new SavingActor(s, file, this);
         this.self = self;
+    }
+
+    public ActorToGraph setSaveLeafNode(boolean saveLeafNode) {
+        this.saveLeafNode = saveLeafNode;
+        return this;
     }
 
     static class SavingActor extends ActorDefault {
@@ -237,6 +243,7 @@ public class ActorToGraph {
     protected void save(GraphNode n, ActorAggregationReplicable a) {
         ActorAggregationReplicable.State s = a.getState();
         n.tableLabel.add(Arrays.asList("state", s.getClass().getSimpleName()));
+        n.tableLabel.add(Arrays.asList("depth", Integer.toString(s.getDepth())));
         if (s instanceof ActorAggregationReplicable.StateDefault) {
             //
         } else if (s instanceof ActorAggregationReplicable.StateReplica) {
@@ -251,6 +258,7 @@ public class ActorToGraph {
             link(n, tmp.getRight(), "newRight");
             tmp.getSplits().forEach(c -> saveSplitTree(n, c, "split"));
         } else if (s instanceof ActorAggregationReplicable.StateRouter) {
+            n.tableLabel.add(Arrays.asList("maxPending", Integer.toString(((ActorAggregationReplicable.StateRouter) s).getMaxPendingSize())));
             ((ActorAggregationReplicable.StateRouter) s).getSplits().forEach(c -> saveSplitTree(n, c,  "split"));
         }
     }
@@ -263,7 +271,11 @@ public class ActorToGraph {
         } else if (node instanceof KeyHistograms.HistogramNodeTree) {
             return saveTree(from, (KeyHistograms.HistogramNodeTree) node);
         } else if (node instanceof KeyHistograms.HistogramNodeLeaf) {
-            return saveLeafN(from, (KeyHistograms.HistogramNodeLeaf) node);
+            if (node.height() > 0 || (saveLeafNode)) {
+                return saveLeafN(from, (KeyHistograms.HistogramNodeLeaf) node);
+            } else {
+                return null;
+            }
         } else {
             return null;
         }
@@ -332,14 +344,14 @@ public class ActorToGraph {
         if (s instanceof MailboxAggregationReplicable.SplitTree) {
             MailboxAggregationReplicable.SplitTree st = (MailboxAggregationReplicable.SplitTree) s;
             GraphNode n = createNode();
-            n.label = "split:" + limitString(Objects.toString(st.getPoint()));
+            n.label = "split:" + limitString(Objects.toString(st.getPoint())) + " dep:" + s.getDepth();
 
             saveSplit(n, st.getLeft(), "left");
             saveSplit(n, st.getRight(), "right");
 
             n.fromEdge(from).label = edgeLabel;
         } else if (s instanceof MailboxAggregationReplicable.SplitActor) {
-            link(from, ((MailboxAggregationReplicable.SplitActor) s).getActorRef(), edgeLabel);
+            link(from, ((MailboxAggregationReplicable.SplitActor) s).getActorRef(), edgeLabel + " dep:" + s.getDepth());
         }
     }
 
