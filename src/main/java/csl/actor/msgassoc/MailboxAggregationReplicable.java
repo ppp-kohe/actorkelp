@@ -25,11 +25,28 @@ public class MailboxAggregationReplicable extends MailboxAggregation {
     }
 
     public boolean isOverThreshold() {
-        return queue.size() > threshold && hasMultiplePoints();
+        return size > threshold && hasMultiplePoints();
     }
 
     public int getThreshold() {
         return threshold;
+    }
+
+    private volatile int size;
+
+    @Override
+    public void offer(Message<?> message) {
+        ++size; //queue.size() is slow. the volatile field is used here. it is sufficient just for checking over the threshold
+        super.offer(message);
+    }
+
+    @Override
+    public Message<?> poll() {
+        Message<?> m = super.poll();
+        if (m != null) {
+            --size;
+        }
+        return m;
     }
 
     public boolean hasMultiplePoints() {
@@ -42,9 +59,10 @@ public class MailboxAggregationReplicable extends MailboxAggregation {
     }
 
     public List<Object> splitMessageTableIntoReplicas(ActorAggregationReplicable a1, ActorAggregationReplicable a2) {
-        MailboxAggregationReplicable m1 = a1.getMailboxAsReplicable();
-        MailboxAggregationReplicable m2 = a2.getMailboxAsReplicable();
+        return splitMessageTableIntoReplicas(a1.getMailboxAsReplicable(), a2.getMailboxAsReplicable());
+    }
 
+    public List<Object> splitMessageTableIntoReplicas(MailboxAggregationReplicable m1, MailboxAggregationReplicable m2) {
         int size = tables.length;
         List<Object> splitPoints = new ArrayList<>(size);
         for (int i = 0; i < size; ++i) {

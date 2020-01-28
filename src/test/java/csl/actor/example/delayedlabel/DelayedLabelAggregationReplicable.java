@@ -1,18 +1,16 @@
 package csl.actor.example.delayedlabel;
 
-import csl.actor.*;
+import csl.actor.ActorBehavior;
+import csl.actor.ActorRef;
+import csl.actor.ActorSystem;
+import csl.actor.Message;
 import csl.actor.msgassoc.ActorAggregationReplicable;
-import csl.actor.msgassoc.ActorBehaviorBuilderKeyValue;
-import csl.actor.msgassoc.KeyHistograms;
-import csl.actor.msgassoc.MailboxAggregationReplicable;
 
 import java.io.PrintWriter;
 import java.time.Instant;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Function;
-import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 
 public class DelayedLabelAggregationReplicable extends DelayedLabelManual {
     public static void main(String[] args) {
@@ -214,6 +212,17 @@ public class DelayedLabelAggregationReplicable extends DelayedLabelManual {
         private String toStr(Object o) {
             return o == null ? "null": (o.getClass().getSimpleName() + "@" + ActorToGraph.idStr(o));
         }
+
+        @Override
+        public ActorAggregationReplicable createClone() {
+            ActorAggregationReplicable r = super.createClone();
+            System.err.println("#clone: " + r + " <- " + this);
+            System.err.println("   completed  " +
+                    Integer.toHexString(System.identityHashCode(r.getMailboxAsReplicable().getTable(0).getCompleted())) + " <- " +
+                    Integer.toHexString(System.identityHashCode(this.getMailboxAsReplicable().getTable(0).getCompleted())));
+
+            return r;
+        }
 */
         @Override
         protected void processMessage(Message<?> message) {
@@ -225,17 +234,5 @@ public class DelayedLabelAggregationReplicable extends DelayedLabelManual {
             super.processMessage(message);
         }
 
-        @Override
-        public ActorAggregationReplicable createClone() {
-            ActorAggregationReplicable r = super.createClone();
-            /*
-            System.err.println("#clone: " + r + " <- " + this);
-            System.err.println("   completed  " +
-                    Integer.toHexString(System.identityHashCode(r.getMailboxAsReplicable().getTable(0).getCompleted())) + " <- " +
-                    Integer.toHexString(System.identityHashCode(this.getMailboxAsReplicable().getTable(0).getCompleted())));
-
-             */
-            return r;
-        }
     }
 }

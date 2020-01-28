@@ -85,6 +85,8 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
             a2.state = new StateReplica(self, 1);
             List<Object> splitPoints = self.getMailboxAsReplicable().splitMessageTableIntoReplicas(a1, a2);
 
+            self.nextThreshold(a1, a2);
+
             ActorPlacement placement = self.getPlacement();
 
             StateRouter r = new StateRouter(self,
@@ -98,6 +100,16 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
         public int getDepth() {
             return 0;
         }
+    }
+
+    public void nextThreshold(ActorAggregationReplicable a1, ActorAggregationReplicable a2) {
+        int selfTh = getMailboxAsReplicable().getThreshold();
+        int th = selfTh * 10;
+        if (th < selfTh) { //overflow
+            th = selfTh;
+        }
+        a1.getMailboxAsReplicable().setThreshold(th);
+        a2.getMailboxAsReplicable().setThreshold(th);
     }
 
     public static class StateRouter implements State {
@@ -273,6 +285,7 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
             r2.state = new StateReplica(router, depth + 1);
             List<Object> splitPoints = self.getMailboxAsReplicable().splitMessageTableIntoReplicas(r1, r2);
 
+            self.nextThreshold(r1, r2);
             ActorPlacement placement = self.getPlacement();
 
             self.state = new StateRouterTemporary(self,
