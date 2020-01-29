@@ -8,4 +8,5 @@ public interface ActorSystem extends Executor, AutoCloseable {
     void send(Message<?> message);
 
     Actor resolveActorLocalNamed(ActorRefLocalNamed ref);
+    void close();
 }

@@ -2,10 +2,7 @@ package csl.actor;
 
 import java.io.Serializable;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class ActorSystemDefault implements ActorSystem {
@@ -95,7 +92,11 @@ public class ActorSystemDefault implements ActorSystem {
         }
         if (!target.processMessageLocked()) { //the guard is experimentally inserted for reducing executorService's backlogs
             // it needs to isEmptyMailbox() at (B) for the (A)->(B) & remainingMessages=false case
-            execute(() -> processMessageSubsequently(target));
+            try {
+                execute(() -> processMessageSubsequently(target));
+            } catch (RejectedExecutionException re) {
+                processMessageRejected(target);
+            }
         }
     }
 
@@ -113,10 +114,20 @@ public class ActorSystemDefault implements ActorSystem {
             } finally { //(A)
                 actor.processMessageAfter();
                 if (remainingMessages || !actor.isEmptyMailbox()) { //(B)
-                    execute(() -> processMessageSubsequently(actor));
+                    try {
+                        execute(() -> processMessageSubsequently(actor));
+                    } catch (RejectedExecutionException re) { //shutdown
+                        processMessageRejected(actor);
+                    }
                 }
                 processingCount.decrementAndGet();
             }
+        }
+    }
+
+    protected void processMessageRejected(Actor actor) {
+        if (!actor.isEmptyMailbox()) {
+            System.err.println(String.format("remaining-messages for actor after shut-down: %s", actor));
         }
     }
 
