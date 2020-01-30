@@ -245,10 +245,10 @@ public class ActorToGraph {
         n.tableLabel.add(Arrays.asList("state", s.getClass().getSimpleName()));
         n.tableLabel.add(Arrays.asList("depth", Integer.toString(s.getDepth())));
         if (s instanceof ActorAggregationReplicable.StateDefault) {
-            //
-        } else if (s instanceof ActorAggregationReplicable.StateReplica) {
-            ActorRef r = ((ActorAggregationReplicable.StateReplica) s).getRouter();
-            n.tableLabel.add(Arrays.asList("router", r == null ? "null" : idStr(r)));
+            if (s instanceof ActorAggregationReplicable.StateReplica) {
+                ActorRef r = ((ActorAggregationReplicable.StateReplica) s).getRouter();
+                n.tableLabel.add(Arrays.asList("router", r == null ? "null" : idStr(r)));
+            }
         } else if (s instanceof ActorAggregationReplicable.StateRouterTemporary) {
             ActorAggregationReplicable.StateRouterTemporary tmp = (ActorAggregationReplicable.StateRouterTemporary) s;
             ActorRef r = tmp.getRouter();

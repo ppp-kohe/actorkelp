@@ -2,6 +2,8 @@ package csl.actor.example.msgassoc;
 
 import csl.actor.*;
 
+import java.io.FileWriter;
+import java.io.PrintWriter;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -11,6 +13,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.IntStream;
 
 public class ThreadTest {
     public static void main(String[] args) {
@@ -20,12 +23,16 @@ public class ThreadTest {
     public void run(String... args) {
         int n = Integer.parseInt(args[0].replaceAll("[_,]", ""));
         int ps = Runtime.getRuntime().availableProcessors();
+        for (int i = 2; i <= ps * 2; ++i) {
+            create().runActor(n, ps, i, 2);
+        }
         create().run(n, ps, ps / 2);
         create().run(n, ps, 1);
         create().runActor(n, ps, 1, 1);
         create().runActor(n, ps, ps / 2, 1);
         create().runActor(n, ps, ps / 2, 2);
         create().runActor(n, ps, ps / 2, 4);
+
     }
 
     public ThreadTest create() {
@@ -37,6 +44,7 @@ public class ThreadTest {
     ExecutorService service;
     Instant start;
     AtomicInteger i = new AtomicInteger();
+    volatile boolean finish = false;
 
     public void run(int n, int threads, int readThreads) {
         log(String.format("%s ============ start n=%,d, th=%,d, rth=%,d", getClass().getSimpleName(), n, threads, readThreads));
@@ -51,18 +59,18 @@ public class ThreadTest {
             log(String.format("finish offer %,d: %s", num, Duration.between(start, Instant.now())));
         });
 
+        String title = title("t", threads, readThreads, 0);
         List<ThreadComp> cs = new ArrayList<>();
-        for (int i = 0; i < readThreads; ++i) {
-            ThreadComp tc = createThreadComp(i);
-            cs.add(tc);
+        IntStream.range(0, readThreads).forEach(i -> cs.add(createThreadComp(i, title)));
+
+        for (ThreadComp tc : cs) {
             service.execute(() -> {
-                while (true) {
+                while (!queue.isEmpty() || !finish) {
                     Object msg = queue.poll();
-                    if (msg == null) {
-                        break;
+                    if (msg != null) {
+                        Object o = process(tc, msg);
+                        service.execute(() -> count(tc, o));
                     }
-                    Object o = process(tc, msg);
-                    service.execute(() -> count(tc, o));
                 }
                 log(String.format("finish poll th-%d %,d: %s", tc.th, tc.polls, Duration.between(start, Instant.now())));
             });
@@ -84,19 +92,24 @@ public class ThreadTest {
 
     public void count(ThreadComp self, Object o) {
         if (i.incrementAndGet() >= num) {
-            log(String.format("finish: %,d: %s", i.get(), Duration.between(start, Instant.now())));
+            Duration d = Duration.between(start, Instant.now());
+            log(String.format("finish: %,d: %s", i.get(), d));
             service.shutdownNow();
+            finish = true;
+            save(self.title, d);
         }
     }
-    protected ThreadComp createThreadComp(int th) {
-        return new ThreadComp(th);
+    protected ThreadComp createThreadComp(int th, String title) {
+        return new ThreadComp(th, title);
     }
 
     public static class ThreadComp {
         public int th;
         public int polls;
-        public ThreadComp(int th) {
+        public String title;
+        public ThreadComp(int th, String title) {
             this.th = th;
+            this.title = title;
         }
 
         @Override
@@ -123,7 +136,7 @@ public class ThreadTest {
         };
         start = Instant.now();
 
-        FinishActor fa = new FinishActor(sys, num);
+        FinishActor fa = new FinishActor(sys, num, title("a", threads, readThreads, routerThreads));
 
         List<ReadActor> as = new ArrayList<>();
         for (int r = 0; r < readThreads; ++r) {
@@ -154,15 +167,35 @@ public class ThreadTest {
         return new RouterActor(sys, as);
     }
 
+    String title(String type, int threads, int readThreads, int routerThreads) {
+        return String.format("%s-%s-%s-th%d-cth%d-rt%d",
+                getClass().getSimpleName(), type, Integer.toString(num)
+                        .replaceAll("000000$", "m")
+                        .replaceAll("000$", "k"),
+                threads, readThreads, routerThreads);
+    }
+
+    static String file = "target/msgassoc-time.csv";
+    static void save(String title, Duration d) {
+        long milli = d.getNano() / 1_000_000L;
+        double s = d.getSeconds() + (milli / (double) 1000);
+        try (PrintWriter w = new PrintWriter(new FileWriter(file, true))) {
+            w.println(String.format("%s,%5.2f", title, s));
+        } catch (Exception ex) {
+            ex.printStackTrace();
+        }
+    }
 
     static class FinishActor extends ActorDefault {
         int count;
         int num;
         Instant start;
-        public FinishActor(ActorSystem system, int num) {
+        String title;
+        public FinishActor(ActorSystem system, int num, String title) {
             super(system);
             this.num = num;
             start = Instant.now();
+            this.title = title;
         }
 
         @Override
@@ -175,8 +208,10 @@ public class ThreadTest {
         public void receive(Object c) {
             ++count;
             if (count >= num) {
-                log(String.format("finish: %,d: %s", count, Duration.between(start, Instant.now())));
+                Duration d = Duration.between(start, Instant.now());
+                log(String.format("finish: %,d: %s", count, d));
                 getSystem().close();
+                save(title, d);
             }
         }
     }

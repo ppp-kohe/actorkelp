@@ -28,11 +28,11 @@ public class KeyHistograms {
             this.treeLimit = treeLimit;
         }
 
-        public boolean hasMultiplePoints() {
+        public boolean hasSufficientPoints() {
             if (root == null) {
                 return false;
             } else {
-                return leafSizeNonZero >= 2;
+                return leafSize >= 100;
             }
         }
 

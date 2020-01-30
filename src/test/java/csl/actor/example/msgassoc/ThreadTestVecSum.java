@@ -17,8 +17,8 @@ public class ThreadTestVecSum extends ThreadTest {
     }
 
     @Override
-    protected ThreadComp createThreadComp(int th) {
-        return new ThreadCompVecSum(th);
+    protected ThreadComp createThreadComp(int th, String title) {
+        return new ThreadCompVecSum(th, title);
     }
 
     @Override
@@ -31,8 +31,8 @@ public class ThreadTestVecSum extends ThreadTest {
     static class ThreadCompVecSum extends ThreadComp {
         double[] vec = new double[vecSize];
         Random rand = new Random();
-        public ThreadCompVecSum(int th) {
-            super(th);
+        public ThreadCompVecSum(int th, String title) {
+            super(th, title);
         }
 
         double sum() {

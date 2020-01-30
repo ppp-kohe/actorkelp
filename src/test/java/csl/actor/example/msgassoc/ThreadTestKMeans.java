@@ -48,8 +48,8 @@ public class ThreadTestKMeans extends ThreadTest {
     }
 
     @Override
-    protected ThreadComp createThreadComp(int th) {
-        return new ThreadCompKMeans(th);
+    protected ThreadComp createThreadComp(int th, String title) {
+        return new ThreadCompKMeans(th, title);
     }
 
     @Override
@@ -60,8 +60,8 @@ public class ThreadTestKMeans extends ThreadTest {
 
     static class ThreadCompKMeans extends ThreadComp {
         public double diff;
-        public ThreadCompKMeans(int th) {
-            super(th);
+        public ThreadCompKMeans(int th, String title) {
+            super(th, title);
         }
 
         @Override

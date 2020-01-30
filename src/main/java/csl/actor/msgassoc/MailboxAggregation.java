@@ -110,14 +110,11 @@ public class MailboxAggregation extends MailboxDefault implements Cloneable {
     }
 
     public HistogramSelection selectTable(Object value) {
-        HistogramSelection s = new HistogramSelection();
         int i = 0;
         for (HistogramEntry e : tables) {
             Object position = e.getProcessor().selectFromValue(value);
             if (position != null) {
-                s.entryId = i;
-                s.position = position;
-                return s;
+                return new HistogramSelection(i, position);
             }
             ++i;
         }

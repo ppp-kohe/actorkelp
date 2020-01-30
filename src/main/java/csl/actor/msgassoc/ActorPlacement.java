@@ -7,10 +7,11 @@ import csl.actor.remote.ActorSystemRemote;
 
 import java.io.Serializable;
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Objects;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
@@ -28,9 +29,20 @@ public interface ActorPlacement {
         };
     }
 
+    static int getLocalThreads(ActorSystem system) {
+        if (system instanceof ActorSystemDefault) {
+            return ((ActorSystemDefault) system).getThreads();
+        } else if (system instanceof ActorSystemRemote) {
+            return getLocalThreads(((ActorSystemRemote) system).getLocalSystem());
+        } else {
+            return 1;
+        }
+    }
+
     abstract class PlacemenActor extends ActorDefault implements ActorPlacement {
-        protected List<ActorAddress.ActorAddressRemoteActor> cluster = new ArrayList<>();
+        protected List<AddressListEntry> cluster = new ArrayList<>();
         protected PlacementStrategy strategy;
+        protected volatile int totalThreads;
 
         public static boolean debugLog = System.getProperty("csl.actor.debug", "false").equals("true");
 
@@ -43,11 +55,12 @@ public interface ActorPlacement {
         public PlacemenActor(ActorSystem system, String name) {
             super(system, name);
             strategy = initStrategy();
+            totalThreads = getLocalThreads(system);
         }
 
         protected abstract PlacementStrategy initStrategy();
 
-        public List<ActorAddress.ActorAddressRemoteActor> getCluster() {
+        public List<AddressListEntry> getCluster() {
             return cluster;
         }
 
@@ -70,7 +83,14 @@ public interface ActorPlacement {
             } else {
                 masterActor = master.getActor(getName()); //same name
             }
-            receive(new AddressList(masterActor), null);
+            try {
+                int masterThreads = ResponsiveCalls.send(getSystem(), masterActor, (self, sender) ->
+                        getLocalThreads(self.getSystem())).get(2, TimeUnit.SECONDS);
+                tell(new AddressList(
+                            new AddressListEntry(masterActor, masterThreads)), null);
+            } catch (Exception ex) {
+                throw new RuntimeException(ex);
+            }
         }
 
         public ActorAddress.ActorAddressRemoteActor getSelfAddress() {
@@ -78,6 +98,15 @@ public interface ActorPlacement {
                 return ((ActorSystemRemote) getSystem()).getServerAddress().getActor(getName());
             } else {
                 return null;
+            }
+        }
+
+        public AddressListEntry getSelfEntry() {
+            ActorAddress.ActorAddressRemoteActor a = getSelfAddress();
+            if (a == null) {
+                return null;
+            } else {
+                return new AddressListEntry(a, getLocalThreads(getSystem()));
             }
         }
 
@@ -91,14 +120,21 @@ public interface ActorPlacement {
             ActorAddress.ActorAddressRemoteActor self = getSelfAddress();
 
             boolean added = false;
-            for (ActorAddress.ActorAddressRemoteActor a : list.getCluster()) {
-                if (!cluster.contains(a) && (self == null || !self.equals(a))) {
-                    cluster.add(a);
+            for (AddressListEntry a : list.getCluster()) {
+                int index = cluster.indexOf(a);
+                if ((index == -1 || !cluster.get(index).sameInfo(a)) &&
+                        (self == null || !self.equals(a.getPlacementActor()))) {
+                    if (index == -1) {
+                        cluster.add(a);
+                    } else {
+                        cluster.set(index, a);
+                    }
                     added = true;
                 }
             }
             if (added) {
                 sendClusterToOthers(sender);
+                updateTotalThreads();
             }
         }
 
@@ -108,16 +144,22 @@ public interface ActorPlacement {
                 excluded.add((ActorAddress.ActorAddressRemoteActor) ((ActorRefRemote) sender).getAddress());
             }
             AddressList addressListToOthers = new AddressList(new ArrayList<>(cluster));
-            ActorAddress.ActorAddressRemoteActor selfAddress = getSelfAddress();
-            if (selfAddress != null) {
-                addressListToOthers.getCluster().add(selfAddress);
+            AddressListEntry selfEntry = getSelfEntry();
+            if (selfEntry != null) {
+                addressListToOthers.getCluster().add(selfEntry);
             }
-            for (ActorAddress.ActorAddressRemoteActor r : cluster) {
-                if (!excluded.contains(r)) {
-                    ActorRefRemote.get(getSystem(), r.getActor(getName()))
+            for (AddressListEntry r : cluster) {
+                if (!excluded.contains(r.getPlacementActor())) {
+                    ActorRefRemote.get(getSystem(), r.getPlacementActor())
                             .tell(addressListToOthers, this);
                 }
             }
+        }
+
+        protected void updateTotalThreads() {
+            totalThreads = getLocalThreads(getSystem()) + cluster.stream()
+                    .mapToInt(AddressListEntry::getThreads)
+                    .sum();
         }
 
         @Override
@@ -172,22 +214,69 @@ public interface ActorPlacement {
         public PlacementStrategy getStrategy() {
             return strategy;
         }
+
+        public int getTotalThreads() {
+            return totalThreads;
+        }
     }
 
     class AddressList implements Serializable {
-        protected List<ActorAddress.ActorAddressRemoteActor> cluster;
+        protected List<AddressListEntry> cluster;
 
-        public AddressList(List<ActorAddress.ActorAddressRemoteActor> cluster) {
+        public AddressList(List<AddressListEntry> cluster) {
             this.cluster = cluster;
         }
 
-        public AddressList(ActorAddress.ActorAddressRemoteActor r) {
+        public AddressList(AddressListEntry r) {
             cluster = new ArrayList<>(1);
             cluster.add(r);
         }
 
-        public List<ActorAddress.ActorAddressRemoteActor> getCluster() {
+        public List<AddressListEntry> getCluster() {
             return cluster;
+        }
+    }
+
+    class AddressListEntry implements Serializable {
+        protected ActorAddress.ActorAddressRemoteActor placementActor;
+        protected int threads;
+
+        public AddressListEntry(ActorAddress.ActorAddressRemoteActor placementActor, int threads) {
+            this.placementActor = placementActor;
+            this.threads = threads;
+        }
+
+        public ActorAddress.ActorAddressRemoteActor getPlacementActor() {
+            return placementActor;
+        }
+
+        public int getThreads() {
+            return threads;
+        }
+
+        @Override
+        public String toString() {
+            return "{" +
+                    "placementActor=" + placementActor +
+                    ", threads=" + threads +
+                    '}';
+        }
+
+        public boolean sameInfo(AddressListEntry e) {
+            return threads == e.getThreads();
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            AddressListEntry that = (AddressListEntry) o;
+            return Objects.equals(placementActor, that.placementActor);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(placementActor);
         }
     }
 
@@ -206,6 +295,65 @@ public interface ActorPlacement {
     interface PlacementStrategy {
         ActorAddress.ActorAddressRemoteActor getNextAddress(PlacemenActor pa, Actor a, int retryCount);
         long getNextLocalNumber();
+    }
+
+    class PlacementStrategyRoundRobinThreads implements PlacementStrategy {
+        protected Map<AddressListEntry, Long> count = new HashMap<>();
+        protected long localNum;
+        protected int clusterIndex;
+
+        //it might re-enter the method
+        @Override
+        public synchronized ActorAddress.ActorAddressRemoteActor getNextAddress(PlacemenActor pa, Actor a, int retryCount) {
+            boolean first = true;
+            while (true) {
+                int i = clusterIndex;
+                AddressListEntry e;
+                if (i <= 0) { //local
+                    e = pa.getSelfEntry();
+                } else if (i - 1 < pa.getCluster().size()) {
+                    e = pa.getCluster().get(i - 1);
+                } else {
+                    clusterIndex = 0;
+                    e = pa.getSelfEntry();
+                }
+                long n = count.computeIfAbsent(e, k -> 0L);
+                if (n + 1L < e.getThreads()) {
+                    count.put(e, n + 1L);
+                    return e.getPlacementActor();
+                } else if (first) {
+                    ++clusterIndex;
+                    if (clusterIndex - 1 >= pa.getCluster().size()) {
+                        clusterIndex = 0;
+                    }
+                    first = false;
+                } else {
+                    break;
+                }
+            }
+            return pa.getSelfAddress();
+        }
+
+        @Override
+        public long getNextLocalNumber() {
+            localNum++;
+            return localNum;
+        }
+
+        /** @return implementation field getter */
+        public int getClusterIndex() {
+            return clusterIndex;
+        }
+
+        /** @return implementation field getter */
+        public Map<AddressListEntry, Long> getCount() {
+            return count;
+        }
+
+        /** @return implementation field getter */
+        public long getLocalNum() {
+            return localNum;
+        }
     }
 
     class PlacementStrategyRoundRobin implements PlacementStrategy {
@@ -230,11 +378,11 @@ public interface ActorPlacement {
                 ++count;
                 return null; //local
             } else {
-                List<ActorAddress.ActorAddressRemoteActor> cluster = pa.getCluster();
+                List<AddressListEntry> cluster = pa.getCluster();
                 int clusterIndex = (localLimit == 0 ? (count % cluster.size()) : (count / localLimit));
                 ++count;
                 if (0 <= clusterIndex && clusterIndex < cluster.size()) {
-                    return cluster.get(clusterIndex);
+                    return cluster.get(clusterIndex).getPlacementActor();
                 } else {
                     count = 0;
                     return getNextAddress(pa, a, 0);

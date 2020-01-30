@@ -25,18 +25,31 @@ public class MailboxAggregationReplicable extends MailboxAggregation {
     }
 
     public boolean isOverThreshold() {
-        return size > threshold && hasMultiplePoints();
+        return size > threshold && hasSufficientPoints();
     }
 
     public int getThreshold() {
         return threshold;
     }
 
+
+    @Override
+    public MailboxAggregationReplicable create() {
+        return (MailboxAggregationReplicable) super.create();
+    }
+
     private volatile int size;
+
+    public int size() {
+        return size;
+    }
 
     @Override
     public void offer(Message<?> message) {
         ++size; //queue.size() is slow. the volatile field is used here. it is sufficient just for checking over the threshold
+        if (size < 0) { //overflow
+            size = Integer.MAX_VALUE;
+        }
         super.offer(message);
     }
 
@@ -44,14 +57,14 @@ public class MailboxAggregationReplicable extends MailboxAggregation {
     public Message<?> poll() {
         Message<?> m = super.poll();
         if (m != null) {
-            --size;
+            size = Math.max(size - 1, 0);
         }
         return m;
     }
 
-    public boolean hasMultiplePoints() {
+    public boolean hasSufficientPoints() {
         for (HistogramEntry h : tables) {
-            if (h.getTree().hasMultiplePoints()) {
+            if (h.getTree().hasSufficientPoints()) {
                 return true;
             }
         }
@@ -76,6 +89,18 @@ public class MailboxAggregationReplicable extends MailboxAggregation {
         return splitPoints;
     }
 
+    public Object extractKey(HistogramSelection selection, Message<?> message) {
+        HistogramProcessor p = tables[selection.entryId].getProcessor();
+        return p.extractKeyFromValue(message.getData(), selection.position);
+    }
+
+    @SuppressWarnings("unchecked")
+    public boolean compare(int entryId, Object key, Object point) {
+        HistogramProcessor p = tables[entryId].getProcessor();
+        return ((KeyHistograms.KeyComparator<Object>) p.getKeyComparator()).compare(key, point) < 0;
+    }
+
+    @Deprecated
     public List<SplitTreeRoot> createSplits(ActorRef a1, ActorRef a2, Random random, List<Object> splitPoints, int depth) {
         List<SplitTreeRoot> splits = new ArrayList<>(tables.length);
         int i = 0;
@@ -86,6 +111,7 @@ public class MailboxAggregationReplicable extends MailboxAggregation {
         return splits;
     }
 
+    @Deprecated
     public static class SplitTreeRoot {
         protected Split split;
         protected HistogramProcessor processor;
@@ -133,6 +159,7 @@ public class MailboxAggregationReplicable extends MailboxAggregation {
         }
     }
 
+    @Deprecated
     public interface Split {
         Split updatePoint(Object newSplitPoint, ActorRef left, ActorRef right, HistogramProcessor processor);
         void send(Message<?> message, Object key, HistogramProcessor processor);
@@ -141,6 +168,7 @@ public class MailboxAggregationReplicable extends MailboxAggregation {
         int getDepth();
     }
 
+    @Deprecated
     public static class SplitActor implements Split {
         protected ActorRef actorRef;
         protected int depth;
@@ -176,6 +204,7 @@ public class MailboxAggregationReplicable extends MailboxAggregation {
         }
     }
 
+    @Deprecated
     public static class SplitTree implements Split {
         protected Object point;
         protected Split left;
