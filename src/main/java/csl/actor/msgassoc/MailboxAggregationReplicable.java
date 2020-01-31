@@ -28,6 +28,44 @@ public class MailboxAggregationReplicable extends MailboxAggregation {
         return size > threshold && hasSufficientPoints();
     }
 
+    public MailboxStatus getStatus() {
+        int s = size;
+        int t = threshold;
+        if (s > t) {
+            if (hasSufficientPoints()) {
+                return MailboxStatus.Exceeded;
+            } else {
+                return MailboxStatus.Unready;
+            }
+        } else if (s < t / 2) {
+            return MailboxStatus.Few;
+        } else {
+            return MailboxStatus.Reasonable;
+        }
+    }
+
+    public enum MailboxStatus {
+        Exceeded {
+            @Override
+            public boolean isExcessive() {
+                return true;
+            }
+        },
+        Reasonable,
+        Few {
+            @Override
+            public boolean isExcessive() {
+                return true;
+            }
+        },
+        Unready;
+
+        public boolean isExcessive() {
+            return false;
+        }
+    }
+
+
     public int getThreshold() {
         return threshold;
     }
@@ -98,6 +136,20 @@ public class MailboxAggregationReplicable extends MailboxAggregation {
     public boolean compare(int entryId, Object key, Object point) {
         HistogramProcessor p = tables[entryId].getProcessor();
         return ((KeyHistograms.KeyComparator<Object>) p.getKeyComparator()).compare(key, point) < 0;
+    }
+
+    public void merge(MailboxAggregationReplicable m) {
+        size += m.size;
+        queue.addAll(m.queue); //it does not change target of each message
+        if (size < 0) { //overflow
+            size = Integer.MAX_VALUE;
+        }
+
+        for (int i = 0, l = tables.length; i < l; ++i) {
+            HistogramEntry e1 = tables[i];
+            HistogramEntry e2 = m.tables[i];
+            e1.getTree().merge(e2.getTree());
+        }
     }
 
     @Deprecated

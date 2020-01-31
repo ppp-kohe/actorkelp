@@ -1,6 +1,7 @@
 package csl.actor.msgassoc;
 
 import csl.actor.*;
+import csl.actor.msgassoc.MailboxAggregationReplicable.MailboxStatus;
 
 import java.io.Serializable;
 import java.util.*;
@@ -66,17 +67,17 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
         return maxHeight;
     }
 
+    public static ActorRef place(ActorPlacement placement, ActorAggregationReplicable a) {
+        if (placement != null) {
+            return placement.place(a);
+        } else {
+            a.getSystem().send(new Message.MessageNone(a));
+            return a;
+        }
+    }
+
     public interface State {
         void processMessage(ActorAggregationReplicable self, Message<?> message);
-
-        default ActorRef place(ActorPlacement placement, ActorAggregationReplicable a) {
-            if (placement != null) {
-                return placement.place(a);
-            } else {
-                a.getSystem().send(new Message.MessageNone(a));
-                return a;
-            }
-        }
 
         @Deprecated
         default int getDepth() {
@@ -389,6 +390,51 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
         }
     }
 
+
+    @Deprecated
+    public static class RequestUpdateSplitsPrepare implements Serializable {
+        protected int depth;
+
+        public RequestUpdateSplitsPrepare(int depth) {
+            this.depth = depth;
+        }
+
+        public int getDepth() {
+            return depth;
+        }
+    }
+
+    @Deprecated
+    public static class RequestUpdateSplits implements Serializable {
+        protected List<Object> newSplitPoints;
+        protected ActorRef left;
+        protected ActorRef right;
+        protected int depth;
+
+        public RequestUpdateSplits(List<Object> newSplitPoints, ActorRef left, ActorRef right, int depth) {
+            this.newSplitPoints = newSplitPoints;
+            this.left = left;
+            this.right = right;
+            this.depth = depth;
+        }
+
+        public List<Object> getNewSplitPoints() {
+            return newSplitPoints;
+        }
+
+        public ActorRef getLeft() {
+            return left;
+        }
+
+        public ActorRef getRight() {
+            return right;
+        }
+
+        public int getDepth() {
+            return depth;
+        }
+    }
+
     ///////////////////////////
 
     public static class StateSplitRouter implements State {
@@ -402,24 +448,25 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
 
         @Override
         public void processMessage(ActorAggregationReplicable self, Message<?> message) {
-            if (isOverThreshold(self)) {
-                setNextHeight(self);
-                split = split(split, self, 0);
-                route(self, message);
+            MailboxStatus status;
+            if (isNonParallelRouting() &&
+                    (status = self.getMailboxAsReplicable().getStatus()).isExcessive()) {
 
-                needClearHistory = true;
-                parallelRouting1 = true;
-                parallelRouting2 = true;
-                self.getSystem().execute(() -> {
-                    routeRemaining(self);
-                    parallelRouting1 = false;
-                });
-                self.getSystem().execute(() -> {
-                    routeRemaining(self);
-                    parallelRouting2 = false;
-                });
+                int maxHeight = self.getMaxHeight();
+                MailboxAggregationReplicable m = self.getMailboxAsReplicable();
+                int size = m.size();
+                int threshold = m.getThreshold();
+
+                if (status.equals(MailboxStatus.Exceeded) &&
+                        height < maxHeight) {
+                    setNextHeight(maxHeight, size, threshold);
+                    splitAndParallelRouting(self, m, message);
+                } else if (status.equals(MailboxStatus.Few) &&
+                        split.isHistoryExceeded(threshold / 3)) {
+                    mergeInactive(self, m, message);
+                }
             } else {
-                if (needClearHistory && split != null && !isParallelRouting()) {
+                if (needClearHistory && split != null && isNonParallelRouting()) {
                     needClearHistory = false;
                     split.clearHistory();
                 }
@@ -427,109 +474,44 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
             }
         }
 
-        protected boolean isOverThreshold(ActorAggregationReplicable self) {
-            return (height < self.getMaxHeight() &&
-                    !isParallelRouting() &&
-                    self.getMailboxAsReplicable().isOverThreshold());
+        protected boolean isNonParallelRouting() {
+            return !(parallelRouting1 || parallelRouting2);
         }
 
-        protected boolean isParallelRouting() {
-            return parallelRouting1 || parallelRouting2;
-        }
-
-        protected void setNextHeight(ActorAggregationReplicable self) {
-            int size = self.getMailboxAsReplicable().size();
-            int threshold = self.getMailboxAsReplicable().getThreshold();
-
+        protected void setNextHeight(int maxHeight, int size, int threshold) {
             int h = 1;
             while ((size >>> h) > threshold) {
                 ++h;
             }
 
-            this.height = Math.min(Math.max(height, h), self.getMaxHeight());
+            this.height = Math.min(Math.max(height, h), maxHeight);
         }
 
-        protected Split split(Split split, ActorAggregationReplicable self, int depth) {
-            if (split == null) {
-                return split(self, depth);
-            } else if (depth >= height) {
-                if (split instanceof SplitNode) {
-                    return mergeSplit((SplitNode) split, self, depth);
-                } else {
-                    return split;
-                }
+        protected void splitAndParallelRouting(ActorAggregationReplicable self, MailboxAggregationReplicable m, Message<?> message) {
+            if (split == null) { //root
+                split = SplitLeaf.create(self, 0, height);
             } else {
-                if (split instanceof SplitLeaf) {
-                    ActorRef ref = ((SplitLeaf) split).getActor();
-                    ActorAggregationReplicable local = toLocal(self.getSystem(), ref);
-                    if (local != null) {
-                        return split(local, depth);
-                    } else {
-                        return split;
-                    }
-                } else if (split instanceof SplitNode) {
-                    SplitNode node = (SplitNode) split;
-                    return new SplitNode(node.getSplitPoints(),
-                            split(node.getLeft(), self, depth + 1),
-                            split(node.getRight(), self, depth + 1), node.getDepth());
-                } else {
-                    return split; //never
-                }
+                split = split.split(self.getSystem(), height);
             }
+            route(self, m, message);
+
+            needClearHistory = true;
+            parallelRouting1 = true;
+            parallelRouting2 = true;
+            self.getSystem().execute(() -> {
+                routeRemaining(self);
+                parallelRouting1 = false;
+            });
+            self.getSystem().execute(() -> {
+                routeRemaining(self);
+                parallelRouting2 = false;
+            });
         }
 
-        protected Split split(ActorAggregationReplicable self, int depth) {
-            if (depth >= height) {
-                ActorPlacement placement = self.getPlacement();
-                return new SplitLeaf(place(placement, self), depth);
-            } else {
-                ActorAggregationReplicable a1 = self.createClone();
-                ActorAggregationReplicable a2 = self.createClone();
-                a1.state = new StateLeaf();
-                a2.state = new StateLeaf();
-                List<Object> splitPoints = self.getMailboxAsReplicable().splitMessageTableIntoReplicas(a1, a2);
-                Split s1 = split(a1, depth + 1);
-                Split s2 = split(a2, depth + 1);
-
-                return new SplitNode(splitPoints, s1, s2, depth);
-            }
-        }
-
-        protected ActorAggregationReplicable toLocal(ActorSystem system, ActorRef ref) {
-            if (ref instanceof ActorAggregationReplicable) {
-                return (ActorAggregationReplicable) ref;
-            }
-            try {
-                ActorReplicableSerializableState state = ResponsiveCalls.<ActorReplicableSerializableState>send(system, ref,
-                        CallableMessage.callableMessage((s, sender) ->
-                                ((ActorAggregationReplicable) s).toSerializable(0)))
-                        .get(2, TimeUnit.SECONDS);
-
-                return fromSerializable(system, state, 0);
-            } catch (Exception ex) {
-                ex.printStackTrace();
-                return null;
-            }
-        }
-
-        protected SplitLeaf mergeSplit(SplitNode split, ActorAggregationReplicable self, int depth) {
-            SplitLeaf l = mergeSplitToLeaf(split, split.getLeft(), self, depth);
-            SplitLeaf r = mergeSplitToLeaf(split, split.getRight(), self, depth);
-
-            ActorAggregationReplicable la = toLocal(self.getSystem(), l.getActor());
-            ActorAggregationReplicable ra = toLocal(self.getSystem(), r.getActor());
-
-            //TODO merge la ra
-
-            return new SplitLeaf(la, depth);
-        }
-
-        protected SplitLeaf mergeSplitToLeaf(SplitNode split, Split child, ActorAggregationReplicable self, int depth) {
-            if (child instanceof SplitNode) {
-                return mergeSplit((SplitNode) child, self, depth + 1);
-            } else {
-                return (SplitLeaf) child;
-            }
+        protected void mergeInactive(ActorAggregationReplicable self, MailboxAggregationReplicable m, Message<?> message) {
+            split = split.mergeInactive(self.getSystem());
+            split.clearHistory();
+            route(self, m, message);
         }
 
         protected void routeRemaining(ActorAggregationReplicable self) {
@@ -537,13 +519,12 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
             while (!m.isEmpty()) {
                 Message<?> msg = m.poll();
                 if (msg != null) {
-                    route(self, msg);
+                    route(self, m, msg);
                 }
             }
         }
 
-        protected void route(ActorAggregationReplicable self, Message<?> message) {
-            MailboxAggregationReplicable m = self.getMailboxAsReplicable();
+        protected void route(ActorAggregationReplicable self, MailboxAggregationReplicable m, Message<?> message) {
             MailboxAggregation.HistogramSelection selection = m.selectTable(message.getData());
             Object key = m.extractKey(selection, message);
             split.process(self, this, key, selection, message);
@@ -565,7 +546,16 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
         void process(ActorAggregationReplicable self, StateSplitRouter router,
                      Object key, MailboxAggregation.HistogramSelection selection, Message<?> message);
         int getDepth();
-        default  void clearHistory() {}
+
+        default void clearHistory() {}
+
+        default boolean isHistoryExceeded(int limit) {
+            return false;
+        }
+
+        Split split(ActorSystem system, int height);
+        Split mergeInactive(ActorSystem system);
+        SplitLeaf mergeIntoLeaf(ActorSystem system);
     }
 
     public static class SplitLeaf implements Split {
@@ -590,6 +580,80 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
 
         public ActorRef getActor() {
             return actor;
+        }
+
+        @Override
+        public Split split(ActorSystem system, int height) {
+            if (depth >= height) {
+                return this;
+            }
+            ActorAggregationReplicable self = toLocal(system, getActor());
+            if (self == null) {
+                return this;
+            }
+
+            ActorAggregationReplicable a1 = self.createClone();
+            ActorAggregationReplicable a2 = self.createClone();
+            a1.state = new StateLeaf();
+            a2.state = new StateLeaf();
+            List<Object> splitPoints = self.getMailboxAsReplicable().splitMessageTableIntoReplicas(a1, a2);
+            Split s1 = create(a1, depth + 1, height);
+            Split s2 = create(a2, depth + 1, height);
+
+            return new SplitNode(splitPoints, s1, s2, depth);
+        }
+
+        public static Split create(ActorAggregationReplicable actor, int depth, int height) {
+            if (depth >= height) {
+                return new SplitLeaf(place(actor.getPlacement(), actor), depth);
+            } else {
+                return new SplitLeaf(actor, depth).split(actor.getSystem(), height);
+            }
+        }
+
+        @Override
+        public Split mergeInactive(ActorSystem system) {
+            return this;
+        }
+
+        @Override
+        public SplitLeaf mergeIntoLeaf(ActorSystem system) {
+            return this;
+        }
+
+        public SplitLeaf merge(ActorSystem system, SplitLeaf leaf) {
+            ActorRef a1 = getActor();
+            ActorRef a2 = leaf.getActor();
+
+            if (a1 instanceof ActorAggregationReplicable) { //local
+                if (a2 instanceof ActorAggregationReplicable) {
+                    ((ActorAggregationReplicable) a1).getMailboxAsReplicable()
+                            .merge(((ActorAggregationReplicable) a2).getMailboxAsReplicable());
+                } else { //remote a2
+                    ActorAggregationReplicable l2 = toLocal(system, a2);
+                    if (l2 != null) {
+                        ((ActorAggregationReplicable) a1).getMailboxAsReplicable()
+                                .merge(l2.getMailboxAsReplicable());
+                    }
+                }
+            } else if (a2 instanceof ActorAggregationReplicable) { //remote a1, local a2
+                ActorAggregationReplicable l1 = toLocal(system, a1);
+                if (l1 != null) {
+                    ((ActorAggregationReplicable) a2).getMailboxAsReplicable()
+                            .merge(l1.getMailboxAsReplicable());
+                }
+                actor = a2;
+            } else { //both remote
+                a1.tell(CallableMessage.callableMessageConsumer((self, sender) -> {
+                    ActorAggregationReplicable l2 = toLocal(self.getSystem(), a2);
+                    if (l2 != null) {
+                        ((ActorAggregationReplicable) self).getMailboxAsReplicable()
+                                .merge(l2.getMailboxAsReplicable());
+                    }
+                }), null);
+            }
+
+            return this;
         }
     }
 
@@ -671,17 +735,94 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
 
         @Override
         public void clearHistory() {
-            RoutingHistory top = this.history;
-            RoutingHistory h = top;
-            while (true) {
-                h.clear();
-                h = h.next;
-                if (h == top) {
-                    break;
-                }
-            }
+            this.history.clearAll();
             left.clearHistory();
             right.clearHistory();
+        }
+
+        @Override
+        public boolean isHistoryExceeded(int limit) {
+            return history.isExceeded(limit);
+        }
+
+        @Override
+        public Split split(ActorSystem system, int height) {
+            if (depth < height) {
+                left = left.split(system, height);
+                right = right.split(system, height);
+            }
+            return this;
+        }
+
+        @Override
+        public Split mergeInactive(ActorSystem system) {
+            float r = history.ratio();
+            if (r > 0.8f) { //into left
+                return merge(system, true, left.mergeInactive(system), right.mergeIntoLeaf(system));
+            } else if (r < 0.2f) { //into right
+                return merge(system, false, left.mergeIntoLeaf(system), right.mergeInactive(system));
+            } else {
+                this.left = left.mergeInactive(system);
+                this.right = right.mergeInactive(system);
+                return this;
+            }
+        }
+
+        protected Split merge(ActorSystem system, boolean intoLeft, Split left, Split right) {
+            boolean leftIsLeaf = (left instanceof SplitLeaf);
+            boolean rightIsLeaf = (right instanceof SplitLeaf);
+            if (leftIsLeaf && rightIsLeaf) {
+                //merge leaf
+                if (intoLeft) {
+                    return ((SplitLeaf) left).merge(system, (SplitLeaf) right);
+                } else {
+                    return ((SplitLeaf) right).merge(system, (SplitLeaf) left);
+                }
+            } else {
+                this.left = left;
+                this.right = right;
+                if (leftIsLeaf) {
+                    if (((SplitNode) right).mergeIntoChildLeaf(system, true, (SplitLeaf) left)) {
+                        return right;
+                    } else {
+                        return this;
+                    }
+                } else if (rightIsLeaf) {
+                    if (((SplitNode) left).mergeIntoChildLeaf(system, false, (SplitLeaf) right)) {
+                        return left;
+                    } else {
+                        return this;
+                    }
+                }
+                return this;
+            }
+        }
+
+        public boolean mergeIntoChildLeaf(ActorSystem system, boolean intoLeft, SplitLeaf merged) {
+            Split first = intoLeft ? left : right;
+            Split second = intoLeft ? right : left;
+
+            if (first instanceof SplitLeaf) {
+                ((SplitLeaf) first).merge(system, merged);
+                return true;
+            } else {
+                if (((SplitNode) first).mergeIntoChildLeaf(system, intoLeft, merged)) {
+                    return true;
+                } else {
+                    if (second instanceof SplitLeaf) {
+                        ((SplitLeaf) second).merge(system, merged);
+                        return true;
+                    } else {
+                        return ((SplitNode) second).mergeIntoChildLeaf(system, intoLeft, merged);
+                    }
+                }
+            }
+        }
+
+        @Override
+        public SplitLeaf mergeIntoLeaf(ActorSystem system) {
+            return left.mergeIntoLeaf(system)
+                    .merge(system, right.mergeIntoLeaf(system));
         }
     }
 
@@ -713,6 +854,33 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
 
         public int total() {
             return left + right;
+        }
+
+        public boolean isExceeded(int limit) {
+            RoutingHistory h = this;
+            int total = 0;
+            while (true) {
+                total += h.total();
+                if (total > limit) {
+                    return true;
+                }
+                h = h.next;
+                if (h == this) {
+                    break;
+                }
+            }
+            return false;
+        }
+
+        public void clearAll() {
+            RoutingHistory h = this;
+            while (true) {
+                h.clear();
+                h = h.next;
+                if (h == this) {
+                    break;
+                }
+            }
         }
 
         public RoutingHistory clear() {
@@ -770,45 +938,20 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
         return state;
     }
 
-    public static class RequestUpdateSplitsPrepare implements Serializable {
-        protected int depth;
-
-        public RequestUpdateSplitsPrepare(int depth) {
-            this.depth = depth;
+    public static ActorAggregationReplicable toLocal(ActorSystem system, ActorRef ref) {
+        if (ref instanceof ActorAggregationReplicable) {
+            return (ActorAggregationReplicable) ref;
         }
+        try {
+            ActorReplicableSerializableState state = ResponsiveCalls.<ActorReplicableSerializableState>send(system, ref,
+                    CallableMessage.callableMessage((s, sender) ->
+                            ((ActorAggregationReplicable) s).toSerializable(0)))
+                    .get(2, TimeUnit.SECONDS);
 
-        public int getDepth() {
-            return depth;
-        }
-    }
-
-    public static class RequestUpdateSplits implements Serializable {
-        protected List<Object> newSplitPoints;
-        protected ActorRef left;
-        protected ActorRef right;
-        protected int depth;
-
-        public RequestUpdateSplits(List<Object> newSplitPoints, ActorRef left, ActorRef right, int depth) {
-            this.newSplitPoints = newSplitPoints;
-            this.left = left;
-            this.right = right;
-            this.depth = depth;
-        }
-
-        public List<Object> getNewSplitPoints() {
-            return newSplitPoints;
-        }
-
-        public ActorRef getLeft() {
-            return left;
-        }
-
-        public ActorRef getRight() {
-            return right;
-        }
-
-        public int getDepth() {
-            return depth;
+            return fromSerializable(system, state, 0);
+        } catch (Exception ex) {
+            ex.printStackTrace();
+            return null;
         }
     }
 
