@@ -75,6 +75,9 @@ public class ActorToGraph {
 
         public boolean write() {
             if (!write.get()) {
+                if (!file.getParentFile().exists()) {
+                    file.getParentFile().mkdirs();
+                }
                 try (PrintWriter out = new PrintWriter(file)) {
                     g.write(out);
                 } catch (Exception ex) {
@@ -180,21 +183,35 @@ public class ActorToGraph {
         if (a instanceof ActorAggregation) {
             ActorAggregation ag = (ActorAggregation) a;
             for (int i = 0, size = ag.getMailboxAsAggregation().getTableSize(); i < size; ++i) {
-                KeyHistograms.HistogramTree tree = ag.getMailboxAsAggregation().getTable(i);
-                table.add(Arrays.asList("t" + i + ".leafSize", String.format("%,d", tree.getLeafSize())));
-                table.add(Arrays.asList("t" + i + ".leafSizeNZ", String.format("%,d", tree.getLeafSizeNonZero())));
-                table.add(Arrays.asList("t" + i + ".leafSizeNZR", String.format("%1.2f", tree.getLeafSizeNonZeroRate())));
-                table.add(Arrays.asList("t" + i + ".completed", idStr(tree.getCompleted()) + " (" + tree.getCompleted().size() + ")"));
                 table.add(Arrays.asList("t" + i + ".processor", idStr(ag.getMailboxAsAggregation().getTableEntries().get(i).getProcessor())));
 
-                GraphEdge e = save(n, tree.getRoot());
-                if (e != null) {
-                    e.label = "root";
-                }
+                KeyHistograms.HistogramTree tree = ag.getMailboxAsAggregation().getTable(i);
+                save(n, tree, i);
             }
             if (a instanceof ActorAggregationReplicable) {
                 save(n, (ActorAggregationReplicable) a);
             }
+        }
+        return n;
+    }
+
+    public GraphNode save(GraphNode n, KeyHistograms.HistogramTree tree, int i) {
+        if (n == null) {
+            n = createNode();
+        }
+        List<List<String>> table;
+        if (n.tableLabel == null) {
+            n.tableLabel = new ArrayList<>();
+        }
+        table = n.tableLabel;
+        table.add(Arrays.asList("t" + i + ".leafSize", String.format("%,d", tree.getLeafSize())));
+        table.add(Arrays.asList("t" + i + ".leafSizeNZ", String.format("%,d", tree.getLeafSizeNonZero())));
+        table.add(Arrays.asList("t" + i + ".leafSizeNZR", String.format("%1.2f", tree.getLeafSizeNonZeroRate())));
+        table.add(Arrays.asList("t" + i + ".completed", idStr(tree.getCompleted()) + " (" + tree.getCompleted().size() + ")"));
+
+        GraphEdge e = save(n, tree.getRoot());
+        if (e != null) {
+            e.label = "root";
         }
         return n;
     }
@@ -243,6 +260,7 @@ public class ActorToGraph {
     protected void save(GraphNode n, ActorAggregationReplicable a) {
         ActorAggregationReplicable.State s = a.getState();
         n.tableLabel.add(Arrays.asList("state", s.getClass().getSimpleName()));
+        /*
         n.tableLabel.add(Arrays.asList("depth", Integer.toString(s.getDepth())));
         if (s instanceof ActorAggregationReplicable.StateDefault) {
             if (s instanceof ActorAggregationReplicable.StateReplica) {
@@ -262,6 +280,10 @@ public class ActorToGraph {
             n.tableLabel.add(Arrays.asList("pending", Integer.toString(ru.getPendingSize())));
             n.tableLabel.add(Arrays.asList("forecasts", Long.toString(ru.forecastCount())));
             ((ActorAggregationReplicable.StateRouter) s).getSplits().forEach(c -> saveSplitTree(n, c,  "split"));
+        }*/
+        if (s instanceof ActorAggregationReplicable.StateSplitRouter) {
+            ActorAggregationReplicable.StateSplitRouter r = (ActorAggregationReplicable.StateSplitRouter) s;
+
         }
     }
 
@@ -337,23 +359,20 @@ public class ActorToGraph {
         return n.fromEdge(from);
     }
 
-    protected void saveSplitTree(GraphNode n, MailboxAggregationReplicable.SplitTreeRoot root, String edgeLabel) {
-        MailboxAggregationReplicable.Split s = root.getSplit();
-        saveSplit(n, s, edgeLabel);
-    }
-
-    protected void saveSplit(GraphNode from, MailboxAggregationReplicable.Split s, String edgeLabel) {
-        if (s instanceof MailboxAggregationReplicable.SplitTree) {
-            MailboxAggregationReplicable.SplitTree st = (MailboxAggregationReplicable.SplitTree) s;
+    protected void saveSplit(GraphNode from, ActorAggregationReplicable.Split s, String edgeLabel) {
+        if (s instanceof ActorAggregationReplicable.SplitNode) {
+            ActorAggregationReplicable.SplitNode st = (ActorAggregationReplicable.SplitNode) s;
             GraphNode n = createNode();
-            n.label = "split:" + limitString(Objects.toString(st.getPoint())) + " dep:" + s.getDepth();
+            n.label = "split:" + limitString(Objects.toString(st.getSplitPoints())) + " dep:" + s.getDepth();
 
             saveSplit(n, st.getLeft(), "left");
             saveSplit(n, st.getRight(), "right");
 
+            //TODO history
+
             n.fromEdge(from).label = edgeLabel;
-        } else if (s instanceof MailboxAggregationReplicable.SplitActor) {
-            link(from, ((MailboxAggregationReplicable.SplitActor) s).getActorRef(), edgeLabel + " dep:" + s.getDepth());
+        } else if (s instanceof ActorAggregationReplicable.SplitLeaf) {
+            link(from, ((ActorAggregationReplicable.SplitLeaf) s).getActor(), edgeLabel + " dep:" + s.getDepth());
         }
     }
 

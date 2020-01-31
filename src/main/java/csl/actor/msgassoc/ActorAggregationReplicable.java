@@ -78,11 +78,11 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
 
     public interface State {
         void processMessage(ActorAggregationReplicable self, Message<?> message);
-
+        /*
         @Deprecated
         default int getDepth() {
             return 0;
-        }
+        }*/
     }
 
     public ActorPlacement getPlacement() {
@@ -94,7 +94,7 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
             return null;
         }
     }
-
+    /*
     @Deprecated
     public static class StateDefault implements State {
         @Override
@@ -192,12 +192,12 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
             }
         }
 
-        /** @return implementation field getter */
+        /** @return implementation field getter *//*
         public Random getRandom() {
             return random;
         }
 
-        /** @return implementation field getter */
+        /** @return implementation field getter *//*
         public List<MailboxAggregationReplicable.SplitTreeRoot> getSplits() {
             return splits;
         }
@@ -207,7 +207,7 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
             return depth;
         }
 
-        /** @return implementation field getter */
+        /** @return implementation field getter *//*
         public RouterUpdate getUpdate() {
             return update;
         }
@@ -255,17 +255,17 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
                     .sum();
         }
 
-        /** @return implementation field getter */
+        /** @return implementation field getter *//*
         public TreeMap<Integer, RouterUpdateEntry> getDepthToEntry() {
             return depthToEntry;
         }
 
-        /** @return implementation field getter */
+        /** @return implementation field getter *//*
         public int getMinDepth() {
             return minDepth;
         }
 
-        /** @return implementation field getter */
+        /** @return implementation field getter *//*
         public int getPendingSize() {
             return pendingSize;
         }
@@ -369,22 +369,22 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
                     .collect(Collectors.toList());
         }
 
-        /** @return implementation field getter */
+        /** @return implementation field getter *//*
         public boolean isRequested() {
             return requested;
         }
 
-        /** @return implementation field getter */
+        /** @return implementation field getter *//*
         public ActorRef getRouter() {
             return router;
         }
 
-        /** @return implementation field getter */
+        /** @return implementation field getter *//*
         public ActorRef getLeft() {
             return left;
         }
 
-        /** @return implementation field getter */
+        /** @return implementation field getter *//*
         public ActorRef getRight() {
             return right;
         }
@@ -434,7 +434,7 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
             return depth;
         }
     }
-
+*/
     ///////////////////////////
 
     public static class StateSplitRouter implements State {
@@ -533,6 +533,16 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
         public Random getRandom() {
             return random;
         }
+
+        /** @return implementation field getter */
+        public Split getSplit() {
+            return split;
+        }
+
+        /** @return implementation field getter */
+        public int getHeight() {
+            return height;
+        }
     }
 
     public static class StateLeaf implements State, Serializable {
@@ -627,28 +637,24 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
 
             if (a1 instanceof ActorAggregationReplicable) { //local
                 if (a2 instanceof ActorAggregationReplicable) {
-                    ((ActorAggregationReplicable) a1).getMailboxAsReplicable()
-                            .merge(((ActorAggregationReplicable) a2).getMailboxAsReplicable());
+                    ((ActorAggregationReplicable) a1).merge((ActorAggregationReplicable) a2);
                 } else { //remote a2
                     ActorAggregationReplicable l2 = toLocal(system, a2);
                     if (l2 != null) {
-                        ((ActorAggregationReplicable) a1).getMailboxAsReplicable()
-                                .merge(l2.getMailboxAsReplicable());
+                        ((ActorAggregationReplicable) a1).merge(l2);
                     }
                 }
             } else if (a2 instanceof ActorAggregationReplicable) { //remote a1, local a2
                 ActorAggregationReplicable l1 = toLocal(system, a1);
                 if (l1 != null) {
-                    ((ActorAggregationReplicable) a2).getMailboxAsReplicable()
-                            .merge(l1.getMailboxAsReplicable());
+                    ((ActorAggregationReplicable) a2).merge(l1);
                 }
                 actor = a2;
             } else { //both remote
                 a1.tell(CallableMessage.callableMessageConsumer((self, sender) -> {
                     ActorAggregationReplicable l2 = toLocal(self.getSystem(), a2);
                     if (l2 != null) {
-                        ((ActorAggregationReplicable) self).getMailboxAsReplicable()
-                                .merge(l2.getMailboxAsReplicable());
+                        ((ActorAggregationReplicable) self).merge(l2);
                     }
                 }), null);
             }
@@ -955,6 +961,14 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
         }
     }
 
+    public void merge(ActorAggregationReplicable merged) {
+        getMailboxAsReplicable()
+                .merge(merged.getMailboxAsReplicable());
+        initMerged(merged);
+    }
+
+    protected void initMerged(ActorAggregationReplicable m) { }
+
     public static class PlacemenActorReplicable extends ActorPlacement.PlacemenActor {
         public PlacemenActorReplicable(ActorSystem system, String name) {
             super(system, name);
@@ -1001,11 +1015,12 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
         state.actorType = getClass();
         state.name = String.format("%s#%d", getName(), num);
 
+        /*
         State s = getState();
         state.depth = s.getDepth();
         if (s instanceof StateReplica) { //a replica always has StateReplica
             state.router = ((StateReplica) s).getRouter();
-        }
+        }*/
 
         MailboxAggregationReplicable r = getMailboxAsReplicable();
         r.serializeTo(state);
@@ -1020,11 +1035,12 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
         try {
             ActorAggregationReplicable r = state.actorType.getConstructor(ActorSystem.class, String.class)
                 .newInstance(system, String.format("%s_%d", state.name, num));
-            if (state.router == null) {
+            //if (state.router == null) {
                 r.state = new StateLeaf();
-            } else {
+            /*} else {
                 r.state = new StateReplica(state.router, state.depth);
-            }
+            }*/
+
             r.getMailboxAsReplicable().deserializeFrom(state);
             return r;
         } catch (Exception ex) {

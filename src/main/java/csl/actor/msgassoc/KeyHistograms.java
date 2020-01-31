@@ -80,10 +80,15 @@ public class KeyHistograms {
             }
         }
 
+        @SuppressWarnings("unchecked")
         public Object splitPointAsRightHandSide(HistogramTree splitLeft) {
             //this is the right hand side and the right has least one root node.
             // so the returned point is inclusive for the right split
-            return root.keyStart();
+            if (splitLeft.getLeafSize() == 0) {
+                return root.keyStart();
+            } else {
+                return ((KeyComparator<Object>) comparator).centerPoint(splitLeft.getRoot().keyEnd(), root.keyStart());
+            }
         }
 
         public void merge(HistogramTree tree) {
@@ -225,6 +230,10 @@ public class KeyHistograms {
 
     public interface KeyComparator<KeyType> extends Serializable, Comparator<KeyType> {
         int compare(KeyType key1, KeyType key2);
+
+        default KeyType centerPoint(KeyType leftEnd, KeyType rightStart) {
+            return rightStart;
+        }
     }
 
     public interface HistogramNode extends Serializable {
@@ -735,6 +744,16 @@ public class KeyHistograms {
             return p;
         }
 
+        /** @return implementation field getter */
+        public TreeMap<Comparable<?>, HistogramLeafList> getValues() {
+            return values;
+        }
+
+        /** @return implementation field getter */
+        public int getNextPosition() {
+            return nextPosition;
+        }
+
         public Object[] take(int requiredSize, HistogramTree tree) {
             if (values.size() >= requiredSize) {
                 Object[] res = new Object[requiredSize];
@@ -816,6 +835,19 @@ public class KeyHistograms {
                 ++n;
             }
             return n;
+        }
+
+        public boolean hasRequired(int n) {
+            HistogramLeafCell cell = head;
+            while (n > 0) {
+                if (cell != null) {
+                    --n;
+                    cell = cell.next;
+                } else {
+                    return false;
+                }
+            }
+            return n == 0;
         }
 
         public Iterator<Object> iterator() {

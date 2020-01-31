@@ -151,7 +151,7 @@ public class MailboxAggregationReplicable extends MailboxAggregation {
             e1.getTree().merge(e2.getTree());
         }
     }
-
+/*
     @Deprecated
     public List<SplitTreeRoot> createSplits(ActorRef a1, ActorRef a2, Random random, List<Object> splitPoints, int depth) {
         List<SplitTreeRoot> splits = new ArrayList<>(tables.length);
@@ -179,12 +179,12 @@ public class MailboxAggregationReplicable extends MailboxAggregation {
             return split;
         }
 
-        /** @return implementation field getter */
+        /** @return implementation field getter *//*
         public HistogramProcessor getProcessor() {
             return processor;
         }
 
-        /** @return implementation field getter */
+        /** @return implementation field getter *//*
         public Random getRandom() {
             return random;
         }
@@ -230,7 +230,7 @@ public class MailboxAggregationReplicable extends MailboxAggregation {
             this.depth = depth;
         }
 
-        /** @return implementation field getter */
+        /** @return implementation field getter *//*
         public ActorRef getActorRef() {
             return actorRef;
         }
@@ -274,12 +274,12 @@ public class MailboxAggregationReplicable extends MailboxAggregation {
             return point;
         }
 
-        /** @return implementation field getter */
+        /** @return implementation field getter *//*
         public Split getLeft() {
             return left;
         }
 
-        /** @return implementation field getter */
+        /** @return implementation field getter *//*
         public Split getRight() {
             return right;
         }
@@ -323,7 +323,7 @@ public class MailboxAggregationReplicable extends MailboxAggregation {
             }
         }
     }
-
+*/
     public void serializeTo(ActorAggregationReplicable.ActorReplicableSerializableState state) {
         state.messages = queue.toArray(new Message[0]);
         state.threshold = threshold;

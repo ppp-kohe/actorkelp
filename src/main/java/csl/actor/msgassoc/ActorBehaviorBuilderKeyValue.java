@@ -2,6 +2,9 @@ package csl.actor.msgassoc;
 
 import csl.actor.*;
 
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.math.RoundingMode;
 import java.util.*;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
@@ -235,6 +238,57 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
         public int compare(KeyType key1, KeyType key2) {
             return key1.compareTo(key2);
         }
+
+        @Override
+        public KeyType centerPoint(KeyType leftEnd, KeyType rightStart) {
+            return centerPointPrimitive(leftEnd, rightStart);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    public static <KeyType> KeyType centerPointPrimitive(KeyType leftEnd, KeyType rightStart) {
+        if (leftEnd instanceof Number && rightStart instanceof Number) {
+            if (leftEnd instanceof Long && rightStart instanceof Long) {
+                long r = (Long) rightStart;
+                long l = (Long) leftEnd;
+                return (KeyType) (Long) (Math.max(1L, (r - l) / 2L) + l);
+            } else if (leftEnd instanceof Integer && rightStart instanceof Integer) {
+                int r = (Integer) rightStart;
+                int l = (Integer) leftEnd;
+                return (KeyType) (Integer) (Math.max(1, (r - l) / 2) + l);
+            } else if (leftEnd instanceof Double && rightStart instanceof Double) {
+                double r = (Double) rightStart;
+                double l = (Double) leftEnd;
+                return (KeyType) (Double) (r - (r - l) / 2.0);
+            } else if (leftEnd instanceof Float && rightStart instanceof Float) {
+                float r = (Float) rightStart;
+                float l = (Float) leftEnd;
+                return (KeyType) (Float) (r - (r - l) / 2f);
+            } else if (leftEnd instanceof BigDecimal && rightStart instanceof BigDecimal) {
+                BigDecimal r = (BigDecimal) rightStart;
+                BigDecimal l = (BigDecimal) leftEnd;
+                return (KeyType) r.subtract(r.subtract(l).divide(BigDecimal.valueOf(2), RoundingMode.FLOOR));
+            } else if (leftEnd instanceof BigInteger && rightStart instanceof BigInteger) {
+                BigInteger r = (BigInteger) rightStart;
+                BigInteger l = (BigInteger) leftEnd;
+                return (KeyType) r.subtract(r.subtract(l).divide(BigInteger.valueOf(2)));
+            } else {
+                return rightStart;
+            }
+        } else if (leftEnd instanceof UUID && rightStart instanceof UUID) {
+            UUID r = (UUID) rightStart;
+            UUID l = (UUID) leftEnd;
+            if (r.getMostSignificantBits() == l.getMostSignificantBits()) {
+                return (KeyType) new UUID(r.getMostSignificantBits(),
+                        centerPointPrimitive(l.getLeastSignificantBits(), r.getLeastSignificantBits()));
+            } else {
+                return (KeyType) new UUID(
+                        centerPointPrimitive(l.getMostSignificantBits(), r.getMostSignificantBits()),
+                        centerPointPrimitive(l.getLeastSignificantBits(), r.getLeastSignificantBits()));
+            }
+        } else {
+            return rightStart;
+        }
     }
 
     public static class KeyComparatorDefault<KeyType> implements KeyHistograms.KeyComparator<KeyType> {
@@ -245,6 +299,15 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
                 return ((Comparable<Object>) key1).compareTo(key2);
             } else {
                 return Integer.compare(Objects.hash(key1), Objects.hash(key2));
+            }
+        }
+
+        @Override
+        public KeyType centerPoint(KeyType leftEnd, KeyType rightStart) {
+            if (leftEnd instanceof Comparable<?>) {
+                return centerPointPrimitive(leftEnd, rightStart);
+            } else {
+                return rightStart;
             }
         }
     }
@@ -296,8 +359,7 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
             KeyHistograms.HistogramTree tree = m.getTable(matchKeyEntryId);
             HistogramNodeLeafTwo next = ((HistogramNodeLeafTwo) tree.takeCompleted());
             if (next != null) {
-                next.consume(tree, (BiConsumer<Object,Object>) handler);
-                return true;
+                return next.consume(tree, (BiConsumer<Object,Object>) handler);
             }
             return false;
         }
@@ -372,9 +434,14 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
             return !values1.isEmpty() && !values2.isEmpty();
         }
 
-        public void consume(KeyHistograms.HistogramTree tree, BiConsumer<Object, Object> handler) {
-            afterTake(2, tree);
-            handler.accept(values1.poll(), values2.poll());
+        public boolean consume(KeyHistograms.HistogramTree tree, BiConsumer<Object, Object> handler) {
+            if (completedAfterPut(null)) {  //currently, it can complete before consume, and then it might not be able to consume 2 or more times
+                afterTake(2, tree);
+                handler.accept(values1.poll(), values2.poll());
+                return true;
+            } else {
+                return false;
+            }
         }
 
         public List<KeyHistograms.HistogramLeafList> getValueList() {
@@ -436,8 +503,7 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
             KeyHistograms.HistogramTree tree = m.getTable(matchKeyEntryId);
             HistogramNodeLeafThree next = ((HistogramNodeLeafThree) tree.takeCompleted());
             if (next != null) {
-                next.consume(tree, (TriConsumer<Object,Object,Object>) handler);
-                return true;
+                return next.consume(tree, (TriConsumer<Object,Object,Object>) handler);
             }
             return false;
         }
@@ -514,9 +580,14 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
             return !values1.isEmpty() && !values2.isEmpty() && !values3.isEmpty();
         }
 
-        public void consume(KeyHistograms.HistogramTree tree, TriConsumer<Object, Object, Object> handler) {
-            afterTake(3, tree);
-            handler.accept(values1.poll(), values2.poll(), values3.poll());
+        public boolean consume(KeyHistograms.HistogramTree tree, TriConsumer<Object, Object, Object> handler) {
+            if (completedAfterPut(null)) {
+                afterTake(3, tree);
+                handler.accept(values1.poll(), values2.poll(), values3.poll());
+                return true;
+            } else {
+                return false;
+            }
         }
 
         public List<KeyHistograms.HistogramLeafList> getValueList() {
@@ -583,8 +654,7 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
             KeyHistograms.HistogramTree tree = m.getTable(matchKeyEntryId);
             HistogramNodeLeafFour next = ((HistogramNodeLeafFour) tree.takeCompleted());
             if (next != null) {
-                next.consume(tree, (QuadConsumer<Object,Object,Object,Object>) handler);
-                return true;
+                return next.consume(tree, (QuadConsumer<Object,Object,Object,Object>) handler);
             }
             return false;
         }
@@ -669,9 +739,14 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
             return !values1.isEmpty() && !values2.isEmpty() && !values3.isEmpty() && !values4.isEmpty();
         }
 
-        public void consume(KeyHistograms.HistogramTree tree, QuadConsumer<Object, Object, Object, Object> handler) {
-            afterTake(4, tree);
-            handler.accept(values1.poll(), values2.poll(), values3.poll(), values4.poll());
+        public boolean consume(KeyHistograms.HistogramTree tree, QuadConsumer<Object, Object, Object, Object> handler) {
+            if (completedAfterPut(null)) {
+                afterTake(4, tree);
+                handler.accept(values1.poll(), values2.poll(), values3.poll(), values4.poll());
+                return true;
+            } else {
+                return false;
+            }
         }
 
         public List<KeyHistograms.HistogramLeafList> getValueList() {
@@ -726,8 +801,7 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
             KeyHistograms.HistogramTree tree = m.getTable(matchKeyEntryId);
             HistogramNodeLeafList next = (HistogramNodeLeafList) tree.takeCompleted();
             if (next != null) {
-                next.consume(putRequiredSize, tree, (BiConsumer) handler);
-                return true;
+                return next.consume(putRequiredSize, tree, (BiConsumer) handler);
             }
             return false;
         }
@@ -776,16 +850,25 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
 
         @Override
         protected boolean completedAfterPut(KeyHistograms.HistogramPutContext context) {
-            return context.putRequiredSize >= size;
+            return completed(context.putRequiredSize);
         }
 
-        public void consume(int requiredSize, KeyHistograms.HistogramTree tree, BiConsumer<Object,List<Object>> handler) {
-            List<Object> vs = new ArrayList<>(requiredSize);
-            for (int i = 0; i < requiredSize; ++i) {
-                vs.add(values.poll());
+        protected boolean completed(int r) {
+            return r >= size;
+        }
+
+        public boolean consume(int requiredSize, KeyHistograms.HistogramTree tree, BiConsumer<Object,List<Object>> handler) {
+            if (completed(requiredSize)) {
+                List<Object> vs = new ArrayList<>(requiredSize);
+                for (int i = 0; i < requiredSize; ++i) {
+                    vs.add(values.poll());
+                }
+                afterTake(requiredSize, tree);
+                handler.accept(key, vs);
+                return true;
+            } else {
+                return false;
             }
-            afterTake(requiredSize, tree);
-            handler.accept(key, vs);
         }
 
         public List<KeyHistograms.HistogramLeafList> getValueList() {
