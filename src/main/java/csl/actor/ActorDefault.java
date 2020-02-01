@@ -3,6 +3,10 @@ package csl.actor;
 public abstract class ActorDefault extends Actor {
     protected ActorBehavior behavior;
 
+    public ActorDefault(ActorSystem system, String name, Mailbox mailbox, ActorBehavior behavior) {
+        super(system, name, mailbox);
+        this.behavior = behavior;
+    }
 
     public ActorDefault(ActorSystem system, String name, ActorBehavior behavior) {
         super(system, name);

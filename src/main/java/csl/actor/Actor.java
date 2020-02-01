@@ -13,12 +13,17 @@ public abstract class Actor implements ActorRef {
     }
 
     public Actor(ActorSystem system, String name) {
+        this(system, name, null);
+        initMailbox();
+    }
+
+    public Actor(ActorSystem system, String name, Mailbox mailbox) {
         this.system = system;
         this.name = name;
         if (system != null && name != null) {
             system.register(this);
         }
-        initMailbox();
+        this.mailbox = mailbox;
     }
 
     public String getName() {

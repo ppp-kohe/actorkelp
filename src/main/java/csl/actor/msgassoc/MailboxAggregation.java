@@ -7,7 +7,16 @@ import java.util.List;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
 public class MailboxAggregation extends MailboxDefault implements Cloneable {
+    protected int treeSize;
     protected HistogramEntry[] tables;
+
+    public MailboxAggregation() {
+        this(32);
+    }
+
+    public MailboxAggregation(int treeSize) {
+        this.treeSize = treeSize;
+    }
 
     public MailboxAggregation create() {
         try {
@@ -35,11 +44,6 @@ public class MailboxAggregation extends MailboxDefault implements Cloneable {
     public static class HistogramEntry {
         protected HistogramProcessor processor;
         protected KeyHistograms.HistogramTree tree;
-
-        public HistogramEntry(HistogramProcessor p) {
-            this.processor = p;
-            tree = new KeyHistograms.HistogramTree(p.getKeyComparator());
-        }
 
         public HistogramEntry(HistogramProcessor p, int treeLimit) {
             this.processor = p;
@@ -71,8 +75,12 @@ public class MailboxAggregation extends MailboxDefault implements Cloneable {
         int size = processors.size();
         tables = new HistogramEntry[size];
         for (int i = 0; i < size; ++i) {
-            tables[i] = new HistogramEntry(processors.get(i));
+            tables[i] = new HistogramEntry(processors.get(i), getInitTreeSize(i));
         }
+    }
+
+    protected int getInitTreeSize(int i) {
+        return treeSize;
     }
 
     public boolean processTable() {

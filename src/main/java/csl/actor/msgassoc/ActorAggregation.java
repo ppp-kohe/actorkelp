@@ -3,6 +3,10 @@ package csl.actor.msgassoc;
 import csl.actor.*;
 
 public abstract class ActorAggregation extends ActorDefault {
+    public ActorAggregation(ActorSystem system, String name, MailboxAggregation mailbox, ActorBehavior behavior) {
+        super(system, name, mailbox, behavior);
+    }
+
     public ActorAggregation(ActorSystem system, String name, ActorBehavior behavior) {
         super(system, name, behavior);
     }

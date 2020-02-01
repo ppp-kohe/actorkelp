@@ -155,6 +155,14 @@ public class KeyHistograms {
             return root;
         }
 
+        public long getTreeSize() {
+            return root == null ? 0 : root.size();
+        }
+
+        public int getTreeHeight() {
+            return root == null ? 0 : root.height();
+        }
+
         /** @return implementation field getter */
         public KeyComparator<?> getComparator() {
             return comparator;
@@ -712,8 +720,6 @@ public class KeyHistograms {
                 return false;
             }
         }
-
-
     }
 
     public static class HistogramNodeLeafMap extends HistogramNodeLeaf {

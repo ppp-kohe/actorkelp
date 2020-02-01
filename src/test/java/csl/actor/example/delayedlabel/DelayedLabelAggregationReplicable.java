@@ -5,6 +5,7 @@ import csl.actor.ActorRef;
 import csl.actor.ActorSystem;
 import csl.actor.Message;
 import csl.actor.msgassoc.ActorAggregationReplicable;
+import csl.actor.msgassoc.ConfigAggregationReplicable;
 
 import java.io.PrintWriter;
 import java.time.Instant;
@@ -17,19 +18,10 @@ public class DelayedLabelAggregationReplicable extends DelayedLabelManual {
         new DelayedLabelAggregationReplicable().run(args);
     }
 
-    static int threshold = 1000;
-
-    @Override
-    public void run(String... args) {
-        if (args.length >= 2) {
-            threshold = Integer.parseInt(args[1].replaceAll("_", ""));
-        }
-        super.run(args);
-    }
-
     @Override
     public ActorRef learnerActor(ActorSystem system, PrintWriter out, ActorRef resultActor, int numInstances) {
         root = new LernerActorAggregationReplicable(system, out, resultActor, numInstances);
+        root.log(root.getConfig().toString());
         return root;
     }
 
@@ -39,10 +31,6 @@ public class DelayedLabelAggregationReplicable extends DelayedLabelManual {
     }
 
     static LernerActorAggregationReplicable root;
-
-    public static void log(String msg, Object... args) {
-        System.err.println("\033[38;5;161m" + Instant.now() + ": " + String.format(msg, args) + "\033[0m");
-    }
 
     static List<LernerActorAggregationReplicable> processing = new ArrayList<>();
 
@@ -64,10 +52,8 @@ public class DelayedLabelAggregationReplicable extends DelayedLabelManual {
         DelayedLabelAggregation.LearnerAggregationSupport support;
 
         public LernerActorAggregationReplicable(ActorSystem system, String name, PrintWriter out, ActorRef resultActor, int numInstances) {
-            super(system, name);
+            super(system, name, ConfigAggregationReplicable.readConfig("", System.getProperties()));
             support = new DelayedLabelAggregation.LearnerAggregationSupport(this, out, resultActor, numInstances);
-            System.err.println(String.format("#threshold: %,d", threshold));
-            getMailboxAsReplicable().setThreshold(threshold);
         }
 
         public LernerActorAggregationReplicable(ActorSystem system, PrintWriter out, ActorRef resultActor, int numInstances) {
@@ -102,14 +88,14 @@ public class DelayedLabelAggregationReplicable extends DelayedLabelManual {
 
         @Override
         protected void initClone(ActorAggregationReplicable original) {
-            System.err.println("#clone");
+            log("clone");
             rec = new AtomicInteger();
             support = support.createClone(this);
         }
 
         @Override
         protected void initMerged(ActorAggregationReplicable m) {
-            System.err.println("#merge");
+            log("merge");
         }
 
         /*        @Override
