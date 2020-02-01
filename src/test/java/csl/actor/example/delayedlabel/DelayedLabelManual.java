@@ -12,6 +12,7 @@ import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -50,7 +51,7 @@ public class DelayedLabelManual {
         Instant startTime = Instant.now();
 
         ActorSystem system = new ActorSystemDefault();
-        ResultActor resultActor = new ResultActor(system, out, startTime, numInstances);
+        ResultActor resultActor = resultActor(system, out, startTime, numInstances);
         ActorRef learnerActor = learnerActor(system, out, resultActor, numInstances);
         resultActor.setLearner(learnerActor);
 
@@ -124,6 +125,10 @@ public class DelayedLabelManual {
         return new LearnerActor(system, resultActor);
     }
 
+    public ResultActor resultActor(ActorSystem system, PrintWriter out, Instant startTime, int numInstances) {
+        return new ResultActor(system, out, startTime, numInstances);
+    }
+
     public static class ResultActor extends ActorDefault {
         Instant startTime;
         long numInstances;
@@ -132,6 +137,7 @@ public class DelayedLabelManual {
         Instant lastTime;
         ScheduledExecutorService exe;
         ActorRef learner;
+        ScheduledFuture<?> checker;
 
         public ResultActor(ActorSystem system, PrintWriter out, Instant startTime, int numInstances) {
             super(system);
@@ -140,7 +146,7 @@ public class DelayedLabelManual {
             this.out = out;
             this.lastTime = startTime;
             exe = Executors.newSingleThreadScheduledExecutor();
-            exe.scheduleAtFixedRate(this::check, 1, 1, TimeUnit.SECONDS);
+            checker = exe.scheduleAtFixedRate(this::check, 1, 1, TimeUnit.SECONDS);
         }
 
         void check() {
@@ -149,6 +155,7 @@ public class DelayedLabelManual {
                 out.println(String.format("#not yet finished: %,d %s since-start:%s",
                         finishedInstances, d, Duration.between(startTime, Instant.now())));
                 learner.tell(new Finish(finishedInstances), this);
+                checker.cancel(false);
                 exe.shutdown();
             }
         }
@@ -171,6 +178,8 @@ public class DelayedLabelManual {
                 Duration d = Duration.between(startTime, Instant.now());
                 out.println(String.format("#finish: %,d %s", finishedInstances, d));
                 learner.tell(new Finish(finishedInstances), this);
+                checker.cancel(true);
+                exe.shutdown();
                 //finish
                 //((ActorSystemDefault) getSystem()).stop();
             }

@@ -11,6 +11,7 @@ import java.util.stream.Collectors;
 
 public class MailboxAggregationReplicable extends MailboxAggregation {
     protected int threshold;
+    private volatile int size;
 
     public MailboxAggregationReplicable() {
         this(1000);
@@ -73,10 +74,11 @@ public class MailboxAggregationReplicable extends MailboxAggregation {
 
     @Override
     public MailboxAggregationReplicable create() {
-        return (MailboxAggregationReplicable) super.create();
+        MailboxAggregationReplicable r = (MailboxAggregationReplicable) super.create();
+        r.size = 0;
+        return r;
     }
 
-    private volatile int size;
 
     public int size() {
         return size;

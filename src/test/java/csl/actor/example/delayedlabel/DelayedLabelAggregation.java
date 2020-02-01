@@ -90,8 +90,12 @@ public class DelayedLabelAggregation extends DelayedLabelManual {
         }
 
         public void processMessageBefore(Message<?> message) {
-            ++count;
             pruneCount.addAndGet(self.getMailboxAsAggregation().prune(32, 0.5));
+            process();
+        }
+
+        public void process() {
+            ++count;
             if (debug && ((count % (numInstances / 10)) == 0 || count == numInstances)) {
                 save(Long.toString(count), false);
             }
@@ -104,7 +108,7 @@ public class DelayedLabelAggregation extends DelayedLabelManual {
             }
             String sn = self.getClass().getSimpleName();
             File file = new File(dir, String.format("delayed-%s-%s.dot", sn, count));
-            root.tell(CallableMessage.callableMessageConsumer((self, ref) -> {
+            ResponsiveCalls.send(self.getSystem(), root, (self, ref) -> {
                 if (new ActorToGraph(self.getSystem(), file, self).save(self).finish()) {
                     if (finish) {
                         System.exit(0);
@@ -116,7 +120,8 @@ public class DelayedLabelAggregation extends DelayedLabelManual {
                         });
                     }
                 }
-            }), null);
+                return null;
+            }, (t) -> {});
         }
 
         public void finish(Finish f) {

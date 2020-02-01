@@ -7,7 +7,7 @@ import java.io.Serializable;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.stream.Collectors;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public abstract class ActorAggregationReplicable extends ActorAggregation implements Cloneable {
     protected State state;
@@ -460,17 +460,52 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
                 if (status.equals(MailboxStatus.Exceeded) &&
                         height < maxHeight) {
                     setNextHeight(maxHeight, size, threshold);
+                    System.err.println(String.format("!!! size=%,d thr=%,d h=%,d maxH=%,d  status=%s leaf=%,d sizeInTbl=%,d",
+                            size, threshold, height, maxHeight, status,
+                            self.getMailboxAsReplicable().getTable(0).getLeafSize(),
+                            self.getMailboxAsReplicable().getTable(0).getRoot().size()));
+
                     splitAndParallelRouting(self, m, message);
-                } else if (status.equals(MailboxStatus.Few) &&
+                } else if (split != null && status.equals(MailboxStatus.Few) &&
                         split.isHistoryExceeded(threshold / 3)) {
                     mergeInactive(self, m, message);
+                } else {
+                    route(self, m, message);
                 }
             } else {
-                if (needClearHistory && split != null && isNonParallelRouting()) {
+                if (needClearHistory) {
                     needClearHistory = false;
-                    split.clearHistory();
+                    if (split != null && isNonParallelRouting()) {
+                        split.clearHistory();
+                        System.err.println("!!! after boost");
+                        print(self.getSystem(), split);
+                    }
                 }
-                self.getBehavior().process(self, message);
+                route(self, self.getMailboxAsReplicable(), message);
+            }
+        }
+
+        private void print(ActorSystem system, Split s) {
+            String idt = "  ";
+            for (int i = 0; i < s.getDepth(); ++i) {
+                idt += " - ";
+            }
+            if (s instanceof SplitNode) {
+                SplitNode sn = (SplitNode) s;
+                System.err.println(String.format("%snode: %s ", idt, sn.getSplitPoints()));
+                print(system, sn.getLeft());
+                print(system, sn.getRight());
+            } else if (s instanceof SplitLeaf) {
+                ActorAggregationReplicable r = toLocal(system, ((SplitLeaf) s).getActor());
+                if (r == null) {
+                    System.err.println(String.format("%sleaf: ??? %s", idt, ((SplitLeaf) s).getActor()));
+                } else {
+                    KeyHistograms.HistogramNode root = r.getMailboxAsReplicable().getTable(0).getRoot();
+                    System.err.println(String.format("%sleaf: size=%,d leaf=%,d sizeInTbl=%,d", idt,
+                            r.getMailboxAsReplicable().size(),
+                            r.getMailboxAsReplicable().getTable(0).getLeafSize(),
+                            (root == null ? 0 : root.size())));
+                }
             }
         }
 
@@ -488,28 +523,38 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
         }
 
         protected void splitAndParallelRouting(ActorAggregationReplicable self, MailboxAggregationReplicable m, Message<?> message) {
+            //TODO special considering height=0
             if (split == null) { //root
                 split = SplitLeaf.create(self, 0, height);
             } else {
                 split = split.split(self.getSystem(), height);
             }
+            print(self.getSystem(), split);
             route(self, m, message);
 
             needClearHistory = true;
-            parallelRouting1 = true;
-            parallelRouting2 = true;
-            self.getSystem().execute(() -> {
-                routeRemaining(self);
-                parallelRouting1 = false;
-            });
-            self.getSystem().execute(() -> {
-                routeRemaining(self);
-                parallelRouting2 = false;
-            });
+            if (split != null) {
+                parallelRouting1 = true;
+                parallelRouting2 = true;
+                self.getSystem().execute(() -> {
+                    try {
+                        routeRemaining(self);
+                    } finally {
+                        parallelRouting1 = false;
+                    }
+                });
+                self.getSystem().execute(() -> {
+                    try {
+                        routeRemaining(self);
+                    } finally {
+                        parallelRouting2 = false;
+                    }
+                });
+            }
         }
 
         protected void mergeInactive(ActorAggregationReplicable self, MailboxAggregationReplicable m, Message<?> message) {
-            split = split.mergeInactive(self.getSystem());
+            //TODO split = split.mergeInactive(self.getSystem());
             split.clearHistory();
             route(self, m, message);
         }
@@ -517,7 +562,7 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
         protected void routeRemaining(ActorAggregationReplicable self) {
             MailboxAggregationReplicable m = self.getMailboxAsReplicable();
             while (!m.isEmpty()) {
-                Message<?> msg = m.poll();
+                Message<?> msg = self.pollForParallelRouting();
                 if (msg != null) {
                     route(self, m, msg);
                 }
@@ -525,9 +570,13 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
         }
 
         protected void route(ActorAggregationReplicable self, MailboxAggregationReplicable m, Message<?> message) {
-            MailboxAggregation.HistogramSelection selection = m.selectTable(message.getData());
-            Object key = m.extractKey(selection, message);
-            split.process(self, this, key, selection, message);
+            if (split == null) {
+                self.getBehavior().process(self, message);
+            } else {
+                MailboxAggregation.HistogramSelection selection = m.selectTable(message.getData());
+                Object key = m.extractKey(selection, message);
+                split.process(self, this, key, selection, message);
+            }
         }
 
         public Random getRandom() {
@@ -692,9 +741,9 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
 
         protected void countHistory(boolean left, ActorAggregationReplicable self) {
             if (left) {
-                history.left++;
+                history.left.getAndIncrement();
             } else {
-                history.right++;
+                history.right.getAndIncrement();
             }
             if (history.total() > self.getMailboxAsReplicable().getThreshold() / 10) {
                 history = history.next.clear();
@@ -706,7 +755,17 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
             if (selection == null) {
                 return router.getRandom().nextBoolean();
             } else {
-                return self.getMailboxAsReplicable().compare(selection.entryId, key, splitPoints.get(selection.entryId));
+                Object point = splitPoints.get(selection.entryId);
+                if (point == null) { //the first arriving key becomes splitPoint
+                    synchronized (this) {
+                        point = splitPoints.get(selection.entryId);
+                        if (point == null) {
+                            splitPoints.set(selection.entryId, key);
+                            point = key;
+                        }
+                    }
+                }
+                return self.getMailboxAsReplicable().compare(selection.entryId, key, point);
             }
         }
 
@@ -726,6 +785,11 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
         /** @return implementation field getter */
         public List<Object> getSplitPoints() {
             return splitPoints;
+        }
+
+        /** @return implementation field getter */
+        public RoutingHistory getHistory() {
+            return history;
         }
 
         public RoutingHistory initRoutingHistory() {
@@ -762,7 +826,7 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
 
         @Override
         public Split mergeInactive(ActorSystem system) {
-            float r = history.ratio();
+            float r = history.ratioAll();
             if (r > 0.8f) { //into left
                 return merge(system, true, left.mergeInactive(system), right.mergeIntoLeaf(system));
             } else if (r < 0.2f) { //into right
@@ -834,17 +898,17 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
 
 
     public static class RoutingHistory {
-        public int left;
-        public int right;
+        public AtomicInteger left = new AtomicInteger();
+        public AtomicInteger right = new AtomicInteger();
         public RoutingHistory next;
 
-        public float ratio() {
+        public float ratioAll() {
             RoutingHistory h = this;
             long l = 0;
             long r = 0;
             while (true) {
-                l += h.left;
-                r += h.right;
+                l += h.left.get();
+                r += h.right.get();
                 h = h.next;
                 if (h == this) {
                     break;
@@ -858,8 +922,17 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
             }
         }
 
+        public float ratio() {
+            long t = total();
+            if (t == 0) {
+                return 0.5f;
+            } else {
+                return ((float) left.get()) / (float) (t);
+            }
+        }
+
         public int total() {
-            return left + right;
+            return left.get() + right.get();
         }
 
         public boolean isExceeded(int limit) {
@@ -890,9 +963,22 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
         }
 
         public RoutingHistory clear() {
-            left = 0;
-            right = 0;
+            left.set(0);
+            right.set(0);
             return this;
+        }
+
+        public List<RoutingHistory> toList() {
+            List<RoutingHistory> hs = new ArrayList<>();
+            RoutingHistory h = this;
+            while (true) {
+                hs.add(h);
+                h = h.next;
+                if (h == this) {
+                    break;
+                }
+            }
+            return hs;
         }
     }
 
@@ -921,6 +1007,10 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
 
     public static <T> CallableMessageRouting<T> callableRouting(CallableMessageRouting<T> t) {
         return t;
+    }
+
+    public Message<?> pollForParallelRouting() {
+        return mailbox.poll();
     }
 
     public ActorAggregationReplicable createClone() {

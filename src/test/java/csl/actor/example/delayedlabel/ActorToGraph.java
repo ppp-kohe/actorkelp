@@ -9,8 +9,6 @@ import java.io.File;
 import java.io.PrintWriter;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
@@ -283,7 +281,8 @@ public class ActorToGraph {
         }*/
         if (s instanceof ActorAggregationReplicable.StateSplitRouter) {
             ActorAggregationReplicable.StateSplitRouter r = (ActorAggregationReplicable.StateSplitRouter) s;
-
+            n.tableLabel.add(Arrays.asList("state.height", Integer.toString(r.getHeight())));
+            saveSplit(n, r.getSplit(), "root");
         }
     }
 
@@ -360,15 +359,26 @@ public class ActorToGraph {
     }
 
     protected void saveSplit(GraphNode from, ActorAggregationReplicable.Split s, String edgeLabel) {
-        if (s instanceof ActorAggregationReplicable.SplitNode) {
+        if (s == null) {
+            GraphNode n = createNode();
+            n.label = "null";
+            n.fromEdge(from);
+        } else if (s instanceof ActorAggregationReplicable.SplitNode) {
             ActorAggregationReplicable.SplitNode st = (ActorAggregationReplicable.SplitNode) s;
             GraphNode n = createNode();
-            n.label = "split:" + limitString(Objects.toString(st.getSplitPoints())) + " dep:" + s.getDepth();
+            n.tableLabel = new ArrayList<>();
+            n.tableLabel.add(Arrays.asList("split", limitString(Objects.toString(st.getSplitPoints()))));
+            n.tableLabel.add(Arrays.asList("depth", Integer.toString(s.getDepth())));
+            n.tableLabel.add(Arrays.asList("ratioAll", String.format("%4.2f", st.getHistory().ratioAll())));
+
+            int hi = 0;
+            for (ActorAggregationReplicable.RoutingHistory h : st.getHistory().toList()) {
+                n.tableLabel.add(Arrays.asList("hist" + hi, String.format("%4.2f", h.ratio()), String.format("%,d", h.left.get()), String.format("%,d", h.right.get())));
+                ++hi;
+            }
 
             saveSplit(n, st.getLeft(), "left");
             saveSplit(n, st.getRight(), "right");
-
-            //TODO history
 
             n.fromEdge(from).label = edgeLabel;
         } else if (s instanceof ActorAggregationReplicable.SplitLeaf) {

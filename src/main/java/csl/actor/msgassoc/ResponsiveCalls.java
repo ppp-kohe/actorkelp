@@ -79,7 +79,11 @@ public class ResponsiveCalls {
      * @return a future of the result
      */
     public static <T> Future<T> send(ActorSystem system, ActorRef target, Object msg) {
-        return new ResponsiveSenderActor<T>(system).send(target, msg);
+        return new ResponsiveSenderActorCompletableFuture<T>(system).send(target, msg);
+    }
+
+    public static <T> Future<T> sendCallable(ActorSystem system, ActorRef target, CallableMessage<T> msg) {
+        return send(system, target, msg);
     }
 
     /**
@@ -115,21 +119,63 @@ public class ResponsiveCalls {
         return send(system, target, CALLABLE_NAME, task);
     }
 
+    public static <T> void send(ActorSystem system, ActorRef target, CallableMessage<T> task, ResponsiveCompletable<T> resultHandler) {
+        target.tell(task, new ResponsiveSenderActor<T>(system, resultHandler));
+    }
+
     public static void initCallableTarget(ActorSystem system) {
         new ResponsiveCallableActor(system);
     }
 
-    public static class ResponsiveSenderActor<T> extends ActorDefault {
-        protected CompletableFuture<T> resultHolder;
+    @FunctionalInterface
+    public interface ResponsiveCompletable<T> {
+        void complete(T t);
+        default void completeExceptionally(Throwable ex) {
+            ex.printStackTrace();
+        }
+    }
 
-        public ResponsiveSenderActor(ActorSystem system) {
-            super(system, nextId());
-            resultHolder = new CompletableFuture<>();
+    public static class ResponsiveCompletableFuture<T> implements ResponsiveCompletable<T> {
+        protected CompletableFuture<T> future;
+
+        public ResponsiveCompletableFuture(CompletableFuture<T> future) {
+            this.future = future;
         }
 
-        public Future<T> send(ActorRef target, Object data) {
-            target.tell(data, this);
-            return resultHolder;
+        public ResponsiveCompletableFuture() {
+            this(new CompletableFuture<>());
+        }
+
+        @Override
+        public void complete(T t) {
+            future.complete(t);
+        }
+
+        @Override
+        public void completeExceptionally(Throwable ex) {
+            future.completeExceptionally(ex);
+        }
+
+        @Override
+        public String toString() {
+            return "" + future;
+        }
+
+        public CompletableFuture<T> getFuture() {
+            return future;
+        }
+    }
+
+    public static class ResponsiveSenderActor<T> extends ActorDefault {
+        protected ResponsiveCompletable<T> resultHolder;
+
+        public ResponsiveSenderActor(ActorSystem system, ResponsiveCompletable<T> resultHolder) {
+            super(system, nextId());
+            this.resultHolder = resultHolder;
+        }
+
+        public ResponsiveSenderActor(ActorSystem system) {
+            this(system, new ResponsiveCompletableFuture<>());
         }
 
         @Override
@@ -158,8 +204,23 @@ public class ResponsiveCalls {
             resultHolder.completeExceptionally(new DeadLetterException(l));
         }
 
-        public CompletableFuture<T> getResultHolder() {
+        public ResponsiveCompletable<T> getResultHolder() {
             return resultHolder;
+        }
+    }
+
+    public static class ResponsiveSenderActorCompletableFuture<T> extends ResponsiveSenderActor<T> {
+        public ResponsiveSenderActorCompletableFuture(ActorSystem system) {
+            super(system, new ResponsiveCompletableFuture<>());
+        }
+
+        public ResponsiveSenderActorCompletableFuture(ActorSystem system, CompletableFuture<T> future) {
+            super(system, new ResponsiveCompletableFuture<>(future));
+        }
+
+        public Future<T> send(ActorRef target, Object data) {
+            target.tell(data, this);
+            return ((ResponsiveCompletableFuture<T>) resultHolder).getFuture();
         }
     }
 

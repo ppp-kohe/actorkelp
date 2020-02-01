@@ -83,9 +83,14 @@ public class KeyHistograms {
         @SuppressWarnings("unchecked")
         public Object splitPointAsRightHandSide(HistogramTree splitLeft) {
             //this is the right hand side and the right has least one root node.
-            // so the returned point is inclusive for the right split
+            // so the returned point is inclusive for the right split:
+            //   subsequent split may be done with empty root, then it has both no point
             if (splitLeft.getLeafSize() == 0) {
-                return root.keyStart();
+                if (root == null) {
+                    return null;
+                } else {
+                    return root.keyStart();
+                }
             } else {
                 return ((KeyComparator<Object>) comparator).centerPoint(splitLeft.getRoot().keyEnd(), root.keyStart());
             }
