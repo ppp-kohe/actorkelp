@@ -2,6 +2,7 @@ package csl.actor.example.delayedlabel;
 
 import csl.actor.*;
 import csl.actor.msgassoc.ActorAggregationReplicable;
+import csl.actor.msgassoc.Config;
 
 import java.io.BufferedReader;
 import java.io.PrintWriter;
@@ -18,23 +19,47 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 public class DelayedLabelManual {
+    public static class DelayedLabelConfig extends Config {
+        @CommandArgumentOption(abbrev = "-n", help = "number of instances.")
+        public int instances = 100_000;
+        @CommandArgumentOption(abbrev = "-c", help = "number of labels.")
+        public int classes = 100;
+        @CommandArgumentOption(abbrev = "-v", help = "length of feature vector.")
+        public int vectorLength = 300;
+        @CommandArgumentOption(abbrev = "-c", help = "number of label delay.")
+        public int delay = 100;
+    }
+
+    public DelayedLabelConfig config = new DelayedLabelConfig();
+
     public static void main(String[] args) {
         new DelayedLabelManual().run(args);
     }
 
     public void run(String... args) {
-        String nums = args[0];
-        int numInstances;
+        config.read("", System.getProperties());
+
+        List<String> rest = config.readArgs(args);
+        if (rest.contains("--help")) {
+            System.out.println(getClass().getName());
+            config.showHelp();
+            return;
+        }
         String file = null;
-        try {
-            numInstances = Integer.parseInt(nums.replaceAll("_", ""));
-        } catch (NumberFormatException ne) {
-            numInstances = readHead(nums);
-            file = nums;
+        if (!rest.isEmpty()) {
+            String nums = rest.get(0);
+            try {
+                config.instances = (Integer) config.readValue(Integer.class, nums);
+            } catch (NumberFormatException ne) {
+                config.instances = readHead(nums);
+                file = nums;
+            }
         }
         PrintWriter out = new PrintWriter(System.out, true);
 
-        run(out, numInstances, file);
+        config.log(config.toString());
+
+        run(out, file);
     }
 
     public int readHead(String file) {
@@ -45,14 +70,14 @@ public class DelayedLabelManual {
         }
     }
 
-    public void run(PrintWriter out, int numInstances, String src) {
-        Iterator<Object> inputs = inputs(out, numInstances, src);
+    public void run(PrintWriter out, String src) {
+        Iterator<Object> inputs = inputs(out, src);
 
         Instant startTime = Instant.now();
 
         ActorSystem system = new ActorSystemDefault();
-        ResultActor resultActor = resultActor(system, out, startTime, numInstances);
-        ActorRef learnerActor = learnerActor(system, out, resultActor, numInstances);
+        ResultActor resultActor = resultActor(system, out, startTime);
+        ActorRef learnerActor = learnerActor(system, out, resultActor);
         resultActor.setLearner(learnerActor);
 
         while (inputs.hasNext()) {
@@ -60,10 +85,11 @@ public class DelayedLabelManual {
         }
     }
 
-    public Iterator<Object> inputs(PrintWriter out, int numInstances, String src) {
+    public Iterator<Object> inputs(PrintWriter out, String src) {
+        int numInstances = config.instances;
         if (src == null) {
             Instant startGenTime = Instant.now();
-            List<Object> inputs = generateInput(12345L, 100, 300, numInstances, 100);
+            List<Object> inputs = generateInput(12345L, config.classes, config.vectorLength, numInstances, config.delay);
             out.println(String.format("#generateInput: %,d %s", numInstances, Duration.between(startGenTime, Instant.now())));
             return inputs.iterator();
         } else {
@@ -121,12 +147,12 @@ public class DelayedLabelManual {
         }
     }
 
-    public ActorRef learnerActor(ActorSystem system, PrintWriter out, ActorRef resultActor, int numInstances) {
+    public ActorRef learnerActor(ActorSystem system, PrintWriter out, ActorRef resultActor) {
         return new LearnerActor(system, resultActor);
     }
 
-    public ResultActor resultActor(ActorSystem system, PrintWriter out, Instant startTime, int numInstances) {
-        return new ResultActor(system, out, startTime, numInstances);
+    public ResultActor resultActor(ActorSystem system, PrintWriter out, Instant startTime) {
+        return new ResultActor(system, out, startTime, config.instances);
     }
 
     public static class ResultActor extends ActorDefault {

@@ -5,7 +5,6 @@ import csl.actor.msgassoc.MailboxAggregationReplicable.MailboxStatus;
 
 import java.io.PrintWriter;
 import java.io.Serializable;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -18,11 +17,9 @@ import java.util.stream.Collectors;
 public abstract class ActorAggregationReplicable extends ActorAggregation implements Cloneable {
     protected State state;
     protected volatile int maxHeight;
-    protected ConfigAggregationReplicable config = CONFIG_DEFAULT;
+    protected Config config = CONFIG_DEFAULT;
 
-    public static final ConfigAggregationReplicable CONFIG_DEFAULT = new ConfigAggregationReplicable();
-
-    public static PrintWriter logOut = new PrintWriter(System.err, true);
+    public static final Config CONFIG_DEFAULT = new Config();
 
     public ActorAggregationReplicable(ActorSystem system, String name, MailboxAggregationReplicable mailbox, ActorBehavior behavior) {
         super(system, name, mailbox, behavior);
@@ -42,7 +39,7 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
         maxHeight = initMaxHeight();
     }
 
-    public ActorAggregationReplicable(ActorSystem system, String name, ConfigAggregationReplicable config) {
+    public ActorAggregationReplicable(ActorSystem system, String name, Config config) {
         super(system, name, null, null);
         this.config = config;
         initMailbox();
@@ -55,7 +52,7 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
         this(system, name, CONFIG_DEFAULT);
     }
 
-    public ActorAggregationReplicable(ActorSystem system, ConfigAggregationReplicable config) {
+    public ActorAggregationReplicable(ActorSystem system, Config config) {
         this(system, null, config);
     }
 
@@ -66,7 +63,7 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
     //////////////////////// config
 
 
-    public ConfigAggregationReplicable getConfig() {
+    public Config getConfig() {
         return config;
     }
 
@@ -187,6 +184,41 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
         protected volatile boolean parallelRouting2;
         protected boolean needClearHistory;
 
+        public void split(ActorAggregationReplicable self, int height) {
+            this.height = height;
+            if (split == null) { //root
+                split = self.createSplitLeaf(self, 0, height);
+            } else {
+                split = split.split(self, height);
+            }
+            if (self.logSplit()) {
+                self.log("after split: height=" + height);
+                self.printStatus();
+            }
+        }
+
+        public void mergeInactive(ActorAggregationReplicable self) {
+            split = split.mergeInactive(self);
+            split.clearHistory();
+            if (self.logSplit()) {
+                self.log("after mergeInactive");
+                self.printStatus();
+            }
+        }
+
+        public void splitOrMerge(ActorAggregationReplicable self, int height) {
+            this.height = height;
+            if (split == null) {
+                split = self.createSplitLeaf(self, 0, height);
+            } else {
+                split = split.splitOrMerge(self, height);
+            }
+            if (self.logSplit()) {
+                self.log("after splitOrMerge: height=" + height);
+                self.printStatus();
+            }
+        }
+
         @Override
         public void processMessage(ActorAggregationReplicable self, Message<?> message) {
             MailboxStatus status;
@@ -198,9 +230,8 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
                 int size = m.size();
 
                 if (status.equals(MailboxStatus.Exceeded)) {
-                    setNextHeight(maxHeight, size, self.minSizeOfEachMailboxSplit());
-
-                    splitAndParallelRouting(self, m, message);
+                    int h = nextHeight(maxHeight, size, self.minSizeOfEachMailboxSplit());
+                    splitAndParallelRouting(self, m, message, h);
                 } else if (split != null && status.equals(MailboxStatus.Few) &&
                         split.isHistoryExceeded((int) (self.historyExceededLimit()))) {
                     mergeInactive(self, m, message);
@@ -227,29 +258,23 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
             return !(parallelRouting1 || parallelRouting2);
         }
 
-        protected void setNextHeight(int maxHeight, int size, int eachSizeOfSplits) {
+        public int nextHeight(int maxHeight, int size, int eachSizeOfSplits) {
             int h = 1;
             while ((size >>> h) > eachSizeOfSplits && h < maxHeight) {
                 ++h;
             }
-            this.height = Math.min(Math.max(height, h), maxHeight);
+            return Math.min(Math.max(height, h), maxHeight);
         }
 
-        protected void splitAndParallelRouting(ActorAggregationReplicable self, MailboxAggregationReplicable m, Message<?> message) {
-            if (split == null) { //root
-                split = self.createSplitLeaf(self, 0, height);
-            } else {
-                split = split.split(self, height);
-            }
-
-            if (self.logSplit()) {
-                self.log("after split");
-                self.printStatus();
-            }
-
+        protected void splitAndParallelRouting(ActorAggregationReplicable self, MailboxAggregationReplicable m, Message<?> message,
+                                               int height) {
+            split(self, height);
             route(self, m, message, false);
+            startParallelRouting(self);
+        }
 
-            int max = Math.min(m.size(), self.maxParallelRouting());
+        public void startParallelRouting(ActorAggregationReplicable self) {
+            int max = Math.min(self.getMailboxAsReplicable().size(), self.maxParallelRouting());
 
             needClearHistory = true;
             if (split != null) {
@@ -273,12 +298,7 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
         }
 
         protected void mergeInactive(ActorAggregationReplicable self, MailboxAggregationReplicable m, Message<?> message) {
-            split = split.mergeInactive(self);
-            split.clearHistory();
-            if (self.logSplit()) {
-                self.log("after mergeInactive");
-                self.printStatus();
-            }
+            mergeInactive(self);
             route(self, m, message, false);
         }
 
@@ -385,6 +405,8 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
         Split split(ActorAggregationReplicable router, int height);
         Split mergeInactive(ActorAggregationReplicable router);
         SplitLeaf mergeIntoLeaf(ActorAggregationReplicable router);
+
+        Split splitOrMerge(ActorAggregationReplicable router, int height);
     }
 
     public static class SplitLeaf implements Split {
@@ -468,6 +490,15 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
             }
 
             return this;
+        }
+
+        @Override
+        public Split splitOrMerge(ActorAggregationReplicable router, int height) {
+            if (depth < height) {
+                return split(router, height);
+            } else {
+                return this;
+            }
         }
     }
 
@@ -654,6 +685,17 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
             return left.mergeIntoLeaf(router)
                     .merge(router, right.mergeIntoLeaf(router));
         }
+
+        @Override
+        public Split splitOrMerge(ActorAggregationReplicable router, int height) {
+            if (depth < height) {
+                left = left.splitOrMerge(router, height);
+                right = right.splitOrMerge(router, height);
+                return this;
+            } else {
+                return mergeIntoLeaf(router);
+            }
+        }
     }
 
 
@@ -819,6 +861,28 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
 
     protected void initMerged(ActorAggregationReplicable m) { }
 
+    public void routerSplit(int height) {
+        State s = state;
+        if (s instanceof StateSplitRouter) {
+            ((StateSplitRouter) s).split(this, height);
+        }
+    }
+
+    public void routerMergeInactive() {
+        State s = state;
+        if (s instanceof StateSplitRouter) {
+            ((StateSplitRouter) s).mergeInactive(this);
+        }
+    }
+
+    public void routerSplitOrMerge(int height) {
+        State s = state;
+        if (s instanceof StateSplitRouter) {
+            ((StateSplitRouter) s).splitOrMerge(this, height);
+        }
+    }
+
+
     public static class PlacemenActorReplicable extends ActorPlacement.PlacemenActor {
         public PlacemenActorReplicable(ActorSystem system, String name) {
             super(system, name);
@@ -879,7 +943,7 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
 
     public static ActorAggregationReplicable fromSerializable(ActorSystem system, ActorReplicableSerializableState state, long num) {
         try {
-            ActorAggregationReplicable r = state.actorType.getConstructor(ActorSystem.class, String.class, ConfigAggregationReplicable.class)
+            ActorAggregationReplicable r = state.actorType.getConstructor(ActorSystem.class, String.class, Config.class)
                 .newInstance(system, String.format("%s_%d", state.name, num),
                         state.config == null ? CONFIG_DEFAULT : state.config);
             r.state = new StateLeaf();
@@ -896,15 +960,15 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
         public String name;
         public Message<?>[] messages;
         public List<KeyHistograms.HistogramTree> tables;
-        public ConfigAggregationReplicable config;
+        public Config config;
     }
 
     public void printStatus() {
-        printStatus(logOut);
+        printStatus(config.getLogOut());
     }
 
     public void log(String str) {
-        println(logOut, String.format("!!! [%s] : %s", Instant.now(), str));
+        config.log(str);
     }
 
     public void printStatus(PrintWriter out) {
@@ -973,12 +1037,7 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
     }
 
     public void println(PrintWriter out, String line) {
-        int c = config.logColor;
-        if (c > -1) {
-            out.println(String.format("\033[38;5;%dm%s\033[0m", c, line));
-        } else {
-            out.println(line);
-        }
+        config.println(out, line);
     }
 
 }

@@ -14,8 +14,8 @@ public class DelayedLabelAggregation extends DelayedLabelManual {
     }
 
     @Override
-    public ActorRef learnerActor(ActorSystem system, PrintWriter out, ActorRef resultActor, int numInstances) {
-        return new LernerActorAggregation(system, out, resultActor, numInstances);
+    public ActorRef learnerActor(ActorSystem system, PrintWriter out, ActorRef resultActor) {
+        return new LernerActorAggregation(system, out, resultActor, config.instances);
     }
 
     public static class LernerActorAggregation extends ActorAggregation {

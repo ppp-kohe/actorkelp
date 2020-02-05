@@ -5,7 +5,7 @@ import csl.actor.ActorRef;
 import csl.actor.ActorSystem;
 import csl.actor.Message;
 import csl.actor.msgassoc.ActorAggregationReplicable;
-import csl.actor.msgassoc.ConfigAggregationReplicable;
+import csl.actor.msgassoc.Config;
 
 import java.io.PrintWriter;
 import java.time.Instant;
@@ -19,15 +19,14 @@ public class DelayedLabelAggregationReplicable extends DelayedLabelManual {
     }
 
     @Override
-    public ActorRef learnerActor(ActorSystem system, PrintWriter out, ActorRef resultActor, int numInstances) {
-        root = new LernerActorAggregationReplicable(system, out, resultActor, numInstances);
-        root.log(root.getConfig().toString());
+    public ActorRef learnerActor(ActorSystem system, PrintWriter out, ActorRef resultActor) {
+        root = new LernerActorAggregationReplicable(system, out, resultActor, config);
         return root;
     }
 
     @Override
-    public ResultActor resultActor(ActorSystem system, PrintWriter out, Instant startTime, int numInstances) {
-        return new ResultActorAggregationReplicable(system, out, startTime, numInstances);
+    public ResultActor resultActor(ActorSystem system, PrintWriter out, Instant startTime) {
+        return new ResultActorAggregationReplicable(system, out, startTime, config.instances);
     }
 
     static LernerActorAggregationReplicable root;
@@ -51,13 +50,21 @@ public class DelayedLabelAggregationReplicable extends DelayedLabelManual {
     static class LernerActorAggregationReplicable extends ActorAggregationReplicable {
         DelayedLabelAggregation.LearnerAggregationSupport support;
 
-        public LernerActorAggregationReplicable(ActorSystem system, String name, PrintWriter out, ActorRef resultActor, int numInstances) {
-            super(system, name, ConfigAggregationReplicable.readConfig("", System.getProperties()));
-            support = new DelayedLabelAggregation.LearnerAggregationSupport(this, out, resultActor, numInstances);
+        public LernerActorAggregationReplicable(ActorSystem system, String name, Config config) {
+            super(system, name, config);
+            support = new DelayedLabelAggregation.LearnerAggregationSupport(this, config.getLogOut(), null,
+                    ((DelayedLabelConfig) config).instances);
         }
 
-        public LernerActorAggregationReplicable(ActorSystem system, PrintWriter out, ActorRef resultActor, int numInstances) {
-            this(system, null, out, resultActor, numInstances);
+        public LernerActorAggregationReplicable(ActorSystem system, String name, PrintWriter out, ActorRef resultActor,
+                                                DelayedLabelConfig config) {
+            super(system, name, config);
+            support = new DelayedLabelAggregation.LearnerAggregationSupport(this, out, resultActor, config.instances);
+        }
+
+        public LernerActorAggregationReplicable(ActorSystem system, PrintWriter out, ActorRef resultActor,
+                                                DelayedLabelConfig config) {
+            this(system, null, out, resultActor, config);
         }
 
         @Override
