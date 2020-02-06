@@ -48,7 +48,6 @@ public abstract class ActorAggregation extends ActorDefault {
     @Override
     protected void processMessage(Message<?> message) {
         if (message.getData() instanceof MailboxAggregation.TraversalProcess) {
-            //TODO
             getMailboxAsAggregation()
                     .processTraversal(this, ((MailboxAggregation.TraversalProcess) message.getData()).entryId);
         } else {

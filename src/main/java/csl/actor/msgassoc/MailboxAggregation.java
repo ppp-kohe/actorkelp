@@ -82,16 +82,16 @@ public class MailboxAggregation extends MailboxDefault implements Cloneable {
             return processor;
         }
 
-        public synchronized void updateScheduledProcess(Actor self) {
+        public synchronized void updateScheduledTraversalProcess(Actor self) {
             ScheduledFuture<?> p = scheduledProcess;
             nextSchedule = Instant.now().plus(1, ChronoUnit.SECONDS); //TODO custom delay
             if (p == null || p.isCancelled() || p.isDone()) {
                 scheduledProcess = self.getSystem().getScheduledExecutor()
-                        .schedule(() -> processScheduled(self), 1, TimeUnit.SECONDS); //TODO custom delay
+                        .schedule(() -> startTraversalProcess(self), 1, TimeUnit.SECONDS); //TODO custom delay
             }
         }
 
-        public void processScheduled(Actor self) {
+        public void startTraversalProcess(Actor self) {
             synchronized (this) {
                 Duration remaining = Duration.between(Instant.now(), nextSchedule);
                 if (remaining.isNegative()) {
@@ -101,7 +101,7 @@ public class MailboxAggregation extends MailboxDefault implements Cloneable {
                 } else {
                     scheduledProcess.cancel(false);
                     scheduledProcess = self.getSystem().getScheduledExecutor()
-                            .schedule(() -> processScheduled(self), remaining.toMillis() + 1L, TimeUnit.MILLISECONDS);
+                            .schedule(() -> startTraversalProcess(self), remaining.toMillis() + 1L, TimeUnit.MILLISECONDS);
                 }
             }
         }
@@ -185,6 +185,10 @@ public class MailboxAggregation extends MailboxDefault implements Cloneable {
         }
     }
 
+    public void updateScheduledTraversalProcess(Actor self, int entryId) {
+        tables[entryId].updateScheduledTraversalProcess(self);
+    }
+
     public void processTraversal(Actor self, int entryId) {
         processTraversal(self, entryId, getTable(entryId).getRoot());
     }
@@ -192,8 +196,9 @@ public class MailboxAggregation extends MailboxDefault implements Cloneable {
     protected void processTraversal(Actor self, int entryId, KeyHistograms.HistogramNode node) {
         if (node.size() > 0) {
             if (node instanceof KeyHistograms.HistogramNodeTree) {
-                ((KeyHistograms.HistogramNodeTree) node).getChildren()
-                        .forEach(c -> processTraversal(self, entryId, c));
+                for (KeyHistograms.HistogramNode ch : ((KeyHistograms.HistogramNodeTree) node).getChildren()) {
+                    processTraversal(self, entryId, ch);
+                }
             } else if (node instanceof KeyHistograms.HistogramNodeLeaf) {
                 tables[entryId].getProcessor().processTraversal(self, (KeyHistograms.HistogramNodeLeaf) node);
             }

@@ -71,8 +71,7 @@ public class DelayedLabelAggregationReplicable extends DelayedLabelManual {
         protected ActorBehavior initBehavior() {
             return behaviorBuilder()
                     .matchKey(FeatureInstance.class, FeatureInstance::getId)
-                    .or(LabelInstance.class, LabelInstance::getId)
-                    .collect()
+                          .or(LabelInstance.class, LabelInstance::getId)
                     .forEachPair(this::train)
                     .match(Finish.class, this::finish)
                     .build();

@@ -36,7 +36,6 @@ public class DelayedLabelAggregation extends DelayedLabelManual {
             return behaviorBuilder()
                     .matchKey(FeatureInstance.class, FeatureInstance::getId)
                           .or(LabelInstance.class, LabelInstance::getId)
-                    .collect()
                     .forEachPair(this::train)
                     .match(Finish.class, this::finish)
                     .build();

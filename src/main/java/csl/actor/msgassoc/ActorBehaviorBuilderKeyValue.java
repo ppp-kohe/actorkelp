@@ -3,6 +3,7 @@ package csl.actor.msgassoc;
 import csl.actor.ActorBehavior;
 import csl.actor.ActorBehaviorBuilder;
 import csl.actor.ActorRef;
+import csl.actor.msgassoc.KeyHistograms.KeyComparator;
 
 import java.util.*;
 import java.util.function.BiConsumer;
@@ -86,18 +87,18 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
 
     public static class RelayToCollect<KeyType> {
         protected ActorBehaviorBuilderKeyValue builder;
-        protected KeyHistograms.KeyComparator<KeyType> keyComparator;
+        protected KeyComparator<KeyType> keyComparator;
 
         public RelayToCollect(ActorBehaviorBuilderKeyValue builder) {
             this(builder, new KeyComparatorDefault<>());
         }
 
-        public RelayToCollect(ActorBehaviorBuilderKeyValue builder, KeyHistograms.KeyComparator<KeyType> keyComparator) {
+        public RelayToCollect(ActorBehaviorBuilderKeyValue builder, KeyComparator<KeyType> keyComparator) {
             this.builder = builder;
             this.keyComparator = keyComparator;
         }
 
-        public RelayToCollect<KeyType> sort(KeyHistograms.KeyComparator<KeyType> keyComparator) {
+        public RelayToCollect<KeyType> sort(KeyComparator<KeyType> keyComparator) {
             this.keyComparator = keyComparator;
             return this;
         }
@@ -122,7 +123,7 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
         }
 
         @Override
-        public RelayToCollect1<KeyType, ValueType> sort(KeyHistograms.KeyComparator<KeyType> keyComparator) {
+        public RelayToCollect1<KeyType, ValueType> sort(KeyComparator<KeyType> keyComparator) {
             super.sort(keyComparator);
             return this;
         }
@@ -172,7 +173,7 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
 
 
         @Override
-        public RelayToCollect2<KeyType, ValueType1, ValueType2> sort(KeyHistograms.KeyComparator<KeyType> keyComparator) {
+        public RelayToCollect2<KeyType, ValueType1, ValueType2> sort(KeyComparator<KeyType> keyComparator) {
             super.sort(keyComparator);
             return this;
         }
@@ -228,7 +229,7 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
 
 
         @Override
-        public RelayToCollect3<KeyType, ValueType1, ValueType2, ValueType3> sort(KeyHistograms.KeyComparator<KeyType> keyComparator) {
+        public RelayToCollect3<KeyType, ValueType1, ValueType2, ValueType3> sort(KeyComparator<KeyType> keyComparator) {
             super.sort(keyComparator);
             return this;
         }
@@ -287,7 +288,7 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
         }
 
         @Override
-        public RelayToCollect4<KeyType, ValueType1, ValueType2, ValueType3, ValueType4> sort(KeyHistograms.KeyComparator<KeyType> keyComparator) {
+        public RelayToCollect4<KeyType, ValueType1, ValueType2, ValueType3, ValueType4> sort(KeyComparator<KeyType> keyComparator) {
             super.sort(keyComparator);
             return this;
         }
@@ -329,15 +330,16 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
                                List<KeyExtractor<KeyType, ?>> extractors) {
             super(builder);
             this.extractors = new ArrayList<>(extractors);
+            this.keyValuesReducers = new ArrayList<>(3);
         }
 
         public RelayToCollectList(ActorBehaviorBuilderKeyValue builder,
-                                  KeyHistograms.KeyComparator<KeyType> keyComparator,
+                                  KeyComparator<KeyType> keyComparator,
                                   BiFunction<KeyType, List<ValueType>, Iterable<ValueType>> keyValuesReducer,
                                   List<KeyExtractor<KeyType, ?>> extractors) {
             super(builder, keyComparator);
             this.extractors = new ArrayList<>(extractors);
-            this.keyValuesReducers = new ArrayList<>();
+            this.keyValuesReducers = new ArrayList<>(3);
             keyValuesReducers.add(keyValuesReducer);
         }
 
@@ -348,7 +350,7 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
         }
 
         @Override
-        public RelayToCollectList<KeyType, ValueType> sort(KeyHistograms.KeyComparator<KeyType> keyComparator) {
+        public RelayToCollectList<KeyType, ValueType> sort(KeyComparator<KeyType> keyComparator) {
             super.sort(keyComparator);
             return this;
         }
@@ -374,8 +376,42 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
 
         public ActorBehaviorBuilderKeyValue forEachKeyList(BiConsumer<KeyType, List<ValueType>> handler) {
             return action(id -> new ActorBehaviorAggregation.ActorBehaviorMatchKeyListFuture<>(id, keyComparator,
-                    new KeyExtractorList<>(extractors), handler)
-                    .withKeyValuesReducers(keyValuesReducers));
+                    new KeyValuesReducerList<>(keyValuesReducers),
+                    new KeyExtractorList<>(extractors), handler));
+        }
+    }
+
+    public static class KeyValuesReducerList<KeyType, ValueType> implements BiFunction<KeyType, List<ValueType>, Iterable<ValueType>> {
+        protected List<BiFunction<KeyType, List<ValueType>, Iterable<ValueType>>> keyValuesReducers;
+
+        public KeyValuesReducerList(List<BiFunction<KeyType, List<ValueType>, Iterable<ValueType>>> keyValuesReducers) {
+            this.keyValuesReducers = keyValuesReducers;
+        }
+
+        @Override
+        public Iterable<ValueType> apply(KeyType key, List<ValueType> values) {
+            List<ValueType> nextInput = values;
+            Iterable<ValueType> lastResult = values;
+            boolean first = true;
+            for (BiFunction<KeyType, List<ValueType>, Iterable<ValueType>> f : keyValuesReducers) {
+                if (first) {
+                    first = false;
+                } else {
+                    if (lastResult instanceof List<?>) {
+                        nextInput = (List<ValueType>) lastResult;
+                    } else {
+                        nextInput = new ArrayList<>();
+                        for (ValueType v : lastResult) {
+                            nextInput.add(v);
+                        }
+                    }
+                }
+                if (nextInput.isEmpty()) {
+                    break;
+                }
+                lastResult = f.apply(key, nextInput);
+            }
+            return nextInput;
         }
     }
 
@@ -445,63 +481,9 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
             return null;
         }
     }
-/*
-    @Deprecated
-    public static class RelayToBehavior<KeyType> {
-        protected ActorBehaviorBuilderKeyValue builder;
-        protected List<KeyExtractor<KeyType, ?>> messages;
-        protected int machKeyEntryId;
-        protected KeyHistograms.KeyComparator<KeyType> keyComparator;
-
-        public RelayToBehavior(ActorBehaviorBuilderKeyValue builder, List<KeyExtractor<KeyType, ?>> messages,
-                               KeyHistograms.KeyComparator<KeyType> keyComparator) {
-            this.builder = builder;
-            this.messages = messages;
-            this.keyComparator = keyComparator;
-            this.machKeyEntryId = builder.nextMatchKeyEntry(); //determines the entry id here
-        }
-
-        @SuppressWarnings("unchecked")
-        public <ValueType1, ValueType2> ActorBehaviorBuilderKeyValue forEachPair(
-                BiConsumer<ValueType1, ValueType2> handler) {
-            KeyExtractor<KeyType, ValueType1> m1 = (KeyExtractor<KeyType, ValueType1>) messages.get(0);
-            KeyExtractor<KeyType, ValueType2> m2 = (KeyExtractor<KeyType, ValueType2>) messages.get(1);
-            //TODO check size of messages
-            return builder.withProcessor(machKeyEntryId, new ActorBehaviorAggregation.ActorBehaviorMatchKey2<>(machKeyEntryId, keyComparator, m1, m2, handler));
-        }
-
-        @SuppressWarnings("unchecked")
-        public <ValueType1, ValueType2, ValueType3> ActorBehaviorBuilderKeyValue forEachTri(
-                TriConsumer<ValueType1, ValueType2, ValueType3> handler) {
-            KeyExtractor<KeyType, ValueType1> m1 = (KeyExtractor<KeyType, ValueType1>) messages.get(0);
-            KeyExtractor<KeyType, ValueType2> m2 = (KeyExtractor<KeyType, ValueType2>) messages.get(1);
-            KeyExtractor<KeyType, ValueType3> m3 = (KeyExtractor<KeyType, ValueType3>) messages.get(2);
-            //TODO check size of messages
-            return builder.withProcessor(machKeyEntryId, new ActorBehaviorAggregation.ActorBehaviorMatchKey3<>(machKeyEntryId, keyComparator, m1, m2, m3, handler));
-        }
-
-        @SuppressWarnings("unchecked")
-        public <ValueType1, ValueType2, ValueType3, ValueType4> ActorBehaviorBuilderKeyValue forEachQuad(
-                QuadConsumer<ValueType1, ValueType2, ValueType3, ValueType4> handler) {
-            KeyExtractor<KeyType, ValueType1> m1 = (KeyExtractor<KeyType, ValueType1>) messages.get(0);
-            KeyExtractor<KeyType, ValueType2> m2 = (KeyExtractor<KeyType, ValueType2>) messages.get(1);
-            KeyExtractor<KeyType, ValueType3> m3 = (KeyExtractor<KeyType, ValueType3>) messages.get(2);
-            KeyExtractor<KeyType, ValueType4> m4 = (KeyExtractor<KeyType, ValueType4>) messages.get(3);
-            //TODO check size of messages
-            return builder.withProcessor(machKeyEntryId, new ActorBehaviorAggregation.ActorBehaviorMatchKey4<>(machKeyEntryId, keyComparator, m1, m2, m3, m4, handler));
-        }
-
-        @SuppressWarnings("unchecked")
-        public <ValueType> ActorBehaviorBuilderKeyValue forEachList(
-                int threshold, BiConsumer<KeyType, List<ValueType>> handler) {
-            KeyExtractor<KeyType, ValueType> m = (KeyExtractor<KeyType, ValueType>) messages.get(0);
-            //TODO check size of messages
-            return builder.withProcessor(machKeyEntryId, new ActorBehaviorAggregation.ActorBehaviorMatchKeyList<>(machKeyEntryId, threshold, keyComparator, m, handler));
-        }
-    }*/
 
 
-    public static class KeyComparatorDefault<KeyType> implements KeyHistograms.KeyComparator<KeyType> {
+    public static class KeyComparatorDefault<KeyType> implements KeyComparator<KeyType> {
         @SuppressWarnings("unchecked")
         @Override
         public int compare(KeyType key1, KeyType key2) {

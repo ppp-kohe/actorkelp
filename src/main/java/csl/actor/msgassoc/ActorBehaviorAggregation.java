@@ -668,10 +668,12 @@ public class ActorBehaviorAggregation {
         }
 
         public ActorBehaviorMatchKey<KeyType> withKeyValuesReducers(List<BiFunction<KeyType, List<ValueType>, Iterable<ValueType>>> keyValuesReducers) {
-            BiFunction<KeyType, ?, ?> v = keyValuesReducers.get(0);
-            BiFunction<KeyType, Object, Object> o = (BiFunction<KeyType,Object,Object>) v;
-            //TODO
-            return this;
+            if (keyValuesReducers.isEmpty()) {
+                return this;
+            } else {
+                return new ActorBehaviorMatchKeyListFuture<>(matchKeyEntryId, this.putRequiredSize, keyComparator,
+                        new ActorBehaviorBuilderKeyValue.KeyValuesReducerList<>(keyValuesReducers), keyExtractorFromValue, handler);
+            }
         }
 
         @Override
@@ -689,7 +691,7 @@ public class ActorBehaviorAggregation {
             } else {
                 return false;
             }
-            put(self, key, null, value);
+            put(self, key, true, value);
             return true;
         }
 
@@ -772,19 +774,40 @@ public class ActorBehaviorAggregation {
         public List<KeyHistograms.HistogramLeafList> getValueList() {
             return Collections.singletonList(values);
         }
+
+        public KeyHistograms.HistogramLeafList getValues() {
+            return values;
+        }
     }
 
     public static class ActorBehaviorMatchKeyListFuture<KeyType, ValueType>
             extends ActorBehaviorMatchKey<KeyType> {
+        protected BiFunction<KeyType, List<ValueType>, Iterable<ValueType>> keyValuesReducer;
         protected ActorBehaviorBuilderKeyValue.KeyExtractor<KeyType, ValueType> keyExtractorFromValue;
-        protected BiFunction<KeyType, >
         protected BiConsumer<KeyType, List<ValueType>> handler;
 
         public ActorBehaviorMatchKeyListFuture(int matchKeyEntryId,
                                                KeyHistograms.KeyComparator<KeyType> keyComparator,
                                                ActorBehaviorBuilderKeyValue.KeyExtractor<KeyType, ValueType> keyExtractorFromValue,
                                                BiConsumer<KeyType, List<ValueType>> handler) {
-            super(matchKeyEntryId, 1, keyComparator);
+            this(matchKeyEntryId, 1, keyComparator, (k,vs) -> vs, keyExtractorFromValue, handler);
+        }
+
+        public ActorBehaviorMatchKeyListFuture(int matchKeyEntryId,
+                                               KeyHistograms.KeyComparator<KeyType> keyComparator,
+                                               BiFunction<KeyType, List<ValueType>, Iterable<ValueType>> keyValuesReducer,
+                                               ActorBehaviorBuilderKeyValue.KeyExtractor<KeyType, ValueType> keyExtractorFromValue,
+                                               BiConsumer<KeyType, List<ValueType>> handler) {
+            this(matchKeyEntryId, 1, keyComparator, keyValuesReducer, keyExtractorFromValue, handler);
+        }
+
+        public ActorBehaviorMatchKeyListFuture(int matchKeyEntryId, int requiredSize,
+                                               KeyHistograms.KeyComparator<KeyType> keyComparator,
+                                               BiFunction<KeyType, List<ValueType>, Iterable<ValueType>> keyValuesReducer,
+                                               ActorBehaviorBuilderKeyValue.KeyExtractor<KeyType, ValueType> keyExtractorFromValue,
+                                               BiConsumer<KeyType, List<ValueType>> handler) {
+            super(matchKeyEntryId, requiredSize, keyComparator);
+            this.keyValuesReducer = keyValuesReducer;
             this.keyExtractorFromValue = keyExtractorFromValue;
             this.handler = handler;
         }
@@ -809,20 +832,20 @@ public class ActorBehaviorAggregation {
             } else {
                 return false;
             }
-            put(self, key, null, message);
-            ((MailboxAggregation) self.getMailbox()).getTableEntries().get(this.matchKeyEntryId)
-                    .updateScheduledProcess(self);
+            put(self, key, true, message);
+            ((MailboxAggregation) self.getMailbox())
+                    .updateScheduledTraversalProcess(self, this.matchKeyEntryId);
             return true;
         }
 
         @Override
         protected KeyHistograms.HistogramNodeLeaf createLeaf(Object key, int height) {
-            return new HistogramNodeLeafListForReduce(key, this, height);
+            return new HistogramNodeLeafList(key, this, height);
         }
 
         @Override
         public boolean processTable(MailboxAggregation m) {
-            return false;
+            return false; //instead, consuming is done by TraversalProcess
         }
 
         @Override
@@ -839,16 +862,61 @@ public class ActorBehaviorAggregation {
         public Object extractKeyFromValue(Object value, Object position) {
             return keyExtractorFromValue.toKey((ValueType) value);
         }
+
+        @SuppressWarnings({"unchecked", "rawtypes"})
+        @Override
+        public void processTraversal(Actor self, KeyHistograms.HistogramNodeLeaf leaf) {
+            HistogramNodeLeafListReducible list = (HistogramNodeLeafListReducible) leaf;
+            if (list.consume(putRequiredSize, putTree, (BiFunction) keyValuesReducer, (BiConsumer) handler)) {
+                self.tell(new MailboxAggregation.TraversalProcess(matchKeyEntryId), self);
+            }
+        }
     }
 
-    public static class HistogramNodeLeafListForReduce extends HistogramNodeLeafList {
-        public HistogramNodeLeafListForReduce(Object key, KeyHistograms.HistogramPutContext context, int height) {
+    public static class HistogramNodeLeafListReducible extends HistogramNodeLeafList {
+        public HistogramNodeLeafListReducible(Object key, KeyHistograms.HistogramPutContext context, int height) {
             super(key, context, height);
         }
 
-        @Override
-        protected boolean completedAfterPut(KeyHistograms.HistogramPutContext context) {
-            return false;
+        public boolean consume(int requiredSize, KeyHistograms.HistogramTree tree, BiFunction<Object, List<Object>, Iterable<Object>> keyValuesReducer,
+                            BiConsumer<Object, List<Object>> handler) {
+            if (completed(requiredSize)) {
+                int consuming = (int) Math.min(Integer.MAX_VALUE, size());
+                if (consuming > 100_000) { //refer free memory size
+                    Runtime rt = Runtime.getRuntime();
+                    consuming = (int) Math.min(consuming,
+                            Math.max(100_000, (rt.maxMemory() - rt.totalMemory()) / 8L / 4L));
+                }
+                List<Object> vs = new ArrayList<>(consuming);
+                for (int i = 0; i < consuming; ++i) {
+                    vs.add(values.poll());
+                }
+                try {
+                    Object key = getKey();
+                    List<Object> rs = toList(keyValuesReducer.apply(key, vs));
+                    if (!rs.isEmpty()) {
+                        handler.accept(key, rs);
+                    }
+                } finally {
+                    completed(consuming);
+                    afterTake(consuming, tree);
+                }
+                return completed(requiredSize);
+            } else {
+                return false;
+            }
+        }
+
+        private List<Object> toList(Iterable<Object> is) {
+            if (is instanceof List<?>) {
+                return (List<Object>) is;
+            } else {
+                ArrayList<Object> vs = new ArrayList<>();
+                for (Object v:  is) {
+                    vs.add(v);
+                }
+                return vs;
+            }
         }
     }
 }
