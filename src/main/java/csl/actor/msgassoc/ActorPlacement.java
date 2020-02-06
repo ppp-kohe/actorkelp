@@ -26,16 +26,6 @@ public interface ActorPlacement {
         };
     }
 
-    static int getLocalThreads(ActorSystem system) {
-        if (system instanceof ActorSystemDefault) {
-            return ((ActorSystemDefault) system).getThreads();
-        } else if (system instanceof ActorSystemRemote) {
-            return getLocalThreads(((ActorSystemRemote) system).getLocalSystem());
-        } else {
-            return 1;
-        }
-    }
-
     abstract class PlacemenActor extends ActorDefault implements ActorPlacement {
         protected List<AddressListEntry> cluster = new ArrayList<>();
         protected PlacementStrategy strategy;
@@ -52,7 +42,7 @@ public interface ActorPlacement {
         public PlacemenActor(ActorSystem system, String name) {
             super(system, name);
             strategy = initStrategy();
-            totalThreads = getLocalThreads(system);
+            totalThreads = system.getThreads();
         }
 
         protected abstract PlacementStrategy initStrategy();
@@ -82,7 +72,7 @@ public interface ActorPlacement {
             }
             try {
                 int masterThreads = ResponsiveCalls.send(getSystem(), masterActor, (self, sender) ->
-                        getLocalThreads(self.getSystem())).get(2, TimeUnit.SECONDS);
+                        self.getSystem().getThreads()).get(2, TimeUnit.SECONDS);
                 tell(new AddressList(
                             new AddressListEntry(masterActor, masterThreads)), null);
             } catch (Exception ex) {
@@ -103,7 +93,7 @@ public interface ActorPlacement {
             if (a == null) {
                 return null;
             } else {
-                return new AddressListEntry(a, getLocalThreads(getSystem()));
+                return new AddressListEntry(a, getSystem().getThreads());
             }
         }
 
@@ -154,7 +144,7 @@ public interface ActorPlacement {
         }
 
         protected void updateTotalThreads() {
-            totalThreads = getLocalThreads(getSystem()) + cluster.stream()
+            totalThreads = getSystem().getThreads() + cluster.stream()
                     .mapToInt(AddressListEntry::getThreads)
                     .sum();
         }

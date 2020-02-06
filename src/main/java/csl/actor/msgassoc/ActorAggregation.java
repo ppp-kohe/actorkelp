@@ -44,4 +44,15 @@ public abstract class ActorAggregation extends ActorDefault {
         }
         return super.processMessageNext();
     }
+
+    @Override
+    protected void processMessage(Message<?> message) {
+        if (message.getData() instanceof MailboxAggregation.TraversalProcess) {
+            //TODO
+            getMailboxAsAggregation()
+                    .processTraversal(this, ((MailboxAggregation.TraversalProcess) message.getData()).entryId);
+        } else {
+            super.processMessage(message);
+        }
+    }
 }

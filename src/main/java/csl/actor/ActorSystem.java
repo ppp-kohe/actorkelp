@@ -1,6 +1,7 @@
 package csl.actor;
 
 import java.util.concurrent.Executor;
+import java.util.concurrent.ScheduledExecutorService;
 
 public interface ActorSystem extends Executor, AutoCloseable {
     void register(Actor actor);
@@ -9,4 +10,7 @@ public interface ActorSystem extends Executor, AutoCloseable {
 
     Actor resolveActorLocalNamed(ActorRefLocalNamed ref);
     void close();
+
+    int getThreads();
+    ScheduledExecutorService getScheduledExecutor();
 }

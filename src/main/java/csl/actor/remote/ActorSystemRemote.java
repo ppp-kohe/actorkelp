@@ -11,6 +11,7 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
@@ -267,6 +268,16 @@ public class ActorSystemRemote implements ActorSystem {
 
     public void connectionClosed(ConnectionActor ca) {
         connectionMap.remove(ca.getAddress().getKey(), ca);
+    }
+
+    @Override
+    public int getThreads() {
+        return localSystem.getThreads();
+    }
+
+    @Override
+    public ScheduledExecutorService getScheduledExecutor() {
+        return localSystem.getScheduledExecutor();
     }
 
     /**

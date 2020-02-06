@@ -1,12 +1,12 @@
 package csl.actor.msgassoc;
 
-import csl.actor.*;
+import csl.actor.ActorBehavior;
+import csl.actor.ActorBehaviorBuilder;
+import csl.actor.ActorRef;
 
-import java.math.BigDecimal;
-import java.math.BigInteger;
-import java.math.RoundingMode;
 import java.util.*;
 import java.util.function.BiConsumer;
+import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -56,14 +56,15 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
         return b;
     }
 
-    public <ValueType, KeyType> RelayToCollect<KeyType> matchKey(
+    public <ValueType, KeyType> RelayToCollect1<KeyType, ValueType> matchKey(
             Class<ValueType> valueType, Function<ValueType, KeyType> keyExtractorFromValue) {
-        return new RelayToCollect<KeyType>(this).or(valueType, keyExtractorFromValue);
+        return new RelayToCollect1<>(this, new KeyExtractorClass<>(valueType, keyExtractorFromValue));
     }
 
-    public <ValueType, KeyType extends Comparable<KeyType>> RelayToCollect<KeyType> matchKeyOrdered(
+    public <ValueType, KeyType extends Comparable<KeyType>> RelayToCollect1<KeyType, ValueType> matchKeyOrdered(
             Class<ValueType> valueType, Function<ValueType, KeyType> keyExtractorFromValue) {
-        return new RelayToCollectOrdered<KeyType>(this).or(valueType, keyExtractorFromValue);
+        return new RelayToCollect1<>(this, new KeyExtractorClass<>(valueType, keyExtractorFromValue))
+                .sort(new ActorBehaviorAggregation.KeyComparatorOrdered<>());
     }
 
     public int nextMatchKeyEntry() {
@@ -85,37 +86,296 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
 
     public static class RelayToCollect<KeyType> {
         protected ActorBehaviorBuilderKeyValue builder;
-        protected List<KeyExtractor<KeyType, ?>> messages;
+        protected KeyHistograms.KeyComparator<KeyType> keyComparator;
 
         public RelayToCollect(ActorBehaviorBuilderKeyValue builder) {
-            this.builder = builder;
-            this.messages = new ArrayList<>();
+            this(builder, new KeyComparatorDefault<>());
         }
 
-        public <ValueType> RelayToCollect<KeyType> or(
-                Class<ValueType> valueType,
-                Function<ValueType, KeyType> keyExtractorFromValue) {
-            messages.add(new KeyExtractorClass<>(valueType, keyExtractorFromValue));
+        public RelayToCollect(ActorBehaviorBuilderKeyValue builder, KeyHistograms.KeyComparator<KeyType> keyComparator) {
+            this.builder = builder;
+            this.keyComparator = keyComparator;
+        }
+
+        public RelayToCollect<KeyType> sort(KeyHistograms.KeyComparator<KeyType> keyComparator) {
+            this.keyComparator = keyComparator;
             return this;
         }
 
-        public RelayToBehavior<KeyType> collect() {
-            return collect(new KeyComparatorDefault<>());
+        protected ActorBehaviorBuilderKeyValue action(Function<Integer, ActorBehavior> behaviorFactory) {
+            int id = builder.nextMatchKeyEntry();
+            return builder.withProcessor(id, behaviorFactory.apply(id));
         }
 
-        public RelayToBehavior<KeyType> collect(KeyHistograms.KeyComparator<KeyType> keyComparator) {
-            return new RelayToBehavior<>(builder, messages, keyComparator);
-        }
     }
 
-    public static class RelayToCollectOrdered<KeyType extends Comparable<KeyType>> extends RelayToCollect<KeyType> {
-        public RelayToCollectOrdered(ActorBehaviorBuilderKeyValue builder) {
+    public static class RelayToCollect1<KeyType, ValueType> extends RelayToCollect<KeyType> {
+        protected KeyExtractor<KeyType, ValueType> extractor1;
+        public RelayToCollect1(ActorBehaviorBuilderKeyValue builder, KeyExtractor<KeyType, ValueType> extractor1) {
             super(builder);
+            this.extractor1 = extractor1;
+        }
+
+        public <ValueType2> RelayToCollect2<KeyType, ValueType, ValueType2> or(
+                Class<ValueType2> valueType, Function<ValueType2, KeyType> keyExtractorFromValue) {
+            return new RelayToCollect2<>(builder, extractor1, new KeyExtractorClass<>(valueType, keyExtractorFromValue));
         }
 
         @Override
-        public RelayToBehavior<KeyType> collect() {
-            return super.collect(new KeyComparatorOrdered<>());
+        public RelayToCollect1<KeyType, ValueType> sort(KeyHistograms.KeyComparator<KeyType> keyComparator) {
+            super.sort(keyComparator);
+            return this;
+        }
+
+
+        public RelayToCollectList<KeyType, Object> reduce(BiFunction<KeyType, List<Object>, Iterable<Object>> keyValuesReducer) {
+            return new RelayToCollectList<>(builder, keyComparator, keyValuesReducer,
+                    Collections.singletonList(extractor1));
+        }
+
+        public ActorBehaviorBuilderKeyValue forEachKeyValue(BiConsumer<KeyType, ValueType> handler) {
+            return action(id -> new ActorBehaviorAggregation.ActorBehaviorMatchKey1<>(id,
+                    keyComparator, extractor1, handler));
+        }
+
+        public ActorBehaviorBuilderKeyValue forEach(Consumer<ValueType> handler) {
+            return forEachKeyValue((k,v) -> handler.accept(v));
+        }
+
+        public ActorBehaviorBuilderKeyValue forEachKeyList(int requiredSize, BiConsumer<KeyType, List<ValueType>> handler) {
+            return action(id -> new ActorBehaviorAggregation.ActorBehaviorMatchKeyList<>(id, requiredSize, keyComparator,
+                    extractor1, handler));
+        }
+
+        public ActorBehaviorBuilderKeyValue forEachKeyList(BiConsumer<KeyType, List<ValueType>> handler) {
+            return action(id -> new ActorBehaviorAggregation.ActorBehaviorMatchKeyListFuture<>(id, keyComparator,
+                    extractor1, handler));
+        }
+    }
+
+    public static class RelayToCollect2<KeyType, ValueType1, ValueType2> extends RelayToCollect<KeyType> {
+        protected KeyExtractor<KeyType, ValueType1> extractor1;
+        protected KeyExtractor<KeyType, ValueType2> extractor2;
+
+        public RelayToCollect2(ActorBehaviorBuilderKeyValue builder,
+                               KeyExtractor<KeyType, ValueType1> extractor1,
+                               KeyExtractor<KeyType, ValueType2> extractor2) {
+            super(builder);
+            this.extractor1 = extractor1;
+            this.extractor2 = extractor2;
+        }
+
+        public <ValueType3> RelayToCollect3<KeyType, ValueType1, ValueType2, ValueType3> or(
+                Class<ValueType3> valueType, Function<ValueType3, KeyType> keyExtractorFromValue) {
+            return new RelayToCollect3<>(builder, extractor1, extractor2, new KeyExtractorClass<>(valueType, keyExtractorFromValue));
+        }
+
+
+        @Override
+        public RelayToCollect2<KeyType, ValueType1, ValueType2> sort(KeyHistograms.KeyComparator<KeyType> keyComparator) {
+            super.sort(keyComparator);
+            return this;
+        }
+
+        public RelayToCollectList<KeyType, Object> reduce(BiFunction<KeyType, List<Object>, Iterable<Object>> keyValuesReducer) {
+            return new RelayToCollectList<>(builder, keyComparator, keyValuesReducer,
+                    Arrays.asList(extractor1, extractor2));
+        }
+
+        public ActorBehaviorBuilderKeyValue forEachPair(BiConsumer<ValueType1, ValueType2> handler) {
+            return forEachKeyPair((k,v1,v2) -> handler.accept(v1,v2));
+        }
+
+        public ActorBehaviorBuilderKeyValue forEachKeyPair(TriConsumer<KeyType, ValueType1, ValueType2> handler) {
+            return action(id -> new ActorBehaviorAggregation.ActorBehaviorMatchKey2<>(id,
+                    keyComparator, extractor1, extractor2, handler));
+        }
+
+        public ActorBehaviorBuilderKeyValue forEachKeyValue(BiConsumer<KeyType, Object> handler) {
+            return forEachKeyList(1, (k,vs) -> handler.accept(k, vs.get(0)));
+        }
+
+        public ActorBehaviorBuilderKeyValue forEachKeyList(int requiredSize, BiConsumer<KeyType, List<Object>> handler) {
+            return action(id -> new ActorBehaviorAggregation.ActorBehaviorMatchKeyList<>(id, requiredSize, keyComparator,
+                    new KeyExtractorList<>(extractor1, extractor2), handler));
+        }
+
+        public ActorBehaviorBuilderKeyValue forEachKeyList(BiConsumer<KeyType, List<Object>> handler) {
+            return action(id -> new ActorBehaviorAggregation.ActorBehaviorMatchKeyListFuture<>(id, keyComparator,
+                    new KeyExtractorList<>(extractor1, extractor2), handler));
+        }
+    }
+
+    public static class RelayToCollect3<KeyType, ValueType1, ValueType2, ValueType3> extends RelayToCollect<KeyType> {
+        protected KeyExtractor<KeyType, ValueType1> extractor1;
+        protected KeyExtractor<KeyType, ValueType2> extractor2;
+        protected KeyExtractor<KeyType, ValueType3> extractor3;
+
+        public RelayToCollect3(ActorBehaviorBuilderKeyValue builder,
+                               KeyExtractor<KeyType, ValueType1> extractor1,
+                               KeyExtractor<KeyType, ValueType2> extractor2,
+                               KeyExtractor<KeyType, ValueType3> extractor3) {
+            super(builder);
+            this.extractor1 = extractor1;
+            this.extractor2 = extractor2;
+            this.extractor3 = extractor3;
+        }
+
+        public <ValueType4> RelayToCollect4<KeyType, ValueType1, ValueType2, ValueType3, ValueType4> or(
+                Class<ValueType4> valueType, Function<ValueType4, KeyType> keyExtractorFromValue) {
+            return new RelayToCollect4<>(builder, extractor1, extractor2, extractor3, new KeyExtractorClass<>(valueType, keyExtractorFromValue));
+        }
+
+
+        @Override
+        public RelayToCollect3<KeyType, ValueType1, ValueType2, ValueType3> sort(KeyHistograms.KeyComparator<KeyType> keyComparator) {
+            super.sort(keyComparator);
+            return this;
+        }
+
+        public RelayToCollectList<KeyType, Object> reduce(BiFunction<KeyType, List<Object>, Iterable<Object>> keyValuesReducer) {
+            return new RelayToCollectList<>(builder, keyComparator, keyValuesReducer,
+                    Arrays.asList(extractor1, extractor2, extractor3));
+        }
+
+        public ActorBehaviorBuilderKeyValue forEachTriple(TriConsumer<ValueType1, ValueType2, ValueType3> handler) {
+            return forEachKeyTriple((k,v1,v2,v3) -> handler.accept(v1,v2,v3));
+        }
+
+        public ActorBehaviorBuilderKeyValue forEachKeyTriple(QuadConsumer<KeyType, ValueType1, ValueType2, ValueType3> handler) {
+            return action(id -> new ActorBehaviorAggregation.ActorBehaviorMatchKey3<>(id,
+                    keyComparator, extractor1, extractor2, extractor3, handler));
+        }
+
+        public ActorBehaviorBuilderKeyValue forEachKeyValue(BiConsumer<KeyType, Object> handler) {
+            return forEachKeyList(1, (k,vs) -> handler.accept(k, vs.get(0)));
+        }
+
+        public ActorBehaviorBuilderKeyValue forEachKeyList(int requiredSize, BiConsumer<KeyType, List<Object>> handler) {
+            return action(id -> new ActorBehaviorAggregation.ActorBehaviorMatchKeyList<>(id, requiredSize, keyComparator,
+                    new KeyExtractorList<>(extractor1, extractor2, extractor3), handler));
+        }
+
+        public ActorBehaviorBuilderKeyValue forEachKeyList(BiConsumer<KeyType, List<Object>> handler) {
+            return action(id -> new ActorBehaviorAggregation.ActorBehaviorMatchKeyListFuture<>(id, keyComparator,
+                    new KeyExtractorList<>(extractor1, extractor2, extractor3), handler));
+        }
+    }
+
+    public static class RelayToCollect4<KeyType, ValueType1, ValueType2, ValueType3, ValueType4> extends RelayToCollect<KeyType> {
+        protected KeyExtractor<KeyType, ValueType1> extractor1;
+        protected KeyExtractor<KeyType, ValueType2> extractor2;
+        protected KeyExtractor<KeyType, ValueType3> extractor3;
+        protected KeyExtractor<KeyType, ValueType4> extractor4;
+
+        public RelayToCollect4(ActorBehaviorBuilderKeyValue builder,
+                               KeyExtractor<KeyType, ValueType1> extractor1,
+                               KeyExtractor<KeyType, ValueType2> extractor2,
+                               KeyExtractor<KeyType, ValueType3> extractor3,
+                               KeyExtractor<KeyType, ValueType4> extractor4) {
+            super(builder);
+            this.extractor1 = extractor1;
+            this.extractor2 = extractor2;
+            this.extractor3 = extractor3;
+            this.extractor4 = extractor4;
+        }
+
+        public <ValueType5> RelayToCollectList<KeyType, Object> or(
+                Class<ValueType5> valueType, Function<ValueType5, KeyType> keyExtractorFromValue) {
+            return new RelayToCollectList<>(builder,
+                    Arrays.asList(extractor1, extractor2, extractor3, extractor4, new KeyExtractorClass<>(valueType, keyExtractorFromValue)));
+        }
+
+        @Override
+        public RelayToCollect4<KeyType, ValueType1, ValueType2, ValueType3, ValueType4> sort(KeyHistograms.KeyComparator<KeyType> keyComparator) {
+            super.sort(keyComparator);
+            return this;
+        }
+
+        public RelayToCollectList<KeyType, Object> reduce(BiFunction<KeyType, List<Object>, Iterable<Object>> keyValuesReducer) {
+            return new RelayToCollectList<>(builder, keyComparator, keyValuesReducer,
+                    Arrays.asList(extractor1, extractor2, extractor3, extractor4));
+        }
+
+        public ActorBehaviorBuilderKeyValue forEachQuad(QuadConsumer<ValueType1, ValueType2, ValueType3, ValueType4> handler) {
+            return forEachKeyQuad((k,v1,v2,v3,v4) -> handler.accept(v1,v2,v3,v4));
+        }
+
+        public ActorBehaviorBuilderKeyValue forEachKeyQuad(QuintConsumer<KeyType, ValueType1, ValueType2, ValueType3, ValueType4> handler) {
+            return action(id -> new ActorBehaviorAggregation.ActorBehaviorMatchKey4<>(id,
+                            keyComparator, extractor1, extractor2, extractor3, extractor4, handler));
+        }
+
+        public ActorBehaviorBuilderKeyValue forEachKeyValue(BiConsumer<KeyType, Object> handler) {
+            return forEachKeyList(1, (k,vs) -> handler.accept(k, vs.get(0)));
+        }
+
+        public ActorBehaviorBuilderKeyValue forEachKeyList(int requiredSize, BiConsumer<KeyType, List<Object>> handler) {
+            return action(id -> new ActorBehaviorAggregation.ActorBehaviorMatchKeyList<>(id, requiredSize, keyComparator,
+                    new KeyExtractorList<>(extractor1, extractor2, extractor3, extractor4), handler));
+        }
+
+        public ActorBehaviorBuilderKeyValue forEachKeyList(BiConsumer<KeyType, List<Object>> handler) {
+            return action(id -> new ActorBehaviorAggregation.ActorBehaviorMatchKeyListFuture<>(id, keyComparator,
+                    new KeyExtractorList<>(extractor1, extractor2, extractor3, extractor4), handler));
+        }
+    }
+
+    public static class RelayToCollectList<KeyType, ValueType> extends RelayToCollect<KeyType> {
+        protected List<KeyExtractor<KeyType,?>> extractors;
+        protected List<BiFunction<KeyType, List<ValueType>, Iterable<ValueType>>> keyValuesReducers;
+
+        public RelayToCollectList(ActorBehaviorBuilderKeyValue builder,
+                               List<KeyExtractor<KeyType, ?>> extractors) {
+            super(builder);
+            this.extractors = new ArrayList<>(extractors);
+        }
+
+        public RelayToCollectList(ActorBehaviorBuilderKeyValue builder,
+                                  KeyHistograms.KeyComparator<KeyType> keyComparator,
+                                  BiFunction<KeyType, List<ValueType>, Iterable<ValueType>> keyValuesReducer,
+                                  List<KeyExtractor<KeyType, ?>> extractors) {
+            super(builder, keyComparator);
+            this.extractors = new ArrayList<>(extractors);
+            this.keyValuesReducers = new ArrayList<>();
+            keyValuesReducers.add(keyValuesReducer);
+        }
+
+        public RelayToCollectList<KeyType,ValueType> or(
+                Class<ValueType> valueType, Function<ValueType, KeyType> keyExtractorFromValue) {
+            extractors.add(new KeyExtractorClass<>(valueType, keyExtractorFromValue));
+            return this;
+        }
+
+        @Override
+        public RelayToCollectList<KeyType, ValueType> sort(KeyHistograms.KeyComparator<KeyType> keyComparator) {
+            super.sort(keyComparator);
+            return this;
+        }
+
+        public RelayToCollectList<KeyType, ValueType> reduce(BiFunction<KeyType, List<ValueType>, Iterable<ValueType>> keyValuesReducer) {
+            keyValuesReducers.add(keyValuesReducer);
+            return this;
+        }
+
+        public ActorBehaviorBuilderKeyValue forEachKeyValue(BiConsumer<KeyType, ValueType> handler) {
+            return forEachKeyList(1, (k,vs) -> handler.accept(k, vs.get(0)));
+        }
+
+        public ActorBehaviorBuilderKeyValue forEach(Consumer<ValueType> handler) {
+            return forEachKeyList(1, (k,vs) -> handler.accept(vs.get(0)));
+        }
+
+        public ActorBehaviorBuilderKeyValue forEachKeyList(int requiredSize, BiConsumer<KeyType, List<ValueType>> handler) {
+            return action(id -> new ActorBehaviorAggregation.ActorBehaviorMatchKeyList<>(id, requiredSize, keyComparator,
+                    new KeyExtractorList<>(extractors), handler)
+                    .withKeyValuesReducers(keyValuesReducers));
+        }
+
+        public ActorBehaviorBuilderKeyValue forEachKeyList(BiConsumer<KeyType, List<ValueType>> handler) {
+            return action(id -> new ActorBehaviorAggregation.ActorBehaviorMatchKeyListFuture<>(id, keyComparator,
+                    new KeyExtractorList<>(extractors), handler)
+                    .withKeyValuesReducers(keyValuesReducers));
         }
     }
 
@@ -152,6 +412,41 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
         }
     }
 
+    public static class KeyExtractorList<KeyType, ValueType> implements KeyExtractor<KeyType, ValueType> {
+        protected List<KeyExtractor<KeyType, ?>> keyExtractors;
+
+        public KeyExtractorList(List<KeyExtractor<KeyType, ?>> keyExtractors) {
+            this.keyExtractors = keyExtractors;
+        }
+
+        @SafeVarargs
+        public KeyExtractorList(KeyExtractor<KeyType, ?>... keyExtractors) {
+            this.keyExtractors = Arrays.asList(keyExtractors);
+        }
+
+        @Override
+        public boolean matchValue(Object value) {
+            for (KeyExtractor<KeyType, ?> e : keyExtractors) {
+                if (e.matchValue(value)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        @SuppressWarnings("unchecked")
+        @Override
+        public KeyType toKey(ValueType v) {
+            for (KeyExtractor<KeyType, ?> e : keyExtractors) {
+                if (e.matchValue(v)) {
+                    return ((KeyExtractor<KeyType,Object>) e).toKey(v);
+                }
+            }
+            return null;
+        }
+    }
+/*
+    @Deprecated
     public static class RelayToBehavior<KeyType> {
         protected ActorBehaviorBuilderKeyValue builder;
         protected List<KeyExtractor<KeyType, ?>> messages;
@@ -172,7 +467,7 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
             KeyExtractor<KeyType, ValueType1> m1 = (KeyExtractor<KeyType, ValueType1>) messages.get(0);
             KeyExtractor<KeyType, ValueType2> m2 = (KeyExtractor<KeyType, ValueType2>) messages.get(1);
             //TODO check size of messages
-            return builder.withProcessor(machKeyEntryId, new ActorBehaviorMatchKeyTwo<>(machKeyEntryId, keyComparator, m1, m2, handler));
+            return builder.withProcessor(machKeyEntryId, new ActorBehaviorAggregation.ActorBehaviorMatchKey2<>(machKeyEntryId, keyComparator, m1, m2, handler));
         }
 
         @SuppressWarnings("unchecked")
@@ -182,7 +477,7 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
             KeyExtractor<KeyType, ValueType2> m2 = (KeyExtractor<KeyType, ValueType2>) messages.get(1);
             KeyExtractor<KeyType, ValueType3> m3 = (KeyExtractor<KeyType, ValueType3>) messages.get(2);
             //TODO check size of messages
-            return builder.withProcessor(machKeyEntryId, new ActorBehaviorMatchKeyThree<>(machKeyEntryId, keyComparator, m1, m2, m3, handler));
+            return builder.withProcessor(machKeyEntryId, new ActorBehaviorAggregation.ActorBehaviorMatchKey3<>(machKeyEntryId, keyComparator, m1, m2, m3, handler));
         }
 
         @SuppressWarnings("unchecked")
@@ -193,7 +488,7 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
             KeyExtractor<KeyType, ValueType3> m3 = (KeyExtractor<KeyType, ValueType3>) messages.get(2);
             KeyExtractor<KeyType, ValueType4> m4 = (KeyExtractor<KeyType, ValueType4>) messages.get(3);
             //TODO check size of messages
-            return builder.withProcessor(machKeyEntryId, new ActorBehaviorMatchKeyFour<>(machKeyEntryId, keyComparator, m1, m2, m3, m4, handler));
+            return builder.withProcessor(machKeyEntryId, new ActorBehaviorAggregation.ActorBehaviorMatchKey4<>(machKeyEntryId, keyComparator, m1, m2, m3, m4, handler));
         }
 
         @SuppressWarnings("unchecked")
@@ -201,95 +496,10 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
                 int threshold, BiConsumer<KeyType, List<ValueType>> handler) {
             KeyExtractor<KeyType, ValueType> m = (KeyExtractor<KeyType, ValueType>) messages.get(0);
             //TODO check size of messages
-            return builder.withProcessor(machKeyEntryId, new ActorBehaviorMatchKeyList<>(machKeyEntryId, threshold, keyComparator, m, handler));
+            return builder.withProcessor(machKeyEntryId, new ActorBehaviorAggregation.ActorBehaviorMatchKeyList<>(machKeyEntryId, threshold, keyComparator, m, handler));
         }
-    }
+    }*/
 
-
-    public static abstract class ActorBehaviorMatchKey<KeyType> extends KeyHistograms.HistogramPutContext
-            implements ActorBehavior, MailboxAggregation.HistogramProcessor {
-        protected int matchKeyEntryId;
-        protected KeyHistograms.KeyComparator<KeyType> keyComparator;
-
-        public ActorBehaviorMatchKey(int matchKeyEntryId, int requiredSize, KeyHistograms.KeyComparator<KeyType> keyComparator) {
-            this.putRequiredSize = requiredSize;
-            this.matchKeyEntryId = matchKeyEntryId;
-            this.keyComparator = keyComparator;
-        }
-
-        protected void put(Actor self, KeyType key, Comparable<?> position, Object value) {
-            MailboxAggregation m = (MailboxAggregation) self.getMailbox();
-            this.putPosition = position;
-            this.putValue = value;
-            m.getTable(matchKeyEntryId).put(key, this);
-        }
-
-        @Override
-        public KeyHistograms.KeyComparator<?> getKeyComparator() {
-            return keyComparator;
-        }
-
-        public abstract List<KeyExtractor<KeyType,?>> getKeyExtractors();
-        public abstract Object getHandler();
-    }
-
-    public static class KeyComparatorOrdered<KeyType extends Comparable<KeyType>> implements KeyHistograms.KeyComparator<KeyType> {
-        @Override
-        public int compare(KeyType key1, KeyType key2) {
-            return key1.compareTo(key2);
-        }
-
-        @Override
-        public KeyType centerPoint(KeyType leftEnd, KeyType rightStart) {
-            return centerPointPrimitive(leftEnd, rightStart);
-        }
-    }
-
-    @SuppressWarnings("unchecked")
-    public static <KeyType> KeyType centerPointPrimitive(KeyType leftEnd, KeyType rightStart) {
-        if (leftEnd instanceof Number && rightStart instanceof Number) {
-            if (leftEnd instanceof Long && rightStart instanceof Long) {
-                long r = (Long) rightStart;
-                long l = (Long) leftEnd;
-                return (KeyType) (Long) (Math.max(1L, (r - l) / 2L) + l);
-            } else if (leftEnd instanceof Integer && rightStart instanceof Integer) {
-                int r = (Integer) rightStart;
-                int l = (Integer) leftEnd;
-                return (KeyType) (Integer) (Math.max(1, (r - l) / 2) + l);
-            } else if (leftEnd instanceof Double && rightStart instanceof Double) {
-                double r = (Double) rightStart;
-                double l = (Double) leftEnd;
-                return (KeyType) (Double) (r - (r - l) / 2.0);
-            } else if (leftEnd instanceof Float && rightStart instanceof Float) {
-                float r = (Float) rightStart;
-                float l = (Float) leftEnd;
-                return (KeyType) (Float) (r - (r - l) / 2f);
-            } else if (leftEnd instanceof BigDecimal && rightStart instanceof BigDecimal) {
-                BigDecimal r = (BigDecimal) rightStart;
-                BigDecimal l = (BigDecimal) leftEnd;
-                return (KeyType) r.subtract(r.subtract(l).divide(BigDecimal.valueOf(2), RoundingMode.FLOOR));
-            } else if (leftEnd instanceof BigInteger && rightStart instanceof BigInteger) {
-                BigInteger r = (BigInteger) rightStart;
-                BigInteger l = (BigInteger) leftEnd;
-                return (KeyType) r.subtract(r.subtract(l).divide(BigInteger.valueOf(2)));
-            } else {
-                return rightStart;
-            }
-        } else if (leftEnd instanceof UUID && rightStart instanceof UUID) {
-            UUID r = (UUID) rightStart;
-            UUID l = (UUID) leftEnd;
-            if (r.getMostSignificantBits() == l.getMostSignificantBits()) {
-                return (KeyType) new UUID(r.getMostSignificantBits(),
-                        centerPointPrimitive(l.getLeastSignificantBits(), r.getLeastSignificantBits()));
-            } else {
-                return (KeyType) new UUID(
-                        centerPointPrimitive(l.getMostSignificantBits(), r.getMostSignificantBits()),
-                        centerPointPrimitive(l.getLeastSignificantBits(), r.getLeastSignificantBits()));
-            }
-        } else {
-            return rightStart;
-        }
-    }
 
     public static class KeyComparatorDefault<KeyType> implements KeyHistograms.KeyComparator<KeyType> {
         @SuppressWarnings("unchecked")
@@ -305,574 +515,27 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
         @Override
         public KeyType centerPoint(KeyType leftEnd, KeyType rightStart) {
             if (leftEnd instanceof Comparable<?>) {
-                return centerPointPrimitive(leftEnd, rightStart);
+                return ActorBehaviorAggregation.centerPointPrimitive(leftEnd, rightStart);
             } else {
                 return rightStart;
             }
         }
     }
 
-    public static class ActorBehaviorMatchKeyTwo<KeyType, ValueType1, ValueType2> extends ActorBehaviorMatchKey<KeyType> {
-        protected KeyExtractor<KeyType, ValueType1> keyExtractorFromValue1;
-        protected KeyExtractor<KeyType, ValueType2> keyExtractorFromValue2;
-
-        protected BiConsumer<ValueType1, ValueType2> handler;
-
-        public ActorBehaviorMatchKeyTwo(int matchKeyEntryId, KeyHistograms.KeyComparator<KeyType> keyComparator,
-                                        KeyExtractor<KeyType, ValueType1> keyExtractorFromValue1,
-                                        KeyExtractor<KeyType, ValueType2> keyExtractorFromValue2,
-                                        BiConsumer<ValueType1, ValueType2> handler) {
-            super(matchKeyEntryId, 2, keyComparator);
-            this.keyExtractorFromValue1 = keyExtractorFromValue1;
-            this.keyExtractorFromValue2 = keyExtractorFromValue2;
-            this.handler = handler;
-        }
-
-        @Override
-        protected KeyHistograms.HistogramNodeLeaf createLeaf(Object key, int height) {
-            return new HistogramNodeLeafTwo(key, this, height);
-        }
-
-        @SuppressWarnings("unchecked")
-        @Override
-        public boolean process(Actor self, Message<?> message) {
-            Object value = message.getData();
-            KeyType key;
-            Comparable<?> pos;
-            if (keyExtractorFromValue1.matchValue(value)) {
-                key = keyExtractorFromValue1.toKey((ValueType1) value);
-                pos = 0;
-            } else if (keyExtractorFromValue2.matchValue(value)) {
-                key = keyExtractorFromValue2.toKey((ValueType2) value);
-                pos = 1;
-            } else {
-                return false;
-            }
-
-            put(self, key, pos, value);
-            return true;
-        }
-
-        @SuppressWarnings("unchecked")
-        @Override
-        public boolean processTable(MailboxAggregation m) {
-            KeyHistograms.HistogramTree tree = m.getTable(matchKeyEntryId);
-            HistogramNodeLeafTwo next = ((HistogramNodeLeafTwo) tree.takeCompleted());
-            if (next != null) {
-                return next.consume(tree, (BiConsumer<Object,Object>) handler);
-            }
-            return false;
-        }
-
-        @Override
-        public Object selectFromValue(Object value) {
-            if (keyExtractorFromValue1.matchValue(value)) {
-                return 0;
-            } else if (keyExtractorFromValue2.matchValue(value)) {
-                return 1;
-            } else {
-                return null;
-            }
-        }
-
-        @SuppressWarnings("unchecked")
-        @Override
-        public Object extractKeyFromValue(Object value, Object position) {
-            if (position.equals(0)) {
-                return keyExtractorFromValue1.toKey((ValueType1) value);
-            } else if (position.equals(1)) {
-                return keyExtractorFromValue2.toKey((ValueType2) value);
-            } else {
-                return null;
-            }
-        }
-
-        /** @return implementation field getter */
-        public List<KeyExtractor<KeyType,?>> getKeyExtractors() {
-            return Arrays.asList(keyExtractorFromValue1, keyExtractorFromValue2);
-        }
-
-        /** @return implementation field getter */
-        public BiConsumer<ValueType1, ValueType2> getHandler() {
-            return handler;
-        }
-    }
-
-    public static abstract class HistogramNodeLeafN extends KeyHistograms.HistogramNodeLeaf {
-        public HistogramNodeLeafN(Object key, KeyHistograms.HistogramPutContext context, int height) {
-            super(key, context, height);
-        }
-
-        public abstract List<KeyHistograms.HistogramLeafList> getValueList();
-    }
-
-    public static class HistogramNodeLeafTwo extends HistogramNodeLeafN {
-        protected KeyHistograms.HistogramLeafList values1;
-        protected KeyHistograms.HistogramLeafList values2;
-
-        public HistogramNodeLeafTwo(Object key, KeyHistograms.HistogramPutContext context, int height) {
-            super(key, context, height);
-        }
-
-        @Override
-        protected void initStruct() {
-            values1 = new KeyHistograms.HistogramLeafList();
-            values2 = new KeyHistograms.HistogramLeafList();
-        }
-
-        @Override
-        protected void putValueStruct(KeyHistograms.HistogramPutContext context) {
-            if (context.putPosition.equals(0)) {
-                values1.add(context.putValue);
-            } else {
-                values2.add(context.putValue);
-            }
-        }
-
-        @Override
-        protected boolean completedAfterPut(KeyHistograms.HistogramPutContext context) {
-            return !values1.isEmpty() && !values2.isEmpty();
-        }
-
-        public boolean consume(KeyHistograms.HistogramTree tree, BiConsumer<Object, Object> handler) {
-            if (completedAfterPut(null)) {  //currently, it can complete before consume, and then it might not be able to consume 2 or more times
-                afterTake(2, tree);
-                handler.accept(values1.poll(), values2.poll());
-                return true;
-            } else {
-                return false;
-            }
-        }
-
-        public List<KeyHistograms.HistogramLeafList> getValueList() {
-            return Arrays.asList(values1, values2);
-        }
-    }
-
-
-    public static class ActorBehaviorMatchKeyThree<KeyType, ValueType1, ValueType2, ValueType3> extends ActorBehaviorMatchKey<KeyType> {
-        protected KeyExtractor<KeyType, ValueType1> keyExtractorFromValue1;
-        protected KeyExtractor<KeyType, ValueType2> keyExtractorFromValue2;
-        protected KeyExtractor<KeyType, ValueType3> keyExtractorFromValue3;
-
-        protected TriConsumer<ValueType1, ValueType2, ValueType3> handler;
-
-        public ActorBehaviorMatchKeyThree(int matchKeyEntryId, KeyHistograms.KeyComparator<KeyType> keyComparator,
-                                        KeyExtractor<KeyType, ValueType1> keyExtractorFromValue1,
-                                        KeyExtractor<KeyType, ValueType2> keyExtractorFromValue2,
-                                        KeyExtractor<KeyType, ValueType3> keyExtractorFromValue3,
-                                        TriConsumer<ValueType1, ValueType2, ValueType3> handler) {
-            super(matchKeyEntryId, 3, keyComparator);
-            this.keyExtractorFromValue1 = keyExtractorFromValue1;
-            this.keyExtractorFromValue2 = keyExtractorFromValue2;
-            this.keyExtractorFromValue3 = keyExtractorFromValue3;
-            this.handler = handler;
-        }
-
-        @Override
-        protected KeyHistograms.HistogramNodeLeaf createLeaf(Object key, int height) {
-            return new HistogramNodeLeafThree(key, this, height);
-        }
-
-        @SuppressWarnings("unchecked")
-        @Override
-        public boolean process(Actor self, Message<?> message) {
-            Object value = message.getData();
-            KeyType key;
-            Comparable<?> pos;
-            if (keyExtractorFromValue1.matchValue(value)) {
-                key = keyExtractorFromValue1.toKey((ValueType1) value);
-                pos = 0;
-            } else if (keyExtractorFromValue2.matchValue(value)) {
-                key = keyExtractorFromValue2.toKey((ValueType2) value);
-                pos = 1;
-            } else if (keyExtractorFromValue3.matchValue(value)) {
-                key = keyExtractorFromValue3.toKey((ValueType3) value);
-                pos = 2;
-            } else {
-                return false;
-            }
-
-            put(self, key, pos, value);
-            return true;
-        }
-
-        @SuppressWarnings("unchecked")
-        @Override
-        public boolean processTable(MailboxAggregation m) {
-            KeyHistograms.HistogramTree tree = m.getTable(matchKeyEntryId);
-            HistogramNodeLeafThree next = ((HistogramNodeLeafThree) tree.takeCompleted());
-            if (next != null) {
-                return next.consume(tree, (TriConsumer<Object,Object,Object>) handler);
-            }
-            return false;
-        }
-
-        @Override
-        public Object selectFromValue(Object value) {
-            if (keyExtractorFromValue1.matchValue(value)) {
-                return 0;
-            } else if (keyExtractorFromValue2.matchValue(value)) {
-                return 1;
-            } else if (keyExtractorFromValue3.matchValue(value)) {
-                return 2;
-            } else {
-                return null;
-            }
-        }
-
-        @SuppressWarnings("unchecked")
-        @Override
-        public Object extractKeyFromValue(Object value, Object position) {
-            if (position.equals(0)) {
-                return keyExtractorFromValue1.toKey((ValueType1) value);
-            } else if (position.equals(1)) {
-                return keyExtractorFromValue2.toKey((ValueType2) value);
-            } else if (position.equals(2)) {
-                return keyExtractorFromValue3.toKey((ValueType3) value);
-            } else {
-                return null;
-            }
-        }
-
-        /** @return implementation field getter */
-        public List<KeyExtractor<KeyType,?>> getKeyExtractors() {
-            return Arrays.asList(keyExtractorFromValue1, keyExtractorFromValue2, keyExtractorFromValue3);
-        }
-
-        /** @return implementation field getter */
-        public TriConsumer<ValueType1, ValueType2, ValueType3> getHandler() {
-            return handler;
-        }
-    }
-
-
-    public static class HistogramNodeLeafThree extends HistogramNodeLeafN {
-        protected KeyHistograms.HistogramLeafList values1;
-        protected KeyHistograms.HistogramLeafList values2;
-        protected KeyHistograms.HistogramLeafList values3;
-
-        public HistogramNodeLeafThree(Object key, KeyHistograms.HistogramPutContext context, int height) {
-            super(key, context, height);
-        }
-
-        @Override
-        protected void initStruct() {
-            values1 = new KeyHistograms.HistogramLeafList();
-            values2 = new KeyHistograms.HistogramLeafList();
-            values3 = new KeyHistograms.HistogramLeafList();
-        }
-
-        @Override
-        protected void putValueStruct(KeyHistograms.HistogramPutContext context) {
-            Comparable<?> pos = context.putPosition;
-            if (pos.equals(0)) {
-                values1.add(context.putValue);
-            } else if (pos.equals(1)) {
-                values2.add(context.putValue);
-            } else {
-                values3.add(context.putValue);
-            }
-        }
-
-        @Override
-        protected boolean completedAfterPut(KeyHistograms.HistogramPutContext context) {
-            return !values1.isEmpty() && !values2.isEmpty() && !values3.isEmpty();
-        }
-
-        public boolean consume(KeyHistograms.HistogramTree tree, TriConsumer<Object, Object, Object> handler) {
-            if (completedAfterPut(null)) {
-                afterTake(3, tree);
-                handler.accept(values1.poll(), values2.poll(), values3.poll());
-                return true;
-            } else {
-                return false;
-            }
-        }
-
-        public List<KeyHistograms.HistogramLeafList> getValueList() {
-            return Arrays.asList(values1, values2, values3);
-        }
-    }
-
-    public static class ActorBehaviorMatchKeyFour<KeyType, ValueType1, ValueType2, ValueType3, ValueType4> extends ActorBehaviorMatchKey<KeyType> {
-        protected KeyExtractor<KeyType, ValueType1> keyExtractorFromValue1;
-        protected KeyExtractor<KeyType, ValueType2> keyExtractorFromValue2;
-        protected KeyExtractor<KeyType, ValueType3> keyExtractorFromValue3;
-        protected KeyExtractor<KeyType, ValueType4> keyExtractorFromValue4;
-
-        protected QuadConsumer<ValueType1, ValueType2, ValueType3, ValueType4> handler;
-
-        public ActorBehaviorMatchKeyFour(int matchKeyEntryId, KeyHistograms.KeyComparator<KeyType> keyComparator,
-                                          KeyExtractor<KeyType, ValueType1> keyExtractorFromValue1,
-                                          KeyExtractor<KeyType, ValueType2> keyExtractorFromValue2,
-                                          KeyExtractor<KeyType, ValueType3> keyExtractorFromValue3,
-                                          KeyExtractor<KeyType, ValueType4> keyExtractorFromValue4,
-                                          QuadConsumer<ValueType1, ValueType2, ValueType3, ValueType4> handler) {
-            super(matchKeyEntryId, 4, keyComparator);
-            this.keyExtractorFromValue1 = keyExtractorFromValue1;
-            this.keyExtractorFromValue2 = keyExtractorFromValue2;
-            this.keyExtractorFromValue3 = keyExtractorFromValue3;
-            this.keyExtractorFromValue4 = keyExtractorFromValue4;
-            this.handler = handler;
-        }
-
-        @Override
-        protected KeyHistograms.HistogramNodeLeaf createLeaf(Object key, int height) {
-            return new HistogramNodeLeafFour(key, this, height);
-        }
-
-        @SuppressWarnings("unchecked")
-        @Override
-        public boolean process(Actor self, Message<?> message) {
-            Object value = message.getData();
-            KeyType key;
-            Comparable<?> pos;
-            if (keyExtractorFromValue1.matchValue(value)) {
-                key = keyExtractorFromValue1.toKey((ValueType1) value);
-                pos = 0;
-            } else if (keyExtractorFromValue2.matchValue(value)) {
-                key = keyExtractorFromValue2.toKey((ValueType2) value);
-                pos = 1;
-            } else if (keyExtractorFromValue3.matchValue(value)) {
-                key = keyExtractorFromValue3.toKey((ValueType3) value);
-                pos = 2;
-            } else if (keyExtractorFromValue4.matchValue(value)) {
-                key = keyExtractorFromValue4.toKey((ValueType4) value);
-                pos = 3;
-            } else {
-                return false;
-            }
-
-            put(self, key, pos, value);
-            return true;
-        }
-
-        @SuppressWarnings("unchecked")
-        @Override
-        public boolean processTable(MailboxAggregation m) {
-            KeyHistograms.HistogramTree tree = m.getTable(matchKeyEntryId);
-            HistogramNodeLeafFour next = ((HistogramNodeLeafFour) tree.takeCompleted());
-            if (next != null) {
-                return next.consume(tree, (QuadConsumer<Object,Object,Object,Object>) handler);
-            }
-            return false;
-        }
-
-        @Override
-        public Object selectFromValue(Object value) {
-            if (keyExtractorFromValue1.matchValue(value)) {
-                return 0;
-            } else if (keyExtractorFromValue2.matchValue(value)) {
-                return 1;
-            } else if (keyExtractorFromValue3.matchValue(value)) {
-                return 2;
-            } else if (keyExtractorFromValue4.matchValue(value)) {
-                return 3;
-            } else {
-                return null;
-            }
-        }
-
-        @SuppressWarnings("unchecked")
-        @Override
-        public Object extractKeyFromValue(Object value, Object position) {
-            if (position.equals(0)) {
-                return keyExtractorFromValue1.toKey((ValueType1) value);
-            } else if (position.equals(1)) {
-                return keyExtractorFromValue2.toKey((ValueType2) value);
-            } else if (position.equals(2)) {
-                return keyExtractorFromValue3.toKey((ValueType3) value);
-            } else if (position.equals(3)) {
-                return keyExtractorFromValue4.toKey((ValueType4) value);
-            } else {
-                return null;
-            }
-        }
-
-        /** @return implementation field getter */
-        public List<KeyExtractor<KeyType,?>> getKeyExtractors() {
-            return Arrays.asList(keyExtractorFromValue1, keyExtractorFromValue2, keyExtractorFromValue3, keyExtractorFromValue4);
-        }
-
-        /** @return implementation field getter */
-        public QuadConsumer<ValueType1, ValueType2, ValueType3, ValueType4> getHandler() {
-            return handler;
-        }
-    }
-
-
-    public static class HistogramNodeLeafFour extends HistogramNodeLeafN {
-        protected KeyHistograms.HistogramLeafList values1;
-        protected KeyHistograms.HistogramLeafList values2;
-        protected KeyHistograms.HistogramLeafList values3;
-        protected KeyHistograms.HistogramLeafList values4;
-
-        public HistogramNodeLeafFour(Object key, KeyHistograms.HistogramPutContext context, int height) {
-            super(key, context, height);
-        }
-
-        @Override
-        protected void initStruct() {
-            values1 = new KeyHistograms.HistogramLeafList();
-            values2 = new KeyHistograms.HistogramLeafList();
-            values3 = new KeyHistograms.HistogramLeafList();
-            values4 = new KeyHistograms.HistogramLeafList();
-        }
-
-        @Override
-        protected void putValueStruct(KeyHistograms.HistogramPutContext context) {
-            Comparable<?> pos = context.putPosition;
-            if (pos.equals(0)) {
-                values1.add(context.putValue);
-            } else if (pos.equals(1)) {
-                values2.add(context.putValue);
-            } else if (pos.equals(2)) {
-                values3.add(context.putValue);
-            } else {
-                values4.add(context.putValue);
-            }
-        }
-
-        @Override
-        protected boolean completedAfterPut(KeyHistograms.HistogramPutContext context) {
-            return !values1.isEmpty() && !values2.isEmpty() && !values3.isEmpty() && !values4.isEmpty();
-        }
-
-        public boolean consume(KeyHistograms.HistogramTree tree, QuadConsumer<Object, Object, Object, Object> handler) {
-            if (completedAfterPut(null)) {
-                afterTake(4, tree);
-                handler.accept(values1.poll(), values2.poll(), values3.poll(), values4.poll());
-                return true;
-            } else {
-                return false;
-            }
-        }
-
-        public List<KeyHistograms.HistogramLeafList> getValueList() {
-            return Arrays.asList(values1, values2, values3, values4);
-        }
-    }
 
     @FunctionalInterface
     public interface TriConsumer<V1,V2,V3> {
-        void accept(V1 a, V2 b, V3 c);
+        void accept(V1 v1, V2 v2, V3 v3);
     }
 
     @FunctionalInterface
     public interface QuadConsumer<V1,V2,V3,V4> {
-        void accept(V1 a, V2 b, V3 c, V4 d);
+        void accept(V1 v1, V2 v2, V3 v3, V4 v4);
     }
 
-    public static class ActorBehaviorMatchKeyList<KeyType, ValueType> extends ActorBehaviorMatchKey<KeyType> {
-        protected KeyExtractor<KeyType, ValueType> keyExtractorFromValue;
-        protected BiConsumer<KeyType, List<ValueType>> handler;
-
-        public ActorBehaviorMatchKeyList(int matchKeyEntryId, int threshold, KeyHistograms.KeyComparator<KeyType> keyComparator,
-                                         KeyExtractor<KeyType, ValueType> keyExtractorFromValue,
-                                         BiConsumer<KeyType, List<ValueType>> handler) {
-            super(matchKeyEntryId, threshold, keyComparator);
-            this.keyExtractorFromValue = keyExtractorFromValue;
-            this.handler = handler;
-        }
-
-        @Override
-        protected KeyHistograms.HistogramNodeLeaf createLeaf(Object key, int height) {
-            return new HistogramNodeLeafList(key, this, height);
-        }
-
-        @SuppressWarnings("unchecked")
-        @Override
-        public boolean process(Actor self, Message<?> message) {
-            Object value = message.getData();
-            KeyType key;
-            if (keyExtractorFromValue.matchValue(value)) {
-                key = keyExtractorFromValue.toKey((ValueType) value);
-            } else {
-                return false;
-            }
-            put(self, key, null, value);
-            return true;
-        }
-
-        @SuppressWarnings({"unchecked", "rawtypes"})
-        @Override
-        public boolean processTable(MailboxAggregation m) {
-            KeyHistograms.HistogramTree tree = m.getTable(matchKeyEntryId);
-            HistogramNodeLeafList next = (HistogramNodeLeafList) tree.takeCompleted();
-            if (next != null) {
-                return next.consume(putRequiredSize, tree, (BiConsumer) handler);
-            }
-            return false;
-        }
-
-        @Override
-        public Object selectFromValue(Object value) {
-            if (keyExtractorFromValue.matchValue(value)) {
-                return true;
-            } else {
-                return null;
-            }
-        }
-
-        @SuppressWarnings("unchecked")
-        @Override
-        public Object extractKeyFromValue(Object value, Object position) {
-            return keyExtractorFromValue.toKey((ValueType) value);
-        }
-
-        /** @return implementation field getter */
-        public List<KeyExtractor<KeyType,?>> getKeyExtractors() {
-            return Collections.singletonList(keyExtractorFromValue);
-        }
-
-        /** @return implementation field getter */
-        public BiConsumer<KeyType, List<ValueType>> getHandler() {
-            return handler;
-        }
+    @FunctionalInterface
+    public interface QuintConsumer<V1,V2,V3,V4,V5> {
+        void accept(V1 v1, V2 v2, V3 v3, V4 v4, V5 v5);
     }
 
-    public static class HistogramNodeLeafList extends HistogramNodeLeafN {
-        protected KeyHistograms.HistogramLeafList values;
-        public HistogramNodeLeafList(Object key, KeyHistograms.HistogramPutContext context, int height) {
-            super(key, context, height);
-        }
-
-        @Override
-        protected void initStruct() {
-            values = new KeyHistograms.HistogramLeafList();
-        }
-
-        @Override
-        protected void putValueStruct(KeyHistograms.HistogramPutContext context) {
-            values.add(context.putValue);
-        }
-
-        @Override
-        protected boolean completedAfterPut(KeyHistograms.HistogramPutContext context) {
-            return completed(context.putRequiredSize);
-        }
-
-        protected boolean completed(int r) {
-            return r >= size;
-        }
-
-        public boolean consume(int requiredSize, KeyHistograms.HistogramTree tree, BiConsumer<Object,List<Object>> handler) {
-            if (completed(requiredSize)) {
-                List<Object> vs = new ArrayList<>(requiredSize);
-                for (int i = 0; i < requiredSize; ++i) {
-                    vs.add(values.poll());
-                }
-                afterTake(requiredSize, tree);
-                handler.accept(key, vs);
-                return true;
-            } else {
-                return false;
-            }
-        }
-
-        public List<KeyHistograms.HistogramLeafList> getValueList() {
-            return Collections.singletonList(values);
-        }
-    }
 }

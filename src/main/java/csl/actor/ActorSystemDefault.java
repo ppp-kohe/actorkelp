@@ -10,6 +10,7 @@ public class ActorSystemDefault implements ActorSystem {
     protected boolean shutdown;
     protected int threads;
     protected ExecutorService executorService;
+    protected volatile ScheduledExecutorService scheduledExecutor;
     protected AtomicInteger processingCount;
     protected int throughput;
     protected Map<String, Actor> namedActorMap;
@@ -18,6 +19,7 @@ public class ActorSystemDefault implements ActorSystem {
         initSystem();
     }
 
+    @Override
     public int getThreads() {
         return threads;
     }
@@ -185,6 +187,27 @@ public class ActorSystemDefault implements ActorSystem {
     public void close() {
         shutdown = true;
         executorService.shutdownNow();
+        ScheduledExecutorService se = scheduledExecutor;
+        if (se != null) {
+            se.shutdownNow();
+        }
+    }
+
+    public ScheduledExecutorService getScheduledExecutor() {
+        ScheduledExecutorService se = scheduledExecutor;
+        if (se == null) {
+            synchronized (this) {
+                if (scheduledExecutor == null) {
+                    scheduledExecutor = Executors.newScheduledThreadPool(getScheduledExecutorThreads());
+                }
+                se = scheduledExecutor;
+            }
+        }
+        return se;
+    }
+
+    protected int getScheduledExecutorThreads() {
+        return Math.max(1, getThreads() / 2);
     }
 
     public static class PollTime {

@@ -345,8 +345,8 @@ public class ActorToGraph {
         }
         table.add(Arrays.asList("key", Objects.toString(l.getKey())));
         table.add(Arrays.asList("size", String.format("%,d", l.size())));
-        if (l instanceof ActorBehaviorBuilderKeyValue.HistogramNodeLeafN) {
-            for (KeyHistograms.HistogramLeafList list : ((ActorBehaviorBuilderKeyValue.HistogramNodeLeafN) l).getValueList()) {
+        if (l instanceof ActorBehaviorAggregation.HistogramNodeLeafN) {
+            for (KeyHistograms.HistogramLeafList list : ((ActorBehaviorAggregation.HistogramNodeLeafN) l).getValueList()) {
                 long n = list.count();
                 table.add(Arrays.asList("v" + vi + ".count", String.format("%,d", n)));
                 ++vi;

@@ -130,7 +130,7 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
         if (placement instanceof ActorPlacement.PlacemenActor) {
             return ((ActorPlacement.PlacemenActor) placement).getTotalThreads();
         } else {
-            return ActorPlacement.getLocalThreads(self.getSystem());
+            return self.getSystem().getThreads();
         }
     }
 
