@@ -1,18 +1,20 @@
 package csl.actor.msgassoc;
 
 import csl.actor.Actor;
+import csl.actor.Mailbox;
 import csl.actor.MailboxDefault;
+import csl.actor.Message;
 
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
 import java.util.List;
-import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
-public class MailboxAggregation extends MailboxDefault implements Cloneable {
+public class MailboxAggregation implements Mailbox, Cloneable {
+    protected MailboxDefault mailbox;
     protected int treeSize;
     protected HistogramEntry[] tables;
 
@@ -22,12 +24,34 @@ public class MailboxAggregation extends MailboxDefault implements Cloneable {
 
     public MailboxAggregation(int treeSize) {
         this.treeSize = treeSize;
+        this.mailbox = new MailboxDefault();
     }
 
+    public MailboxAggregation(int treeSize, MailboxDefault mailbox) {
+        this.mailbox = mailbox;
+        this.treeSize = treeSize;
+    }
+
+    @Override
+    public void offer(Message<?> message) {
+        mailbox.offer(message);
+    }
+
+    @Override
+    public Message<?> poll() {
+        return mailbox.poll();
+    }
+
+    @Override
+    public boolean isEmpty() {
+        return mailbox.isEmpty();
+    }
+
+    @Override
     public MailboxAggregation create() {
         try {
             MailboxAggregation m = (MailboxAggregation) super.clone();
-            m.queue = new ConcurrentLinkedQueue<>();
+            m.mailbox = mailbox.create();
             int size = tables.length;
             m.tables = new HistogramEntry[size];
             for (int i = 0; i < size; ++i) {

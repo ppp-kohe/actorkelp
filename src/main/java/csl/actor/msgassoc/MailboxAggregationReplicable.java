@@ -117,10 +117,6 @@ public class MailboxAggregationReplicable extends MailboxAggregation {
         return false;
     }
 
-    public List<Object> splitMessageTableIntoReplicas(ActorAggregationReplicable a1, ActorAggregationReplicable a2) {
-        return splitMessageTableIntoReplicas(a1.getMailboxAsReplicable(), a2.getMailboxAsReplicable());
-    }
-
     public List<Object> splitMessageTableIntoReplicas(MailboxAggregationReplicable m1, MailboxAggregationReplicable m2) {
         int size = tables.length;
         List<Object> splitPoints = new ArrayList<>(size);
@@ -154,7 +150,7 @@ public class MailboxAggregationReplicable extends MailboxAggregation {
         if (size.addAndGet(m.size()) < 0) {
             size.set(Integer.MAX_VALUE);
         }
-        queue.addAll(m.queue); //it does not change target of each message
+        mailbox.getQueue().addAll(m.mailbox.getQueue()); //it does not change target of each message
 
         for (int i = 0, l = tables.length; i < l; ++i) {
             HistogramEntry e1 = tables[i];
@@ -164,14 +160,14 @@ public class MailboxAggregationReplicable extends MailboxAggregation {
     }
 
     public void serializeTo(ActorAggregationReplicable.ActorReplicableSerializableState state) {
-        state.messages = queue.toArray(new Message[0]);
+        state.messages = mailbox.getQueue().toArray(new Message[0]);
         state.tables = Arrays.stream(tables)
                 .map(HistogramEntry::getTree)
                 .collect(Collectors.toList());
     }
 
     public void deserializeFrom(ActorAggregationReplicable.ActorReplicableSerializableState state) {
-        queue.addAll(Arrays.asList(state.messages));
+        mailbox.getQueue().addAll(Arrays.asList(state.messages));
         int i = 0;
         for (KeyHistograms.HistogramTree t : state.tables) {
             tables[i].setTree(t);

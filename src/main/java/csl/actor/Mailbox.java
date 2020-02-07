@@ -1,7 +1,8 @@
 package csl.actor;
 
-public abstract class Mailbox {
-    public abstract void offer(Message<?> message);
-    public abstract Message<?> poll();
-    public abstract boolean isEmpty();
+public interface Mailbox {
+    void offer(Message<?> message);
+    Message<?> poll();
+    boolean isEmpty();
+    Mailbox create();
 }

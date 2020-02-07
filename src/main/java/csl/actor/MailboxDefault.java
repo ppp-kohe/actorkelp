@@ -2,8 +2,20 @@ package csl.actor;
 
 import java.util.concurrent.ConcurrentLinkedQueue;
 
-public class MailboxDefault extends Mailbox {
+public class MailboxDefault implements Mailbox, Cloneable {
     protected ConcurrentLinkedQueue<Message<?>> queue = new ConcurrentLinkedQueue<>();
+
+    @Override
+    public MailboxDefault create() {
+        try {
+            MailboxDefault m = (MailboxDefault) super.clone();
+            m.queue = new ConcurrentLinkedQueue<>();
+            return m;
+        } catch (CloneNotSupportedException e) {
+            //never
+            throw new RuntimeException(e);
+        }
+    }
 
     @Override
     public void offer(Message<?> message) {
@@ -20,7 +32,6 @@ public class MailboxDefault extends Mailbox {
         return queue.isEmpty();
     }
 
-    /** @return implementation field getter */
     public ConcurrentLinkedQueue<Message<?>> getQueue() {
         return queue;
     }

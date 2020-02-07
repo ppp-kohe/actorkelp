@@ -447,7 +447,8 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
             ActorAggregationReplicable a2 = self.createClone();
             a1.state = new StateLeaf();
             a2.state = new StateLeaf();
-            List<Object> splitPoints = self.getMailboxAsReplicable().splitMessageTableIntoReplicas(a1, a2);
+            List<Object> splitPoints = self.getMailboxAsReplicable()
+                    .splitMessageTableIntoReplicas(a1.getMailboxAsReplicable(), a2.getMailboxAsReplicable());
             return router.createSplitNode(splitPoints, a1, a2, depth, height);
         }
 
