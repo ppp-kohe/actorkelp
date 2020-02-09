@@ -115,7 +115,7 @@ public class ActorBehaviorAggregation {
 
         @Override
         protected KeyHistograms.HistogramNodeLeaf createLeaf(Object key, int height) {
-            return new HistogramNodeLeaf2(key, this, height);
+            return new HistogramNodeLeaf1(key, this, height);
         }
 
         @SuppressWarnings("unchecked")
@@ -180,8 +180,6 @@ public class ActorBehaviorAggregation {
         public HistogramNodeLeafN(Object key, KeyHistograms.HistogramPutContext context, int height) {
             super(key, context, height);
         }
-
-        public abstract List<KeyHistograms.HistogramLeafList> getValueList();
     }
 
 
@@ -193,13 +191,13 @@ public class ActorBehaviorAggregation {
         }
 
         @Override
-        protected void initStruct() {
-            values1 = new KeyHistograms.HistogramLeafList();
+        protected void initStruct(KeyHistograms.HistogramPutContext context) {
+            values1 = context.createEmptyList();
         }
 
         @Override
         protected void putValueStruct(KeyHistograms.HistogramPutContext context) {
-            values1.add(context.putValue);
+            values1.add(context.putTree, context.putValue);
         }
 
         @Override
@@ -210,14 +208,14 @@ public class ActorBehaviorAggregation {
         public boolean consume(KeyHistograms.HistogramTree tree, BiConsumer<Object, Object> handler) {
             if (completedAfterPut(null)) {  //currently, it can complete before consume, and then it might not be able to consume 2 or more times
                 afterTake(1, tree);
-                handler.accept(getKey(), values1.poll());
+                handler.accept(getKey(), values1.poll(tree));
                 return true;
             } else {
                 return false;
             }
         }
 
-        public List<KeyHistograms.HistogramLeafList> getValueList() {
+        public List<KeyHistograms.HistogramLeafList> getStructList() {
             return Collections.singletonList(values1);
         }
     }
@@ -318,17 +316,17 @@ public class ActorBehaviorAggregation {
         }
 
         @Override
-        protected void initStruct() {
-            values1 = new KeyHistograms.HistogramLeafList();
-            values2 = new KeyHistograms.HistogramLeafList();
+        protected void initStruct(KeyHistograms.HistogramPutContext context) {
+            values1 = context.createEmptyList();
+            values2 = context.createEmptyList();
         }
 
         @Override
         protected void putValueStruct(KeyHistograms.HistogramPutContext context) {
             if (context.putPosition.equals(0)) {
-                values1.add(context.putValue);
+                values1.add(context.putTree, context.putValue);
             } else {
-                values2.add(context.putValue);
+                values2.add(context.putTree, context.putValue);
             }
         }
 
@@ -340,14 +338,14 @@ public class ActorBehaviorAggregation {
         public boolean consume(KeyHistograms.HistogramTree tree, TriConsumer<Object, Object, Object> handler) {
             if (completedAfterPut(null)) {  //currently, it can complete before consume, and then it might not be able to consume 2 or more times
                 afterTake(2, tree);
-                handler.accept(getKey(), values1.poll(), values2.poll());
+                handler.accept(getKey(), values1.poll(tree), values2.poll(tree));
                 return true;
             } else {
                 return false;
             }
         }
 
-        public List<KeyHistograms.HistogramLeafList> getValueList() {
+        public List<KeyHistograms.HistogramLeafList> getStructList() {
             return Arrays.asList(values1, values2);
         }
     }
@@ -459,21 +457,21 @@ public class ActorBehaviorAggregation {
         }
 
         @Override
-        protected void initStruct() {
-            values1 = new KeyHistograms.HistogramLeafList();
-            values2 = new KeyHistograms.HistogramLeafList();
-            values3 = new KeyHistograms.HistogramLeafList();
+        protected void initStruct(KeyHistograms.HistogramPutContext context) {
+            values1 = context.createEmptyList();
+            values2 = context.createEmptyList();
+            values3 = context.createEmptyList();
         }
 
         @Override
         protected void putValueStruct(KeyHistograms.HistogramPutContext context) {
             Comparable<?> pos = context.putPosition;
             if (pos.equals(0)) {
-                values1.add(context.putValue);
+                values1.add(context.putTree, context.putValue);
             } else if (pos.equals(1)) {
-                values2.add(context.putValue);
+                values2.add(context.putTree, context.putValue);
             } else {
-                values3.add(context.putValue);
+                values3.add(context.putTree, context.putValue);
             }
         }
 
@@ -485,14 +483,14 @@ public class ActorBehaviorAggregation {
         public boolean consume(KeyHistograms.HistogramTree tree, QuadConsumer<Object, Object, Object, Object> handler) {
             if (completedAfterPut(null)) {
                 afterTake(3, tree);
-                handler.accept(getKey(), values1.poll(), values2.poll(), values3.poll());
+                handler.accept(getKey(), values1.poll(tree), values2.poll(tree), values3.poll(tree));
                 return true;
             } else {
                 return false;
             }
         }
 
-        public List<KeyHistograms.HistogramLeafList> getValueList() {
+        public List<KeyHistograms.HistogramLeafList> getStructList() {
             return Arrays.asList(values1, values2, values3);
         }
     }
@@ -614,24 +612,24 @@ public class ActorBehaviorAggregation {
         }
 
         @Override
-        protected void initStruct() {
-            values1 = new KeyHistograms.HistogramLeafList();
-            values2 = new KeyHistograms.HistogramLeafList();
-            values3 = new KeyHistograms.HistogramLeafList();
-            values4 = new KeyHistograms.HistogramLeafList();
+        protected void initStruct(KeyHistograms.HistogramPutContext context) {
+            values1 = context.createEmptyList();
+            values2 = context.createEmptyList();
+            values3 = context.createEmptyList();
+            values4 = context.createEmptyList();
         }
 
         @Override
         protected void putValueStruct(KeyHistograms.HistogramPutContext context) {
             Comparable<?> pos = context.putPosition;
             if (pos.equals(0)) {
-                values1.add(context.putValue);
+                values1.add(context.putTree, context.putValue);
             } else if (pos.equals(1)) {
-                values2.add(context.putValue);
+                values2.add(context.putTree, context.putValue);
             } else if (pos.equals(2)) {
-                values3.add(context.putValue);
+                values3.add(context.putTree, context.putValue);
             } else {
-                values4.add(context.putValue);
+                values4.add(context.putTree, context.putValue);
             }
         }
 
@@ -643,14 +641,14 @@ public class ActorBehaviorAggregation {
         public boolean consume(KeyHistograms.HistogramTree tree, QuintConsumer<Object, Object, Object, Object, Object> handler) {
             if (completedAfterPut(null)) {
                 afterTake(4, tree);
-                handler.accept(getKey(), values1.poll(), values2.poll(), values3.poll(), values4.poll());
+                handler.accept(getKey(), values1.poll(tree), values2.poll(tree), values3.poll(tree), values4.poll(tree));
                 return true;
             } else {
                 return false;
             }
         }
 
-        public List<KeyHistograms.HistogramLeafList> getValueList() {
+        public List<KeyHistograms.HistogramLeafList> getStructList() {
             return Arrays.asList(values1, values2, values3, values4);
         }
     }
@@ -739,13 +737,13 @@ public class ActorBehaviorAggregation {
         }
 
         @Override
-        protected void initStruct() {
-            values = new KeyHistograms.HistogramLeafList();
+        protected void initStruct(KeyHistograms.HistogramPutContext context) {
+            values = context.createEmptyList();
         }
 
         @Override
         protected void putValueStruct(KeyHistograms.HistogramPutContext context) {
-            values.add(context.putValue);
+            values.add(context.putTree, context.putValue);
         }
 
         @Override
@@ -761,7 +759,7 @@ public class ActorBehaviorAggregation {
             if (completed(requiredSize)) {
                 List<Object> vs = new ArrayList<>(requiredSize);
                 for (int i = 0; i < requiredSize; ++i) {
-                    vs.add(values.poll());
+                    vs.add(values.poll(tree));
                 }
                 afterTake(requiredSize, tree);
                 handler.accept(key, vs);
@@ -771,7 +769,8 @@ public class ActorBehaviorAggregation {
             }
         }
 
-        public List<KeyHistograms.HistogramLeafList> getValueList() {
+        @Override
+        public List<KeyHistograms.HistogramLeafList> getStructList() {
             return Collections.singletonList(values);
         }
 
@@ -840,7 +839,7 @@ public class ActorBehaviorAggregation {
 
         @Override
         protected KeyHistograms.HistogramNodeLeaf createLeaf(Object key, int height) {
-            return new HistogramNodeLeafList(key, this, height);
+            return new HistogramNodeLeafListReducible(key, this, height);
         }
 
         @Override
@@ -865,9 +864,9 @@ public class ActorBehaviorAggregation {
 
         @SuppressWarnings({"unchecked", "rawtypes"})
         @Override
-        public void processTraversal(Actor self, KeyHistograms.HistogramNodeLeaf leaf) {
+        public void processTraversal(Actor self, MailboxAggregation.ReducedSize reducedSize, KeyHistograms.HistogramNodeLeaf leaf) {
             HistogramNodeLeafListReducible list = (HistogramNodeLeafListReducible) leaf;
-            if (list.consume(putRequiredSize, putTree, (BiFunction) keyValuesReducer, (BiConsumer) handler)) {
+            if (list.consume(putRequiredSize, putTree, reducedSize, (BiFunction) keyValuesReducer, (BiConsumer) handler)) {
                 self.tell(new MailboxAggregation.TraversalProcess(matchKeyEntryId), self);
             }
         }
@@ -878,18 +877,16 @@ public class ActorBehaviorAggregation {
             super(key, context, height);
         }
 
-        public boolean consume(int requiredSize, KeyHistograms.HistogramTree tree, BiFunction<Object, List<Object>, Iterable<Object>> keyValuesReducer,
-                            BiConsumer<Object, List<Object>> handler) {
+        public boolean consume(int requiredSize,
+                               KeyHistograms.HistogramTree tree,
+                               MailboxAggregation.ReducedSize reducedSize,
+                               BiFunction<Object, List<Object>, Iterable<Object>> keyValuesReducer,
+                               BiConsumer<Object, List<Object>> handler) {
             if (completed(requiredSize)) {
-                int consuming = (int) Math.min(Integer.MAX_VALUE, size());
-                if (consuming > 100_000) { //refer free memory size
-                    Runtime rt = Runtime.getRuntime();
-                    consuming = (int) Math.min(consuming,
-                            Math.max(100_000, (rt.maxMemory() - rt.totalMemory()) / 8L / 4L));
-                }
+                int consuming = Math.max(requiredSize, reducedSize.nextReducedSize(size()));
                 List<Object> vs = new ArrayList<>(consuming);
                 for (int i = 0; i < consuming; ++i) {
-                    vs.add(values.poll());
+                    vs.add(values.poll(tree));
                 }
                 try {
                     Object key = getKey();
@@ -919,4 +916,5 @@ public class ActorBehaviorAggregation {
             }
         }
     }
+
 }

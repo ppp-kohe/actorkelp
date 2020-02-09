@@ -25,7 +25,7 @@ public class ActorSystemRemote implements ActorSystem {
 
     protected Map<Object, ConnectionActor> connectionMap;
 
-    protected Function<ActorSystemRemote, Kryo> serializer;
+    protected Function<ActorSystem, Kryo> serializer;
     protected Pool<Kryo> serializerPool;
 
     public static boolean debugLog = System.getProperty("csl.actor.debug", "false").equals("true");
@@ -34,7 +34,7 @@ public class ActorSystemRemote implements ActorSystem {
         this(new ActorSystemDefaultForRemote(), KryoBuilder.builder());
     }
 
-    public ActorSystemRemote(ActorSystemDefault localSystem, Function<ActorSystemRemote, Kryo> serializer) {
+    public ActorSystemRemote(ActorSystemDefault localSystem, Function<ActorSystem, Kryo> serializer) {
         this.localSystem = localSystem;
         this.serializer = serializer;
         init();
@@ -89,7 +89,7 @@ public class ActorSystemRemote implements ActorSystem {
     }
 
     /** @return implementation field getter */
-    public Function<ActorSystemRemote, Kryo> getSerializerFunction() {
+    public Function<ActorSystem, Kryo> getSerializerFunction() {
         return serializer;
     }
 

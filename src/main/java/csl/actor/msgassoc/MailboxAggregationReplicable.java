@@ -1,5 +1,7 @@
 package csl.actor.msgassoc;
 
+import csl.actor.Mailbox;
+import csl.actor.MailboxDefault;
 import csl.actor.Message;
 
 import java.util.ArrayList;
@@ -19,6 +21,19 @@ public class MailboxAggregationReplicable extends MailboxAggregation {
 
     public MailboxAggregationReplicable(int threshold, int treeSize) {
         super(treeSize);
+        this.threshold = threshold;
+        this.treeSize = treeSize;
+    }
+
+    public MailboxAggregationReplicable(int threshold, int treeSize, MailboxDefault mailbox) {
+        super(treeSize, mailbox);
+        this.threshold = threshold;
+        this.treeSize = treeSize;
+    }
+
+    public MailboxAggregationReplicable(int threshold, int treeSize, MailboxDefault mailbox,
+                                        KeyHistograms treeFactory) {
+        super(treeSize, mailbox, treeFactory);
         this.threshold = threshold;
         this.treeSize = treeSize;
     }

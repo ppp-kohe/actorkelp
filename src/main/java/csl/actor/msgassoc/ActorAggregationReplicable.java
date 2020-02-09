@@ -17,9 +17,6 @@ import java.util.stream.Collectors;
 public abstract class ActorAggregationReplicable extends ActorAggregation implements Cloneable {
     protected State state;
     protected volatile int maxHeight;
-    protected Config config = CONFIG_DEFAULT;
-
-    public static final Config CONFIG_DEFAULT = new Config();
 
     public ActorAggregationReplicable(ActorSystem system, String name, MailboxAggregationReplicable mailbox, ActorBehavior behavior) {
         super(system, name, mailbox, behavior);
@@ -40,24 +37,23 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
     }
 
     public ActorAggregationReplicable(ActorSystem system, String name, Config config) {
-        super(system, name, null, null);
-        this.config = config;
-        initMailbox();
-        behavior = initBehavior();
-        state = new StateSplitRouter();
+        super(system, name, config);
         maxHeight = initMaxHeight();
     }
 
     public ActorAggregationReplicable(ActorSystem system, String name) {
-        this(system, name, CONFIG_DEFAULT);
+        super(system, name);
+        maxHeight = initMaxHeight();
     }
 
     public ActorAggregationReplicable(ActorSystem system, Config config) {
-        this(system, null, config);
+        super(system, config);
+        maxHeight = initMaxHeight();
     }
 
     public ActorAggregationReplicable(ActorSystem system) {
-        this(system, CONFIG_DEFAULT);
+        super(system);
+        maxHeight = initMaxHeight();
     }
 
     //////////////////////// config
@@ -69,10 +65,6 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
 
     protected int mailboxThreshold() {
         return config.mailboxThreshold;
-    }
-
-    protected int mailboxTreeSize() {
-        return config.mailboxTreeSize;
     }
 
     public float lowerBoundThresholdFactor() {
@@ -107,10 +99,6 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
         return (long) config.pruneGreaterThanLeafThresholdFactor * mailboxThreshold();
     }
 
-    protected double pruneLessThanNonZeroLeafRate() {
-        return config.pruneLessThanNonZeroLeafRate;
-    }
-
     protected long toLocalWaitMs() {
         return config.toLocalWaitMs;
     }
@@ -136,7 +124,10 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
 
     @Override
     protected void initMailbox() {
-        mailbox = new MailboxAggregationReplicable(mailboxThreshold(), mailboxTreeSize());
+        MailboxPersistable.PersistentFileManager m = getPersistentFile();
+        mailbox = new MailboxAggregationReplicable(mailboxThreshold(), mailboxTreeSize(),
+                initMailboxDefault(m),
+                initTreeFactory(m));
     }
 
     protected void initMailboxForClone() {
@@ -319,8 +310,7 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
                 if (fromParallelRouting) {
                     self.tell(message.getData(), message.getSender());
                 } else {
-                    self.prune();
-                    self.getBehavior().process(self, message);
+                    self.processMessageBehavior(message);
                 }
             } else {
                 MailboxAggregation.HistogramSelection selection = m.selectTable(message.getData());
@@ -347,8 +337,7 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
     public static class StateLeaf implements State, Serializable {
         @Override
         public void processMessage(ActorAggregationReplicable self, Message<?> message) {
-            self.prune();
-            self.getBehavior().process(self, message);
+            self.processMessageBehavior(message);
         }
     }
 
@@ -385,11 +374,6 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
         return new SplitLeaf(actor, depth);
     }
 
-    public void prune() {
-        getMailboxAsReplicable().prune(
-                pruneGreaterThanLeaf(),
-                pruneLessThanNonZeroLeafRate());
-    }
 
     public interface Split {
         void process(ActorAggregationReplicable router, StateSplitRouter stateRouter,

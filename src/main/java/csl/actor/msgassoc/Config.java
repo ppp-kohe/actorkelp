@@ -28,6 +28,12 @@ public class Config implements Serializable {
     public long toLocalWaitMs = 2000;
     public boolean logSplit = true;
     public int logColor = 33;
+    public long traverseDelayTimeMs = 300;
+    public String persistMailboxPath = "";
+    public long persistMailboxSizeLimit = Integer.MAX_VALUE / 64;
+    public long persistMailboxOnMemorySize = 100_000L;
+    public int reduceRuntimeCheckingThreshold = 100_000;
+    public double reduceRuntimeRemainingBytesToSizeRatio = 0.003;
 
     protected PrintWriter logOut;
 

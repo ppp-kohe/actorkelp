@@ -4,6 +4,12 @@ import java.io.Serializable;
 import java.util.*;
 
 public class KeyHistograms {
+    public static final KeyHistograms DEFAULT = new KeyHistograms();
+
+    public HistogramTree create(KeyComparator<?> comparator, int treeLimit) {
+        return new HistogramTree(comparator, treeLimit);
+    }
+
     public static class HistogramTree implements Serializable {
         protected HistogramNode root;
         protected KeyComparator<?> comparator;
@@ -39,14 +45,21 @@ public class KeyHistograms {
         public void put(Object key, HistogramPutContext context) {
             context.putTree = this;
             context.putTreeLimit = treeLimit;
+
+            context.putIndexCurrentRangeStart = 0;
+            context.putIndexCurrentRangeLength = 1;
             if (root == null) {
                 root = context.createLeafWithCountUp(key, 0);
             } else {
                 HistogramNode l = root.put(comparator, key, context);
                 if (l != null) {
-                    root = new HistogramNodeTree(root.height() + 1, treeLimit, sort(comparator, l, root));
+                    root = createNodeTree(root.height() + 1, treeLimit, sort(comparator, l, root));
                 }
             }
+        }
+
+        protected HistogramNodeTree createNodeTree(int height, int treeLimit, HistogramNode... children) {
+            return new HistogramNodeTree(height, treeLimit, children);
         }
 
         /**
@@ -54,9 +67,9 @@ public class KeyHistograms {
          */
         public HistogramTree split() {
             if (root == null) {
-                return new HistogramTree(comparator, treeLimit);
+                return createTree(null);
             } else {
-                HistogramTree left = new HistogramTree(root.split(root.size() / 2, 0), comparator, treeLimit);
+                HistogramTree left = createTree(root.split(root.size() / 2, 0));
                 leafSize = 0;
                 leafSizeNonZero = 0;
                 prune(true);
@@ -65,6 +78,10 @@ public class KeyHistograms {
                 splitCompleted(left);
                 return left;
             }
+        }
+
+        public HistogramTree createTree(HistogramNode root) {
+            return new HistogramTree(root, comparator, treeLimit);
         }
 
         @SuppressWarnings("unchecked")
@@ -123,7 +140,7 @@ public class KeyHistograms {
 
             HistogramNodeTree targetNode;
             if (target instanceof HistogramNodeLeaf) {
-                targetNode = new HistogramNodeTree(
+                targetNode = createNodeTree(
                         (height > 0 ? height : 1),
                         treeLimit,
                         (height > 0 ? target.increaseHeight(-1) : target));
@@ -133,7 +150,7 @@ public class KeyHistograms {
 
             HistogramNode newNode = targetNode.merge(treeLimit, comparator, merged);
             if (newNode != null) {
-                return new HistogramNodeTree(height + 1, treeLimit, sort(comparator, targetNode, newNode));
+                return createNodeTree(height + 1, treeLimit, sort(comparator, targetNode, newNode));
             } else {
                 return targetNode;
             }
@@ -211,6 +228,10 @@ public class KeyHistograms {
             }
             return ((double) leafSizeNonZero) / (double) leafSize;
         }
+
+        public HistogramLeafList createEmptyList() {
+            return new HistogramLeafList();
+        }
     }
 
     public static abstract class HistogramPutContext {
@@ -220,12 +241,20 @@ public class KeyHistograms {
         public Object putValue;
         public int putTreeLimit;
 
+        public float putIndexCurrentRangeStart;
+        public float putIndexCurrentRangeLength;
+
         protected abstract HistogramNodeLeaf createLeaf(Object key, int height);
 
         public HistogramNodeLeaf createLeafWithCountUp(Object key, int height) {
             HistogramNodeLeaf l = createLeaf(key, height);
+            l.putValue(this);
             putTree.incrementLeafSize(1);
             return l;
+        }
+
+        public HistogramLeafList createEmptyList() {
+            return putTree.createEmptyList();
         }
 
         public void incrementLeafSizeNonZero() {
@@ -370,6 +399,7 @@ public class KeyHistograms {
 
             HistogramNode newNode = null;
             int index = search(comparator, key);
+            updatePutIndex(context, index);
             if (index >= 0) { //found
                 newNode = children.get(index).put(comparator, key, context);
                 if (newNode == null) {
@@ -390,7 +420,7 @@ public class KeyHistograms {
                 HistogramNode childTarget = children.get(index);
                 newNode = childTarget.put(comparator, key, context);
                 if (newNode != null && childTarget instanceof HistogramNodeLeaf) { //it can create a new sub-tree
-                    newNode = new HistogramNodeTree(height - 1, treeLimit, sort(comparator,
+                    newNode = createNodeTree(height - 1, treeLimit, sort(comparator,
                             childTarget.increaseHeight(-1), newNode.increaseHeight(-1)));
                     children.set(index, newNode); //replace
                     newNode.setParent(this);
@@ -445,10 +475,19 @@ public class KeyHistograms {
             return -(start + 1);
         }
 
+        protected void updatePutIndex(HistogramPutContext context, int index) {
+            float s = context.putIndexCurrentRangeStart;
+            float l = context.putIndexCurrentRangeLength;
+            float cs = children.size();
+            float p = ((float) Math.abs(index)) / cs;
+            context.putIndexCurrentRangeStart = s + l * p;
+            context.putIndexCurrentRangeLength = l * (1f / cs);
+        }
+
         protected int selectChildTree(int index, int treeLimit) {
             if (index - 1 < 0) {
                 if (index >= children.size()) { //empty
-                    HistogramNodeTree childTarget = new HistogramNodeTree(height - 1, treeLimit);
+                    HistogramNodeTree childTarget = createNodeTree(height - 1, treeLimit);
                     children.add(childTarget);
                     childTarget.setParent(this);
                     updateKeys();
@@ -467,6 +506,10 @@ public class KeyHistograms {
                     }
                 }
             }
+        }
+
+        protected HistogramNodeTree createNodeTree(int height, int treeLimit, HistogramNode... children) {
+            return new HistogramNodeTree(height, treeLimit, children);
         }
 
         protected void updateChildren() {
@@ -607,8 +650,7 @@ public class KeyHistograms {
         public HistogramNodeLeaf(Object key, HistogramPutContext context, int height) {
             this.key = key;
             this.height = height;
-            initStruct();
-            putValue(context);
+            initStruct(context);
         }
 
         public Object getKey() {
@@ -684,7 +726,7 @@ public class KeyHistograms {
             return null;
         }
 
-        protected abstract void initStruct();
+        protected abstract void initStruct(HistogramPutContext context);
         protected abstract void putValueStruct(HistogramPutContext context);
 
         protected abstract boolean completedAfterPut(HistogramPutContext context);
@@ -720,6 +762,8 @@ public class KeyHistograms {
                 return false;
             }
         }
+
+        public abstract List<HistogramLeafList> getStructList();
     }
 
     public static class HistogramNodeLeafMap extends HistogramNodeLeaf {
@@ -731,14 +775,17 @@ public class KeyHistograms {
         }
 
         @Override
-        protected void initStruct() {
+        protected void initStruct(HistogramPutContext context) {
             values = new TreeMap<>();
         }
 
         @Override
         protected void putValueStruct(HistogramPutContext context) {
             values.compute(context.position(this),
-                    (p, l) -> HistogramLeafList.add(l, context.putValue));
+                    (p, l) -> HistogramLeafList.add(
+                            l == null ? context.createEmptyList() : l,
+                            context.putTree,
+                            context.putValue));
         }
 
         @Override
@@ -773,7 +820,7 @@ public class KeyHistograms {
                      ei.hasNext(); ) {
                     Map.Entry<Comparable<?>, HistogramLeafList> e = ei.next();
                     HistogramLeafList ev = e.getValue();
-                    res[i] = ev.poll();
+                    res[i] = ev.poll(tree);
                     ++i;
                     if (ev.isEmpty()) {
                         ei.remove();
@@ -784,6 +831,11 @@ public class KeyHistograms {
             } else {
                 return null;
             }
+        }
+
+        @Override
+        public List<HistogramLeafList> getStructList() {
+            return new ArrayList<>(this.values.values());
         }
     }
 
@@ -803,18 +855,18 @@ public class KeyHistograms {
     }
 
     public static class HistogramLeafList implements Iterable<Object>, Serializable {
-        protected HistogramLeafCell head;
-        protected HistogramLeafCell tail;
+        public HistogramLeafCell head;
+        public HistogramLeafCell tail;
 
-        public static HistogramLeafList add(HistogramLeafList list, Object v) {
+        public static HistogramLeafList add(HistogramLeafList list, HistogramTree tree, Object v) {
             if (list == null) {
                 list = new HistogramLeafList();
             }
-            list.add(v);
+            list.add(tree, v);
             return list;
         }
 
-        public void add(Object value) {
+        public void add(HistogramTree tree, Object value) {
             HistogramLeafCell c = new HistogramLeafCell(value);
             if (head == null) {
                 head = c;
@@ -829,7 +881,7 @@ public class KeyHistograms {
             return head == null;
         }
 
-        public Object poll() {
+        public Object poll(HistogramTree tree) {
             Object v = head.value;
             head = head.next;
             if (head == null) {
@@ -846,19 +898,6 @@ public class KeyHistograms {
                 ++n;
             }
             return n;
-        }
-
-        public boolean hasRequired(int n) {
-            HistogramLeafCell cell = head;
-            while (n > 0) {
-                if (cell != null) {
-                    --n;
-                    cell = cell.next;
-                } else {
-                    return false;
-                }
-            }
-            return n == 0;
         }
 
         public Iterator<Object> iterator() {

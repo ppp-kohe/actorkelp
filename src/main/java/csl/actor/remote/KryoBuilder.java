@@ -11,6 +11,7 @@ import com.esotericsoftware.kryo.serializers.FieldSerializer;
 import com.esotericsoftware.kryo.serializers.JavaSerializer;
 import com.esotericsoftware.kryo.util.DefaultInstantiatorStrategy;
 import csl.actor.ActorRef;
+import csl.actor.ActorSystem;
 import csl.actor.Message;
 import org.objenesis.instantiator.basic.ObjectStreamClassInstantiator;
 import org.objenesis.strategy.StdInstantiatorStrategy;
@@ -33,7 +34,7 @@ import java.util.function.Function;
 import java.util.regex.Pattern;
 
 public class KryoBuilder {
-    protected ActorSystemRemote system;
+    protected ActorSystem system;
     protected Kryo kryo;
 
     public KryoBuilder setKryo(Kryo kryo) {
@@ -41,12 +42,12 @@ public class KryoBuilder {
         return this;
     }
 
-    public KryoBuilder setSystem(ActorSystemRemote system) {
+    public KryoBuilder setSystem(ActorSystem system) {
         this.system = system;
         return this;
     }
 
-    public static Function<ActorSystemRemote, Kryo> builder() {
+    public static Function<ActorSystem, Kryo> builder() {
         return (sys) ->
             new KryoBuilder().setSystem(sys)
                     .build();
@@ -58,7 +59,7 @@ public class KryoBuilder {
     }
 
     /** @return implementation field getter */
-    public ActorSystemRemote getSystem() {
+    public ActorSystem getSystem() {
         return system;
     }
 

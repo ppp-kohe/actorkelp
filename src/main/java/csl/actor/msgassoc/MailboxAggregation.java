@@ -7,7 +7,6 @@ import csl.actor.Message;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.ScheduledFuture;
@@ -17,19 +16,24 @@ public class MailboxAggregation implements Mailbox, Cloneable {
     protected MailboxDefault mailbox;
     protected int treeSize;
     protected HistogramEntry[] tables;
+    protected KeyHistograms treeFactory = new KeyHistograms();
 
     public MailboxAggregation() {
         this(32);
     }
 
     public MailboxAggregation(int treeSize) {
-        this.treeSize = treeSize;
-        this.mailbox = new MailboxDefault();
+        this(treeSize, new MailboxDefault());
     }
 
     public MailboxAggregation(int treeSize, MailboxDefault mailbox) {
+        this(treeSize, mailbox, new KeyHistograms());
+    }
+
+    public MailboxAggregation(int treeSize, MailboxDefault mailbox, KeyHistograms treeFactory) {
         this.mailbox = mailbox;
         this.treeSize = treeSize;
+        this.treeFactory = treeFactory;
     }
 
     @Override
@@ -69,9 +73,12 @@ public class MailboxAggregation implements Mailbox, Cloneable {
         Object selectFromValue(Object value);
         Object extractKeyFromValue(Object value, Object position);
 
-        default void processTraversal(Actor self, KeyHistograms.HistogramNodeLeaf leaf) {}
+        default void processTraversal(Actor self, ReducedSize reducedSize, KeyHistograms.HistogramNodeLeaf leaf) {}
     }
 
+    public interface ReducedSize {
+        int nextReducedSize(long size);
+    }
 
     public static class HistogramEntry {
         protected int entryId;
@@ -80,14 +87,14 @@ public class MailboxAggregation implements Mailbox, Cloneable {
         protected volatile ScheduledFuture<?> scheduledProcess;
         protected Instant nextSchedule = Instant.now();
 
-        public HistogramEntry(int entryId, HistogramProcessor p, int treeLimit) {
+        public HistogramEntry(int entryId, HistogramProcessor p, KeyHistograms.HistogramTree tree) {
             this.entryId = entryId;
             this.processor = p;
-            tree = new KeyHistograms.HistogramTree(p.getKeyComparator(), treeLimit);
+            this.tree = tree;
         }
 
         public HistogramEntry create() {
-            return new HistogramEntry(entryId, processor, tree.getTreeLimit());
+            return new HistogramEntry(entryId, processor, tree.createTree(null));
         }
 
         public KeyHistograms.HistogramTree getTree() {
@@ -107,11 +114,15 @@ public class MailboxAggregation implements Mailbox, Cloneable {
         }
 
         public synchronized void updateScheduledTraversalProcess(Actor self) {
+            long time = 300;
+            if (self instanceof ActorAggregation) {
+                time = ((ActorAggregation) self).traverseDelayTimeMs();
+            }
             ScheduledFuture<?> p = scheduledProcess;
-            nextSchedule = Instant.now().plus(1, ChronoUnit.SECONDS); //TODO custom delay
+            nextSchedule = Instant.now().plusMillis(time);
             if (p == null || p.isCancelled() || p.isDone()) {
                 scheduledProcess = self.getSystem().getScheduledExecutor()
-                        .schedule(() -> startTraversalProcess(self), 1, TimeUnit.SECONDS); //TODO custom delay
+                        .schedule(() -> startTraversalProcess(self), time, TimeUnit.MILLISECONDS);
             }
         }
 
@@ -143,7 +154,9 @@ public class MailboxAggregation implements Mailbox, Cloneable {
         int size = processors.size();
         tables = new HistogramEntry[size];
         for (int i = 0; i < size; ++i) {
-            tables[i] = new HistogramEntry(i, processors.get(i), getInitTreeSize(i));
+            HistogramProcessor p = processors.get(i);
+            tables[i] = new HistogramEntry(i, p,
+                    treeFactory.create(p.getKeyComparator(), getInitTreeSize(i)));
         }
     }
 
@@ -213,18 +226,18 @@ public class MailboxAggregation implements Mailbox, Cloneable {
         tables[entryId].updateScheduledTraversalProcess(self);
     }
 
-    public void processTraversal(Actor self, int entryId) {
-        processTraversal(self, entryId, getTable(entryId).getRoot());
+    public void processTraversal(Actor self, int entryId, ReducedSize reducedSize) {
+        processTraversal(self, entryId, reducedSize, getTable(entryId).getRoot());
     }
 
-    protected void processTraversal(Actor self, int entryId, KeyHistograms.HistogramNode node) {
+    protected void processTraversal(Actor self, int entryId, ReducedSize reducedSize, KeyHistograms.HistogramNode node) {
         if (node.size() > 0) {
             if (node instanceof KeyHistograms.HistogramNodeTree) {
                 for (KeyHistograms.HistogramNode ch : ((KeyHistograms.HistogramNodeTree) node).getChildren()) {
-                    processTraversal(self, entryId, ch);
+                    processTraversal(self, entryId, reducedSize, ch);
                 }
             } else if (node instanceof KeyHistograms.HistogramNodeLeaf) {
-                tables[entryId].getProcessor().processTraversal(self, (KeyHistograms.HistogramNodeLeaf) node);
+                tables[entryId].getProcessor().processTraversal(self, reducedSize, (KeyHistograms.HistogramNodeLeaf) node);
             }
         }
     }
