@@ -2,7 +2,8 @@ package csl.actor.msgassoc;
 
 import csl.actor.*;
 
-public abstract class ActorAggregation extends ActorDefault {
+public abstract class ActorAggregation extends ActorDefault
+        implements KeyHistogramsPersistable.HistogramTreePersistableConfig {
     protected Config config = CONFIG_DEFAULT;
     public static final Config CONFIG_DEFAULT = new Config();
 
@@ -46,7 +47,7 @@ public abstract class ActorAggregation extends ActorDefault {
 
     protected KeyHistograms initTreeFactory(MailboxPersistable.PersistentFileManager m) {
         if (m != null) {
-            return new KeyHistogramsPersistable(m);
+            return new KeyHistogramsPersistable(this, m);
         } else {
             return KeyHistograms.DEFAULT;
         }
@@ -108,6 +109,19 @@ public abstract class ActorAggregation extends ActorDefault {
     protected double reduceRuntimeRemainingBytesToSizeRatio() {
         return config.reduceRuntimeRemainingBytesToSizeRatio;
     }
+
+    @Override
+    public int histogramPersistHistoryEntrySize() { return config.histogramPersistHistoryEntrySize; }
+    @Override
+    public int histogramPersistHistoryEntryLimit() { return config.histogramPersistHistoryEntryLimit; }
+    @Override
+    public long histogramPersistSizeLimit() { return config.histogramPersistSizeLimit; }
+    @Override
+    public long histogramPersistOnMemorySize() { return config.histogramPersistOnMemorySize; }
+    @Override
+    public double histogramPersistSizeRatioThreshold() { return config.histogramPersistSizeRatioThreshold; }
+    @Override
+    public long histogramPersistRandomSeed() { return config.histogramPersistRandomSeed; }
 
     /////////////
 

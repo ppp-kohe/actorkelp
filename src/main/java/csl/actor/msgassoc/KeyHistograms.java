@@ -401,7 +401,7 @@ public class KeyHistograms {
             int index = search(comparator, key);
             updatePutIndex(context, index);
             if (index >= 0) { //found
-                newNode = children.get(index).put(comparator, key, context);
+                newNode = putChildAt(comparator, key, context, index);
                 if (newNode == null) {
                     return null;
                 }
@@ -417,8 +417,8 @@ public class KeyHistograms {
                 newNode.setParent(this);
             } else { //upper tree
                 index = selectChildTree(index, treeLimit);
+                newNode = putChildAt(comparator, key, context, index);
                 HistogramNode childTarget = children.get(index);
-                newNode = childTarget.put(comparator, key, context);
                 if (newNode != null && childTarget instanceof HistogramNodeLeaf) { //it can create a new sub-tree
                     newNode = createNodeTree(height - 1, treeLimit, sort(comparator,
                             childTarget.increaseHeight(-1), newNode.increaseHeight(-1)));
@@ -438,6 +438,10 @@ public class KeyHistograms {
                 }
                 return null;
             }
+        }
+
+        protected HistogramNode putChildAt(KeyComparator<?> comparator, Object key, HistogramPutContext context, int index) {
+            return children.get(index).put(comparator, key, context);
         }
 
         protected HistogramNode split() {
@@ -764,6 +768,7 @@ public class KeyHistograms {
         }
 
         public abstract List<HistogramLeafList> getStructList();
+        public abstract void setStructList(int i, HistogramLeafList list);
     }
 
     public static class HistogramNodeLeafMap extends HistogramNodeLeaf {
@@ -836,6 +841,11 @@ public class KeyHistograms {
         @Override
         public List<HistogramLeafList> getStructList() {
             return new ArrayList<>(this.values.values());
+        }
+
+        @Override
+        public void setStructList(int i, HistogramLeafList list) {
+            values.put(i, list);
         }
     }
 

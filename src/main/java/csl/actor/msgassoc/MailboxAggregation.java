@@ -16,7 +16,7 @@ public class MailboxAggregation implements Mailbox, Cloneable {
     protected MailboxDefault mailbox;
     protected int treeSize;
     protected HistogramEntry[] tables;
-    protected KeyHistograms treeFactory = new KeyHistograms();
+    protected KeyHistograms treeFactory;
 
     public MailboxAggregation() {
         this(32);

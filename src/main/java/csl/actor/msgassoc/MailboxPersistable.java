@@ -288,6 +288,10 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
                 throw new RuntimeException(ex);
             }
         }
+
+        public PersistentFileReaderSource newSource(long offset) {
+            return new PersistentFileReaderSource(path, offset, manager);
+        }
     }
 
     public static class PersistentFileReader implements AutoCloseable {
@@ -295,22 +299,32 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
         protected PersistentFileManager manager;
         protected Kryo serializer;
         protected Input input;
+        protected long offset;
 
         public PersistentFileReader(Path path, long offset, PersistentFileManager manager) throws IOException {
             this.path = path;
             this.manager = manager;
             this.serializer = manager.getSerializer().get();
             InputStream in = new FileInputStream(path.toFile()); //Files.newInputStream(path).skip(n) is slow
+            this.offset = offset;
             in.skip(offset);
             input = new Input(in);
         }
 
         public Object next() throws IOException {
-            Object o = serializer.readClassAndObject(input);
-            if (o instanceof PersistentFileEnd) {
-                close();
-            }
-            return o;
+            return serializer.readClassAndObject(input);
+        }
+
+        public long nextLong() {
+            return input.readLong();
+        }
+
+        public long position() {
+            return offset + input.position();
+        }
+
+        public void position(long newPosition) {
+            input.skip(newPosition - position());
         }
 
         @Override
@@ -395,7 +409,7 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
                 }
                 Object o = reader.next();
                 if (o instanceof PersistentFileEnd) {
-                    //reader is closed
+                    reader.close();
                     reader = null;
                     return null;
                 } else {

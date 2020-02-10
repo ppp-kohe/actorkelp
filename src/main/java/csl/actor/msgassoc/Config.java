@@ -35,6 +35,13 @@ public class Config implements Serializable {
     public int reduceRuntimeCheckingThreshold = 100_000;
     public double reduceRuntimeRemainingBytesToSizeRatio = 0.003;
 
+    public int histogramPersistHistoryEntrySize = 10;
+    public int histogramPersistHistoryEntryLimit = 100;
+    public long histogramPersistSizeLimit = 1000;
+    public long histogramPersistOnMemorySize = 100;
+    public double histogramPersistSizeRatioThreshold = 0.00001;
+    public long histogramPersistRandomSeed = 0;
+
     protected PrintWriter logOut;
 
     public static Config readConfig(Map<Object, Object> properties) {

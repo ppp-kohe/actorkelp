@@ -218,6 +218,11 @@ public class ActorBehaviorAggregation {
         public List<KeyHistograms.HistogramLeafList> getStructList() {
             return Collections.singletonList(values1);
         }
+
+        @Override
+        public void setStructList(int i, KeyHistograms.HistogramLeafList list) {
+            if (i == 0) { this.values1 = list; }
+        }
     }
 
     public static class ActorBehaviorMatchKey2<KeyType, ValueType1, ValueType2> extends ActorBehaviorMatchKey<KeyType> {
@@ -347,6 +352,12 @@ public class ActorBehaviorAggregation {
 
         public List<KeyHistograms.HistogramLeafList> getStructList() {
             return Arrays.asList(values1, values2);
+        }
+
+        @Override
+        public void setStructList(int i, KeyHistograms.HistogramLeafList list) {
+            if (i == 0) { this.values1 = list; }
+            else if (i == 1) { this.values2 = list; }
         }
     }
 
@@ -492,6 +503,13 @@ public class ActorBehaviorAggregation {
 
         public List<KeyHistograms.HistogramLeafList> getStructList() {
             return Arrays.asList(values1, values2, values3);
+        }
+
+        @Override
+        public void setStructList(int i, KeyHistograms.HistogramLeafList list) {
+            if (i == 0) { this.values1 = list; }
+            else if (i == 1) { this.values2 = list; }
+            else if (i == 2) { this.values3 = list; }
         }
     }
 
@@ -651,6 +669,14 @@ public class ActorBehaviorAggregation {
         public List<KeyHistograms.HistogramLeafList> getStructList() {
             return Arrays.asList(values1, values2, values3, values4);
         }
+
+        @Override
+        public void setStructList(int i, KeyHistograms.HistogramLeafList list) {
+            if (i == 0) { this.values1 = list; }
+            else if (i == 1) { this.values2 = list; }
+            else if (i == 2) { this.values3 = list; }
+            else if (i == 3) { this.values4 = list; }
+        }
     }
 
     public static class ActorBehaviorMatchKeyList<KeyType, ValueType> extends ActorBehaviorMatchKey<KeyType> {
@@ -774,8 +800,9 @@ public class ActorBehaviorAggregation {
             return Collections.singletonList(values);
         }
 
-        public KeyHistograms.HistogramLeafList getValues() {
-            return values;
+        @Override
+        public void setStructList(int i, KeyHistograms.HistogramLeafList list) {
+            if (i == 0) { this.values = list; }
         }
     }
 
