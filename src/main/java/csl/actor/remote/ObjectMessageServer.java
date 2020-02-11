@@ -6,7 +6,6 @@ import com.esotericsoftware.kryo.util.Pool;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufInputStream;
-import io.netty.buffer.Unpooled;
 import io.netty.channel.*;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
@@ -16,9 +15,8 @@ import io.netty.handler.logging.LogLevel;
 import io.netty.handler.logging.LoggingHandler;
 
 import java.io.Closeable;
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 public class ObjectMessageServer implements Closeable {
@@ -27,7 +25,7 @@ public class ObjectMessageServer implements Closeable {
         if (args.length > 0) {
             server.setPort(Integer.parseInt(args[0]));
         }
-        server.setReceiver(System.out::println)
+        server.setReceiver(o -> {System.out.println(o); return 200;})
                 .start();
     }
 
@@ -42,7 +40,7 @@ public class ObjectMessageServer implements Closeable {
     protected EventLoopGroup workerGroup;
     protected ChannelFuture channel;
 
-    protected Consumer<Object> receiver;
+    protected Function<Object, Integer> receiver;
 
     public static boolean debugTraceLog = System.getProperty("csl.actor.trace.server", "false").equals("true");
 
@@ -76,7 +74,7 @@ public class ObjectMessageServer implements Closeable {
         return this;
     }
 
-    public ObjectMessageServer setReceiver(Consumer<Object> receiver) {
+    public ObjectMessageServer setReceiver(Function<Object, Integer> receiver) {
         this.receiver = receiver;
         return this;
     }
@@ -184,6 +182,11 @@ public class ObjectMessageServer implements Closeable {
         bootstrap = new ServerBootstrap();
         bootstrap.group(leaderGroup, workerGroup)
                 .option(ChannelOption.AUTO_CLOSE, false)
+                .option(ChannelOption.SO_REUSEADDR, true)
+                .option(ChannelOption.SO_BACKLOG, 120_000)
+                .childOption(ChannelOption.TCP_NODELAY, true)
+                .childOption(ChannelOption.SO_KEEPALIVE, true)
+                .childOption(ChannelOption.AUTO_CLOSE, false)
                 .channel(NioServerSocketChannel.class);
         if (debugTraceLog) {
             bootstrap.handler(new LoggingHandler(ObjectMessageServer.class, LogLevel.INFO));
@@ -212,7 +215,7 @@ public class ObjectMessageServer implements Closeable {
         return serializer;
     }
 
-    public Consumer<Object> getReceiver() {
+    public Function<Object, Integer> getReceiver() {
         return receiver;
     }
 
@@ -225,6 +228,8 @@ public class ObjectMessageServer implements Closeable {
 
         @Override
         protected void initChannel(SocketChannel socketChannel) throws Exception {
+            ActorSystemRemote.settingsSocketChannel(socketChannel);
+
             //length[4] + contents[length]
             ChannelPipeline pipeline = socketChannel.pipeline();
             if (debugTraceLog) {
@@ -244,9 +249,10 @@ public class ObjectMessageServer implements Closeable {
 
     public static class QueueServerHandler extends SimpleChannelInboundHandler<Object> {
         protected Supplier<Kryo> serializer;
-        protected Consumer<Object> receiver;
+        protected Function<Object,Integer> receiver;
+        protected volatile boolean firstError = true;
 
-        public QueueServerHandler(Supplier<Kryo> serializer, Consumer<Object> receiver) {
+        public QueueServerHandler(Supplier<Kryo> serializer, Function<Object, Integer> receiver) {
             this.serializer = serializer;
             this.receiver = receiver;
         }
@@ -256,25 +262,32 @@ public class ObjectMessageServer implements Closeable {
             if (msg instanceof ByteBuf) {
                 ByteBuf buf = (ByteBuf) msg;
                 int length = buf.readInt();
-                ActorSystemRemote.log("bytes %,d  len %,d", buf.readableBytes(), length);
+                ActorSystemRemote.log(161, "QueueServerHandler bytes %,d  len %,d", buf.readableBytes(), length);
                 Input input = new Input(new ByteBufInputStream(buf, length));
                 Object value = serializer.get().readClassAndObject(input);
+                int r = 200;
                 if (receiver != null) {
-                    receiver.accept(value);
+                    r = receiver.apply(value);
                 }
+
                 ByteBuf res = ctx.alloc().buffer(4);
-                res.writeInt(200);
+                res.writeInt(r);
                 ctx.writeAndFlush(res);
 
-                ActorSystemRemote.log("read finish");
+                ActorSystemRemote.log(161, "QueueServerHandler read finish");
             } else {
-                ActorSystemRemote.log("ignore %s", msg);
+                ActorSystemRemote.log(161, "QueueServerHandler ignore %s", msg);
             }
         }
 
         @Override
         public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
-            cause.printStackTrace();
+            ActorSystemRemote.log(161, "QueueServerHandler exceptionCaught %s", cause);
+            System.err.println(String.format("QueueServerHandler exceptionCaught %s", cause));
+            if (firstError) {
+                cause.printStackTrace();
+                firstError = false;
+            }
             ctx.close();
         }
 
@@ -284,7 +297,7 @@ public class ObjectMessageServer implements Closeable {
         }
 
         /** @return implementation field getter */
-        public Consumer<Object> getReceiver() {
+        public Function<Object, Integer> getReceiver() {
             return receiver;
         }
 

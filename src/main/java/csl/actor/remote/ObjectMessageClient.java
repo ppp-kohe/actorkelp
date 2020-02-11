@@ -2,7 +2,6 @@ package csl.actor.remote;
 
 import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.io.Output;
-import csl.actor.ActorSystem;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufOutputStream;
@@ -17,6 +16,9 @@ import io.netty.handler.logging.LoggingHandler;
 import io.netty.util.ReferenceCountUtil;
 
 import java.io.Closeable;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 public class ObjectMessageClient implements Closeable {
@@ -100,9 +102,10 @@ public class ObjectMessageClient implements Closeable {
     protected void initBootstrap() {
         bootstrap = new Bootstrap();
         bootstrap.group(group)
-            .channel(NioSocketChannel.class)
             .option(ChannelOption.AUTO_CLOSE, false)
-            .handler(new ClientInitializer(this));
+            .option(ChannelOption.TCP_NODELAY, true)
+            .option(ChannelOption.SO_KEEPALIVE, true)
+            .channel(NioSocketChannel.class);
     }
 
     public boolean isStarted() {
@@ -116,7 +119,7 @@ public class ObjectMessageClient implements Closeable {
     public ObjectMessageConnection connect() {
         synchronized (this) {
             if (!isStarted()) {
-                ActorSystemRemote.log("client-connect start %s", this);
+                ActorSystemRemote.log(18, "ObjectMessageClient connect start %s", this);
                 start();
             }
         }
@@ -141,6 +144,9 @@ public class ObjectMessageClient implements Closeable {
         protected int port;
         protected Channel channel;
 
+        protected ConcurrentLinkedQueue<ChannelFuture> last = new ConcurrentLinkedQueue<>();
+        protected AtomicInteger lastSize = new AtomicInteger();
+
         public ObjectMessageConnection(ObjectMessageClient client) {
             this.client = client;
         }
@@ -157,6 +163,7 @@ public class ObjectMessageClient implements Closeable {
 
         public ObjectMessageConnection open() throws InterruptedException {
             channel = client.getBootstrap()
+                    .handler(new ClientInitializer(client, this))
                     .connect(host, port)
                     .sync()
                     .channel();
@@ -164,28 +171,91 @@ public class ObjectMessageClient implements Closeable {
         }
 
         public ObjectMessageConnection write(Object msg) {
+            return write(msg, 0);
+        }
+
+        public ObjectMessageConnection write(Object msg, int retryCount) {
             if (channel == null || !channel.isWritable()) {
                 try {
+                    logWrite(retryCount, "before write re-open");
                     close();
                     open();
                 } catch (InterruptedException ex) {
                     throw new RuntimeException(ex);
                 }
             }
-            ActorSystemRemote.log("connection channel %s:%d open=%s, active=%s, writable=%s", host, port,
-                    channel.isOpen(), channel.isActive(),
-                    channel.isWritable());
+            logWrite(retryCount, "before write");
             try {
-                channel.writeAndFlush(msg).sync();
-            } catch (Exception ex) {
-                throw new RuntimeException(ex);
+                clearResult();
+                ChannelFuture f = channel.writeAndFlush(msg);
+                checkResult(f);
+            } catch (Exception c) {
+                System.err.println("write failure: " + c);
+                logWrite(retryCount, String.format("write failure %s", c));
+                if (retryCount < 10) {
+                    return write(msg, retryCount + 1);
+                } else {
+                    return this; //drop
+                }
             }
             return this;
         }
 
+        private void logWrite(int retryCount, String msg) {
+            if (ActorSystemRemote.debugLog) {
+                if (channel == null) {
+                    ActorSystemRemote.log(18, "ObjectMessageConnection %s %s:%d, retry=%d, channel=null",
+                            msg, host, port, retryCount);
+                } else {
+                    ActorSystemRemote.log(18, "ObjectMessageConnection %s %s:%d, retry=%d, open=%s, active=%s, writable=%s",
+                            msg, host, port, retryCount,
+                            channel.isOpen(), channel.isActive(),
+                            channel.isWritable());
+                }
+            }
+        }
+
+        public void setResult(int result) {
+            ActorSystemRemote.log(18, "ObjectMessageConnection result-code: %s:%d  %d", host, port, result);
+
+        }
+
+        protected void clearResult() throws Exception {
+            int max = 1;
+            if (lastSize.incrementAndGet() > max) {
+                while (lastSize.get() > max) {
+                    ChannelFuture f = last.peek();
+                    if (f == null) {
+                        break;
+                    }
+                    if (f.isDone()) {
+                        if (last.remove(f)) {
+                            lastSize.decrementAndGet();
+                        }
+                    } else if (!f.await(10_000)) {
+                        System.err.println("client timeout");
+                        throw new RuntimeException("client timeout");
+                    } else {
+                        if (last.remove(f)) {
+                            lastSize.decrementAndGet();
+                        }
+                    }
+                }
+            }
+        }
+
+        protected void checkResult(ChannelFuture f) throws Exception {
+            last.add(f);
+            f.addListener(sf -> {
+                if (last.remove(f)) {
+                    lastSize.decrementAndGet();
+                }
+            });
+        }
+
         public void close() {
             if (channel != null && channel.isOpen()) {
-                ActorSystemRemote.log("connection close: %s:%d", host, port);
+                ActorSystemRemote.log(18, "ObjectMessageConnection close: %s:%d", host, port);
                 channel.close();
                 channel = null;
             }
@@ -214,9 +284,11 @@ public class ObjectMessageClient implements Closeable {
 
     public static class ClientInitializer extends ChannelInitializer<SocketChannel> {
         protected ObjectMessageClient owner;
+        protected ObjectMessageConnection connection;
 
-        public ClientInitializer(ObjectMessageClient owner) {
+        public ClientInitializer(ObjectMessageClient owner, ObjectMessageConnection connection) {
             this.owner = owner;
+            this.connection = connection;
         }
 
         /**
@@ -227,13 +299,15 @@ public class ObjectMessageClient implements Closeable {
          */
         @Override
         protected void initChannel(SocketChannel ch) {
+            ActorSystemRemote.settingsSocketChannel(ch);
+
             ChannelPipeline pipeline = ch.pipeline();
             if (debugTraceLog) {
                 pipeline.addLast(new LoggingHandler(ObjectMessageClient.class, LogLevel.INFO));
             }
             pipeline.addLast(new LengthFieldPrepender(4, false),
                             new QueueClientHandler(owner.getSerializer()),
-                            new ResponseHandler());
+                            new ResponseHandler(connection::setResult));
         }
 
         /** @return implementation field getter */
@@ -263,16 +337,19 @@ public class ObjectMessageClient implements Closeable {
     }
 
     public static class ResponseHandler extends ChannelInboundHandlerAdapter {
+        protected Consumer<Integer> resultHandler;
+
+        public ResponseHandler(Consumer<Integer> resultHandler) {
+            this.resultHandler = resultHandler;
+        }
+
         @Override
         public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
             if (msg instanceof ByteBuf) {
                 ByteBuf buf = (ByteBuf) msg;
                 try {
-                    int n = buf.readInt();
-                    if (n != 200) {
-                        System.err.println(n + " : " + ctx);
-                    }
-                    ctx.close();
+                    resultHandler.accept(buf.readInt());
+                    //does not close ctx
                 } finally {
                     ReferenceCountUtil.release(buf);
                 }

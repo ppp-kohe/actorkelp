@@ -14,30 +14,34 @@ import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Random;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 public class RemoteSending {
-    public static void main(String[] args) {
-        ActorSystemRemote s1 = new ActorSystemRemote();
-        s1.startWithoutWait(10000);
+    public static void main(String[] args) throws Exception {
+        int msgBytes = 1000_000;
+        int msgs = 1_000;
+        ExampleRemote.setMvnClasspath();
+        ExampleRemote.launchJava(Receiver.class.getName(), Integer.toString(msgs));
+        Thread.sleep(1000);
 
         ActorSystemRemote s2 = new ActorSystemRemote();
-        s2.startWithoutWait(10001);
+        s2.startWithoutWait(20001);
 
         List<long[]> data = new ArrayList<>();
         Random r = new Random(12345);
-        int msgSize = 10000;
-        int msgs = 500;
         for (int i = 0; i < msgs; ++i) {
-            long[] ls = r.longs().limit(msgSize).toArray();
+            long[] ls = r.longs().limit(msgBytes / 8).toArray();
             ls[0] = i;
             data.add(ls);
         }
         System.err.println("created inputs");
 
-        new ActorReceiver(s1, "r");
-
-        ActorAddress addr = s1.getServerAddress().getActor("r");
+        ActorAddress addr = ActorAddress.get("localhost", 20000).getActor("r");
         ActorRef rec = ActorRefRemote.get(s2, addr);
+
+        System.err.println("remote target: " + rec);
         rec.tell("start", null);
 
         for (long[] d : data) {
@@ -45,24 +49,38 @@ public class RemoteSending {
         }
 
         rec.tell("end", null);
+    }
 
+    public static class Receiver {
+        public static void main(String[] args) {
+            int msgs = Integer.parseInt(args[0]);
+            ActorSystemRemote s1 = new ActorSystemRemote();
+            s1.startWithoutWait(20000);
+            new ActorReceiver(s1, "r", msgs);
+        }
     }
 
     static class ActorReceiver extends ActorDefault {
         long receivedBytes;
         long receivedMessages;
+        long maxMessages;
         Instant prevTime = Instant.now();
         LinkedList<Long> nums = new LinkedList<>();
+        ScheduledExecutorService service;
 
-        ActorReceiver(ActorSystem s, String name) {
+        long nextExtension = 1;
+
+        ActorReceiver(ActorSystem s, String name, long maxMessages) {
             super(s, name);
+            this.maxMessages = maxMessages;
+            service = Executors.newSingleThreadScheduledExecutor();
         }
 
         @Override
         protected ActorBehavior initBehavior() {
             return behaviorBuilder()
                     .match(long[].class, this::receive)
-                    .matchWithSender(String.class, this::info)
+                    .match(String.class, this::info)
                     .build();
         }
 
@@ -70,17 +88,23 @@ public class RemoteSending {
             receivedBytes += array.length * 8L;
             receivedMessages++;
             nums.add(array[0]);
-            if (nums.size() > 30) {
+            if (receivedMessages > 10) {
                 nums.removeFirst();
             }
-            if ((receivedMessages % 10) == 0 || receivedMessages > 90) {
+            if ((receivedMessages % (maxMessages / 10)) == 0) {
                 printInfo(String.format("receive: %s", nums));
             }
         }
 
-        void info(String msg, ActorRef sender) {
+        void info(String msg) {
             printInfo(msg);
             prevTime = Instant.now();
+            if (msg.equals("end") || msg.equals("extension")) {
+                if (receivedMessages < maxMessages) {
+                    service.schedule(() -> tell("extension", this), nextExtension, TimeUnit.SECONDS);
+                    nextExtension *= 2L;
+                }
+            }
         }
 
         void printInfo(String msg) {

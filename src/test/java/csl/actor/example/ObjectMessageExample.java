@@ -43,13 +43,14 @@ public class ObjectMessageExample {
     static List<Object> received = new ArrayList<>();
     static ObjectMessageServer server;
 
-    static void receive(Object obj) {
+    static int receive(Object obj) {
         received.add(obj);
         System.out.println("RECEIVE " + obj);
 
         if (obj.equals("close")) {
             server.close();
         }
+        return 200;
     }
 
 

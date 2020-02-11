@@ -82,7 +82,7 @@ public class ExampleRemote {
                 list.add("-cp");
                 list.add(classpath);
             }
-            list.add("-Dcsl.actor.debug=true");
+            list.add("-Dcsl.actor.debug=" + ActorSystemRemote.debugLog);
             list.addAll(Arrays.asList(args));
             System.err.println("cmd: " + list);
             ProcessBuilder builder = new ProcessBuilder().command(list);
