@@ -29,6 +29,7 @@ public class ActorSystemRemote implements ActorSystem {
     protected Pool<Kryo> serializerPool;
 
     public static boolean debugLog = System.getProperty("csl.actor.debug", "false").equals("true");
+    public static int debugLogColor = Integer.parseInt(System.getProperty("csl.actor.debug.color", "124"));
 
     public ActorSystemRemote() {
         this(new ActorSystemDefaultForRemote(), KryoBuilder.builder());
@@ -122,7 +123,7 @@ public class ActorSystemRemote implements ActorSystem {
     public void startWithoutWait(ActorAddress.ActorAddressRemote serverAddress) {
         setServerAddress(serverAddress);
         try {
-
+            log("startWithoutWait: %s", this);
             server.setHost(serverAddress.getHost())
                     .setPort(serverAddress.getPort());
             server.startWithoutWait();
@@ -178,7 +179,7 @@ public class ActorSystemRemote implements ActorSystem {
 
     public static void log(String msg, Object... args) {
         if (debugLog) {
-            System.err.println("\033[38;5;33m" + String.format(msg, args) + "\033[0m");
+            System.err.println("\033[38;5;" + debugLogColor + "m" + String.format(msg, args) + "\033[0m");
         }
     }
 

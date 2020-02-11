@@ -38,21 +38,25 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
 
     public ActorAggregationReplicable(ActorSystem system, String name, Config config) {
         super(system, name, config);
+        state = new StateSplitRouter();
         maxHeight = initMaxHeight();
     }
 
     public ActorAggregationReplicable(ActorSystem system, String name) {
         super(system, name);
+        state = new StateSplitRouter();
         maxHeight = initMaxHeight();
     }
 
     public ActorAggregationReplicable(ActorSystem system, Config config) {
         super(system, config);
+        state = new StateSplitRouter();
         maxHeight = initMaxHeight();
     }
 
     public ActorAggregationReplicable(ActorSystem system) {
         super(system);
+        state = new StateSplitRouter();
         maxHeight = initMaxHeight();
     }
 
@@ -875,6 +879,14 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
 
         public PlacemenActorReplicable(ActorSystem system) {
             super(system);
+        }
+
+        public PlacemenActorReplicable(ActorSystem system, String name, PlacementStrategy strategy) {
+            super(system, name, strategy);
+        }
+
+        public PlacemenActorReplicable(ActorSystem system, PlacementStrategy strategy) {
+            super(system, strategy);
         }
 
         @Override

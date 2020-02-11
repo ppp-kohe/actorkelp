@@ -17,6 +17,7 @@ import io.netty.handler.logging.LoggingHandler;
 
 import java.io.Closeable;
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
@@ -182,6 +183,7 @@ public class ObjectMessageServer implements Closeable {
     protected void initBootstrap() {
         bootstrap = new ServerBootstrap();
         bootstrap.group(leaderGroup, workerGroup)
+                .option(ChannelOption.AUTO_CLOSE, false)
                 .channel(NioServerSocketChannel.class);
         if (debugTraceLog) {
             bootstrap.handler(new LoggingHandler(ObjectMessageServer.class, LogLevel.INFO));
@@ -243,15 +245,10 @@ public class ObjectMessageServer implements Closeable {
     public static class QueueServerHandler extends SimpleChannelInboundHandler<Object> {
         protected Supplier<Kryo> serializer;
         protected Consumer<Object> receiver;
-        protected ByteBuf response;
 
         public QueueServerHandler(Supplier<Kryo> serializer, Consumer<Object> receiver) {
             this.serializer = serializer;
             this.receiver = receiver;
-            ByteBuffer b = ByteBuffer.allocate(4);
-            b.putInt(200);
-            b.flip();
-            response = Unpooled.wrappedBuffer(b);
         }
 
         @Override
@@ -265,7 +262,9 @@ public class ObjectMessageServer implements Closeable {
                 if (receiver != null) {
                     receiver.accept(value);
                 }
-                ctx.writeAndFlush(response);
+                ByteBuf res = ctx.alloc().buffer(4);
+                res.writeInt(200);
+                ctx.writeAndFlush(res);
 
                 ActorSystemRemote.log("read finish");
             } else {
@@ -289,9 +288,5 @@ public class ObjectMessageServer implements Closeable {
             return receiver;
         }
 
-        /** @return implementation field getter */
-        public ByteBuf getResponse() {
-            return response;
-        }
     }
 }

@@ -45,6 +45,12 @@ public interface ActorPlacement {
             totalThreads = system.getThreads();
         }
 
+        public PlacemenActor(ActorSystem system, String name, PlacementStrategy strategy) {
+            super(system, name);
+            this.strategy = strategy;
+            totalThreads = system.getThreads();
+        }
+
         protected abstract PlacementStrategy initStrategy();
 
         public List<AddressListEntry> getCluster() {
@@ -53,6 +59,10 @@ public interface ActorPlacement {
 
         public PlacemenActor(ActorSystem system) {
             this(system, PLACEMENT_NAME);
+        }
+
+        public PlacemenActor(ActorSystem system, PlacementStrategy strategy) {
+            this(system, PLACEMENT_NAME, strategy);
         }
 
         @Override
@@ -74,7 +84,7 @@ public interface ActorPlacement {
                 int masterThreads = ResponsiveCalls.send(getSystem(), masterActor, (self, sender) ->
                         self.getSystem().getThreads()).get(2, TimeUnit.SECONDS);
                 tell(new AddressList(
-                            new AddressListEntry(masterActor, masterThreads)), null);
+                            new AddressListEntry(masterActor, masterThreads)), this);
             } catch (Exception ex) {
                 throw new RuntimeException(ex);
             }
@@ -366,6 +376,9 @@ public interface ActorPlacement {
                 return null; //local
             } else {
                 List<AddressListEntry> cluster = pa.getCluster();
+                if (cluster.isEmpty()) {
+                    return null;
+                }
                 int clusterIndex = (localLimit == 0 ? (count % cluster.size()) : (count / localLimit));
                 ++count;
                 if (0 <= clusterIndex && clusterIndex < cluster.size()) {

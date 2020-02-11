@@ -101,6 +101,7 @@ public class ObjectMessageClient implements Closeable {
         bootstrap = new Bootstrap();
         bootstrap.group(group)
             .channel(NioSocketChannel.class)
+            .option(ChannelOption.AUTO_CLOSE, false)
             .handler(new ClientInitializer(this));
     }
 
@@ -174,7 +175,11 @@ public class ObjectMessageClient implements Closeable {
             ActorSystemRemote.log("connection channel %s:%d open=%s, active=%s, writable=%s", host, port,
                     channel.isOpen(), channel.isActive(),
                     channel.isWritable());
-            channel.writeAndFlush(msg);
+            try {
+                channel.writeAndFlush(msg).sync();
+            } catch (Exception ex) {
+                throw new RuntimeException(ex);
+            }
             return this;
         }
 
