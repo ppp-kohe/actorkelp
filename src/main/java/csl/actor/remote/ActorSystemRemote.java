@@ -154,7 +154,7 @@ public class ActorSystemRemote implements ActorSystem {
     public void send(Message<?> message) {
         ActorRef target = message.getTarget();
         if (target instanceof ActorRefRemote) {
-            ActorAddress addr = ((ActorRefRemote) target).getAddress();
+            ActorAddress addr = ((ActorRefRemote) target).getAddress().getHostAddress();
             log(19, "client tell to remote %s", addr);
             ConnectionActor a = connectionMap.computeIfAbsent(addr.getKey(), k -> createConnection(addr));
             if (a != null) {
@@ -319,6 +319,8 @@ public class ActorSystemRemote implements ActorSystem {
         protected ActorAddress address;
         protected ObjectMessageClient.ObjectMessageConnection connection;
 
+        protected int count;
+
         public ConnectionActor(ActorSystem system, ActorSystemRemote remoteSystem, ActorAddress.ActorAddressRemote address)
             throws InterruptedException {
             super(system);
@@ -342,7 +344,7 @@ public class ActorSystemRemote implements ActorSystem {
             } else {
                 if (mailbox.isEmpty()) {
                     log(20, "%s write %s", this, message);
-                    connection.write(message);
+                    connection.write(new TransferredMessage(count, message));
                 } else {
                     int maxBundle = 30;
                     List<Object> messageBundle = new ArrayList<>(maxBundle);
@@ -358,9 +360,10 @@ public class ActorSystemRemote implements ActorSystem {
                         }
                     }
                     log(20, "%s write %,d messages: %s,...", this, messageBundle.size(), message);
-                    connection.write(messageBundle);
+                    connection.write(new TransferredMessage(count, messageBundle));
                 }
             }
+            ++count;
         }
 
         public void close() {
@@ -411,6 +414,9 @@ public class ActorSystemRemote implements ActorSystem {
         @Override
         protected void processMessage(Message<?> message) {
             Object msg = message.getData();
+            if (msg instanceof TransferredMessage) {
+                msg = ((TransferredMessage) msg).body;
+            }
             if (msg instanceof List<?>) { //message bundle
                 List<?> msgs = (List<?>) msg;
                 log(163, "server receive-remote: messages %,d", msgs.size());
@@ -445,5 +451,15 @@ public class ActorSystemRemote implements ActorSystem {
             this.id = id;
             this.body = body;
         }
+
+        @Override
+        public String toString() {
+            return "TransferredMessage{" +
+                    "id=" + id +
+                    ", body=" + body +
+                    '}';
+        }
     }
+
+    public static final boolean CLOSE_EACH_WRITE = false;
 }

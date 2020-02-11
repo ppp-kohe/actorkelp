@@ -39,10 +39,10 @@ public class DelayedLabelRemote extends DelayedLabelAggregationReplicable {
 
         List<Process> ps = new ArrayList<>();
         ExampleRemote.setMvnClasspath();
-        ps.add(ExampleRemote.launchJava("-Dcsl.actor.debug.color=106", Follower.class.getName(), "10001", Integer.toString(serverPort)));
-        ps.add(ExampleRemote.launchJava("-Dcsl.actor.debug.color=118", Follower.class.getName(), "10002", Integer.toString(serverPort)));
+        //ps.add(ExampleRemote.launchJava("-Dcsl.actor.debug.color=106", Follower.class.getName(), "10001", Integer.toString(serverPort)));
+        //ps.add(ExampleRemote.launchJava("-Dcsl.actor.debug.color=118", Follower.class.getName(), "10002", Integer.toString(serverPort)));
         try {
-            Thread.sleep(1000);
+            Thread.sleep(10_000);
         } catch (Exception ex) {
             ex.printStackTrace();
         }
@@ -50,6 +50,8 @@ public class DelayedLabelRemote extends DelayedLabelAggregationReplicable {
         ResultActor resultActor = resultActor(system, out, startTime);
         ActorRef learnerActor = learnerActor(system, out, resultActor);
         resultActor.setLearner(learnerActor);
+
+        System.out.println(system.getLocalSystem().getNamedActorMap());
 
         while (inputs.hasNext()) {
             learnerActor.tell(inputs.next(), null);
@@ -65,15 +67,17 @@ public class DelayedLabelRemote extends DelayedLabelAggregationReplicable {
     }
 
     public static class Follower {
-        public static void main(String[] args) {
+        public static void main(String[] args) throws Exception {
             ActorSystemRemote system = new ActorSystemRemote();
             ResponsiveCalls.initCallableTarget(system);
             int port = Integer.parseInt(args[0]);
             int joinPort = Integer.parseInt(args[1]);
             system.startWithoutWait(port);
 
-            new ActorAggregationReplicable.PlacemenActorReplicable(system)
-                    .join(ActorAddress.get("localhost", joinPort));
+            ActorAggregationReplicable.PlacemenActorReplicable p = new ActorAggregationReplicable.PlacemenActorReplicable(system);
+
+            Thread.sleep(8_000);
+            p.join(ActorAddress.get("localhost", joinPort));
         }
     }
 }

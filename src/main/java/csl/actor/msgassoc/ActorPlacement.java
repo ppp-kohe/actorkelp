@@ -232,6 +232,13 @@ public interface ActorPlacement {
         public List<AddressListEntry> getCluster() {
             return cluster;
         }
+
+        @Override
+        public String toString() {
+            return "AddressList{" +
+                    cluster +
+                    '}';
+        }
     }
 
     class AddressListEntry implements Serializable {

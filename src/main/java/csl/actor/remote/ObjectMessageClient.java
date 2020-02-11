@@ -162,6 +162,7 @@ public class ObjectMessageClient implements Closeable {
         }
 
         public ObjectMessageConnection open() throws InterruptedException {
+            ActorSystemRemote.log(18, "ObjectMessageConnection open %s:%d", host, port);
             channel = client.getBootstrap()
                     .handler(new ClientInitializer(client, this))
                     .connect(host, port)
@@ -216,7 +217,7 @@ public class ObjectMessageClient implements Closeable {
         }
 
         public void setResult(int result) {
-            ActorSystemRemote.log(18, "ObjectMessageConnection result-code: %s:%d  %d", host, port, result);
+            ActorSystemRemote.log(18, "ObjectMessageConnection result-code  %s:%d  %d", host, port, result);
 
         }
 
@@ -247,6 +248,7 @@ public class ObjectMessageClient implements Closeable {
         protected void checkResult(ChannelFuture f) throws Exception {
             last.add(f);
             f.addListener(sf -> {
+                ActorSystemRemote.log(18, "ObjectMessageConnection finish write %s:%d", host, port);
                 if (last.remove(f)) {
                     lastSize.decrementAndGet();
                 }
@@ -349,13 +351,21 @@ public class ObjectMessageClient implements Closeable {
                 ByteBuf buf = (ByteBuf) msg;
                 try {
                     resultHandler.accept(buf.readInt());
-                    //does not close ctx
+                    if (ActorSystemRemote.CLOSE_EACH_WRITE) {
+                        ctx.close();
+                    }
                 } finally {
                     ReferenceCountUtil.release(buf);
                 }
             } else {
                 System.err.println("? " + msg);
             }
+        }
+
+        @Override
+        public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
+            System.err.println("response-handler exception: " + cause);
+            super.exceptionCaught(ctx, cause);
         }
     }
 }

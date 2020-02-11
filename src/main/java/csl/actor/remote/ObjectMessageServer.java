@@ -13,6 +13,7 @@ import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
 import io.netty.handler.logging.LogLevel;
 import io.netty.handler.logging.LoggingHandler;
+import io.netty.util.ReferenceCountUtil;
 
 import java.io.Closeable;
 import java.util.function.Consumer;
@@ -228,6 +229,7 @@ public class ObjectMessageServer implements Closeable {
 
         @Override
         protected void initChannel(SocketChannel socketChannel) throws Exception {
+            ActorSystemRemote.log(161, "ServerInitializer local:%s, remote:%s", socketChannel.localAddress(), socketChannel.remoteAddress());
             ActorSystemRemote.settingsSocketChannel(socketChannel);
 
             //length[4] + contents[length]
@@ -247,7 +249,7 @@ public class ObjectMessageServer implements Closeable {
         }
     }
 
-    public static class QueueServerHandler extends SimpleChannelInboundHandler<Object> {
+    public static class QueueServerHandler extends ChannelInboundHandlerAdapter {
         protected Supplier<Kryo> serializer;
         protected Function<Object,Integer> receiver;
         protected volatile boolean firstError = true;
@@ -258,13 +260,14 @@ public class ObjectMessageServer implements Closeable {
         }
 
         @Override
-        protected void channelRead0(ChannelHandlerContext ctx, Object msg) throws Exception {
+        public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
             if (msg instanceof ByteBuf) {
                 ByteBuf buf = (ByteBuf) msg;
                 int length = buf.readInt();
                 ActorSystemRemote.log(161, "QueueServerHandler bytes %,d  len %,d", buf.readableBytes(), length);
                 Input input = new Input(new ByteBufInputStream(buf, length));
                 Object value = serializer.get().readClassAndObject(input);
+                ReferenceCountUtil.release(buf);
                 int r = 200;
                 if (receiver != null) {
                     r = receiver.apply(value);
@@ -273,8 +276,10 @@ public class ObjectMessageServer implements Closeable {
                 ByteBuf res = ctx.alloc().buffer(4);
                 res.writeInt(r);
                 ctx.writeAndFlush(res);
-
-                ActorSystemRemote.log(161, "QueueServerHandler read finish");
+                if (ActorSystemRemote.CLOSE_EACH_WRITE) {
+                    ctx.close();
+                }
+                ActorSystemRemote.log(161, "QueueServerHandler read finish: %d", r);
             } else {
                 ActorSystemRemote.log(161, "QueueServerHandler ignore %s", msg);
             }

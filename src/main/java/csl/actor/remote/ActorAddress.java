@@ -9,6 +9,10 @@ public class ActorAddress {
         return this;
     }
 
+    public ActorAddress getHostAddress() {
+        return this;
+    }
+
     public static ActorAddressRemote get(String host, int port) {
         return new ActorAddressRemote(host, port);
     }
@@ -82,6 +86,11 @@ public class ActorAddress {
 
         public String getActorName() {
             return actorName;
+        }
+
+        @Override
+        public ActorAddress getHostAddress() {
+            return new ActorAddressRemote(host, port);
         }
 
         @Override

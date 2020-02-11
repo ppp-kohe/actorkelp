@@ -20,8 +20,8 @@ import java.util.concurrent.TimeUnit;
 
 public class RemoteSending {
     public static void main(String[] args) throws Exception {
-        int msgBytes = 1000_000;
-        int msgs = 1_000;
+        int msgBytes = 1_000;
+        int msgs = 1000_000;
         ExampleRemote.setMvnClasspath();
         ExampleRemote.launchJava(Receiver.class.getName(), Integer.toString(msgs));
         Thread.sleep(1000);
