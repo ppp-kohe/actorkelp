@@ -34,7 +34,11 @@ public class ActorSystemDefault implements ActorSystem {
 
     @Override
     public String toString() {
-        return getClass().getSimpleName() + "@" + Integer.toHexString(System.identityHashCode(this));
+        return toStringSystemName() + "@" + Integer.toHexString(System.identityHashCode(this));
+    }
+
+    public String toStringSystemName() {
+        return "system";
     }
 
     protected void initSystem() {

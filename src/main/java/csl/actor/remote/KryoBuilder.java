@@ -10,9 +10,8 @@ import com.esotericsoftware.kryo.serializers.ClosureSerializer;
 import com.esotericsoftware.kryo.serializers.FieldSerializer;
 import com.esotericsoftware.kryo.serializers.JavaSerializer;
 import com.esotericsoftware.kryo.util.DefaultInstantiatorStrategy;
-import csl.actor.ActorRef;
-import csl.actor.ActorSystem;
-import csl.actor.Message;
+import csl.actor.*;
+import csl.actor.msgassoc.*;
 import org.objenesis.instantiator.basic.ObjectStreamClassInstantiator;
 import org.objenesis.strategy.StdInstantiatorStrategy;
 
@@ -31,6 +30,8 @@ import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.*;
 import java.util.function.Function;
+import java.util.function.Supplier;
+import java.util.logging.Level;
 import java.util.regex.Pattern;
 
 public class KryoBuilder {
@@ -48,9 +49,11 @@ public class KryoBuilder {
     }
 
     public static Function<ActorSystem, Kryo> builder() {
-        return (sys) ->
-            new KryoBuilder().setSystem(sys)
-                    .build();
+        return builder(KryoBuilder::new);
+    }
+
+    public static Function<ActorSystem, Kryo> builder(Supplier<KryoBuilder> builderCreator) {
+        return (sys) -> builderCreator.get().setSystem(sys).build();
     }
 
     /** @return implementation field getter */
@@ -69,8 +72,6 @@ public class KryoBuilder {
         kryo.setRegistrationRequired(false);
         kryo.setInstantiatorStrategy(new DefaultInstantiatorStrategy(new StdInstantiatorStrategy()));
 
-        kryo.addDefaultSerializer(ActorRef.class, new ActorRefRemoteSerializer<>(system));
-
         register(kryo, getDefaultSerializerClasses());
         register(kryo, getBaseClasses());
 
@@ -86,9 +87,7 @@ public class KryoBuilder {
             }
         }
 
-        kryo.register(BitSet.class, new BitSetSerializer());
-
-        kryo.register(ActorRef.class, new ActorRefRemoteSerializer<>(system)); //??
+        kryo.addDefaultSerializer(ActorRef.class, new ActorRefRemoteSerializer<>(system)); //for sub-types
 
         register(kryo, getActorClasses());
         return kryo;
@@ -167,7 +166,8 @@ public class KryoBuilder {
                 URL.class,
                 Arrays.asList().getClass(),
                 void.class,
-                PriorityQueue.class);
+                PriorityQueue.class,
+                BitSet.class);
     }
 
     public List<Class<?>> getBaseClasses() { //java.base
@@ -222,23 +222,55 @@ public class KryoBuilder {
 
     public List<Class<?>> getActorClasses() {
         return Arrays.asList(
+                ActorRef.class,
                 Message.class,
                 ActorAddress.ActorAddressRemote.class,
-                ActorAddress.ActorAddressRemoteActor.class);
-    }
+                ActorAddress.ActorAddressRemoteActor.class,
+                ActorSystemDefault.DeadLetter.class,
+                CallableMessage.class,
+                CallableMessage.CallableFailure.class,
+                Message.MessageNone.class,
+                ActorSystemRemote.ConnectionClose.class,
+                ActorSystemRemote.TransferredMessage.class,
 
-    public static class BitSetSerializer extends Serializer<BitSet> {
-        @Override
-        public void write(Kryo kryo, Output output, BitSet object) {
-            byte[] bs = object.toByteArray();
-            output.writeInt(bs.length);
-            output.write(bs);
-        }
+                ActorRefRemote.class, //those classes are not serialized, but may appear as class-info by writeClassAndObject
+                Actor.class,
+                ActorDefault.class,
+                ActorRefLocalNamed.class,
+                ResponsiveCalls.ResponsiveCallableActor.class,
 
-        @Override
-        public BitSet read(Kryo kryo, Input input, Class<? extends BitSet> type) {
-            int n = input.readInt();
-            return BitSet.valueOf(input.readBytes(n));
-        }
+                ResponsiveCalls.DeadLetterException.class,
+                ActorPlacement.AddressList.class,
+                ActorPlacement.AddressListEntry.class,
+                ActorPlacement.ActorCreationRequest.class,
+                ActorPlacement.CallableMasterThreads.class,
+                ActorAggregationReplicable.StateLeaf.class,
+                ActorAggregationReplicable.ActorReplicableSerializableState.class,
+                ActorAggregationReplicable.CallableToLocalSerializable.class,
+                KeyHistograms.HistogramTree.class,
+                KeyHistograms.HistogramNodeTree.class,
+                KeyHistograms.HistogramNodeLeaf.class,
+                KeyHistograms.HistogramLeafList.class,
+                KeyHistograms.HistogramLeafCell.class,
+                ActorBehaviorAggregation.HistogramNodeLeaf1.class,
+                ActorBehaviorAggregation.HistogramNodeLeaf2.class,
+                ActorBehaviorAggregation.HistogramNodeLeaf3.class,
+                ActorBehaviorAggregation.HistogramNodeLeaf4.class,
+                ActorBehaviorAggregation.HistogramNodeLeafList.class,
+                ActorBehaviorAggregation.HistogramNodeLeafListReducible.class,
+                KeyHistograms.HistogramNodeLeafMap.class,
+                csl.actor.msgassoc.Config.class,
+                MailboxPersistable.MessageOnStorage.class,
+                MailboxPersistable.PersistentFileEnd.class,
+                MailboxPersistable.PersistentFileReaderSource.class,
+                MailboxPersistable.MessageOnStorageFile.class,
+                KeyHistogramsPersistable.HistogramTreePersistable.class,
+                KeyHistogramsPersistable.PutIndexHistory.class,
+                KeyHistogramsPersistable.HistogramLeafListPersistable.class,
+                KeyHistogramsPersistable.HistogramLeafCellOnStorageFile.class,
+                KeyHistogramsPersistable.PersistentFileReaderSourceWithSize.class,
+                KeyHistogramsPersistable.HistogramNodeTreeOnStorage.class,
+                KeyHistogramsPersistable.HistogramNodeLeafOnStorage.class,
+                KeyHistogramsPersistable.NodeTreeData.class);
     }
 }

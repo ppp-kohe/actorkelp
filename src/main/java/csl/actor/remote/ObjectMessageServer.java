@@ -2,6 +2,7 @@ package csl.actor.remote;
 
 import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.io.Input;
+import com.esotericsoftware.kryo.io.Output;
 import com.esotericsoftware.kryo.util.Pool;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.buffer.ByteBuf;
@@ -32,7 +33,7 @@ public class ObjectMessageServer implements Closeable {
 
     protected String host = null;
     protected int port = 38888;
-    protected Supplier<Kryo> serializer;
+    protected Serializer serializer;
 
     protected int leaderThreads = 1;
     protected int workerThreads = 4;
@@ -80,7 +81,7 @@ public class ObjectMessageServer implements Closeable {
         return this;
     }
 
-    public ObjectMessageServer setSerializer(Supplier<Kryo> serializer) {
+    public ObjectMessageServer setSerializer(Serializer serializer) {
         this.serializer = serializer;
         return this;
     }
@@ -125,16 +126,61 @@ public class ObjectMessageServer implements Closeable {
         return channel;
     }
 
-    public static Pool<Kryo> defaultSerializer = new Pool<Kryo>(true, false, 8) {
-        @Override
-        protected Kryo create() {
-            return new Kryo();
+    public static SerializerPool defaultSerializer = new SerializerPoolDefault();
+
+    public interface Serializer {
+        Object read(Input input);
+        void write(Output out, Object o);
+    }
+
+    public static class SerializerPool implements Serializer {
+        protected Pool<Kryo> pool;
+
+        public SerializerPool(Pool<Kryo> pool) {
+            this.pool = pool;
         }
-    };
+
+        @Override
+        public Object read(Input input) {
+            Kryo k = pool.obtain();
+            Object o = k.readClassAndObject(input);
+            pool.free(k);
+            return o;
+        }
+
+        @Override
+        public void write(Output out, Object o) {
+            Kryo k = pool.obtain();
+            k.writeClassAndObject(out, o);
+            pool.free(k);
+        }
+    }
+
+    public static class SerializerPoolDefault extends SerializerPool {
+        public SerializerPoolDefault() {
+            super(new Pool<Kryo>(true, false, 8) {
+                @Override
+                protected Kryo create() {
+                    return new Kryo();
+                }
+            });
+        }
+
+        @Override
+        public Object read(Input input) {
+            return super.read(input);
+        }
+
+        @Override
+        public void write(Output out, Object o) {
+            super.write(out, o);
+        }
+    }
 
     protected void initSerializer() {
         if (serializer == null) {
-            serializer = defaultSerializer::obtain;
+            serializer = defaultSerializer;
+            ActorSystemRemote.log(161, "%s use default serializer", this);
         }
     }
 
@@ -212,12 +258,18 @@ public class ObjectMessageServer implements Closeable {
         closeGroups();
     }
 
-    public Supplier<Kryo> getSerializer() {
+    public Serializer getSerializer() {
         return serializer;
     }
 
     public Function<Object, Integer> getReceiver() {
         return receiver;
+    }
+
+    @Override
+    public String toString() {
+        return getClass().getSimpleName() + "@" +
+                Integer.toHexString(System.identityHashCode(this)) + "(" + host + ':' + port + ")";
     }
 
     public static class ServerInitializer extends ChannelInitializer<SocketChannel> {
@@ -229,7 +281,8 @@ public class ObjectMessageServer implements Closeable {
 
         @Override
         protected void initChannel(SocketChannel socketChannel) throws Exception {
-            ActorSystemRemote.log(161, "ServerInitializer local:%s, remote:%s", socketChannel.localAddress(), socketChannel.remoteAddress());
+            QueueServerHandler handler = new QueueServerHandler(owner.getSerializer(), owner.getReceiver());
+            ActorSystemRemote.log(161, "%s local:%s, remote:%s, handler:%s", this, socketChannel.localAddress(), socketChannel.remoteAddress(), handler);
             ActorSystemRemote.settingsSocketChannel(socketChannel);
 
             //length[4] + contents[length]
@@ -240,21 +293,26 @@ public class ObjectMessageServer implements Closeable {
             pipeline.addLast(new LengthFieldBasedFrameDecoder(
                                     Integer.MAX_VALUE,
                                     0, 4, 0, 0),
-                            new QueueServerHandler(owner.getSerializer(), owner.getReceiver()));
+                            handler);
         }
 
         /** @return implementation field getter */
         public ObjectMessageServer getOwner() {
             return owner;
         }
+
+        @Override
+        public String toString() {
+            return getClass().getSimpleName() + "@" + Integer.toHexString(System.identityHashCode(this)) + "(" + owner + ")";
+        }
     }
 
     public static class QueueServerHandler extends ChannelInboundHandlerAdapter {
-        protected Supplier<Kryo> serializer;
+        protected Serializer serializer;
         protected Function<Object,Integer> receiver;
         protected volatile boolean firstError = true;
 
-        public QueueServerHandler(Supplier<Kryo> serializer, Function<Object, Integer> receiver) {
+        public QueueServerHandler(Serializer serializer, Function<Object, Integer> receiver) {
             this.serializer = serializer;
             this.receiver = receiver;
         }
@@ -264,9 +322,9 @@ public class ObjectMessageServer implements Closeable {
             if (msg instanceof ByteBuf) {
                 ByteBuf buf = (ByteBuf) msg;
                 int length = buf.readInt();
-                ActorSystemRemote.log(161, "QueueServerHandler bytes %,d  len %,d", buf.readableBytes(), length);
+                ActorSystemRemote.log(161, "%s bytes %,d  len %,d, serializer=%s", this, buf.readableBytes(), length, serializer);
                 Input input = new Input(new ByteBufInputStream(buf, length));
-                Object value = serializer.get().readClassAndObject(input);
+                Object value = serializer.read(input);
                 ReferenceCountUtil.release(buf);
                 int r = 200;
                 if (receiver != null) {
@@ -279,16 +337,16 @@ public class ObjectMessageServer implements Closeable {
                 if (ActorSystemRemote.CLOSE_EACH_WRITE) {
                     ctx.close();
                 }
-                ActorSystemRemote.log(161, "QueueServerHandler read finish: %d", r);
+                ActorSystemRemote.log(161, "%s read finish: %d", this, r);
             } else {
-                ActorSystemRemote.log(161, "QueueServerHandler ignore %s", msg);
+                ActorSystemRemote.log(161, "%s ignore %s", this, msg);
             }
         }
 
         @Override
         public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
-            ActorSystemRemote.log(161, "QueueServerHandler exceptionCaught %s", cause);
-            System.err.println(String.format("QueueServerHandler exceptionCaught %s", cause));
+            ActorSystemRemote.log(161, "%s exceptionCaught %s", this, cause);
+            System.err.println(String.format("%s exceptionCaught %s", this, cause));
             if (firstError) {
                 cause.printStackTrace();
                 firstError = false;
@@ -297,7 +355,7 @@ public class ObjectMessageServer implements Closeable {
         }
 
         /** @return implementation field getter */
-        public Supplier<Kryo> getSerializer() {
+        public Serializer getSerializer() {
             return serializer;
         }
 
@@ -306,5 +364,9 @@ public class ObjectMessageServer implements Closeable {
             return receiver;
         }
 
+        @Override
+        public String toString() {
+            return getClass().getSimpleName() + "@" + Integer.toHexString(System.identityHashCode(this));
+        }
     }
 }

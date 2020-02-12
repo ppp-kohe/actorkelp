@@ -4,6 +4,8 @@ import csl.actor.ActorRef;
 import csl.actor.ActorSystem;
 import csl.actor.Message;
 
+import java.util.Objects;
+
 public class ActorRefRemote implements ActorRef {
     protected ActorSystem system;
     protected ActorAddress address;
@@ -41,5 +43,19 @@ public class ActorRefRemote implements ActorRef {
                 "" + system +
                 ", " + address +
                 ')';
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        ActorRefRemote that = (ActorRefRemote) o;
+        return Objects.equals(system, that.system) &&
+                Objects.equals(address, that.address);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(system, address);
     }
 }

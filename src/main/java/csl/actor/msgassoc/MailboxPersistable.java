@@ -10,6 +10,7 @@ import csl.actor.MailboxDefault;
 import csl.actor.Message;
 import csl.actor.remote.ActorSystemRemote;
 import csl.actor.remote.KryoBuilder;
+import csl.actor.remote.ObjectMessageServer;
 
 import java.io.*;
 import java.nio.file.Files;
@@ -194,9 +195,9 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
         protected String path;
         protected long fileCount;
 
-        protected Supplier<Kryo> serializer;
+        protected ObjectMessageServer.Serializer serializer;
 
-        public PersistentFileManager(String path, Supplier<Kryo> serializer) {
+        public PersistentFileManager(String path, ObjectMessageServer.Serializer serializer) {
             this.path = path;
             this.serializer = serializer;
         }
@@ -220,7 +221,7 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
             return p;
         }
 
-        public Supplier<Kryo> getSerializer() {
+        public ObjectMessageServer.Serializer getSerializer() {
             return serializer;
         }
     }
@@ -231,7 +232,7 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
         protected Path path;
         protected PersistentFileManager manager;
         protected Output output;
-        protected Kryo serializer;
+        protected ObjectMessageServer.Serializer serializer;
 
         public PersistentFileWriter(Path path, PersistentFileManager manager) throws IOException  {
             this.path = path;
@@ -240,7 +241,7 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
                 Files.createDirectories(path);
             }
             output = new Output(Files.newOutputStream(path));
-            serializer = manager.getSerializer().get();
+            serializer = manager.getSerializer();
         }
 
         public long position() {
@@ -248,7 +249,7 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
         }
 
         public void write(Object obj) {
-            serializer.writeClassAndObject(output, obj);
+            serializer.write(output, obj);
         }
 
         public PersistentFileReaderSource createReaderSourceFromCurrentPosition() {
@@ -297,14 +298,14 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
     public static class PersistentFileReader implements AutoCloseable {
         protected Path path;
         protected PersistentFileManager manager;
-        protected Kryo serializer;
+        protected ObjectMessageServer.Serializer serializer;
         protected Input input;
         protected long offset;
 
         public PersistentFileReader(Path path, long offset, PersistentFileManager manager) throws IOException {
             this.path = path;
             this.manager = manager;
-            this.serializer = manager.getSerializer().get();
+            this.serializer = manager.getSerializer();
             InputStream in = new FileInputStream(path.toFile()); //Files.newInputStream(path).skip(n) is slow
             this.offset = offset;
             in.skip(offset);
@@ -312,7 +313,7 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
         }
 
         public Object next() throws IOException {
-            return serializer.readClassAndObject(input);
+            return serializer.read(input);
         }
 
         public long nextLong() {
@@ -441,16 +442,16 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
     }
 
     public static PersistentFileManager createPersistentFile(String path, ActorSystem system) {
-        Supplier<Kryo> serializer;
+        ObjectMessageServer.Serializer serializer;
         if (system instanceof ActorSystemRemote) {
             serializer = ((ActorSystemRemote) system).getSerializer();
         } else {
-            serializer = new Pool<Kryo>(true, false) {
+            serializer = new ObjectMessageServer.SerializerPool(new Pool<Kryo>(true, false) {
                 @Override
                 protected Kryo create() {
                     return KryoBuilder.builder().apply(system);
                 }
-            }::create;
+            });
         }
         return new PersistentFileManager(path, serializer);
     }

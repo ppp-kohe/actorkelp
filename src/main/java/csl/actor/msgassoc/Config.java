@@ -25,7 +25,7 @@ public class Config implements Serializable {
     public float mergeRatioThreshold = 0.2f;
     public float pruneGreaterThanLeafThresholdFactor = 2f;
     public float pruneLessThanNonZeroLeafRate = 0.2f;
-    public long toLocalWaitMs = 2000;
+    public long toLocalWaitMs = 20_000;
     public boolean logSplit = true;
     public int logColor = 33;
     public long traverseDelayTimeMs = 300;

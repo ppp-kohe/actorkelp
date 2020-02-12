@@ -147,8 +147,12 @@ public class MailboxAggregationReplicable extends MailboxAggregation {
     }
 
     public Object extractKey(HistogramSelection selection, Message<?> message) {
-        HistogramProcessor p = tables[selection.entryId].getProcessor();
-        return p.extractKeyFromValue(message.getData(), selection.position);
+        if (selection == null) {
+            return null;
+        } else {
+            HistogramProcessor p = tables[selection.entryId].getProcessor();
+            return p.extractKeyFromValue(message.getData(), selection.position);
+        }
     }
 
     @SuppressWarnings("unchecked")

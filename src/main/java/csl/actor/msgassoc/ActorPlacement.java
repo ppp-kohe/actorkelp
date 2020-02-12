@@ -9,6 +9,7 @@ import java.io.Serializable;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
@@ -53,8 +54,8 @@ public interface ActorPlacement {
 
         protected abstract PlacementStrategy initStrategy();
 
-        public List<AddressListEntry> getCluster() {
-            return cluster;
+        public synchronized List<AddressListEntry> getCluster() {
+            return new ArrayList<>(cluster);
         }
 
         public PlacemenActor(ActorSystem system) {
@@ -81,8 +82,8 @@ public interface ActorPlacement {
                 masterActor = master.getActor(getName()); //same name
             }
             try {
-                int masterThreads = ResponsiveCalls.send(getSystem(), masterActor, (self, sender) ->
-                        self.getSystem().getThreads()).get(2, TimeUnit.SECONDS);
+                int masterThreads = ResponsiveCalls.send(getSystem(), masterActor, new CallableMasterThreads())
+                        .get(20, TimeUnit.SECONDS);
                 tell(new AddressList(
                             new AddressListEntry(masterActor, masterThreads)), this);
             } catch (Exception ex) {
@@ -117,16 +118,18 @@ public interface ActorPlacement {
             ActorAddress.ActorAddressRemoteActor self = getSelfAddress();
 
             boolean added = false;
-            for (AddressListEntry a : list.getCluster()) {
-                int index = cluster.indexOf(a);
-                if ((index == -1 || !cluster.get(index).sameInfo(a)) &&
-                        (self == null || !self.equals(a.getPlacementActor()))) {
-                    if (index == -1) {
-                        cluster.add(a);
-                    } else {
-                        cluster.set(index, a);
+            synchronized (this) {
+                for (AddressListEntry a : list.getCluster()) {
+                    int index = cluster.indexOf(a);
+                    if ((index == -1 || !cluster.get(index).sameInfo(a)) &&
+                            (self == null || !self.equals(a.getPlacementActor()))) {
+                        if (index == -1) {
+                            cluster.add(a);
+                        } else {
+                            cluster.set(index, a);
+                        }
+                        added = true;
                     }
-                    added = true;
                 }
             }
             if (added) {
@@ -140,12 +143,13 @@ public interface ActorPlacement {
             if (sender instanceof ActorRefRemote) {
                 excluded.add((ActorAddress.ActorAddressRemoteActor) ((ActorRefRemote) sender).getAddress());
             }
-            AddressList addressListToOthers = new AddressList(new ArrayList<>(cluster));
+            List<AddressListEntry> es = getCluster();
+            AddressList addressListToOthers = new AddressList(es);
             AddressListEntry selfEntry = getSelfEntry();
             if (selfEntry != null) {
                 addressListToOthers.getCluster().add(selfEntry);
             }
-            for (AddressListEntry r : cluster) {
+            for (AddressListEntry r : es) {
                 if (!excluded.contains(r.getPlacementActor())) {
                     ActorRefRemote.get(getSystem(), r.getPlacementActor())
                             .tell(addressListToOthers, this);
@@ -154,7 +158,7 @@ public interface ActorPlacement {
         }
 
         protected void updateTotalThreads() {
-            totalThreads = getSystem().getThreads() + cluster.stream()
+            totalThreads = getSystem().getThreads() + getCluster().stream()
                     .mapToInt(AddressListEntry::getThreads)
                     .sum();
         }
@@ -178,15 +182,19 @@ public interface ActorPlacement {
                 log("%s on %s place(%d):\n   move %s to %s", this, getSystem(), retryCount, a, target);
                 return ResponsiveCalls.<ActorRef>send(getSystem(),
                         ActorRefRemote.get(getSystem(), target),
-                        new ActorCreationRequest(s)).get(2, TimeUnit.SECONDS);
+                        new ActorCreationRequest(s)).get(10, TimeUnit.SECONDS);
             } catch (Throwable ex) {
-                if (retryCount < cluster.size()) {
+                if (retryCount < getClusterSize()) {
                     return placeRetry(s, a, retryCount + 1);
                 } else {
                     ex.printStackTrace();
                     return placeLocal(a);
                 }
             }
+        }
+
+        public synchronized int getClusterSize() {
+            return cluster.size();
         }
 
         public void create(ActorCreationRequest c, ActorRef sender) {
@@ -214,6 +222,13 @@ public interface ActorPlacement {
 
         public int getTotalThreads() {
             return totalThreads;
+        }
+    }
+
+    class CallableMasterThreads implements CallableMessage<Integer> {
+        @Override
+        public Integer call(Actor self, ActorRef sender) {
+            return self.getSystem().getThreads();
         }
     }
 
@@ -294,6 +309,13 @@ public interface ActorPlacement {
         public Serializable getData() {
             return data;
         }
+
+        @Override
+        public String toString() {
+            return getClass().getSimpleName() + "@" + Integer.toHexString(System.identityHashCode(this)) +
+                    "(" + (data == null ? "null" : (data.getClass().getSimpleName() + "@" + System.identityHashCode(data))) +
+                    ')';
+        }
     }
 
     interface PlacementStrategy {
@@ -301,9 +323,22 @@ public interface ActorPlacement {
         long getNextLocalNumber();
     }
 
+    class PlacementStrategyUndertaker implements PlacementStrategy {
+        protected AtomicLong localNum = new AtomicLong();
+        @Override
+        public ActorAddress.ActorAddressRemoteActor getNextAddress(PlacemenActor pa, Actor a, int retryCount) {
+            return pa.getSelfAddress();
+        }
+
+        @Override
+        public long getNextLocalNumber() {
+            return localNum.incrementAndGet();
+        }
+    }
+
     class PlacementStrategyRoundRobinThreads implements PlacementStrategy {
         protected Map<AddressListEntry, Long> count = new HashMap<>();
-        protected long localNum;
+        protected AtomicLong localNum = new AtomicLong();
         protected int clusterIndex;
 
         //it might re-enter the method
@@ -340,8 +375,7 @@ public interface ActorPlacement {
 
         @Override
         public long getNextLocalNumber() {
-            localNum++;
-            return localNum;
+            return localNum.incrementAndGet();
         }
 
         /** @return implementation field getter */
@@ -355,7 +389,7 @@ public interface ActorPlacement {
         }
 
         /** @return implementation field getter */
-        public long getLocalNum() {
+        public AtomicLong getLocalNum() {
             return localNum;
         }
     }

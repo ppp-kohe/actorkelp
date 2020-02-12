@@ -2,9 +2,7 @@ package csl.actor.example.delayedlabel;
 
 import csl.actor.ActorRef;
 import csl.actor.ActorSystem;
-import csl.actor.ActorSystemDefault;
 import csl.actor.CallableMessage;
-import csl.actor.example.Example;
 import csl.actor.example.ExampleRemote;
 import csl.actor.msgassoc.ActorAggregationReplicable;
 import csl.actor.msgassoc.ActorPlacement;
@@ -39,8 +37,8 @@ public class DelayedLabelRemote extends DelayedLabelAggregationReplicable {
 
         List<Process> ps = new ArrayList<>();
         ExampleRemote.setMvnClasspath();
-        //ps.add(ExampleRemote.launchJava("-Dcsl.actor.debug.color=106", Follower.class.getName(), "10001", Integer.toString(serverPort)));
-        //ps.add(ExampleRemote.launchJava("-Dcsl.actor.debug.color=118", Follower.class.getName(), "10002", Integer.toString(serverPort)));
+        ps.add(ExampleRemote.launchJava("-Dcsl.actor.debug.color=106", Follower.class.getName(), "10001", Integer.toString(serverPort)));
+        ps.add(ExampleRemote.launchJava("-Dcsl.actor.debug.color=118", Follower.class.getName(), "10002", Integer.toString(serverPort)));
         try {
             Thread.sleep(10_000);
         } catch (Exception ex) {
@@ -74,7 +72,8 @@ public class DelayedLabelRemote extends DelayedLabelAggregationReplicable {
             int joinPort = Integer.parseInt(args[1]);
             system.startWithoutWait(port);
 
-            ActorAggregationReplicable.PlacemenActorReplicable p = new ActorAggregationReplicable.PlacemenActorReplicable(system);
+            ActorAggregationReplicable.PlacemenActorReplicable p = new ActorAggregationReplicable.PlacemenActorReplicable(system,
+                new ActorPlacement.PlacementStrategyUndertaker());
 
             Thread.sleep(8_000);
             p.join(ActorAddress.get("localhost", joinPort));

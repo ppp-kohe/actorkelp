@@ -22,7 +22,7 @@ import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 public class ObjectMessageClient implements Closeable {
-    protected Supplier<Kryo> serializer;
+    protected ObjectMessageServer.Serializer serializer;
 
     protected Bootstrap bootstrap;
     protected int threads = 4;
@@ -34,7 +34,7 @@ public class ObjectMessageClient implements Closeable {
 
     public static boolean debugTraceLog = System.getProperty("csl.actor.trace.client", "false").equals("true");
 
-    public ObjectMessageClient setSerializer(Supplier<Kryo> serializer) {
+    public ObjectMessageClient setSerializer(ObjectMessageServer.Serializer serializer) {
         this.serializer = serializer;
         return this;
     }
@@ -89,7 +89,8 @@ public class ObjectMessageClient implements Closeable {
 
     protected void initSerializer() {
         if (serializer == null) {
-            serializer = ObjectMessageServer.defaultSerializer::obtain;
+            serializer = ObjectMessageServer.defaultSerializer;
+            ActorSystemRemote.log(18, "%s use default serializer", this);
         }
     }
 
@@ -112,14 +113,14 @@ public class ObjectMessageClient implements Closeable {
         return started;
     }
 
-    public Supplier<Kryo> getSerializer() {
+    public ObjectMessageServer.Serializer getSerializer() {
         return serializer;
     }
 
     public ObjectMessageConnection connect() {
         synchronized (this) {
             if (!isStarted()) {
-                ActorSystemRemote.log(18, "ObjectMessageClient connect start %s", this);
+                ActorSystemRemote.log(18, "%s connect start", this);
                 start();
             }
         }
@@ -136,6 +137,12 @@ public class ObjectMessageClient implements Closeable {
         if (group != null) {
             group.shutdownGracefully();
         }
+    }
+
+    @Override
+    public String toString() {
+        return getClass().getSimpleName() + "@" +
+                Integer.toHexString(System.identityHashCode(this)) + "(" + host + ':' + port + ")";
     }
 
     public static class ObjectMessageConnection implements Closeable {
@@ -162,7 +169,7 @@ public class ObjectMessageClient implements Closeable {
         }
 
         public ObjectMessageConnection open() throws InterruptedException {
-            ActorSystemRemote.log(18, "ObjectMessageConnection open %s:%d", host, port);
+            ActorSystemRemote.log(18, "%s open", this);
             channel = client.getBootstrap()
                     .handler(new ClientInitializer(client, this))
                     .connect(host, port)
@@ -191,7 +198,7 @@ public class ObjectMessageClient implements Closeable {
                 ChannelFuture f = channel.writeAndFlush(msg);
                 checkResult(f);
             } catch (Exception c) {
-                System.err.println("write failure: " + c);
+                System.err.println(String.format("%s write failure: %s", this, c));
                 logWrite(retryCount, String.format("write failure %s", c));
                 if (retryCount < 10) {
                     return write(msg, retryCount + 1);
@@ -205,11 +212,11 @@ public class ObjectMessageClient implements Closeable {
         private void logWrite(int retryCount, String msg) {
             if (ActorSystemRemote.debugLog) {
                 if (channel == null) {
-                    ActorSystemRemote.log(18, "ObjectMessageConnection %s %s:%d, retry=%d, channel=null",
-                            msg, host, port, retryCount);
+                    ActorSystemRemote.log(18, "%s %s, retry=%d, channel=null",
+                            this, msg, retryCount);
                 } else {
-                    ActorSystemRemote.log(18, "ObjectMessageConnection %s %s:%d, retry=%d, open=%s, active=%s, writable=%s",
-                            msg, host, port, retryCount,
+                    ActorSystemRemote.log(18, "%s %s, retry=%d, open=%s, active=%s, writable=%s",
+                            this, msg, retryCount,
                             channel.isOpen(), channel.isActive(),
                             channel.isWritable());
                 }
@@ -217,7 +224,7 @@ public class ObjectMessageClient implements Closeable {
         }
 
         public void setResult(int result) {
-            ActorSystemRemote.log(18, "ObjectMessageConnection result-code  %s:%d  %d", host, port, result);
+            ActorSystemRemote.log(18, "%s result-code %d", this, result);
 
         }
 
@@ -234,8 +241,8 @@ public class ObjectMessageClient implements Closeable {
                             lastSize.decrementAndGet();
                         }
                     } else if (!f.await(10_000)) {
-                        System.err.println("client timeout");
-                        throw new RuntimeException("client timeout");
+                        System.err.println(String.format("%s timeout", this));
+                        throw new RuntimeException(String.format("%s timeout", this));
                     } else {
                         if (last.remove(f)) {
                             lastSize.decrementAndGet();
@@ -248,7 +255,7 @@ public class ObjectMessageClient implements Closeable {
         protected void checkResult(ChannelFuture f) throws Exception {
             last.add(f);
             f.addListener(sf -> {
-                ActorSystemRemote.log(18, "ObjectMessageConnection finish write %s:%d", host, port);
+                ActorSystemRemote.log(18, "%s finish write", this);
                 if (last.remove(f)) {
                     lastSize.decrementAndGet();
                 }
@@ -257,7 +264,7 @@ public class ObjectMessageClient implements Closeable {
 
         public void close() {
             if (channel != null && channel.isOpen()) {
-                ActorSystemRemote.log(18, "ObjectMessageConnection close: %s:%d", host, port);
+                ActorSystemRemote.log(18, "%s close", this);
                 channel.close();
                 channel = null;
             }
@@ -281,6 +288,12 @@ public class ObjectMessageClient implements Closeable {
         /** @return implementation field getter */
         public Channel getChannel() {
             return channel;
+        }
+
+        @Override
+        public String toString() {
+            return getClass().getSimpleName() + "@" +
+                    Integer.toHexString(System.identityHashCode(this)) + "(" + host + ':' + port + ")";
         }
     }
 
@@ -319,21 +332,21 @@ public class ObjectMessageClient implements Closeable {
     }
 
     public static class QueueClientHandler extends MessageToByteEncoder<Object> {
-        protected Supplier<Kryo> serializer;
+        protected ObjectMessageServer.Serializer serializer;
 
-        public QueueClientHandler(Supplier<Kryo> serializer) {
+        public QueueClientHandler(ObjectMessageServer.Serializer serializer) {
             this.serializer = serializer;
         }
 
         @Override
         protected void encode(ChannelHandlerContext ctx, Object msg, ByteBuf out) throws Exception {
             Output output = new Output(new ByteBufOutputStream(out));
-            serializer.get().writeClassAndObject(output, msg);
+            serializer.write(output, msg);
             output.flush();
         }
 
         /** @return implementation field getter */
-        public Supplier<Kryo> getSerializer() {
+        public ObjectMessageServer.Serializer getSerializer() {
             return serializer;
         }
     }

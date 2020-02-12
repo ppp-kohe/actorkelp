@@ -830,15 +830,21 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
             return (ActorAggregationReplicable) ref;
         }
         try {
-            ActorReplicableSerializableState state = ResponsiveCalls.<ActorReplicableSerializableState>send(system, ref,
-                    CallableMessage.callableMessage((s, sender) ->
-                            ((ActorAggregationReplicable) s).toSerializable(0)))
+            ActorReplicableSerializableState state = ResponsiveCalls.sendCallable(system, ref,
+                    new CallableToLocalSerializable())
                     .get(toLocalWaitMs(), TimeUnit.MILLISECONDS);
 
-            return fromSerializable(system, state, 0);
+            return fromSerializable(system, state, -1);
         } catch (Exception ex) {
             ex.printStackTrace();
             return null;
+        }
+    }
+
+    public static class CallableToLocalSerializable implements CallableMessage<ActorReplicableSerializableState> {
+        @Override
+        public ActorReplicableSerializableState call(Actor self, ActorRef sender) {
+            return ((ActorAggregationReplicable) self).toSerializable(-1);
         }
     }
 
@@ -940,8 +946,9 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
 
     public static ActorAggregationReplicable fromSerializable(ActorSystem system, ActorReplicableSerializableState state, long num) {
         try {
+            String name = (num < 0 ? null : String.format("%s_%d", state.name, num));
             ActorAggregationReplicable r = state.actorType.getConstructor(ActorSystem.class, String.class, Config.class)
-                .newInstance(system, String.format("%s_%d", state.name, num),
+                .newInstance(system, name,
                         state.config == null ? CONFIG_DEFAULT : state.config);
             r.state = new StateLeaf();
             r.getMailboxAsReplicable().deserializeFrom(state);
@@ -1024,12 +1031,8 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
             printStatus(sn.getLeft(), out);
             printStatus(sn.getRight(), out);
         } else if (s instanceof SplitLeaf) {
-            ActorAggregationReplicable r = toLocal(((SplitLeaf) s).getActor());
-            if (r == null) {
-                println(out, String.format("%s %d:leaf: ??? %s", idt, s.getDepth(), ((SplitLeaf) s).getActor()));
-            } else {
-                println(out, String.format("%s %d:leaf: %s", idt, s.getDepth(), r.toString()));
-            }
+            ActorRef r = ((SplitLeaf) s).getActor();
+            println(out, String.format("%s %d:leaf: %s", idt, s.getDepth(), r));
         }
     }
 

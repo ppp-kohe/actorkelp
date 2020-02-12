@@ -29,8 +29,9 @@ public class ActorSystemRemote implements ActorSystem {
     protected MessageDeliveringActor deliverer;
     protected Map<Object, ConnectionActor> connectionMap;
 
-    protected Function<ActorSystem, Kryo> serializer;
     protected Pool<Kryo> serializerPool;
+    protected Function<ActorSystem, Kryo> kryoFactory;
+    protected ObjectMessageServer.Serializer serializer;
 
     public static boolean debugLog = System.getProperty("csl.actor.debug", "false").equals("true");
     public static int debugLogColor = Integer.parseInt(System.getProperty("csl.actor.debug.color", "124"));
@@ -39,9 +40,9 @@ public class ActorSystemRemote implements ActorSystem {
         this(new ActorSystemDefaultForRemote(), KryoBuilder.builder());
     }
 
-    public ActorSystemRemote(ActorSystemDefault localSystem, Function<ActorSystem, Kryo> serializer) {
+    public ActorSystemRemote(ActorSystemDefault localSystem, Function<ActorSystem, Kryo> kryoFactory) {
         this.localSystem = localSystem;
-        this.serializer = serializer;
+        this.kryoFactory = kryoFactory;
         init();
     }
 
@@ -62,10 +63,11 @@ public class ActorSystemRemote implements ActorSystem {
                 return createSerializer();
             }
         };
+        serializer = new ObjectMessageServer.SerializerPool(serializerPool);
     }
 
     public Kryo createSerializer() {
-        return serializer.apply(this);
+        return kryoFactory.apply(this);
     }
 
     protected void initServerAndClient() {
@@ -95,8 +97,8 @@ public class ActorSystemRemote implements ActorSystem {
     }
 
     /** @return implementation field getter */
-    public Function<ActorSystem, Kryo> getSerializerFunction() {
-        return serializer;
+    public Function<ActorSystem, Kryo> getKryoFactory() {
+        return kryoFactory;
     }
 
     /** @return implementation field getter */
@@ -155,7 +157,7 @@ public class ActorSystemRemote implements ActorSystem {
         ActorRef target = message.getTarget();
         if (target instanceof ActorRefRemote) {
             ActorAddress addr = ((ActorRefRemote) target).getAddress().getHostAddress();
-            log(19, "client tell to remote %s", addr);
+            log(19, "%s: client tell to remote %s", this, addr);
             ConnectionActor a = connectionMap.computeIfAbsent(addr.getKey(), k -> createConnection(addr));
             if (a != null) {
                 a.tell(message, null);
@@ -170,7 +172,6 @@ public class ActorSystemRemote implements ActorSystem {
     protected ConnectionActor createConnection(ActorAddress addr) {
         if (addr instanceof ActorAddress.ActorAddressRemote) {
             try {
-                log(19, "client createConnection: %s", addr);
                 return new ConnectionActor(localSystem, this, (ActorAddress.ActorAddressRemote) addr);
             } catch (InterruptedException ex) {
                 ex.printStackTrace();
@@ -194,13 +195,15 @@ public class ActorSystemRemote implements ActorSystem {
 
     public ByteBuffer serialize(Message<?> message) {
         ByteBufferOutput output = new ByteBufferOutput();
-        serializerPool.obtain().writeObject(output, message);
+        Kryo k = serializerPool.obtain();
+        k.writeClassAndObject(output, message);
+        serializerPool.free(k);
         output.close();
         return output.getByteBuffer();
     }
 
-    public Supplier<Kryo> getSerializer() {
-        return serializerPool::obtain;
+    public ObjectMessageServer.Serializer getSerializer() {
+        return serializer;
     }
 
     public ObjectMessageServer getServer() {
@@ -267,8 +270,12 @@ public class ActorSystemRemote implements ActorSystem {
 
     @Override
     public String toString() {
-        return getClass().getSimpleName() + "@" + Integer.toHexString(System.identityHashCode(this)) +
-                "(" + localSystem + ", address=" + serverAddress + ")";
+        return toStringSystemName() + "@" + Integer.toHexString(System.identityHashCode(this)) +
+                "(" + localSystem + ", " + serverAddress + ")";
+    }
+
+    public String toStringSystemName() {
+        return "remote";
     }
 
     public void connectionClosed(ConnectionActor ca) {
@@ -330,6 +337,7 @@ public class ActorSystemRemote implements ActorSystem {
                     .setHost(address.getHost())
                     .setPort(address.getPort())
                     .open();
+            log(20, "%s connection: %s", this, connection);
         }
 
         @Override
@@ -419,11 +427,11 @@ public class ActorSystemRemote implements ActorSystem {
             }
             if (msg instanceof List<?>) { //message bundle
                 List<?> msgs = (List<?>) msg;
-                log(163, "server receive-remote: messages %,d", msgs.size());
+                log(163, "%s receive-remote: messages %,d", this, msgs.size());
                 int i = 0;
                 for (Object elem : msgs) {
                     Message<?> msgElem = (Message<?>) elem;
-                    log(163, "server receive-remote: [%,d] %s", i, msgElem);
+                    log(163, "%s receive-remote: [%,d] %s", this, i, msgElem);
                     remote.getLocalSystem().send(new Message<>(
                             remote.localize(msgElem.getTarget()),
                             msgElem.getSender(),
@@ -432,14 +440,20 @@ public class ActorSystemRemote implements ActorSystem {
                 }
             } else if (msg instanceof Message<?>) {
                 Message<?> m = (Message<?>)  msg;
-                log(163, "server receive-remote: %s", m);
+                log(163, "%s receive-remote: %s", this, m);
                 remote.getLocalSystem().send(new Message<>(
                         remote.localize(m.getTarget()),
                         m.getSender(),
                         m.getData()));
             } else {
-                log(163, "server receive unintended object: %s", msg);
+                log(163, "%s receive unintended object: %s", this, msg);
             }
+        }
+
+        @Override
+        public String toString() {
+            return getClass().getSimpleName() + "@" + Integer.toHexString(System.identityHashCode(this)) +
+                    "(" + remote + ")";
         }
     }
 

@@ -482,7 +482,7 @@ public class KeyHistogramsPersistable extends KeyHistograms {
 
     }
 
-    public static class PutIndexHistory {
+    public static class PutIndexHistory implements Serializable {
         public int count;
         public int[] indexHistogram = new int[10];
         public PutIndexHistory next;

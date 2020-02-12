@@ -778,7 +778,7 @@ public class ActorBehaviorAggregation {
         }
 
         protected boolean completed(int r) {
-            return r >= size;
+            return r <= size;
         }
 
         public boolean consume(int requiredSize, KeyHistograms.HistogramTree tree, BiConsumer<Object,List<Object>> handler) {
