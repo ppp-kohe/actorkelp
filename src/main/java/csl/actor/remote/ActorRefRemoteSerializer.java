@@ -22,9 +22,9 @@ public class ActorRefRemoteSerializer<RefType extends ActorRef> extends Serializ
         if (actorRef instanceof ActorRefRemote) {
             addr = ((ActorRefRemote) actorRef).getAddress();
         } else if (actorRef instanceof ActorRefLocalNamed) {
-            addr = getServerAddress().getActor(((ActorRefLocalNamed) actorRef).getName());
+            addr = getServerAddress().getActor((ActorRefLocalNamed) actorRef);
         } else if (actorRef instanceof Actor) {
-            addr = getServerAddress().getActor(((Actor) actorRef).getName());
+            addr = getServerAddress().getActor((Actor) actorRef);
         }
         kryo.writeClassAndObject(output, addr);
     }

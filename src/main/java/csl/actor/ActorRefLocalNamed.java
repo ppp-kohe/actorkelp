@@ -1,5 +1,7 @@
 package csl.actor;
 
+import csl.actor.remote.ActorAddress;
+
 public class ActorRefLocalNamed implements ActorRef {
     protected ActorSystem system;
     protected String name;
@@ -30,5 +32,23 @@ public class ActorRefLocalNamed implements ActorRef {
     @Override
     public String toString() {
         return "ref(" + name + ")";
+    }
+
+    public static class ActorRefLocalNamedNoName extends ActorRefLocalNamed {
+        protected ActorAddress origin;
+
+        public ActorRefLocalNamedNoName(ActorSystem system, ActorAddress origin) {
+            super(system, null);
+            this.origin = origin;
+        }
+
+        public ActorAddress getOrigin() {
+            return origin;
+        }
+
+        @Override
+        public String toString() {
+            return "ref(anonymous," + origin + ")";
+        }
     }
 }

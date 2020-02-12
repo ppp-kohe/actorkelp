@@ -1,6 +1,5 @@
 package csl.actor.remote;
 
-import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.io.Output;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.ByteBuf;
@@ -19,7 +18,6 @@ import java.io.Closeable;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
-import java.util.function.Supplier;
 
 public class ObjectMessageClient implements Closeable {
     protected ObjectMessageServer.Serializer serializer;
@@ -333,6 +331,7 @@ public class ObjectMessageClient implements Closeable {
 
     public static class QueueClientHandler extends MessageToByteEncoder<Object> {
         protected ObjectMessageServer.Serializer serializer;
+        protected boolean firstError;
 
         public QueueClientHandler(ObjectMessageServer.Serializer serializer) {
             this.serializer = serializer;
@@ -340,9 +339,17 @@ public class ObjectMessageClient implements Closeable {
 
         @Override
         protected void encode(ChannelHandlerContext ctx, Object msg, ByteBuf out) throws Exception {
-            Output output = new Output(new ByteBufOutputStream(out));
-            serializer.write(output, msg);
-            output.flush();
+            try {
+                Output output = new Output(new ByteBufOutputStream(out));
+                serializer.write(output, msg);
+                output.flush();
+            } catch (Exception ex) {
+                if (firstError) {
+                    ex.printStackTrace();
+                    firstError = false;
+                }
+                throw ex;
+            }
         }
 
         /** @return implementation field getter */
@@ -353,6 +360,7 @@ public class ObjectMessageClient implements Closeable {
 
     public static class ResponseHandler extends ChannelInboundHandlerAdapter {
         protected Consumer<Integer> resultHandler;
+        protected boolean firstError = true;
 
         public ResponseHandler(Consumer<Integer> resultHandler) {
             this.resultHandler = resultHandler;
@@ -378,6 +386,10 @@ public class ObjectMessageClient implements Closeable {
         @Override
         public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
             System.err.println("response-handler exception: " + cause);
+            if (firstError) {
+                cause.printStackTrace();
+                firstError = false;
+            }
             super.exceptionCaught(ctx, cause);
         }
     }

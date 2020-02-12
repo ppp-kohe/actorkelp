@@ -166,7 +166,7 @@ public class DelayedLabelManual {
         ScheduledFuture<?> checker;
 
         public ResultActor(ActorSystem system, PrintWriter out, Instant startTime, int numInstances) {
-            super(system);
+            super(system, "resultActor");
             this.startTime = startTime;
             this.numInstances = numInstances;
             this.out = out;

@@ -20,7 +20,7 @@ public class DelayedLabelAggregationReplicable extends DelayedLabelManual {
 
     @Override
     public ActorRef learnerActor(ActorSystem system, PrintWriter out, ActorRef resultActor) {
-        root = new LernerActorAggregationReplicable(system, out, resultActor, config);
+        root = new LearnerActorAggregationReplicable(system, out, resultActor, config);
         return root;
     }
 
@@ -29,9 +29,9 @@ public class DelayedLabelAggregationReplicable extends DelayedLabelManual {
         return new ResultActorAggregationReplicable(system, out, startTime, config.instances);
     }
 
-    static LernerActorAggregationReplicable root;
+    static LearnerActorAggregationReplicable root;
 
-    static List<LernerActorAggregationReplicable> processing = new ArrayList<>();
+    static List<LearnerActorAggregationReplicable> processing = new ArrayList<>();
 
     static class ResultActorAggregationReplicable extends ResultActor {
         public ResultActorAggregationReplicable(ActorSystem system, PrintWriter out, Instant startTime, int numInstances) {
@@ -47,24 +47,40 @@ public class DelayedLabelAggregationReplicable extends DelayedLabelManual {
         }
     }
 
-    static class LernerActorAggregationReplicable extends ActorAggregationReplicable {
+    public static class LearnerState extends ActorAggregationReplicable.ActorReplicableSerializableState {
+        public ActorRef resultActor;
+
+        @Override
+        protected ActorAggregationReplicable create(ActorSystem system, String name, Config config) throws Exception {
+            return new LearnerActorAggregationReplicable(system, name, config, resultActor);
+        }
+    }
+
+    public static class LearnerActorAggregationReplicable extends ActorAggregationReplicable {
         DelayedLabelAggregation.LearnerAggregationSupport support;
 
-        public LernerActorAggregationReplicable(ActorSystem system, String name, Config config) {
+        public LearnerActorAggregationReplicable(ActorSystem system, String name, Config config, ActorRef result) {
             super(system, name, config);
-            support = new DelayedLabelAggregation.LearnerAggregationSupport(this, config.getLogOut(), null,
+            support = new DelayedLabelAggregation.LearnerAggregationSupport(this, config.getLogOut(), result,
                     ((DelayedLabelConfig) config).instances);
         }
 
-        public LernerActorAggregationReplicable(ActorSystem system, String name, PrintWriter out, ActorRef resultActor,
-                                                DelayedLabelConfig config) {
+        public LearnerActorAggregationReplicable(ActorSystem system, String name, PrintWriter out, ActorRef resultActor,
+                                                 DelayedLabelConfig config) {
             super(system, name, config);
             support = new DelayedLabelAggregation.LearnerAggregationSupport(this, out, resultActor, config.instances);
         }
 
-        public LernerActorAggregationReplicable(ActorSystem system, PrintWriter out, ActorRef resultActor,
-                                                DelayedLabelConfig config) {
-            this(system, null, out, resultActor, config);
+        public LearnerActorAggregationReplicable(ActorSystem system, PrintWriter out, ActorRef resultActor,
+                                                 DelayedLabelConfig config) {
+            this(system, "learner", out, resultActor, config);
+        }
+
+        @Override
+        protected ActorReplicableSerializableState newSerializableState() {
+            LearnerState ls = new LearnerState();
+            ls.resultActor = support.model.resultActor;
+            return ls;
         }
 
         @Override

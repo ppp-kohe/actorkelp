@@ -1,5 +1,9 @@
 package csl.actor.remote;
 
+import csl.actor.Actor;
+import csl.actor.ActorRefLocalNamed;
+import csl.actor.ActorSystem;
+
 import java.io.Serializable;
 import java.util.Objects;
 
@@ -19,6 +23,10 @@ public class ActorAddress {
 
     public static ActorAddressRemoteActor get(String host, int port, String name) {
         return get(host, port).getActor(name);
+    }
+
+    public ActorRefLocalNamed toLocal(ActorSystem system) {
+        return new ActorRefLocalNamed.ActorRefLocalNamedNoName(system, this);
     }
 
     public static class ActorAddressRemote extends ActorAddress implements Serializable {
@@ -72,6 +80,36 @@ public class ActorAddress {
                 return false;
             }
         }
+
+        public ActorAddressRemoteActor getActor(Actor a) {
+            String n = a.getName();
+            if (n == null) {
+                return new ActorAddressAnonymousActor(host, port, a.getClass().getName(), System.identityHashCode(a));
+            } else {
+                return getActor(n);
+            }
+        }
+
+        public ActorAddressRemoteActor getActor(ActorRefLocalNamed local) {
+            if (local instanceof ActorRefLocalNamed.ActorRefLocalNamedNoName) {
+                ActorAddress addr = ((ActorRefLocalNamed.ActorRefLocalNamedNoName) local).getOrigin();
+                if (addr instanceof ActorAddressRemoteActor) {
+                    return (ActorAddressRemoteActor) addr;
+                } else if (addr instanceof ActorAddressRemote) {
+                    ActorAddressRemote remote = (ActorAddressRemote) addr;
+                    return new ActorAddressAnonymousActor(remote.getHost(), remote.getPort(), "?", -1);
+                } else {
+                    return new ActorAddressError("localhost", -1, Objects.toString(addr));
+                }
+            } else {
+                String n = local.getName();
+                if (n == null) {
+                    return new ActorAddressError(host, port, local.toString());
+                } else {
+                    return getActor(n);
+                }
+            }
+        }
     }
 
     public static class ActorAddressRemoteActor extends ActorAddressRemote {
@@ -110,6 +148,46 @@ public class ActorAddress {
         @Override
         public String toString() {
             return super.toString() + "/" + actorName;
+        }
+
+        @Override
+        public ActorRefLocalNamed toLocal(ActorSystem system) {
+            return new ActorRefLocalNamed(system, actorName);
+        }
+    }
+
+    public static class ActorAddressAnonymousActor extends ActorAddressRemoteActor {
+        protected String typeName;
+        protected int identityHashCode;
+
+        public ActorAddressAnonymousActor(String host, int port, String typeName, int identityHashCode) {
+            super(host, port, null);
+            this.typeName = typeName;
+            this.identityHashCode = identityHashCode;
+        }
+
+        @Override
+        public String toString() {
+            return super.toString() + "#anon:" + typeName + "@" + Integer.toHexString(identityHashCode);
+        }
+
+        @Override
+        public ActorRefLocalNamed toLocal(ActorSystem system) {
+            return new ActorRefLocalNamed.ActorRefLocalNamedNoName(system, this);
+        }
+    }
+
+    public static class ActorAddressError extends ActorAddressRemoteActor {
+        protected String info;
+
+        public ActorAddressError(String host, int port, String info) {
+            super(host, port, null);
+            this.info = info;
+        }
+
+        @Override
+        public String toString() {
+            return super.toString() + "#" + info;
         }
     }
 }

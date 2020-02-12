@@ -14,6 +14,8 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 public class Config implements Serializable {
+    public static final Config CONFIG_DEFAULT = new Config();
+
     public int mailboxThreshold = 1000;
     public int mailboxTreeSize = 32;
     public float lowerBoundThresholdFactor = 0.5f;
@@ -42,7 +44,7 @@ public class Config implements Serializable {
     public double histogramPersistSizeRatioThreshold = 0.00001;
     public long histogramPersistRandomSeed = 0;
 
-    protected PrintWriter logOut;
+    protected transient PrintWriter logOut;
 
     public static Config readConfig(Map<Object, Object> properties) {
         return readConfig("csl.actor.msgassoc", properties);

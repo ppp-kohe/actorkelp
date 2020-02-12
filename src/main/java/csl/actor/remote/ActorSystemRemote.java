@@ -16,7 +16,6 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.function.Function;
-import java.util.function.Supplier;
 
 public class ActorSystemRemote implements ActorSystem {
     protected ActorSystemDefault localSystem;
@@ -228,11 +227,7 @@ public class ActorSystemRemote implements ActorSystem {
             return ref;
         } else if (ref instanceof ActorRefRemote) {
             ActorAddress addr = ((ActorRefRemote) ref).getAddress();
-            String localName = null;
-            if (addr instanceof ActorAddress.ActorAddressRemoteActor) {
-                localName = ((ActorAddress.ActorAddressRemoteActor) addr).getActorName();
-            }
-            return new ActorRefLocalNamed(this, localName);
+            return addr.toLocal(this);
         } else {
             return ref;
         }
@@ -415,7 +410,7 @@ public class ActorSystemRemote implements ActorSystem {
         protected ActorSystemRemote remote;
 
         public MessageDeliveringActor(ActorSystemRemote system) {
-            super(system);
+            super(system, MessageDeliveringActor.class.getName());
             this.remote = system;
         }
 

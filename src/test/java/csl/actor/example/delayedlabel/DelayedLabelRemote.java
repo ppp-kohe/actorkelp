@@ -25,7 +25,6 @@ public class DelayedLabelRemote extends DelayedLabelAggregationReplicable {
     public void run(PrintWriter out, String src) {
         Iterator<Object> inputs = inputs(out, src);
 
-        Instant startTime = Instant.now();
 
         ActorSystemRemote system = new ActorSystemRemote();
         ResponsiveCalls.initCallableTarget(system);
@@ -45,6 +44,7 @@ public class DelayedLabelRemote extends DelayedLabelAggregationReplicable {
             ex.printStackTrace();
         }
 
+        Instant startTime = Instant.now();
         ResultActor resultActor = resultActor(system, out, startTime);
         ActorRef learnerActor = learnerActor(system, out, resultActor);
         resultActor.setLearner(learnerActor);
@@ -58,7 +58,7 @@ public class DelayedLabelRemote extends DelayedLabelAggregationReplicable {
 
     @Override
     public ActorRef learnerActor(ActorSystem system, PrintWriter out, ActorRef resultActor) {
-        LernerActorAggregationReplicable r = (LernerActorAggregationReplicable) super.learnerActor(system, out, resultActor);
+        LearnerActorAggregationReplicable r = (LearnerActorAggregationReplicable) super.learnerActor(system, out, resultActor);
         ResponsiveCalls.sendCallable(system, r,
                 CallableMessage.callableMessageConsumer((a, s) -> ((ActorAggregationReplicable) a).routerSplit(3)));
         return r;

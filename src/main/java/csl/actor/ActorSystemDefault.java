@@ -164,7 +164,12 @@ public class ActorSystemDefault implements ActorSystem {
     }
 
     public Actor resolveActorLocalNamed(ActorRefLocalNamed ref) {
-        return namedActorMap.get(ref.getName());
+        if (ref instanceof ActorRefLocalNamed.ActorRefLocalNamedNoName) {
+            System.err.println(String.format("resolveActorLocalNamed error: %s", ref));
+            return null;
+        } else {
+            return namedActorMap.get(ref.getName());
+        }
     }
 
     /** @return implementation field getter */

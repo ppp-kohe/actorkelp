@@ -76,7 +76,7 @@ public class KryoBuilder {
         register(kryo, getBaseClasses());
 
         kryo.register(SerializedLambda.class);
-        kryo.register(ClosureSerializer.Closure.class, new ClosureSerializer());
+        kryo.register(ClosureSerializer.Closure.class, new PatchedClosureSerializer());
 
         registerObjectStream(kryo, EnumMap.class);
         registerObjectStream(kryo, SimpleTimeZone.class);
@@ -237,6 +237,9 @@ public class KryoBuilder {
                 Actor.class,
                 ActorDefault.class,
                 ActorRefLocalNamed.class,
+                ActorRefLocalNamed.ActorRefLocalNamedNoName.class,
+                ActorAddress.ActorAddressAnonymousActor.class,
+                ActorAddress.ActorAddressError.class,
                 ResponsiveCalls.ResponsiveCallableActor.class,
 
                 ResponsiveCalls.DeadLetterException.class,

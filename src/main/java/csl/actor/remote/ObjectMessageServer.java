@@ -17,9 +17,7 @@ import io.netty.handler.logging.LoggingHandler;
 import io.netty.util.ReferenceCountUtil;
 
 import java.io.Closeable;
-import java.util.function.Consumer;
 import java.util.function.Function;
-import java.util.function.Supplier;
 
 public class ObjectMessageServer implements Closeable {
     public static void main(String[] args) {
@@ -143,16 +141,26 @@ public class ObjectMessageServer implements Closeable {
         @Override
         public Object read(Input input) {
             Kryo k = pool.obtain();
-            Object o = k.readClassAndObject(input);
-            pool.free(k);
-            return o;
+            try {
+                Object o = k.readClassAndObject(input);
+                pool.free(k);
+                return o;
+            } catch (Exception ex) {
+                System.err.println(String.format("Kryo error: %s", ex));
+                throw new RuntimeException(ex);
+            }
         }
 
         @Override
         public void write(Output out, Object o) {
             Kryo k = pool.obtain();
-            k.writeClassAndObject(out, o);
-            pool.free(k);
+            try {
+                k.writeClassAndObject(out, o);
+                pool.free(k);
+            } catch (Exception ex) {
+                System.err.println(String.format("Kryo error: %s", ex));
+                throw new RuntimeException(ex);
+            }
         }
     }
 

@@ -358,13 +358,13 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
             if (a == this) {
                 return null;
             } else {
-                return newSplitLeaf(a, depth);
+                return newSplitLeaf(a, depth, this);
             }
         } else {
             if (height <= 1 && actor == this) {
                 return null;
             } else {
-                return newSplitLeaf(actor, depth).split(this, height);
+                return newSplitLeaf(actor, depth, this).split(this, height);
             }
         }
     }
@@ -374,8 +374,8 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
         return new SplitNode(splitPoints, s1, s2, depth, historyEntrySize());
     }
 
-    protected Split newSplitLeaf(ActorRef actor, int depth) {
-        return new SplitLeaf(actor, depth);
+    protected Split newSplitLeaf(ActorRef actor, int depth, ActorRef router) {
+        return new SplitLeaf(actor, depth, router);
     }
 
 
@@ -395,21 +395,31 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
         SplitLeaf mergeIntoLeaf(ActorAggregationReplicable router);
 
         Split splitOrMerge(ActorAggregationReplicable router, int height);
+
+        Split adjustDepth(int dep);
     }
 
     public static class SplitLeaf implements Split {
         protected ActorRef actor;
         protected int depth;
+        protected ActorRef router;
 
-        public SplitLeaf(ActorRef actor, int depth) {
+        public SplitLeaf(ActorRef actor, int depth, ActorRef router) {
             this.actor = actor;
             this.depth = depth;
+            this.router = router;
         }
 
         @Override
         public void process(ActorAggregationReplicable router, StateSplitRouter stateRouter,
                             Object key, MailboxAggregation.HistogramSelection selection, Message<?> message) {
             actor.tell(message.getData(), message.getSender());
+        }
+
+        @Override
+        public SplitLeaf adjustDepth(int dep) {
+            this.depth += dep;
+            return this;
         }
 
         @Override
@@ -549,6 +559,12 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
         }
 
         @Override
+        public SplitNode adjustDepth(int dep) {
+            this.depth += dep;
+            return this;
+        }
+
+        @Override
         public int getDepth() {
             return depth;
         }
@@ -624,22 +640,22 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
             if (leftIsLeaf && rightIsLeaf) {
                 //merge leaf
                 if (intoLeft) {
-                    return ((SplitLeaf) left).merge(router, (SplitLeaf) right);
+                    return ((SplitLeaf) left).merge(router, (SplitLeaf) right).adjustDepth(-1);
                 } else {
-                    return ((SplitLeaf) right).merge(router, (SplitLeaf) left);
+                    return ((SplitLeaf) right).merge(router, (SplitLeaf) left).adjustDepth(-1);
                 }
             } else {
                 this.left = left;
                 this.right = right;
                 if (leftIsLeaf) {
                     if (((SplitNode) right).mergeIntoChildLeaf(router, true, (SplitLeaf) left)) {
-                        return right;
+                        return right.adjustDepth(-1);
                     } else {
                         return this;
                     }
                 } else if (rightIsLeaf) {
                     if (((SplitNode) left).mergeIntoChildLeaf(router, false, (SplitLeaf) right)) {
-                        return left;
+                        return left.adjustDepth(-1);
                     } else {
                         return this;
                     }
@@ -672,7 +688,7 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
         @Override
         public SplitLeaf mergeIntoLeaf(ActorAggregationReplicable router) {
             return left.mergeIntoLeaf(router)
-                    .merge(router, right.mergeIntoLeaf(router));
+                    .merge(router, right.mergeIntoLeaf(router)).adjustDepth(-1);
         }
 
         @Override
@@ -833,8 +849,7 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
             ActorReplicableSerializableState state = ResponsiveCalls.sendCallable(system, ref,
                     new CallableToLocalSerializable())
                     .get(toLocalWaitMs(), TimeUnit.MILLISECONDS);
-
-            return fromSerializable(system, state, -1);
+            return state.create(system, -1);
         } catch (Exception ex) {
             ex.printStackTrace();
             return null;
@@ -912,9 +927,14 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
         @Override
         public Actor fromSerializable(Serializable s, long num) {
             if (s instanceof ActorReplicableSerializableState) {
-                Actor a = ActorAggregationReplicable.fromSerializable(getSystem(), (ActorReplicableSerializableState) s, num);
-                getSystem().send(new Message.MessageNone(a));
-                return a;
+                try {
+                    Actor a = ((ActorReplicableSerializableState) s).create(getSystem(), num);
+                    getSystem().send(new Message.MessageNone(a));
+                    return a;
+                } catch (Exception ex) {
+                    ex.printStackTrace();
+                    return null;
+                }
             } else {
                 return null;
             }
@@ -928,35 +948,22 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
     }
 
     public ActorReplicableSerializableState toSerializable(long num) {
-        ActorReplicableSerializableState state = newSerializableState();
-        state.actorType = getClass();
-        state.name = String.format("%s#%d", getName(), num);
-        if (config != CONFIG_DEFAULT) {
-            state.config = config;
-        }
-
-        MailboxAggregationReplicable r = getMailboxAsReplicable();
-        r.serializeTo(state);
-        return state;
+        return initSerializableState(newSerializableState(), num);
     }
 
     protected ActorReplicableSerializableState newSerializableState() {
         return new ActorReplicableSerializableState();
     }
 
-    public static ActorAggregationReplicable fromSerializable(ActorSystem system, ActorReplicableSerializableState state, long num) {
-        try {
-            String name = (num < 0 ? null : String.format("%s_%d", state.name, num));
-            ActorAggregationReplicable r = state.actorType.getConstructor(ActorSystem.class, String.class, Config.class)
-                .newInstance(system, name,
-                        state.config == null ? CONFIG_DEFAULT : state.config);
-            r.state = new StateLeaf();
-            r.getMailboxAsReplicable().deserializeFrom(state);
-            return r;
-        } catch (Exception ex) {
-            ex.printStackTrace();
-            return null;
+    protected ActorReplicableSerializableState initSerializableState(ActorReplicableSerializableState state, long num) {
+        state.actorType = getClass();
+        state.name = String.format("%s#%d", getName(), num);
+        if (config != Config.CONFIG_DEFAULT) {
+            state.config = config;
         }
+        MailboxAggregationReplicable r = getMailboxAsReplicable();
+        r.serializeTo(state);
+        return state;
     }
 
     public static class ActorReplicableSerializableState implements Serializable {
@@ -965,6 +972,28 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
         public Message<?>[] messages;
         public List<KeyHistograms.HistogramTree> tables;
         public Config config;
+
+        public ActorAggregationReplicable create(ActorSystem system, long num) throws Exception {
+            return init(create(system, name(num), config()));
+        }
+
+        protected String name(long num) {
+            return (num < 0 ? null : String.format("%s_%d", name, num));
+        }
+
+        protected Config config() {
+            return config == null ? Config.CONFIG_DEFAULT : config;
+        }
+
+        protected ActorAggregationReplicable init(ActorAggregationReplicable a) {
+            a.state = new StateLeaf();
+            a.getMailboxAsReplicable().deserializeFrom(this);
+            return a;
+        }
+
+        protected ActorAggregationReplicable create(ActorSystem system, String name, Config config) throws Exception {
+            return actorType.getConstructor(ActorSystem.class, String.class, Config.class).newInstance(system, name, config);
+        }
     }
 
     public void printStatus() {

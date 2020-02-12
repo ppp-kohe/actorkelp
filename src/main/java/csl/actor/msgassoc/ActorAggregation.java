@@ -4,8 +4,7 @@ import csl.actor.*;
 
 public abstract class ActorAggregation extends ActorDefault
         implements KeyHistogramsPersistable.HistogramTreePersistableConfig {
-    protected Config config = CONFIG_DEFAULT;
-    public static final Config CONFIG_DEFAULT = new Config();
+    protected Config config = Config.CONFIG_DEFAULT;
 
     public ActorAggregation(ActorSystem system, String name, MailboxAggregation mailbox, ActorBehavior behavior) {
         super(system, name, mailbox, behavior);
@@ -20,11 +19,11 @@ public abstract class ActorAggregation extends ActorDefault
     }
 
     public ActorAggregation(ActorSystem system, String name) {
-        this(system, name, CONFIG_DEFAULT);
+        this(system, name, Config.CONFIG_DEFAULT);
     }
 
     public ActorAggregation(ActorSystem system) {
-        this(system, CONFIG_DEFAULT);
+        this(system, Config.CONFIG_DEFAULT);
     }
 
     public ActorAggregation(ActorSystem system, String name, Config config) {
