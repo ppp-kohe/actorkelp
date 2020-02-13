@@ -52,6 +52,10 @@ public abstract class ActorDefault extends Actor {
     public String toString() {
         return getClass().getSimpleName() +
                 "@" + Integer.toHexString(System.identityHashCode(this))
-                + (name != null ? ("(" + name + ")") : "");
+                + "(" + toStringContents() + ")";
+    }
+
+    public String toStringContents() {
+        return name == null ? "" : name;
     }
 }

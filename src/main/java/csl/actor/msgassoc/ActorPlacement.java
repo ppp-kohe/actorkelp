@@ -82,7 +82,7 @@ public interface ActorPlacement {
                 masterActor = master.getActor(getName()); //same name
             }
             try {
-                int masterThreads = ResponsiveCalls.send(getSystem(), masterActor, new CallableMasterThreads())
+                int masterThreads = ResponsiveCalls.sendHostTask(getSystem(), masterActor, new CallableMasterThreads())
                         .get(20, TimeUnit.SECONDS);
                 tell(new AddressList(
                             new AddressListEntry(masterActor, masterThreads)), this);
@@ -225,7 +225,7 @@ public interface ActorPlacement {
         }
     }
 
-    class CallableMasterThreads implements CallableMessage<Integer> {
+    class CallableMasterThreads implements CallableMessage<Actor, Integer> {
         @Override
         public Integer call(Actor self, ActorRef sender) {
             return self.getSystem().getThreads();

@@ -126,13 +126,14 @@ public class ActorBehaviorBuilder {
 
     //////
 
-    public static class ActorBehaviorCallable<DataType extends CallableMessage<?>> implements ActorBehavior {
+    public static class ActorBehaviorCallable<ActorType extends Actor,DataType extends CallableMessage<ActorType,?>> implements ActorBehavior {
         protected Class<DataType> dataType;
 
         public ActorBehaviorCallable(Class<DataType> dataType) {
             this.dataType = dataType;
         }
 
+        @SuppressWarnings("unchecked")
         @Override
         public boolean process(Actor self, Message<?> message) {
             Object d = message.getData();
@@ -140,7 +141,7 @@ public class ActorBehaviorBuilder {
                 Object res;
                 ActorRef sender = message.getSender();
                 try {
-                    res = dataType.cast(d).call(self, sender);
+                    res = dataType.cast(d).call((ActorType) self, sender);
                 } catch (Throwable ex) {
                     res = new CallableMessage.CallableFailure(ex);
                 }

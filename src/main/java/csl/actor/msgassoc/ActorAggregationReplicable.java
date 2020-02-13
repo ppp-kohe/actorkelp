@@ -397,6 +397,10 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
         Split splitOrMerge(ActorAggregationReplicable router, int height);
 
         Split adjustDepth(int dep);
+
+        default <ActorType extends ActorAggregationReplicable> void accept(ActorType actor, ActorRef sender, Visitor<ActorType> v) {
+            v.visitRouter(actor, sender, this);
+        }
     }
 
     public static class SplitLeaf implements Split {
@@ -499,6 +503,11 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
                 return this;
             }
         }
+
+        @Override
+        public <ActorType extends ActorAggregationReplicable> void accept(ActorType actor, ActorRef sender, Visitor<ActorType> v) {
+            v.visitRouterLeaf(actor, sender, this);
+        }
     }
 
     public static class SplitNode implements Split {
@@ -582,7 +591,6 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
             return splitPoints;
         }
 
-        /** @return implementation field getter */
         public RoutingHistory getHistory() {
             return history;
         }
@@ -701,6 +709,11 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
                 return mergeIntoLeaf(router);
             }
         }
+
+        @Override
+        public <ActorType extends ActorAggregationReplicable> void accept(ActorType actor, ActorRef sender, Visitor<ActorType> v) {
+            v.visitRouterNode(actor, sender, this);
+        }
     }
 
 
@@ -803,16 +816,16 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
 
     protected boolean isNoRoutingMessage(Message<?> message) {
         return message.getData() instanceof NoRouting ||
-                (message.getData() instanceof CallableMessage<?> &&
+                (message.getData() instanceof CallableMessage<?,?> &&
                         !(message.getData() instanceof Routing));
     }
 
     public interface NoRouting { }
     public interface Routing { }
 
-    public interface CallableMessageRouting<T> extends CallableMessage<T>, Routing { }
+    public interface CallableMessageRouting<A extends Actor,T> extends CallableMessage<A,T>, Routing { }
 
-    public static <T> CallableMessageRouting<T> callableRouting(CallableMessageRouting<T> t) {
+    public static <A extends Actor,T> CallableMessageRouting<A,T> callableRouting(CallableMessageRouting<A,T> t) {
         return t;
     }
 
@@ -846,7 +859,7 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
             return (ActorAggregationReplicable) ref;
         }
         try {
-            ActorReplicableSerializableState state = ResponsiveCalls.sendCallable(system, ref,
+            ActorReplicableSerializableState state = ResponsiveCalls.sendTask(system, ref,
                     new CallableToLocalSerializable())
                     .get(toLocalWaitMs(), TimeUnit.MILLISECONDS);
             return state.create(system, -1);
@@ -857,10 +870,10 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
         }
     }
 
-    public static class CallableToLocalSerializable implements CallableMessage<ActorReplicableSerializableState> {
+    public static class CallableToLocalSerializable implements CallableMessage<ActorAggregationReplicable, ActorReplicableSerializableState> {
         @Override
-        public ActorReplicableSerializableState call(Actor self, ActorRef sender) {
-            return ((ActorAggregationReplicable) self).toSerializable(-1);
+        public ActorReplicableSerializableState call(ActorAggregationReplicable self, ActorRef sender) {
+            return self.toSerializable(-1);
         }
     }
 
@@ -1023,10 +1036,9 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
     }
 
     @Override
-    public String toString() {
-        return String.format("%s: %s",
-                super.toString(),
-                toStringMailboxStatus());
+    public String toStringContents() {
+        return String.format("%s %s, %s", super.toStringContents(),
+                getSystem(), toStringMailboxStatus());
     }
 
     public String toStringMailboxStatus() {
@@ -1052,10 +1064,14 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
             println(out, String.format("%s null", idt));
         } else if (s instanceof SplitNode) {
             SplitNode sn = (SplitNode) s;
-            println(out, String.format("%s %d:node: %s ", idt, sn.getDepth(), sn.getSplitPoints().stream()
+            println(out, String.format("%s %d:node: %s history=%s", idt, sn.getDepth(), sn.getSplitPoints().stream()
                 .map(Objects::toString)
                 .map(l -> l.length() > 100 ? l.substring(0, 100) + "..." : l)
-                .collect(Collectors.joining(", ", "[", "]"))));
+                .collect(Collectors.joining(", ", "[", "]")),
+                sn.getHistory().toList().stream()
+                    .map(h -> String.format("(%,d:%,d)", h.left.get(), h.right.get()))
+                    .limit(3)
+                    .collect(Collectors.joining(", ", "{", "...}"))));
             printStatus(sn.getLeft(), out);
             printStatus(sn.getRight(), out);
         } else if (s instanceof SplitLeaf) {
@@ -1068,4 +1084,42 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
         config.println(out, line);
     }
 
+    public interface Visitor<ActorType extends ActorAggregationReplicable>
+            extends CallableMessage.CallableMessageConsumer<ActorType>, NoRouting {
+        void visitActor(ActorType actor, ActorRef sender);
+
+        @Override
+        default void accept(ActorType actor, ActorRef sender) {
+            if (actor.getState() instanceof StateLeaf) {
+                visitActor(actor, sender);
+            } else if (actor.getState() instanceof StateSplitRouter) {
+                Split s = ((StateSplitRouter) actor.getState()).getSplit();
+                visitActor(actor, sender);
+                if (s != null) {
+                    s.accept(actor, sender, this);
+                }
+            }
+        }
+
+        default boolean visitRouter(ActorType actor, ActorRef sender, Split split) {
+            return true;
+        }
+
+        default void visitRouterNode(ActorType actor, ActorRef sender, SplitNode node) {
+            if (visitRouter(actor, sender, node)) {
+                node.getLeft().accept(actor, sender, this);
+                node.getRight().accept(actor, sender, this);
+            }
+        }
+
+        default void visitRouterLeaf(ActorType actor, ActorRef sender, SplitLeaf leaf) {
+            if (visitRouter(actor, sender, leaf)) {
+                leaf.getActor().tell(this, sender);
+            }
+        }
+    }
+
+    public <SelfType extends ActorAggregationReplicable> void tellVisitor(Visitor<SelfType> v, ActorRef sender) {
+        tell(v, sender);
+    }
 }

@@ -6,7 +6,6 @@ import csl.actor.CallableMessage;
 import csl.actor.example.ExampleRemote;
 import csl.actor.msgassoc.ActorAggregationReplicable;
 import csl.actor.msgassoc.ActorPlacement;
-import csl.actor.msgassoc.Config;
 import csl.actor.msgassoc.ResponsiveCalls;
 import csl.actor.remote.ActorAddress;
 import csl.actor.remote.ActorSystemRemote;
@@ -40,7 +39,7 @@ public class DelayedLabelRemote extends DelayedLabelAggregationReplicable {
         ps.add(ExampleRemote.launchJava("-Dcsl.actor.debug.color=106", Follower.class.getName(), "10001", Integer.toString(serverPort)));
         ps.add(ExampleRemote.launchJava("-Dcsl.actor.debug.color=118", Follower.class.getName(), "10002", Integer.toString(serverPort)));
         try {
-            Thread.sleep(10_000);
+            Thread.sleep(5000);
         } catch (Exception ex) {
             ex.printStackTrace();
         }
@@ -60,7 +59,7 @@ public class DelayedLabelRemote extends DelayedLabelAggregationReplicable {
     @Override
     public ActorRef learnerActor(ActorSystem system, PrintWriter out, ActorRef resultActor) {
         LearnerActorAggregationReplicable r = (LearnerActorAggregationReplicable) super.learnerActor(system, out, resultActor);
-        ResponsiveCalls.sendCallable(system, r,
+        ResponsiveCalls.sendTask(system, r,
                 CallableMessage.callableMessageConsumer((a, s) -> ((ActorAggregationReplicable) a).routerSplit(3)));
         return r;
     }
@@ -76,7 +75,6 @@ public class DelayedLabelRemote extends DelayedLabelAggregationReplicable {
             ActorAggregationReplicable.PlacemenActorReplicable p = new ActorAggregationReplicable.PlacemenActorReplicable(system,
                 new ActorPlacement.PlacementStrategyUndertaker());
 
-            Thread.sleep(8_000);
             p.join(ActorAddress.get("localhost", joinPort));
         }
     }

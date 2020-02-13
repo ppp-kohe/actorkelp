@@ -33,7 +33,7 @@ public class ExampleActorReplicablePlacement {
                 .tell(ActorRefRemote.get(system, "localhost", 10001, "recv"), null);
 
         TestActor a = new TestActor(system, "hello", new Config());
-        ResponsiveCalls.sendCallable(system, a, (s,f) -> {((TestActor) s).move(); return "";});
+        ResponsiveCalls.sendTask(system, a, (s, f) -> {((TestActor) s).move(); return "";});
 
         a.routerSplit(2);
 

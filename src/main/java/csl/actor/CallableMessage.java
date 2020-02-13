@@ -3,8 +3,8 @@ package csl.actor;
 import java.io.Serializable;
 
 @FunctionalInterface
-public interface CallableMessage<T> extends Serializable {
-    T call(Actor self, ActorRef sender);
+public interface CallableMessage<ActorType extends Actor,RetType> extends Serializable {
+    RetType call(ActorType self, ActorRef sender);
 
 
     class CallableFailure implements Serializable {
@@ -24,19 +24,19 @@ public interface CallableMessage<T> extends Serializable {
         }
     }
 
-    static <T> CallableMessage<T> callableMessage(CallableMessage<T> m) {
+    static <ActorType extends Actor,RetType> CallableMessage<ActorType,RetType> callableMessage(CallableMessage<ActorType,RetType> m) {
         return m;
     }
 
-    static CallableMessageConsumer callableMessageConsumer(CallableMessageConsumer m) {
+    static <ActorType extends Actor> CallableMessageConsumer<ActorType> callableMessageConsumer(CallableMessageConsumer<ActorType> m) {
         return m;
     }
 
-    interface CallableMessageConsumer extends CallableMessage<Void> {
-        void accept(Actor self, ActorRef sender);
+    interface CallableMessageConsumer<ActorType extends Actor> extends CallableMessage<ActorType,Void> {
+        void accept(ActorType self, ActorRef sender);
 
         @Override
-        default Void call(Actor self, ActorRef sender) {
+        default Void call(ActorType self, ActorRef sender) {
             accept(self, sender);
             return null;
         }

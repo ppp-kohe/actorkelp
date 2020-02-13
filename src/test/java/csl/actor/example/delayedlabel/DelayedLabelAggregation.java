@@ -107,7 +107,7 @@ public class DelayedLabelAggregation extends DelayedLabelManual {
             }
             String sn = self.getClass().getSimpleName();
             File file = new File(dir, String.format("delayed-%s-%s.dot", sn, count));
-            ResponsiveCalls.send(self.getSystem(), root, (self, ref) -> {
+            ResponsiveCalls.sendTask(self.getSystem(), root, (self, ref) -> {
                 if (new ActorToGraph(self.getSystem(), file, self).save(self).finish()) {
                     if (finish) {
                         System.exit(0);
