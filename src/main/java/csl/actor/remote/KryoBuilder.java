@@ -70,6 +70,7 @@ public class KryoBuilder {
     public Kryo build() {
         Kryo kryo = (this.kryo == null ? new Kryo() : this.kryo);
         kryo.setRegistrationRequired(false);
+        kryo.setReferences(true);
         kryo.setInstantiatorStrategy(new DefaultInstantiatorStrategy(new StdInstantiatorStrategy()));
 
         register(kryo, getDefaultSerializerClasses());

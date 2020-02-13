@@ -6,6 +6,7 @@ import csl.actor.CallableMessage;
 import csl.actor.example.ExampleRemote;
 import csl.actor.msgassoc.ActorAggregationReplicable;
 import csl.actor.msgassoc.ActorPlacement;
+import csl.actor.msgassoc.Config;
 import csl.actor.msgassoc.ResponsiveCalls;
 import csl.actor.remote.ActorAddress;
 import csl.actor.remote.ActorSystemRemote;
@@ -24,7 +25,7 @@ public class DelayedLabelRemote extends DelayedLabelAggregationReplicable {
     @Override
     public void run(PrintWriter out, String src) {
         Iterator<Object> inputs = inputs(out, src);
-
+        config.lowerBoundThresholdFactor = -1; //no Few mailbox and no merge
 
         ActorSystemRemote system = new ActorSystemRemote();
         ResponsiveCalls.initCallableTarget(system);

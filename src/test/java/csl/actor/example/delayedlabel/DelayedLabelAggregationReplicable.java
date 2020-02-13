@@ -6,6 +6,7 @@ import csl.actor.ActorSystem;
 import csl.actor.Message;
 import csl.actor.msgassoc.ActorAggregationReplicable;
 import csl.actor.msgassoc.Config;
+import csl.actor.msgassoc.ResponsiveCalls;
 
 import java.io.PrintWriter;
 import java.time.Instant;
@@ -34,6 +35,7 @@ public class DelayedLabelAggregationReplicable extends DelayedLabelManual {
     static List<LearnerActorAggregationReplicable> processing = new ArrayList<>();
 
     static class ResultActorAggregationReplicable extends ResultActor {
+        boolean printed;
         public ResultActorAggregationReplicable(ActorSystem system, PrintWriter out, Instant startTime, int numInstances) {
             super(system, out, startTime, numInstances);
         }
@@ -43,6 +45,14 @@ public class DelayedLabelAggregationReplicable extends DelayedLabelManual {
             super.receive(next, sender);
             if (learner != null) {
                 root.support.process();
+            }
+            if (!printed && (numInstances * 0.9) < this.finishedInstances) {
+                ResponsiveCalls.sendCallable(system, root, (a,s) -> {
+                    System.err.println("print router");
+                    ((ActorAggregationReplicable) a).printStatus();
+                    return null;
+                });
+                printed = true;
             }
         }
     }

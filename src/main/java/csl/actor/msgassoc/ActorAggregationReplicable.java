@@ -851,6 +851,7 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
                     .get(toLocalWaitMs(), TimeUnit.MILLISECONDS);
             return state.create(system, -1);
         } catch (Exception ex) {
+
             ex.printStackTrace();
             return null;
         }
@@ -958,9 +959,7 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
     protected ActorReplicableSerializableState initSerializableState(ActorReplicableSerializableState state, long num) {
         state.actorType = getClass();
         state.name = String.format("%s#%d", getName(), num);
-        if (config != Config.CONFIG_DEFAULT) {
-            state.config = config;
-        }
+        state.config = config;
         MailboxAggregationReplicable r = getMailboxAsReplicable();
         r.serializeTo(state);
         return state;
