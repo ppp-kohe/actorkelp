@@ -858,7 +858,7 @@ public class ActorBehaviorAggregation {
             } else {
                 return false;
             }
-            put(self, key, true, message);
+            put(self, key, true, value);
             ((MailboxAggregation) self.getMailbox())
                     .updateScheduledTraversalProcess(self, this.matchKeyEntryId);
             return true;
@@ -922,7 +922,6 @@ public class ActorBehaviorAggregation {
                         handler.accept(key, rs);
                     }
                 } finally {
-                    completed(consuming);
                     afterTake(consuming, tree);
                 }
                 return completed(requiredSize);

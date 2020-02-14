@@ -132,7 +132,7 @@ public class MailboxAggregation implements Mailbox, Cloneable {
                 if (remaining.isNegative()) {
                     //do the job
                     scheduledProcess = null;
-                    self.tell(new TraversalProcess(entryId), null);
+                    self.tell(new TraversalProcess(entryId));
                 } else {
                     scheduledProcess.cancel(false);
                     scheduledProcess = self.getSystem().getScheduledExecutor()
@@ -231,7 +231,7 @@ public class MailboxAggregation implements Mailbox, Cloneable {
     }
 
     protected void processTraversal(Actor self, int entryId, ReducedSize reducedSize, KeyHistograms.HistogramNode node) {
-        if (node.size() > 0) {
+        if (node != null && node.size() > 0) {
             if (node instanceof KeyHistograms.HistogramNodeTree) {
                 for (KeyHistograms.HistogramNode ch : ((KeyHistograms.HistogramNodeTree) node).getChildren()) {
                     processTraversal(self, entryId, reducedSize, ch);

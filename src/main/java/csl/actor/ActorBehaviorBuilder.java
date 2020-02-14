@@ -145,7 +145,7 @@ public class ActorBehaviorBuilder {
                 } catch (Throwable ex) {
                     res = new CallableMessage.CallableFailure(ex);
                 }
-                if (sender != null && res != null) {
+                if (sender != null) { //send res even if null
                     sender.tell(res, self);
                 }
                 return true;

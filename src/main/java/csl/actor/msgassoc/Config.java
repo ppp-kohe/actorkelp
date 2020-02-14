@@ -18,7 +18,7 @@ public class Config implements Serializable {
 
     public int mailboxThreshold = 1000;
     public int mailboxTreeSize = 32;
-    public float lowerBoundThresholdFactor = 0.5f;
+    public float lowerBoundThresholdFactor = 0.1f;
     public int minSizeOfEachMailboxSplit = 10;
     public float maxParallelRoutingThresholdFactor = 5.0f;
     public int historyEntrySize = 10;

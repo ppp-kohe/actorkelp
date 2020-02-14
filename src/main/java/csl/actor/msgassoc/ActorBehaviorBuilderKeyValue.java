@@ -129,9 +129,13 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
         }
 
 
-        public RelayToCollectList<KeyType, Object> reduce(BiFunction<KeyType, List<Object>, Iterable<Object>> keyValuesReducer) {
+        public RelayToCollectList<KeyType, ValueType> reduce(BiFunction<KeyType, List<ValueType>, Iterable<ValueType>> keyValuesReducer) {
             return new RelayToCollectList<>(builder, keyComparator, keyValuesReducer,
                     Collections.singletonList(extractor1));
+        }
+
+        public RelayToCollectList<KeyType, ValueType> fold(BiFunction<KeyType, List<ValueType>, ValueType> keyValuesReducer) {
+            return reduce((k,vs) -> Collections.singletonList(keyValuesReducer.apply(k, vs)));
         }
 
         public ActorBehaviorBuilderKeyValue forEachKeyValue(BiConsumer<KeyType, ValueType> handler) {
@@ -181,6 +185,10 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
         public RelayToCollectList<KeyType, Object> reduce(BiFunction<KeyType, List<Object>, Iterable<Object>> keyValuesReducer) {
             return new RelayToCollectList<>(builder, keyComparator, keyValuesReducer,
                     Arrays.asList(extractor1, extractor2));
+        }
+
+        public RelayToCollectList<KeyType, Object> fold(BiFunction<KeyType, List<Object>, Object> keyValuesReducer) {
+            return reduce((k,vs) -> Collections.singletonList(keyValuesReducer.apply(k, vs)));
         }
 
         public ActorBehaviorBuilderKeyValue forEachPair(BiConsumer<ValueType1, ValueType2> handler) {
@@ -237,6 +245,10 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
         public RelayToCollectList<KeyType, Object> reduce(BiFunction<KeyType, List<Object>, Iterable<Object>> keyValuesReducer) {
             return new RelayToCollectList<>(builder, keyComparator, keyValuesReducer,
                     Arrays.asList(extractor1, extractor2, extractor3));
+        }
+
+        public RelayToCollectList<KeyType, Object> fold(BiFunction<KeyType, List<Object>, Object> keyValuesReducer) {
+            return reduce((k,vs) -> Collections.singletonList(keyValuesReducer.apply(k, vs)));
         }
 
         public ActorBehaviorBuilderKeyValue forEachTriple(TriConsumer<ValueType1, ValueType2, ValueType3> handler) {
@@ -296,6 +308,10 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
         public RelayToCollectList<KeyType, Object> reduce(BiFunction<KeyType, List<Object>, Iterable<Object>> keyValuesReducer) {
             return new RelayToCollectList<>(builder, keyComparator, keyValuesReducer,
                     Arrays.asList(extractor1, extractor2, extractor3, extractor4));
+        }
+
+        public RelayToCollectList<KeyType, Object> fold(BiFunction<KeyType, List<Object>, Object> keyValuesReducer) {
+            return reduce((k,vs) -> Collections.singletonList(keyValuesReducer.apply(k, vs)));
         }
 
         public ActorBehaviorBuilderKeyValue forEachQuad(QuadConsumer<ValueType1, ValueType2, ValueType3, ValueType4> handler) {
@@ -360,6 +376,10 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
             return this;
         }
 
+        public RelayToCollectList<KeyType, ValueType> fold(BiFunction<KeyType, List<ValueType>, ValueType> keyValuesReducer) {
+            return reduce((k,vs) -> Collections.singletonList(keyValuesReducer.apply(k, vs)));
+        }
+
         public ActorBehaviorBuilderKeyValue forEachKeyValue(BiConsumer<KeyType, ValueType> handler) {
             return forEachKeyList(1, (k,vs) -> handler.accept(k, vs.get(0)));
         }
@@ -411,7 +431,7 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
                 }
                 lastResult = f.apply(key, nextInput);
             }
-            return nextInput;
+            return lastResult;
         }
     }
 

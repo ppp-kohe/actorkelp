@@ -124,20 +124,19 @@ public class ResponsiveCalls {
      *
      *    For calling to the local target:
      *   <pre>
-     *       send(system, ActorRefLocalNamed.get(system, CALLABLE_NAME), task)
+     *       sendTask(system, ActorRefLocalNamed.get(system, CALLABLE_NAME), task)
      *   </pre>
      * @param system a local system which will hold a sender actor
      * @param target the target host address
      * @param task the task generating a result in the target host
-     * @param <A> the actual actor type of target
      * @param <T> the result type
      * @return a future of the result
      */
-    public static <A extends Actor,T> Future<T> sendHostTask(ActorSystem system, ActorAddress.ActorAddressRemote target, CallableMessage<A,T> task) {
+    public static <T> Future<T> sendHostTask(ActorSystem system, ActorAddress.ActorAddressRemote target, CallableMessage<Actor,T> task) {
         return sendTask(system, target, CALLABLE_NAME, task);
     }
 
-    public static <A extends Actor> Future<Void> sendHostTaskConsumer(ActorSystem system, ActorAddress.ActorAddressRemote target, CallableMessage.CallableMessageConsumer<A> task) {
+    public static Future<Void> sendHostTaskConsumer(ActorSystem system, ActorAddress.ActorAddressRemote target, CallableMessage.CallableMessageConsumer<Actor> task) {
         return sendHostTask(system, target, task);
     }
 
@@ -148,6 +147,25 @@ public class ResponsiveCalls {
     public static <A extends Actor> void sendTaskConsumer(ActorSystem system, ActorRef target, CallableMessage.CallableMessageConsumer<A> task, ResponsiveCompletable<Void> resultHandler) {
         sendTask(system, target, task, resultHandler);
     }
+
+    public static <A extends Actor,T> Future<T> sendTask(A target, CallableMessage<A,T> task) {
+        return sendTask(target.getSystem(), target, task);
+    }
+
+    public static <A extends Actor> Future<Void> sendTaskConsumer(A target, CallableMessage.CallableMessageConsumer<A> task) {
+        return sendTaskConsumer(target.getSystem(), target, task);
+    }
+
+
+    public static <A extends Actor, T> void sendTask(A target, CallableMessage<A,T> task, ResponsiveCompletable<T> future) {
+        sendTask(target.getSystem(), target, task, future);
+    }
+
+    public static <A extends Actor> void sendTaskConsumer(A target, CallableMessage.CallableMessageConsumer<A> task, ResponsiveCompletable<Void> future) {
+        sendTaskConsumer(target.getSystem(), target, task, future);
+    }
+
+
 
     public static void initCallableTarget(ActorSystem system) {
         new ResponsiveCallableActor(system);
@@ -208,7 +226,7 @@ public class ResponsiveCalls {
         protected ActorBehavior initBehavior() {
             return behaviorBuilder()
                     .match(ActorSystemDefault.DeadLetter.class, this::fail)
-                    .matchWithSender(Object.class, this::receive)
+                    .matchAny(this::receive)
                     .build();
         }
 

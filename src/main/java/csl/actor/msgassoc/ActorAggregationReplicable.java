@@ -169,6 +169,15 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
         }
     }
 
+    public ActorRef router() {
+        if (state instanceof StateSplitRouter) {
+            return this;
+        } else if (state instanceof StateLeaf) {
+            return ((StateLeaf) state).getRouter();
+        } else {
+            return null;
+        }
+    }
 
     public static class StateSplitRouter implements State {
         protected Split split;
@@ -339,6 +348,16 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
     }
 
     public static class StateLeaf implements State, Serializable {
+        protected ActorRef router;
+
+        public StateLeaf(ActorRef router) {
+            this.router = router;
+        }
+
+        public ActorRef getRouter() {
+            return router;
+        }
+
         @Override
         public void processMessage(ActorAggregationReplicable self, Message<?> message) {
             self.processMessageBehavior(message);
@@ -447,8 +466,9 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
 
             ActorAggregationReplicable a1 = self.createClone();
             ActorAggregationReplicable a2 = self.createClone();
-            a1.state = new StateLeaf();
-            a2.state = new StateLeaf();
+            ActorRef routerRef = router.router();
+            a1.state = new StateLeaf(routerRef);
+            a2.state = new StateLeaf(routerRef);
             List<Object> splitPoints = self.getMailboxAsReplicable()
                     .splitMessageTableIntoReplicas(a1.getMailboxAsReplicable(), a2.getMailboxAsReplicable());
             return router.createSplitNode(splitPoints, a1, a2, depth, height);
@@ -998,7 +1018,7 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
         }
 
         protected ActorAggregationReplicable init(ActorAggregationReplicable a) {
-            a.state = new StateLeaf();
+            a.state = new StateLeaf(a.router());
             a.getMailboxAsReplicable().deserializeFrom(this);
             return a;
         }
