@@ -4,9 +4,8 @@ import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
+import java.util.*;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -31,11 +30,21 @@ public class FileSplitterExample {
         startTime = Instant.now();
         ExecutorService service = Executors.newScheduledThreadPool(sps.size());
         CountDownLatch latch = new CountDownLatch(sps.size());
-        List<Long> positions = new ArrayList<>(sps.size());
+        ConcurrentLinkedQueue<Long> lns= new ConcurrentLinkedQueue<>();
+        ConcurrentLinkedQueue<Long> wds= new ConcurrentLinkedQueue<>();
         for (FileSplitter.FileSplit split : sps) {
             service.execute(() -> {
-                try (RandomAccessFile f = s.open(split)) {
-                    positions.add(f.getFilePointer());
+                try {
+                    long ln = 0;
+                    long wd = 0;
+                    for (Iterator<String> iter = s.openLineIterator(split);
+                         iter.hasNext(); ) {
+                        String line = iter.next();
+                        wd += Arrays.stream(line.split("￿￿￿￿\\W+")).count();
+                        ++ln;
+                    }
+                    lns.offer(ln);
+                    wds.offer(wd);
                     latch.countDown();
                 } catch (IOException ex) {
                     throw new RuntimeException(ex);
@@ -44,9 +53,11 @@ public class FileSplitterExample {
         }
 
         latch.await();
-        positions.sort(Comparator.naturalOrder());
         Instant openTime = Instant.now();
-        System.out.println(String.format("open: %s : positions=%s", Duration.between(startTime, openTime), positions));
+        System.out.println(String.format("open: %s : lns=%,d wds=%,d", Duration.between(startTime, openTime),
+                lns.stream().mapToLong(Long::valueOf).sum(),
+                wds.stream().mapToLong(Long::valueOf).sum()));
         service.shutdownNow();
     }
+
 }

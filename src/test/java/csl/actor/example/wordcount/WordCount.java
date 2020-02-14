@@ -20,7 +20,7 @@ public class WordCount {
         String dst = args[1];
         ActorSystem system = new ActorSystemDefault();
 
-        FileMapper fileReader = new FileMapper(system, "fileReader", FileSplitter.getWithSplitCount(10_000_000));
+        FileMapper fileReader = new FileMapper(system, "fileReader", FileSplitter.getWithSplitCount(10));
         WordCountMapper mapper = new WordCountMapper(system, "mapper", Config.CONFIG_DEFAULT);
         WordCountReducer reducer = new WordCountReducer(system, "reducer", Config.CONFIG_DEFAULT, dst);
 
@@ -30,6 +30,11 @@ public class WordCount {
         fileReader.routerSplit(3);
 
         fileReader.tell(new FileSplitter.FileSplit(src));
+
+        system.getScheduledExecutor().scheduleAtFixedRate(() -> {
+            ResponsiveCalls.sendTaskConsumer(mapper, (m,s) -> m.printStatus());
+            ResponsiveCalls.sendTaskConsumer(reducer, (m,s) -> m.printStatus());
+        }, 10, 10, TimeUnit.SECONDS);
     }
 
     public static class FileMapper extends ActorAggregationReplicable {
@@ -88,28 +93,6 @@ public class WordCount {
                             .forEach(w -> reducer.tell(new Count(w, 1), this)))
                     .build();
         }
-
-        ConcurrentLinkedQueue<Thread> runningThreads = new ConcurrentLinkedQueue<Thread>();
-        @Override
-        protected void processMessage(Message<?> message) {
-            Thread t = Thread.currentThread();
-            runningThreads.add(t);
-            try {
-                super.processMessage(message);
-            } catch (Exception ex) {
-                List<Thread> ts = new ArrayList<>(runningThreads);
-                System.err.println("error " + t + " : " + ex);
-                for (Thread pt : ts) {
-                    StackTraceElement[] traces = pt.getStackTrace();
-                    System.err.println(" thread: " + pt);
-                    for (StackTraceElement e: traces) {
-                        System.err.println("   " + e);
-                    }
-                }
-                throw ex;
-            }
-            runningThreads.removeIf(et -> et==t);
-        }
     }
 
     public static class WordCountReducer extends ActorAggregationReplicable {
@@ -135,31 +118,94 @@ public class WordCount {
                     .build();
         }
 
-        ConcurrentLinkedQueue<Thread> runningThreads = new ConcurrentLinkedQueue<Thread>();
+        @Override
+        protected void initClone(ActorAggregationReplicable original) {
+            super.initClone(original);
+            initDebug();
+        }
+
+        private void initDebug() {
+            state1 = null;
+            state2 = null;
+            thread1 = null;
+            thread2 = null;
+            proc = false;
+        }
+
+        volatile boolean proc;
+        volatile Thread thread1;
+        volatile Thread thread2;
+        volatile State state1;
+        volatile State state2;
         @Override
         protected void processMessage(Message<?> message) {
-            Thread t = Thread.currentThread();
-            runningThreads.add(t);
+            boolean err = false;
+            if (proc) {
+                if (!isRouterParallelRouting()) {
+                    err = true;
+                    state2 = state;
+                    thread2 = Thread.currentThread();
+                    System.err.println(String.format("%s: %s vs %s : %s vs %s", this, thread1, thread2, state1, state2));
+                    printStack();
+                }
+            } else {
+                thread1 = Thread.currentThread();
+                state1 = state;
+            }
+            proc = true;
             try {
                 super.processMessage(message);
             } catch (Exception ex) {
-                List<Thread> ts = new ArrayList<>(runningThreads);
-                System.err.println("error " + t + " : " + ex);
-                for (Thread pt : ts) {
-                    StackTraceElement[] traces = pt.getStackTrace();
-                    System.err.println(" thread: " + pt);
-                    for (StackTraceElement e: traces) {
-                        System.err.println("   " + e);
-                    }
-                }
+                System.err.println(ex + " " + thread1 + " " + thread2);
+                printStack();;
                 throw ex;
             }
-            runningThreads.removeIf(et -> et==t);
+            proc = false;
+            if (!err && thread2 != null) {
+                try {
+                    while (thread2 != null) {
+                        System.err.println("just a moment");
+                        Thread.sleep(100);
+                    }
+                } catch (Exception ex) {
+
+                }
+            }
+            thread2 = null;
+            thread1 = null;
+            state1 = null;
+            state2= null;
+        }
+        private void printStack() {
+            synchronized (System.err) {
+                if (thread1 != null) {
+                    for (StackTraceElement e : thread1.getStackTrace()) {
+                        System.err.println("   " + e);
+                    }
+                } else {
+                    System.err.println("null");
+                }
+                System.err.println("=====");
+                if (thread2 != null) {
+                    for (StackTraceElement e : thread2.getStackTrace()) {
+                        System.err.println("   " + e);
+                    }
+                } else {
+                    System.err.println("null");
+                }
+            }
+        }
+
+        @Override
+        protected void processMessageDelayWhileParallelRouting(Message<?> message) {
+            super.processMessageDelayWhileParallelRouting(message);
+            System.err.println("parallel routing delay: " + message);
         }
 
         @Override
         protected void initMerged(ActorAggregationReplicable m) {
             ((WordCountReducer) m).close();
+            initDebug();
         }
 
         void close() {
