@@ -904,6 +904,11 @@ public class ActorBehaviorAggregation {
             super(key, context, height);
         }
 
+        @Override
+        protected boolean completedAfterPut(KeyHistograms.HistogramPutContext context) {
+            return false; //processed by processTraversal
+        }
+
         public boolean consume(int requiredSize,
                                KeyHistograms.HistogramTree tree,
                                MailboxAggregation.ReducedSize reducedSize,
@@ -912,8 +917,12 @@ public class ActorBehaviorAggregation {
             if (completed(requiredSize)) {
                 int consuming = Math.max(requiredSize, reducedSize.nextReducedSize(size()));
                 List<Object> vs = new ArrayList<>(consuming);
-                for (int i = 0; i < consuming; ++i) {
-                    vs.add(values.poll(tree));
+                try {
+                    for (int i = 0; i < consuming; ++i) {
+                        vs.add(values.poll(tree));
+                    }
+                } catch (Exception ex) {
+                    throw new RuntimeException(String.format("size=%,d, consuming=%,d actual=%,d required=%,d", size(), consuming, vs.size(), requiredSize), ex);
                 }
                 try {
                     Object key = getKey();

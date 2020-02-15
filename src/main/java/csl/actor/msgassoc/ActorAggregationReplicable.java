@@ -16,48 +16,40 @@ import java.util.stream.Collectors;
 
 public abstract class ActorAggregationReplicable extends ActorAggregation implements Cloneable {
     protected volatile State state;
-    protected volatile int maxHeight;
 
     public ActorAggregationReplicable(ActorSystem system, String name, MailboxAggregationReplicable mailbox, ActorBehavior behavior) {
         super(system, name, mailbox, behavior);
-        state = new StateSplitRouter();
-        maxHeight = initMaxHeight();
+        state = initStateRouter();
     }
 
     public ActorAggregationReplicable(ActorSystem system, String name, ActorBehavior behavior) {
         super(system, name, behavior);
-        state = new StateSplitRouter();
-        maxHeight = initMaxHeight();
+        state = initStateRouter();
     }
 
     public ActorAggregationReplicable(ActorSystem system, ActorBehavior behavior) {
         super(system, behavior);
-        state = new StateSplitRouter();
-        maxHeight = initMaxHeight();
+        state = initStateRouter();
     }
 
     public ActorAggregationReplicable(ActorSystem system, String name, Config config) {
         super(system, name, config);
-        state = new StateSplitRouter();
-        maxHeight = initMaxHeight();
+        state = initStateRouter();
     }
 
     public ActorAggregationReplicable(ActorSystem system, String name) {
         super(system, name);
-        state = new StateSplitRouter();
-        maxHeight = initMaxHeight();
+        state = initStateRouter();
     }
 
     public ActorAggregationReplicable(ActorSystem system, Config config) {
         super(system, config);
-        state = new StateSplitRouter();
-        maxHeight = initMaxHeight();
+        state = initStateRouter();
     }
 
     public ActorAggregationReplicable(ActorSystem system) {
         super(system);
-        state = new StateSplitRouter();
-        maxHeight = initMaxHeight();
+        state = initStateRouter();
     }
 
     //////////////////////// config
@@ -111,19 +103,10 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
         return config.logSplit;
     }
 
-    ////////////////////////
+    //////////////////////// init
 
-    protected int initMaxHeight() {
-        int th = getTotalThreads(this, getPlacement());
-        return Math.max(1, (int) (Math.log(th) / Math.log(2)));
-    }
-
-    protected int getTotalThreads(ActorAggregationReplicable self, ActorPlacement placement) {
-        if (placement instanceof ActorPlacement.PlacemenActor) {
-            return ((ActorPlacement.PlacemenActor) placement).getTotalThreads();
-        } else {
-            return self.getSystem().getThreads();
-        }
+    protected StateSplitRouter initStateRouter() {
+        return new StateSplitRouter();
     }
 
     @Override
@@ -138,35 +121,14 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
         mailbox = getMailboxAsReplicable().create();
     }
 
+    protected void initMerged(ActorAggregationReplicable m) { }
+
+    protected void initClone(ActorAggregationReplicable original) { }
+
+    ////////////////////////
+
     public MailboxAggregationReplicable getMailboxAsReplicable() {
         return (MailboxAggregationReplicable) mailbox;
-    }
-
-    public int getMaxHeight() {
-        return maxHeight;
-    }
-
-    public static ActorRef place(ActorPlacement placement, ActorAggregationReplicable a) {
-        if (placement != null) {
-            return placement.place(a);
-        } else {
-            a.getSystem().send(new Message.MessageNone(a));
-            return a;
-        }
-    }
-
-    public interface State {
-        void processMessage(ActorAggregationReplicable self, Message<?> message);
-    }
-
-    public ActorPlacement getPlacement() {
-        Actor placement = getSystem().resolveActorLocalNamed(
-                ActorRefLocalNamed.get(getSystem(), ActorPlacement.PLACEMENT_NAME));
-        if (placement instanceof ActorPlacement) {
-            return (ActorPlacement) placement;
-        } else {
-            return null;
-        }
     }
 
     public ActorRef router() {
@@ -174,15 +136,36 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
             return this;
         } else if (state instanceof StateLeaf) {
             return ((StateLeaf) state).getRouter();
+        } else if (state instanceof StateDisabled) {
+            return ((StateDisabled) state).getRouter();
         } else {
             return null;
         }
+    }
+
+    public boolean hasRemainingProcesses() {
+        return isRouterParallelRouting() || getMailboxAsReplicable().hasRemainingProcesses();
+    }
+
+    public boolean isRouterParallelRouting() {
+        return state instanceof StateSplitRouter && !((StateSplitRouter) state).isNonParallelRouting();
+    }
+
+    //////////////////////// internal state
+
+    public State getState() {
+        return state;
+    }
+
+    public interface State {
+        void processMessage(ActorAggregationReplicable self, Message<?> message);
     }
 
     public static class StateSplitRouter implements State {
         protected volatile Split split;
         protected Random random = new Random();
         protected int height = 0;
+        protected int maxHeight = -1;
 
         protected volatile boolean parallelRouting1;
         protected volatile boolean parallelRouting2;
@@ -191,7 +174,7 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
         public void split(ActorAggregationReplicable self, int height) {
             this.height = height;
             if (split == null) { //root
-                split = self.createSplitLeaf(self, 0, height);
+                split = self.internalCreateSplitLeaf(self, 0, height);
             } else {
                 split = split.split(self, height);
             }
@@ -213,7 +196,7 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
         public void splitOrMerge(ActorAggregationReplicable self, int height) {
             this.height = height;
             if (split == null) {
-                split = self.createSplitLeaf(self, 0, height);
+                split = self.internalCreateSplitLeaf(self, 0, height);
             } else {
                 split = split.splitOrMerge(self, height);
             }
@@ -229,7 +212,7 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
             if (isNonParallelRouting() &&
                     (status = self.getMailboxAsReplicable().getStatus(self.lowerBoundThresholdFactor())).isExcessive()) {
 
-                int maxHeight = self.getMaxHeight();
+                int maxHeight = getMaxHeight(self);
                 MailboxAggregationReplicable m = self.getMailboxAsReplicable();
                 int size = m.size();
 
@@ -257,6 +240,29 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
             }
         }
 
+        public int getMaxHeight() {
+            return maxHeight;
+        }
+
+        public int getMaxHeight(ActorAggregationReplicable self) {
+            if (maxHeight < 0) {
+                maxHeight = initMaxHeight(self);
+            }
+            return maxHeight;
+        }
+
+        protected int initMaxHeight(ActorAggregationReplicable self) {
+            int th = getTotalThreads(self, self.getPlacement());
+            return Math.max(1, (int) (Math.log(th) / Math.log(2)));
+        }
+
+        protected int getTotalThreads(ActorAggregationReplicable self, ActorPlacement placement) {
+            if (placement instanceof ActorPlacement.PlacemenActor) {
+                return ((ActorPlacement.PlacemenActor) placement).getTotalThreads();
+            } else {
+                return self.getSystem().getThreads();
+            }
+        }
 
         public boolean isNonParallelRouting() {
             return !(parallelRouting1 || parallelRouting2);
@@ -311,7 +317,7 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
             int i = 0;
             List<Message<?>> noRoutingTops = new ArrayList<>(16);
             while (!m.isEmpty() && i < max) {
-                Message<?> msg = self.pollForParallelRouting();
+                Message<?> msg = self.internalPollForParallelRouting();
                 if (msg != null) {
                     if (self.isNoRoutingMessage(msg)) {
                         if (noRoutingTops.contains(msg)) {
@@ -391,39 +397,24 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
         }
     }
 
-    public Split createSplitNode(List<Object> splitPoints, ActorAggregationReplicable a1, ActorAggregationReplicable a2, int depth, int height) {
-        Split s1 = createSplitLeaf(a1, depth + 1, height);
-        Split s2 = createSplitLeaf(a2, depth + 1, height);
+    public static class StateDisabled implements State {
+        protected ActorRef router;
 
-        return newSplitNode(splitPoints, s1, s2, depth);
-    }
+        public StateDisabled(ActorRef router) {
+            this.router = router;
+        }
 
-    public Split createSplitLeaf(ActorAggregationReplicable actor, int depth, int height) {
-        if (depth >= height) {
-            ActorRef a = place(actor.getPlacement(), actor);
-            if (a == this) {
-                return null;
-            } else {
-                return newSplitLeaf(a, depth, this);
-            }
-        } else {
-            if (height <= 1 && actor == this) {
-                return null;
-            } else {
-                return newSplitLeaf(actor, depth, this).split(this, height);
-            }
+        public ActorRef getRouter() {
+            return router;
+        }
+
+        @Override
+        public void processMessage(ActorAggregationReplicable self, Message<?> message) {
+            router.tell(message.getData(), message.getSender());
         }
     }
 
-
-    protected Split newSplitNode(List<Object> splitPoints, Split s1, Split s2, int depth) {
-        return new SplitNode(splitPoints, s1, s2, depth, historyEntrySize());
-    }
-
-    protected Split newSplitLeaf(ActorRef actor, int depth, ActorRef router) {
-        return new SplitLeaf(actor, depth, router);
-    }
-
+    ////////////////////// Split
 
     public interface Split {
         void process(ActorAggregationReplicable router, StateSplitRouter stateRouter,
@@ -452,12 +443,10 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
     public static class SplitLeaf implements Split {
         protected ActorRef actor;
         protected int depth;
-        protected ActorRef router;
 
-        public SplitLeaf(ActorRef actor, int depth, ActorRef router) {
+        public SplitLeaf(ActorRef actor, int depth) {
             this.actor = actor;
             this.depth = depth;
-            this.router = router;
         }
 
         @Override
@@ -468,8 +457,11 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
 
         @Override
         public SplitLeaf adjustDepth(int dep) {
-            this.depth += dep;
-            return this;
+            return newLeaf(actor, depth + dep);
+        }
+
+        public SplitLeaf newLeaf(ActorRef actor, int depth) {
+            return new SplitLeaf(actor, depth);
         }
 
         @Override
@@ -491,12 +483,22 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
                 return this;
             }
 
-            ActorRef routerRef = router.router();
-            ActorAggregationReplicable a1 = self.createClone(routerRef);
-            ActorAggregationReplicable a2 = self.createClone(routerRef);
-            List<Object> splitPoints = self.getMailboxAsReplicable()
-                    .splitMessageTableIntoReplicas(a1.getMailboxAsReplicable(), a2.getMailboxAsReplicable());
-            return router.createSplitNode(splitPoints, a1, a2, depth, height);
+            try {
+                self.getMailboxAsReplicable().lockRemainingProcesses();
+
+                ActorRef routerRef = router.router();
+                ActorAggregationReplicable a1 = self.internalCreateClone(routerRef);
+                ActorAggregationReplicable a2 = self.internalCreateClone(routerRef);
+                List<Object> splitPoints = self.getMailboxAsReplicable()
+                        .splitMessageTableIntoReplicas(a1.getMailboxAsReplicable(), a2.getMailboxAsReplicable());
+                if (router != self) {
+                    self.internalDisable();
+                }
+                return router.internalCreateSplitNode(splitPoints, a1, a2, depth, height);
+            } finally {
+                self.getMailboxAsReplicable().unlockRemainingProcesses(self); //above internalDisable change the instance
+                //the self may has remaining message on it's queue
+            }
         }
 
         @Override
@@ -509,35 +511,51 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
             return this;
         }
 
-        public SplitLeaf merge(ActorAggregationReplicable router, SplitLeaf leaf) {
+        public SplitLeaf merge(ActorAggregationReplicable router, SplitLeaf leaf, int depthAdjust) {
             ActorRef a1 = getActor();
             ActorRef a2 = leaf.getActor();
 
+            if (hasRemainingProcesses(router, a1) || hasRemainingProcesses(router, a2)) {
+                return this;
+            }
+
             if (a1 instanceof ActorAggregationReplicable) { //local
                 if (a2 instanceof ActorAggregationReplicable) {
-                    ((ActorAggregationReplicable) a1).merge((ActorAggregationReplicable) a2);
+                    ((ActorAggregationReplicable) a1).internalMerge((ActorAggregationReplicable) a2);
+                    return newLeaf(a1, depth + depthAdjust);
                 } else { //remote a2
                     ActorAggregationReplicable l2 = router.toLocal(a2);
                     if (l2 != null) {
-                        ((ActorAggregationReplicable) a1).merge(l2);
+                        ((ActorAggregationReplicable) a1).internalMerge(l2);
                     }
+                    return newLeaf(a1, depth + depthAdjust);
                 }
             } else if (a2 instanceof ActorAggregationReplicable) { //remote a1, local a2
                 ActorAggregationReplicable l1 = router.toLocal(a1);
                 if (l1 != null) {
-                    ((ActorAggregationReplicable) a2).merge(l1);
+                    ((ActorAggregationReplicable) a2).internalMerge(l1);
                 }
-                return leaf;
+                return newLeaf(a2, depth + depthAdjust);
             } else { //both remote
                 a1.tell(CallableMessage.callableMessageConsumer((self, sender) -> {
                     ActorAggregationReplicable l2 = ((ActorAggregationReplicable) self).toLocal(a2);
                     if (l2 != null) {
-                        ((ActorAggregationReplicable) self).merge(l2);
+                        ((ActorAggregationReplicable) self).internalMerge(l2);
                     }
                 }), null);
+                return newLeaf(a1, depth + depthAdjust);
             }
+        }
 
-            return this;
+        public boolean hasRemainingProcesses(ActorAggregationReplicable router, ActorRef a) {
+            try {
+                return ResponsiveCalls.sendTask(router.getSystem(), a, (self, sender) ->
+                        ((ActorAggregationReplicable) self).hasRemainingProcesses())
+                        .get(1, TimeUnit.SECONDS);
+            } catch (Exception ex) {
+                router.log("#error hasRemainingProcesses: " + a + " : " + ex);
+                return false;
+            }
         }
 
         @Override
@@ -557,8 +575,8 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
 
     public static class SplitNode implements Split {
         protected List<Object> splitPoints;
-        protected volatile Split left;
-        protected volatile Split right;
+        protected Split left;
+        protected Split right;
         protected int depth;
         protected RoutingHistory history;
 
@@ -568,6 +586,26 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
             this.right = right;
             this.depth = depth;
             history = initRoutingHistory(historyEntrySize);
+        }
+
+        public SplitNode(List<Object> splitPoints, Split left, Split right, int depth, RoutingHistory history) {
+            this.splitPoints = splitPoints;
+            this.left = left;
+            this.right = right;
+            this.depth = depth;
+            this.history = history;
+        }
+
+        public SplitNode newNode(Split left, Split right, int depth) {
+            return new SplitNode(splitPoints, left, right, depth, history);
+        }
+
+        protected SplitNode newNodeOrThis(Split left, Split right, int depth) {
+            if (left != this.left || right != this.right || this.depth != depth) {
+                return newNode(left, right, depth);
+            } else {
+                return this;
+            }
         }
 
         @Override
@@ -614,8 +652,7 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
 
         @Override
         public SplitNode adjustDepth(int dep) {
-            this.depth += dep;
-            return this;
+            return newNode(left, right, dep + depth);
         }
 
         @Override
@@ -666,8 +703,9 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
         @Override
         public Split split(ActorAggregationReplicable router, int height) {
             if (depth < height) {
-                left = left.split(router, height);
-                right = right.split(router, height);
+                return newNodeOrThis(
+                        left.split(router, height),
+                        right.split(router, height), depth);
             }
             return this;
         }
@@ -677,13 +715,17 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
             float r = history.ratioAll();
             float limit = router.mergeRatioThreshold();
             if (r > (1 - limit)) { //into left
-                return merge(router, true, left.mergeInactive(router), right.mergeIntoLeaf(router));
+                return merge(router, true,
+                        left.mergeInactive(router),
+                        right.mergeIntoLeaf(router));
             } else if (r < limit) { //into right
-                return merge(router, false, left.mergeIntoLeaf(router), right.mergeInactive(router));
+                return merge(router, false,
+                        left.mergeIntoLeaf(router),
+                        right.mergeInactive(router));
             } else {
-                this.left = left.mergeInactive(router);
-                this.right = right.mergeInactive(router);
-                return this;
+                return newNodeOrThis(
+                        left.mergeInactive(router),
+                        right.mergeInactive(router), depth);
             }
         }
 
@@ -693,63 +735,52 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
             if (leftIsLeaf && rightIsLeaf) {
                 //merge leaf
                 if (intoLeft) {
-                    return ((SplitLeaf) left).merge(router, (SplitLeaf) right).adjustDepth(-1);
+                    return ((SplitLeaf) left).merge(router, (SplitLeaf) right, -1);
                 } else {
-                    return ((SplitLeaf) right).merge(router, (SplitLeaf) left).adjustDepth(-1);
+                    return ((SplitLeaf) right).merge(router, (SplitLeaf) left, -1);
                 }
             } else {
-                this.left = left;
-                this.right = right;
                 if (leftIsLeaf) {
-                    if (((SplitNode) right).mergeIntoChildLeaf(router, true, (SplitLeaf) left)) {
-                        return right.adjustDepth(-1);
-                    } else {
-                        return this;
-                    }
+                    return ((SplitNode) right).mergeIntoChildLeaf(router, true, (SplitLeaf) left);
                 } else if (rightIsLeaf) {
-                    if (((SplitNode) left).mergeIntoChildLeaf(router, false, (SplitLeaf) right)) {
-                        return left.adjustDepth(-1);
-                    } else {
-                        return this;
-                    }
+                    return ((SplitNode) left).mergeIntoChildLeaf(router, false, (SplitLeaf) right);
+                } else {
+                    return newNodeOrThis(left, right, depth);
                 }
-                return this;
             }
         }
 
-        public boolean mergeIntoChildLeaf(ActorAggregationReplicable router, boolean intoLeft, SplitLeaf merged) {
+        public Split mergeIntoChildLeaf(ActorAggregationReplicable router, boolean intoLeft, SplitLeaf merged) {
             Split first = intoLeft ? left : right;
             Split second = intoLeft ? right : left;
 
             if (first instanceof SplitLeaf) {
-                ((SplitLeaf) first).merge(router, merged);
-                return true;
+                return newNode(intoLeft,
+                        ((SplitLeaf) first).merge(router, merged, -1),
+                        second.adjustDepth(-1), depth - 1);
             } else {
-                if (((SplitNode) first).mergeIntoChildLeaf(router, intoLeft, merged)) {
-                    return true;
-                } else {
-                    if (second instanceof SplitLeaf) {
-                        ((SplitLeaf) second).merge(router, merged);
-                        return true;
-                    } else {
-                        return ((SplitNode) second).mergeIntoChildLeaf(router, intoLeft, merged);
-                    }
-                }
+                return newNode(intoLeft,
+                        ((SplitNode) first).mergeIntoChildLeaf(router, intoLeft, merged),
+                        second.adjustDepth(-1), depth - 1);
             }
+        }
+
+        private SplitNode newNode(boolean infoLeft, Split first, Split second, int depth) {
+            return newNode(infoLeft ? first : second, infoLeft ? second : first, depth);
         }
 
         @Override
         public SplitLeaf mergeIntoLeaf(ActorAggregationReplicable router) {
             return left.mergeIntoLeaf(router)
-                    .merge(router, right.mergeIntoLeaf(router)).adjustDepth(-1);
+                    .merge(router, right.mergeIntoLeaf(router), -1);
         }
 
         @Override
         public Split splitOrMerge(ActorAggregationReplicable router, int height) {
             if (depth < height) {
-                left = left.splitOrMerge(router, height);
-                right = right.splitOrMerge(router, height);
-                return this;
+                return newNodeOrThis(
+                        left.splitOrMerge(router, height),
+                        right.splitOrMerge(router, height), depth);
             } else {
                 return mergeIntoLeaf(router);
             }
@@ -760,7 +791,6 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
             v.visitRouterNode(actor, sender, this);
         }
     }
-
 
     public static class RoutingHistory {
         public AtomicInteger left = new AtomicInteger();
@@ -847,7 +877,7 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
         }
     }
 
-    ///////////////////////////
+    /////////////////////////// process
 
 
     @Override
@@ -867,10 +897,15 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
         getSystem().send(message);
     }
 
+
+    /////////////////////////// routing messages
+
     protected boolean isNoRoutingMessage(Message<?> message) {
-        return message.getData() instanceof NoRouting ||
-                (message.getData() instanceof CallableMessage<?,?> &&
-                        !(message.getData() instanceof Routing));
+        Object data = message.getData();
+        return data instanceof NoRouting ||
+                data instanceof MailboxAggregation.TraversalProcess ||
+                (data instanceof CallableMessage<?,?> &&
+                        !(data instanceof Routing));
     }
 
     public interface NoRouting { }
@@ -882,11 +917,54 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
         return t;
     }
 
-    public Message<?> pollForParallelRouting() {
+    /////////////////////////// methods for state
+
+    public Split internalCreateSplitNode(List<Object> splitPoints, ActorAggregationReplicable a1, ActorAggregationReplicable a2, int depth, int height) {
+        Split s1 = internalCreateSplitLeaf(a1, depth + 1, height);
+        Split s2 = internalCreateSplitLeaf(a2, depth + 1, height);
+
+        return newSplitNode(splitPoints, s1, s2, depth);
+    }
+
+    public Split internalCreateSplitLeaf(ActorAggregationReplicable actor, int depth, int height) {
+        if (depth >= height) {
+            ActorRef a = place(actor.getPlacement(), actor);
+            if (a == this) {
+                return null;
+            } else {
+                return newSplitLeaf(a, depth);
+            }
+        } else {
+            if (height <= 1 && actor == this) {
+                return null;
+            } else {
+                return newSplitLeaf(actor, depth).split(this, height);
+            }
+        }
+    }
+
+
+    public Split newSplitNode(List<Object> splitPoints, Split s1, Split s2, int depth) {
+        return new SplitNode(splitPoints, s1, s2, depth, historyEntrySize());
+    }
+
+    public SplitLeaf newSplitLeaf(ActorRef actor, int depth) {
+        return new SplitLeaf(actor, depth);
+    }
+
+
+    public Message<?> internalPollForParallelRouting() {
         return mailbox.poll();
     }
 
-    public ActorAggregationReplicable createClone(ActorRef router) {
+    public void internalMerge(ActorAggregationReplicable merged) {
+        getMailboxAsReplicable()
+                .merge(merged.getMailboxAsReplicable());
+        merged.internalDisable();
+        initMerged(merged);
+    }
+
+    public ActorAggregationReplicable internalCreateClone(ActorRef router) {
         try {
             ActorAggregationReplicable a = (ActorAggregationReplicable) super.clone();
             //if the actor has the name, it copies the reference to the name,
@@ -900,16 +978,6 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
         } catch (CloneNotSupportedException ce) {
             throw new RuntimeException(ce);
         }
-    }
-
-    protected void initClone(ActorAggregationReplicable original) { }
-
-    public State getState() {
-        return state;
-    }
-
-    public boolean isRouterParallelRouting() {
-        return state instanceof StateSplitRouter && !((StateSplitRouter) state).isNonParallelRouting();
     }
 
     public ActorAggregationReplicable toLocal(ActorRef ref) {
@@ -931,39 +999,67 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
     public static class CallableToLocalSerializable implements CallableMessage<ActorAggregationReplicable, ActorReplicableSerializableState> {
         @Override
         public ActorReplicableSerializableState call(ActorAggregationReplicable self, ActorRef sender) {
+            self.internalDisable();
             return self.toSerializable(-1);
         }
     }
 
-    public void merge(ActorAggregationReplicable merged) {
-        getMailboxAsReplicable()
-                .merge(merged.getMailboxAsReplicable());
-        initMerged(merged);
+    public void internalDisable() {
+        //TODO shutdown the scheduled process
+        getMailboxAsReplicable().lockRemainingProcesses(); //the self goes disable
+        state = new StateDisabled(router());
+        initMailboxForClone();
     }
 
-    protected void initMerged(ActorAggregationReplicable m) { }
+    /////////////////////////// split or merge APIs
 
     public void routerSplit(int height) {
-        State s = state;
-        if (s instanceof StateSplitRouter) {
-            ((StateSplitRouter) s).split(this, height);
-        }
+        tell(CallableMessage.<ActorAggregationReplicable>callableMessageConsumer((a,sender) -> {
+            State state = a.state;
+            if (state instanceof StateSplitRouter) {
+                ((StateSplitRouter) state).split(a, height);
+            }
+        }));
     }
 
     public void routerMergeInactive() {
-        State s = state;
-        if (s instanceof StateSplitRouter) {
-            ((StateSplitRouter) s).mergeInactive(this);
-        }
+        tell(CallableMessage.<ActorAggregationReplicable>callableMessageConsumer((a,sender) -> {
+            State state = a.state;
+            if (state instanceof StateSplitRouter) {
+                ((StateSplitRouter) state).mergeInactive(a);
+            }
+        }));
     }
 
     public void routerSplitOrMerge(int height) {
-        State s = state;
-        if (s instanceof StateSplitRouter) {
-            ((StateSplitRouter) s).splitOrMerge(this, height);
+        tell(CallableMessage.<ActorAggregationReplicable>callableMessageConsumer((a,sender) -> {
+            State state = a.state;
+            if (state instanceof StateSplitRouter) {
+                ((StateSplitRouter) state).splitOrMerge(a, height);
+            }
+        }));
+    }
+
+    /////////////////////////// remote placement and serialization
+
+    public static ActorRef place(ActorPlacement placement, ActorAggregationReplicable a) {
+        if (placement != null) {
+            return placement.place(a);
+        } else {
+            a.getSystem().send(new Message.MessageNone(a));
+            return a;
         }
     }
 
+    public ActorPlacement getPlacement() {
+        Actor placement = getSystem().resolveActorLocalNamed(
+                ActorRefLocalNamed.get(getSystem(), ActorPlacement.PLACEMENT_NAME));
+        if (placement instanceof ActorPlacement) {
+            return (ActorPlacement) placement;
+        } else {
+            return null;
+        }
+    }
 
     public static class PlacemenActorReplicable extends ActorPlacement.PlacemenActor {
         public PlacemenActorReplicable(ActorSystem system, String name) {
@@ -1066,6 +1162,8 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
         }
     }
 
+    /////////////////////////// print status
+
     public void printStatus() {
         printStatus(config.getLogOut());
     }
@@ -1083,7 +1181,7 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
                     str,
                     mailboxThreshold(),
                     sr.getHeight(),
-                    getMaxHeight(),
+                    sr.getMaxHeight(),
                     !sr.isNonParallelRouting()));
             printStatus(sr.getSplit(), out);
         } else if (state instanceof StateLeaf) {
@@ -1105,10 +1203,12 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
                 getMailboxAsReplicable().size(),
                 getMailboxAsReplicable().getTableEntries().stream()
                         .map(MailboxAggregation.HistogramEntry::getTree)
-                        .map(t -> String.format("leaf=%,d valuesInTree=%,d treeHeight=%,d",
+                        .map(t -> String.format("leaf=%,d nonZeroLeaf=%,d valuesInTree=%,d treeHeight=%,d completed=%,d",
                                 t.getLeafSize(),
+                                t.getLeafSizeNonZero(),
                                 t.getTreeSize(),
-                                t.getTreeHeight()))
+                                t.getTreeHeight(),
+                                t.getCompleted().size()))
                         .collect(Collectors.joining(", ", "[", "]")));
     }
 
@@ -1141,6 +1241,8 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
     public void println(PrintWriter out, String line) {
         config.println(out, line);
     }
+
+    /////////////////////////// Visitor
 
     public interface Visitor<ActorType extends ActorAggregationReplicable>
             extends CallableMessage.CallableMessageConsumer<ActorType>, NoRouting {

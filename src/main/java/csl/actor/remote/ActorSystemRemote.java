@@ -159,7 +159,7 @@ public class ActorSystemRemote implements ActorSystem {
             log(19, "%s: client tell to remote %s", this, addr);
             ConnectionActor a = connectionMap.computeIfAbsent(addr.getKey(), k -> createConnection(addr));
             if (a != null) {
-                a.tell(message, null);
+                a.tell(message);
             } else {
                 localSystem.sendDeadLetter(message);
             }
@@ -214,7 +214,7 @@ public class ActorSystemRemote implements ActorSystem {
     }
 
     public int receive(Object msg) {
-        deliverer.tell(msg, null);
+        deliverer.tell(msg);
         if (msg instanceof TransferredMessage) {
             return ((TransferredMessage) msg).id;
         } else {

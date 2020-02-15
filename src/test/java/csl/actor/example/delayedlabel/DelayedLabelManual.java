@@ -81,7 +81,7 @@ public class DelayedLabelManual {
         resultActor.setLearner(learnerActor);
 
         while (inputs.hasNext()) {
-            learnerActor.tell(inputs.next(), null);
+            learnerActor.tell(inputs.next());
         }
     }
 

@@ -1,16 +1,13 @@
 package csl.actor.example.wordcount;
 
 import csl.actor.*;
-import csl.actor.msgassoc.ActorAggregationReplicable;
-import csl.actor.msgassoc.Config;
-import csl.actor.msgassoc.ResponsiveCalls;
+import csl.actor.msgassoc.*;
 
 import java.io.File;
 import java.io.FileWriter;
 import java.io.PrintWriter;
 import java.io.Serializable;
 import java.util.*;
-import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
@@ -109,6 +106,11 @@ public class WordCount {
             this.dst = dst;
         }
 
+//        @Override
+//        protected StateSplitRouter initStateRouter() {
+//            return new KeyHistogramSizeChecker.StateSplitRouterSizeDebug();
+//        }
+
         @Override
         protected ActorBehavior initBehavior() {
             return behaviorBuilder()
@@ -156,7 +158,7 @@ public class WordCount {
             try {
                 super.processMessage(message);
             } catch (Exception ex) {
-                System.err.println(ex + " " + thread1 + " " + thread2);
+                System.err.println(ex + " thread1:" + thread1 + " thread2:" + thread2);
                 printStack();;
                 throw ex;
             }
@@ -178,6 +180,7 @@ public class WordCount {
         }
         private void printStack() {
             synchronized (System.err) {
+                System.err.println("thread1 stack: ");
                 if (thread1 != null) {
                     for (StackTraceElement e : thread1.getStackTrace()) {
                         System.err.println("   " + e);
@@ -185,7 +188,8 @@ public class WordCount {
                 } else {
                     System.err.println("null");
                 }
-                System.err.println("=====");
+                System.err.println("---------------");
+                System.err.println("thread2 stack: ");
                 if (thread2 != null) {
                     for (StackTraceElement e : thread2.getStackTrace()) {
                         System.err.println("   " + e);
@@ -193,6 +197,7 @@ public class WordCount {
                 } else {
                     System.err.println("null");
                 }
+                System.err.println("===============");
             }
         }
 

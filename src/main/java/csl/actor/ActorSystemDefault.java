@@ -82,7 +82,7 @@ public class ActorSystemDefault implements ActorSystem {
 
     public void sendDeadLetter(Message<?> message) {
         if (message.getSender() != null) {
-            message.getSender().tell(toDeadLetter(message), null);
+            message.getSender().tell(toDeadLetter(message));
         } else {
             System.err.println("DEAD-LETTER " + message);
         }

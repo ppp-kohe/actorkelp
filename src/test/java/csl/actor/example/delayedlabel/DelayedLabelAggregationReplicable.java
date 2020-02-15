@@ -141,8 +141,8 @@ public class DelayedLabelAggregationReplicable extends DelayedLabelManual {
         }
 
         @Override
-        public String toString() {
-            return super.toString() + "(" + support.model.numSamples + ")";
+        public String toStringContents() {
+            return super.toStringContents() + String.format(", trained=%,d", support.model.numSamples);
         }
     }
 
