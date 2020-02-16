@@ -915,21 +915,10 @@ public class ActorBehaviorAggregation {
                                BiFunction<Object, List<Object>, Iterable<Object>> keyValuesReducer,
                                BiConsumer<Object, List<Object>> handler) {
             if (completed(requiredSize)) {
-                int consuming = Math.max(requiredSize, reducedSize.nextReducedSize(size()));
-                List<Object> vs = new ArrayList<>(consuming);
+                List<Object> vs = poll(requiredSize, tree, reducedSize);
+                int consuming = vs.size();
                 try {
-                    for (int i = 0; i < consuming; ++i) {
-                        vs.add(values.poll(tree));
-                    }
-                } catch (Exception ex) {
-                    throw new RuntimeException(String.format("size=%,d, consuming=%,d actual=%,d required=%,d", size(), consuming, vs.size(), requiredSize), ex);
-                }
-                try {
-                    Object key = getKey();
-                    List<Object> rs = toList(keyValuesReducer.apply(key, vs));
-                    if (!rs.isEmpty()) {
-                        handler.accept(key, rs);
-                    }
+                    consuming = reduceAndHandle(requiredSize, tree, reducedSize, keyValuesReducer, handler, vs);
                 } finally {
                     afterTake(consuming, tree);
                 }
@@ -939,7 +928,35 @@ public class ActorBehaviorAggregation {
             }
         }
 
-        private List<Object> toList(Iterable<Object> is) {
+        protected List<Object> poll(int requiredSize, KeyHistograms.HistogramTree tree, MailboxAggregation.ReducedSize reducedSize) {
+            int consuming = Math.max(requiredSize, reducedSize.nextReducedSize(size()));
+            List<Object> vs = new ArrayList<>(consuming);
+            try {
+                for (int i = 0; i < consuming; ++i) {
+                    vs.add(values.poll(tree));
+                }
+            } catch (Exception ex) {
+                throw new RuntimeException(String.format("size=%,d, consuming=%,d actual=%,d required=%,d", size(), consuming, vs.size(), requiredSize), ex);
+            }
+            return vs;
+        }
+
+        protected int reduceAndHandle(int requiredSize,
+                                      KeyHistograms.HistogramTree tree,
+                                      MailboxAggregation.ReducedSize reducedSize,
+                                      BiFunction<Object, List<Object>, Iterable<Object>> keyValuesReducer,
+                                      BiConsumer<Object, List<Object>> handler,
+                                      List<Object> vs) {
+            int consuming = vs.size();
+            Object key = getKey();
+            List<Object> rs = toList(keyValuesReducer.apply(key, vs));
+            if (!rs.isEmpty()) {
+                handler.accept(key, rs);
+            }
+            return consuming;
+        }
+
+        protected List<Object> toList(Iterable<Object> is) {
             if (is instanceof List<?>) {
                 return (List<Object>) is;
             } else {
@@ -952,4 +969,81 @@ public class ActorBehaviorAggregation {
         }
     }
 
+    //TODO
+    public static class ActorBehaviorMatchKeyListFuturePhase<KeyType, ValueType>
+            extends ActorBehaviorMatchKeyListFuture<KeyType, ValueType> {
+        public ActorBehaviorMatchKeyListFuturePhase(int matchKeyEntryId, KeyHistograms.KeyComparator<KeyType> keyComparator,
+                                                    ActorBehaviorBuilderKeyValue.KeyExtractor<KeyType, ValueType> keyExtractorFromValue,
+                                                    BiConsumer<KeyType, List<ValueType>> handler) {
+            super(matchKeyEntryId, keyComparator, keyExtractorFromValue, handler);
+        }
+
+        public ActorBehaviorMatchKeyListFuturePhase(int matchKeyEntryId, KeyHistograms.KeyComparator<KeyType> keyComparator,
+                                                    BiFunction<KeyType, List<ValueType>, Iterable<ValueType>> keyValuesReducer,
+                                                    ActorBehaviorBuilderKeyValue.KeyExtractor<KeyType, ValueType> keyExtractorFromValue,
+                                                    BiConsumer<KeyType, List<ValueType>> handler) {
+            super(matchKeyEntryId, keyComparator, keyValuesReducer, keyExtractorFromValue, handler);
+        }
+
+        public ActorBehaviorMatchKeyListFuturePhase(int matchKeyEntryId, int requiredSize, KeyHistograms.KeyComparator<KeyType> keyComparator,
+                                                    BiFunction<KeyType, List<ValueType>, Iterable<ValueType>> keyValuesReducer,
+                                                    ActorBehaviorBuilderKeyValue.KeyExtractor<KeyType, ValueType> keyExtractorFromValue,
+                                                    BiConsumer<KeyType, List<ValueType>> handler) {
+            super(matchKeyEntryId, requiredSize, keyComparator, keyValuesReducer, keyExtractorFromValue, handler);
+        }
+
+        @Override
+        protected KeyHistograms.HistogramNodeLeaf createLeaf(Object key, int height) {
+            return new HistogramNodeLeafListReducibleForPhase(key, this, height);
+        }
+
+        @SuppressWarnings({"unchecked", "rawtypes"})
+        @Override
+        public void processPhase(Actor self, MailboxAggregation.ReducedSize reducedSize, KeyHistograms.HistogramNodeLeaf leaf) {
+            HistogramNodeLeafListReducibleForPhase list = (HistogramNodeLeafListReducibleForPhase) leaf;
+            if (list.consumePhase(putRequiredSize, putTree, reducedSize, (BiFunction) keyValuesReducer, (BiConsumer) handler)) {
+                //TODO ???
+            }
+        }
+    }
+
+    public static class HistogramNodeLeafListReducibleForPhase extends HistogramNodeLeafListReducible {
+        public HistogramNodeLeafListReducibleForPhase(Object key, KeyHistograms.HistogramPutContext context, int height) {
+            super(key, context, height);
+        }
+
+        @Override
+        protected int reduceAndHandle(int requiredSize, KeyHistograms.HistogramTree tree, MailboxAggregation.ReducedSize reducedSize,
+                                      BiFunction<Object, List<Object>, Iterable<Object>> keyValuesReducer,
+                                      BiConsumer<Object, List<Object>> handler, List<Object> vs) {
+            Object key = getKey();
+            int consuming = vs.size();
+            List<Object> rs = toList(keyValuesReducer.apply(key, vs));
+            if (!rs.isEmpty()) {
+                rs.forEach(r -> values.add(tree, r));
+                consuming -= rs.size();
+            }
+            return consuming;
+        }
+
+        public boolean consumePhase(int requiredSize,
+                               KeyHistograms.HistogramTree tree,
+                               MailboxAggregation.ReducedSize reducedSize,
+                               BiFunction<Object, List<Object>, Iterable<Object>> keyValuesReducer,
+                               BiConsumer<Object, List<Object>> handler) {
+            if (completed(requiredSize)) {
+                List<Object> vs = poll(requiredSize, tree, reducedSize);
+                int consuming = vs.size();
+                try {
+                    consuming = super.reduceAndHandle(requiredSize, tree, reducedSize, keyValuesReducer, handler, vs);
+                } finally {
+                    afterTake(consuming, tree);
+                }
+                return completed(requiredSize);
+            } else {
+                return false;
+            }
+        }
+
+    }
 }

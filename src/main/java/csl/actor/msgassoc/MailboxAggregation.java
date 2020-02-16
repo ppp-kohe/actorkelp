@@ -111,6 +111,7 @@ public class MailboxAggregation implements Mailbox, Cloneable {
         Object extractKeyFromValue(Object value, Object position);
 
         default void processTraversal(Actor self, ReducedSize reducedSize, KeyHistograms.HistogramNodeLeaf leaf) {}
+        default void processPhase(Actor self, ReducedSize reducedSize, KeyHistograms.HistogramNodeLeaf leaf) {}
     }
 
     public interface ReducedSize {
@@ -249,6 +250,22 @@ public class MailboxAggregation implements Mailbox, Cloneable {
                 updateScheduledTraversalProcess(self);
             }
         }
+
+        public synchronized void processPhase(Actor self, ReducedSize reducedSize) {
+            processPhase(self, reducedSize, tree.getRoot());
+        }
+
+        public void processPhase(Actor self, ReducedSize reducedSize, KeyHistograms.HistogramNode node) {
+            if (node != null && node.size() > 0) {
+                if (node instanceof KeyHistograms.HistogramNodeTree) {
+                    for (KeyHistograms.HistogramNode ch : ((KeyHistograms.HistogramNodeTree) node).getChildren()) {
+                        processPhase(self, reducedSize, ch);
+                    }
+                } else if (node instanceof KeyHistograms.HistogramNodeLeaf) {
+                    processor.processPhase(self, reducedSize, (KeyHistograms.HistogramNodeLeaf) node);
+                }
+            }
+        }
     }
 
     public static class TraversalProcess {
@@ -337,5 +354,11 @@ public class MailboxAggregation implements Mailbox, Cloneable {
 
     public void processTraversal(Actor self, int entryId, ReducedSize reducedSize) {
         tables[entryId].processTraversal(self, reducedSize);
+    }
+
+    public void processPhase(Actor self, ReducedSize reducedSize) {
+        for (HistogramEntry e : tables) {
+            e.processPhase(self, reducedSize);
+        }
     }
 }

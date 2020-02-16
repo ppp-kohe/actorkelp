@@ -448,7 +448,11 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
                 ((PhaseShift) val).accept(self, message.getSender());
                 return true;
             } else if (val instanceof PhaseShift.PhaseShiftIntermediate) {
-                ((PhaseShift.PhaseShiftIntermediate) val).accept(self, router, message.getSender());
+                PhaseShift.PhaseShiftIntermediate event = (PhaseShift.PhaseShiftIntermediate) val;
+                if (event.getType().equals(PhaseShift.PhaseShiftCompletedIntermediateType.PhaseIntermediateFinishLeaf)) {
+                    self.getMailboxAsAggregation().processPhase(self, self::nextConsumingSize);
+                }
+                event.accept(self, router, message.getSender());
                 return true;
             } else if (val instanceof DisabledChange) {
                 processMessage(self, message);

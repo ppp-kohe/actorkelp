@@ -359,6 +359,15 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
             keyValuesReducers.add(keyValuesReducer);
         }
 
+        public RelayToCollectList(ActorBehaviorBuilderKeyValue builder,
+                                  KeyComparator<KeyType> keyComparator,
+                                  List<BiFunction<KeyType, List<ValueType>, Iterable<ValueType>>> keyValuesReducers,
+                                  List<KeyExtractor<KeyType, ?>> extractors) {
+            super(builder, keyComparator);
+            this.extractors = extractors;
+            this.keyValuesReducers = keyValuesReducers;
+        }
+
         public RelayToCollectList<KeyType,ValueType> or(
                 Class<ValueType> valueType, Function<ValueType, KeyType> keyExtractorFromValue) {
             extractors.add(new KeyExtractorClass<>(valueType, keyExtractorFromValue));
@@ -396,6 +405,41 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
 
         public ActorBehaviorBuilderKeyValue forEachKeyList(BiConsumer<KeyType, List<ValueType>> handler) {
             return action(id -> new ActorBehaviorAggregation.ActorBehaviorMatchKeyListFuture<>(id, keyComparator,
+                    new KeyValuesReducerList<>(keyValuesReducers),
+                    new KeyExtractorList<>(extractors), handler));
+        }
+
+        public RelayToCollectListPhase<KeyType, ValueType> atPhaseEnd() {
+            return new RelayToCollectListPhase<>(builder, keyComparator, keyValuesReducers, extractors);
+        }
+    }
+
+    public static class RelayToCollectListPhase<KeyType, ValueType> extends RelayToCollectList<KeyType, ValueType> {
+        public RelayToCollectListPhase(ActorBehaviorBuilderKeyValue builder, List<KeyExtractor<KeyType, ?>> keyExtractors) {
+            super(builder, keyExtractors);
+        }
+
+        public RelayToCollectListPhase(ActorBehaviorBuilderKeyValue builder, KeyComparator<KeyType> keyComparator,
+                                       BiFunction<KeyType, List<ValueType>, Iterable<ValueType>> keyValuesReducer,
+                                       List<KeyExtractor<KeyType, ?>> keyExtractors) {
+            super(builder, keyComparator, keyValuesReducer, keyExtractors);
+        }
+
+        public RelayToCollectListPhase(ActorBehaviorBuilderKeyValue builder, KeyComparator<KeyType> keyComparator,
+                                       List<BiFunction<KeyType, List<ValueType>, Iterable<ValueType>>> keyValuesReducers,
+                                       List<KeyExtractor<KeyType, ?>> extractors) {
+            super(builder, keyComparator, keyValuesReducers, extractors);
+        }
+
+        public ActorBehaviorBuilderKeyValue forEachKeyList(int requiredSize, BiConsumer<KeyType, List<ValueType>> handler) {
+            return action(id -> new ActorBehaviorAggregation.ActorBehaviorMatchKeyListFuturePhase<>(id, requiredSize, keyComparator,
+                    new KeyValuesReducerList<>(keyValuesReducers),
+                    new KeyExtractorList<>(extractors),
+                    handler));
+        }
+
+        public ActorBehaviorBuilderKeyValue forEachKeyList(BiConsumer<KeyType, List<ValueType>> handler) {
+            return action(id -> new ActorBehaviorAggregation.ActorBehaviorMatchKeyListFuturePhase<>(id, keyComparator,
                     new KeyValuesReducerList<>(keyValuesReducers),
                     new KeyExtractorList<>(extractors), handler));
         }

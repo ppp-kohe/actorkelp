@@ -73,7 +73,6 @@ public class PhaseShift implements CallableMessage.CallableMessageConsumer<Actor
         PhaseIntermediateRouterStart,
         PhaseIntermediateFinishDisabled,
         PhaseIntermediateFinishLeaf
-
     }
 
     public static class PhaseShiftIntermediate implements Serializable, ActorAggregationReplicable.NoRouting {

@@ -124,7 +124,8 @@ public class WordCount {
             return behaviorBuilder()
                     .match(PhaseShift.PhaseShiftCompleted.class, PhaseShift.PhaseShiftCompleted::sendToTarget)
                     .matchKey(Count.class, Count::getWord)
-                    .fold((k,vs) -> vs.stream().reduce(new Count(k, 0), Count::add))
+                        .fold((k,vs) -> vs.stream().reduce(new Count(k, 0), Count::add))
+                        .atPhaseEnd()
                     .forEach(this::write)
                     .build();
         }
