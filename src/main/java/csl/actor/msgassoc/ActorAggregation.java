@@ -165,6 +165,9 @@ public abstract class ActorAggregation extends ActorDefault
             Runtime rt = Runtime.getRuntime();
             consuming = (int) Math.min(consuming,
                     Math.max(rrt, (rt.maxMemory() - rt.totalMemory()) * reduceRuntimeRemainingBytesToSizeRatio()));
+            if (config.logSplit) {
+                config.log(String.format("%s reduceSize: %,d -> %,d", this, size, consuming));
+            }
         }
         return consuming;
     }

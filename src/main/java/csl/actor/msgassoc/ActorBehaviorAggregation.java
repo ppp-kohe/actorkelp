@@ -999,10 +999,32 @@ public class ActorBehaviorAggregation {
 
         @SuppressWarnings({"unchecked", "rawtypes"})
         @Override
+        public void processTraversal(Actor self, MailboxAggregation.ReducedSize reducedSize, KeyHistograms.HistogramNodeLeaf leaf) {
+            long s = leaf.size();
+            HistogramNodeLeafListReducible list = (HistogramNodeLeafListReducible) leaf;
+            if (list.consume(putRequiredSize, putTree, reducedSize, (BiFunction) keyValuesReducer, (BiConsumer) handler)) {
+                if (list.size() > putRequiredSize) { //reducible
+                    self.tell(new MailboxAggregation.TraversalProcess(matchKeyEntryId), self);
+                }
+            }
+            if (leaf.size > 1) {
+                System.err.println(String.format("#processTrav consumed : %,d -> %,d", s, leaf.size()));
+            }
+        }
+
+        @SuppressWarnings({"unchecked", "rawtypes"})
+        @Override
         public void processPhase(Actor self, MailboxAggregation.ReducedSize reducedSize, KeyHistograms.HistogramNodeLeaf leaf) {
+            long prevSize = leaf.size();
             HistogramNodeLeafListReducibleForPhase list = (HistogramNodeLeafListReducibleForPhase) leaf;
-            if (list.consumePhase(putRequiredSize, putTree, reducedSize, (BiFunction) keyValuesReducer, (BiConsumer) handler)) {
-                //TODO ???
+
+            while (list.consumePhase(putRequiredSize, putTree, reducedSize, (BiFunction) keyValuesReducer, (BiConsumer) handler)) {
+                if (prevSize <= leaf.size()) { //no consumption
+                    break;
+                }
+            }
+            if (leaf.size > 0) {
+                System.err.println(String.format("#processPhase consumed : %,d -> %,d", prevSize, leaf.size()));
             }
         }
     }
@@ -1018,10 +1040,13 @@ public class ActorBehaviorAggregation {
                                       BiConsumer<Object, List<Object>> handler, List<Object> vs) {
             Object key = getKey();
             int consuming = vs.size();
-            List<Object> rs = toList(keyValuesReducer.apply(key, vs));
-            if (!rs.isEmpty()) {
-                rs.forEach(r -> values.add(tree, r));
-                consuming -= rs.size();
+            Iterable<Object> rs = keyValuesReducer.apply(key, vs);
+            for (Object r : rs) {
+                values.add(tree, r);
+                consuming--;
+            }
+            if (vs.size() - consuming > 1) {
+                System.err.println(String.format("#reduceAndHandle: size=%,d - consuming:%,d -> %,d", size, vs.size(), consuming));
             }
             return consuming;
         }

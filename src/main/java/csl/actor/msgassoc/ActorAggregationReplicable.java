@@ -450,6 +450,7 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
             } else if (val instanceof PhaseShift.PhaseShiftIntermediate) {
                 PhaseShift.PhaseShiftIntermediate event = (PhaseShift.PhaseShiftIntermediate) val;
                 if (event.getType().equals(PhaseShift.PhaseShiftCompletedIntermediateType.PhaseIntermediateFinishLeaf)) {
+                    self.logPhase("processPhase " + self);
                     self.getMailboxAsAggregation().processPhase(self, self::nextConsumingSize);
                 }
                 event.accept(self, router, message.getSender());
