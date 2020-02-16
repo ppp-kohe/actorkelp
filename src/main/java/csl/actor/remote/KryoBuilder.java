@@ -4,8 +4,6 @@ import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.KryoSerializable;
 import com.esotericsoftware.kryo.Registration;
 import com.esotericsoftware.kryo.Serializer;
-import com.esotericsoftware.kryo.io.Input;
-import com.esotericsoftware.kryo.io.Output;
 import com.esotericsoftware.kryo.serializers.ClosureSerializer;
 import com.esotericsoftware.kryo.serializers.FieldSerializer;
 import com.esotericsoftware.kryo.serializers.JavaSerializer;
@@ -31,7 +29,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.*;
 import java.util.function.Function;
 import java.util.function.Supplier;
-import java.util.logging.Level;
 import java.util.regex.Pattern;
 
 public class KryoBuilder {
@@ -275,6 +272,11 @@ public class KryoBuilder {
                 KeyHistogramsPersistable.PersistentFileReaderSourceWithSize.class,
                 KeyHistogramsPersistable.HistogramNodeTreeOnStorage.class,
                 KeyHistogramsPersistable.HistogramNodeLeafOnStorage.class,
-                KeyHistogramsPersistable.NodeTreeData.class);
+                KeyHistogramsPersistable.NodeTreeData.class,
+
+                ActorVisitor.class,
+                PhaseShift.class,
+                PhaseShift.PhaseShiftCompleted.class,
+                PhaseShift.PhaseShiftIntermediate.class);
     }
 }

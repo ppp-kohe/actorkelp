@@ -17,16 +17,21 @@ public class WordCount {
         String dst = args[1];
         ActorSystem system = new ActorSystemDefault();
 
-        FileMapper fileReader = new FileMapper(system, "fileReader", FileSplitter.getWithSplitCount(10));
-        WordCountMapper mapper = new WordCountMapper(system, "mapper", Config.CONFIG_DEFAULT);
-        WordCountReducer reducer = new WordCountReducer(system, "reducer", Config.CONFIG_DEFAULT, dst);
+        Config conf = Config.readConfig(System.getProperties());
+        conf.log(conf.toString());
+
+        PhaseShift.PhaseFinishActor finisher = new PhaseShift.PhaseFinishActor(system, false);
+
+        FileMapper fileReader = new FileMapper(system, "fileReader", conf, FileSplitter.getWithSplitCount(10));
+        WordCountMapper mapper = new WordCountMapper(system, "mapper", conf);
+        WordCountReducer reducer = new WordCountReducer(system, "reducer", conf, dst);
 
         ResponsiveCalls.sendTaskConsumer(fileReader, (fr,s) -> fr.mapper = mapper).get();
         ResponsiveCalls.sendTaskConsumer(mapper, (m,s) -> m.reducer = reducer).get();
 
         fileReader.routerSplit(3);
 
-        fileReader.tell(new FileSplitter.FileSplit(src));
+        fileReader.tell(new FileSplitter.FileSplit(src), finisher);
 
         system.getScheduledExecutor().scheduleAtFixedRate(() -> {
             ResponsiveCalls.sendTaskConsumer(mapper, (m,s) -> m.printStatus());
@@ -43,7 +48,7 @@ public class WordCount {
             super(system, name, config);
         }
 
-        public FileMapper(ActorSystem system, String name, FileSplitter splitter) {
+        public FileMapper(ActorSystem system, String name, Config config, FileSplitter splitter) {
             super(system, name);
             this.splitter = splitter;
         }
@@ -51,7 +56,8 @@ public class WordCount {
         @Override
         protected ActorBehavior initBehavior() {
             return behaviorBuilder()
-                    .match(FileSplitter.FileSplit.class, this::read)
+                    .matchWithSender(FileSplitter.FileSplit.class, this::read)
+                    .match(PhaseShift.PhaseShiftCompleted.class, shift -> shift.redirectTo(mapper))
                     .build();
         }
 
@@ -61,11 +67,12 @@ public class WordCount {
             splitCount = Math.max(splitCount, fm.splitCount);
         }
 
-        void read(FileSplitter.FileSplit s) {
+        void read(FileSplitter.FileSplit s, ActorRef sender) {
             try {
                 if (s.fileLength == 0) {
                     splitter.splitIterator(s.path)
                             .forEachRemaining(this::tell);
+                    router().tell(new PhaseShift(s.path, sender));
                 } else {
                     splitCount = Math.max(splitCount, s.splitIndex);
                     splitter.openLineIterator(s)
@@ -86,6 +93,7 @@ public class WordCount {
         @Override
         protected ActorBehavior initBehavior() {
             return behaviorBuilder()
+                    .match(PhaseShift.PhaseShiftCompleted.class, s -> s.redirectTo(reducer))
                     .match(String.class, line -> Arrays.stream(line.split("\\W+"))
                             .forEach(w -> reducer.tell(new Count(w, 1), this)))
                     .build();
@@ -114,6 +122,7 @@ public class WordCount {
         @Override
         protected ActorBehavior initBehavior() {
             return behaviorBuilder()
+                    .match(PhaseShift.PhaseShiftCompleted.class, PhaseShift.PhaseShiftCompleted::sendToTarget)
                     .matchKey(Count.class, Count::getWord)
                     .fold((k,vs) -> vs.stream().reduce(new Count(k, 0), Count::add))
                     .forEach(this::write)
@@ -158,8 +167,8 @@ public class WordCount {
             try {
                 super.processMessage(message);
             } catch (Exception ex) {
-                System.err.println(ex + " thread1:" + thread1 + " thread2:" + thread2);
-                printStack();;
+                System.err.println(this + " :" + ex + " thread1:" + thread1 + " thread2:" + thread2);
+                printStack();
                 throw ex;
             }
             proc = false;
@@ -204,7 +213,7 @@ public class WordCount {
         @Override
         protected void processMessageDelayWhileParallelRouting(Message<?> message) {
             super.processMessageDelayWhileParallelRouting(message);
-            System.err.println("parallel routing delay: " + message);
+            log("WordCount: parallel routing delay: " + message);
         }
 
         @Override

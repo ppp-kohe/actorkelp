@@ -5,6 +5,7 @@ import csl.actor.ActorRef;
 import csl.actor.ActorSystem;
 import csl.actor.Message;
 import csl.actor.msgassoc.ActorAggregationReplicable;
+import csl.actor.msgassoc.ActorVisitor;
 import csl.actor.msgassoc.Config;
 import csl.actor.msgassoc.ResponsiveCalls;
 
@@ -49,7 +50,7 @@ public class DelayedLabelAggregationReplicable extends DelayedLabelManual {
             if (!printed && (numInstances * 0.9) < this.finishedInstances) {
                 ResponsiveCalls.sendTask(system, root, (a, s) -> {
                     System.err.println("print router");
-                    ((ActorAggregationReplicable) a).tellVisitor((v,snd) -> v.printStatus(), null);
+                    ActorVisitor.tell((ActorAggregationReplicable) a, (v, snd) -> v.printStatus(), null);
                     return null;
                 });
                 printed = true;

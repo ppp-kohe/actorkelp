@@ -7,6 +7,7 @@ import csl.actor.Message;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
@@ -169,7 +170,9 @@ public class MailboxAggregationReplicable extends MailboxAggregation {
         if (size.addAndGet(m.size()) < 0) {
             size.set(Integer.MAX_VALUE);
         }
-        mailbox.getQueue().addAll(m.mailbox.getQueue()); //it does not change target of each message
+        ConcurrentLinkedQueue<Message<?>> q = m.mailbox.getQueue();
+        mailbox.getQueue().addAll(q); //it does not change target of each message
+        q.clear(); //it suppose that the q is no longer offered
 
         for (int i = 0, l = tables.length; i < l; ++i) {
             HistogramEntry e1 = tables[i];

@@ -30,6 +30,7 @@ public class Config implements Serializable {
     public long toLocalWaitMs = 20_000;
     public boolean logSplit = true;
     public int logColor = 33;
+    public int logColorPhase = 27;
     public long traverseDelayTimeMs = 300;
     public String persistMailboxPath = "";
     public long persistMailboxSizeLimit = Integer.MAX_VALUE / 64;
@@ -360,6 +361,11 @@ public class Config implements Serializable {
         println(out, String.format("!!! [%s] %s", Instant.now(), msg));
     }
 
+    public void log(int color, String msg) {
+        PrintWriter out = getLogOut();
+        println(out, color, String.format("!!! [%s] %s", Instant.now(), msg));
+    }
+
     public PrintWriter getLogOut() {
         PrintWriter out = logOut;
         if (out == null) {
@@ -373,10 +379,17 @@ public class Config implements Serializable {
         out.println(toConsoleLine(line));
     }
 
+    public void println(PrintWriter out, int color, String line) {
+        out.println(toConsoleLine(color, line));
+    }
+
     public String toConsoleLine(String line) {
-        int c = logColor;
-        if (c > -1) {
-            return String.format("\033[38;5;%dm%s\033[0m", c, line);
+        return toConsoleLine(logColor, line);
+    }
+
+    public String toConsoleLine(int color, String line) {
+        if (color > -1) {
+            return String.format("\033[38;5;%dm%s\033[0m", color, line);
         } else {
             return line;
         }

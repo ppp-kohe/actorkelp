@@ -80,6 +80,13 @@ public class MailboxAggregation implements Mailbox, Cloneable {
         self.getSystem().send(new Message.MessageNone(self));
     }
 
+    public void terminateAfterSerialized() {
+        mailbox.getQueue().clear();
+        for (HistogramEntry e : tables) {
+            e.terminateRemainingProcess();
+        }
+    }
+
     @Override
     public MailboxAggregation create() {
         try {
@@ -214,7 +221,7 @@ public class MailboxAggregation implements Mailbox, Cloneable {
 
         public synchronized boolean hasRemainingProcesses() {
             KeyHistograms.HistogramTree tree = this.tree;
-            return scheduledProcess != null && tree != null && !tree.getCompleted().isEmpty();
+            return scheduledProcess != null || (tree != null && !tree.getCompleted().isEmpty());
         }
 
         public synchronized void lockRemainingProcess() {
@@ -225,6 +232,14 @@ public class MailboxAggregation implements Mailbox, Cloneable {
                     nextSchedule = Instant.MAX; //temporary defer forever!
                 }
             }
+        }
+
+        public synchronized void terminateRemainingProcess() {
+            ScheduledFuture<?> p = scheduledProcess;
+            if (p != null && !p.isDone() && !p.isCancelled()) {
+                p.cancel(false);
+            }
+            scheduledProcess = null;
         }
 
         public synchronized void unlockRemainingProcess(Actor self) {

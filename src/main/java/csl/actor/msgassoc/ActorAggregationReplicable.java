@@ -5,10 +5,7 @@ import csl.actor.msgassoc.MailboxAggregationReplicable.MailboxStatus;
 
 import java.io.PrintWriter;
 import java.io.Serializable;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Objects;
-import java.util.Random;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -159,6 +156,7 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
 
     public interface State {
         void processMessage(ActorAggregationReplicable self, Message<?> message);
+        boolean processMessagePhase(ActorAggregationReplicable self, Message<?> message);
     }
 
     public static class StateSplitRouter implements State {
@@ -170,6 +168,10 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
         protected volatile boolean parallelRouting1;
         protected volatile boolean parallelRouting2;
         protected volatile boolean needClearHistory;
+        protected volatile boolean logAfterParallelRouting;
+
+        protected Map<Object, PhaseShift.PhaseEntry> phase = new HashMap<>();
+        protected Set<ActorRef> disabled = new HashSet<>();
 
         public void split(ActorAggregationReplicable self, int height) {
             this.height = height;
@@ -230,10 +232,13 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
                     needClearHistory = false;
                     if (split != null && isNonParallelRouting()) {
                         split.clearHistory();
-                        if (self.logSplit()) {
-                            self.log("after parallelRouting");
-                            self.printStatus();
-                        }
+                    }
+                }
+                if (logAfterParallelRouting && isNonParallelRouting()) {
+                    logAfterParallelRouting = false;
+                    if (self.logSplit()) {
+                        self.log("after parallelRouting");
+                        self.printStatus();
                     }
                 }
                 route(self, self.getMailboxAsReplicable(), message, false);
@@ -287,6 +292,7 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
             int max = Math.min(self.getMailboxAsReplicable().size(), self.maxParallelRouting());
 
             needClearHistory = true;
+            logAfterParallelRouting = self.logSplit();
             if (split != null) {
                 parallelRouting1 = true;
                 parallelRouting2 = true;
@@ -371,6 +377,52 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
                     + ", needClearHistory=" + this.needClearHistory +
                     ')';
         }
+
+        @Override
+        public boolean processMessagePhase(ActorAggregationReplicable self, Message<?> message) {
+            Object val = message.getData();
+            if (val instanceof PhaseShift) {
+                processMessagePhaseShift(self, message, (PhaseShift) val);
+                return true;
+            } else if (val instanceof PhaseShift.PhaseShiftIntermediate) {
+                processMessagePhaseShiftCompletedIntermediate(self, message, (PhaseShift.PhaseShiftIntermediate) val);
+                return true;
+            } else if (val instanceof DisabledChange) {
+                processMessageDisabledChange(self, message, (DisabledChange) val);
+                return true;
+            } else {
+                return false;
+            }
+        }
+
+        protected void processMessagePhaseShift(ActorAggregationReplicable self, Message<?> message, PhaseShift ps) {
+            self.logPhase("#phase        start: " + ps.getKey() + " : " + self + " : target=" + ps.getTarget());
+            PhaseShift.PhaseEntry e = phase.computeIfAbsent(ps.getKey(), PhaseShift.PhaseEntry::new);
+            e.setOriginAndSender(ps, message.getSender());
+            e.startRouter(self); //router only delivers to disabled actors without traversal
+        }
+
+        protected void processMessagePhaseShiftCompletedIntermediate(ActorAggregationReplicable self, Message<?> message, PhaseShift.PhaseShiftIntermediate ps) {
+            PhaseShift.PhaseEntry finish = phase.computeIfAbsent(ps.getKey(), PhaseShift.PhaseEntry::new);
+            if (finish.processIntermediate(self, ps)) {
+                phase.remove(ps.getKey());
+            }
+        }
+
+        protected void processMessageDisabledChange(ActorAggregationReplicable self, Message<?> message, DisabledChange changed) {
+            Object data = changed.getData();
+            ActorRef disabledActor = changed.getDisabledActor();
+            if (data.equals(DisabledChangeType.DisabledAdded)) {
+                disabled.add(disabledActor);
+                disabledActor.tell(new DisabledChange(disabledActor, DisabledChangeType.DisabledFinished), self);
+            } else if (data.equals(DisabledChangeType.DisabledFinished)) {
+                disabled.remove(disabledActor);
+            }
+        }
+
+        public Set<ActorRef> getDisabled() {
+            return disabled;
+        }
     }
 
     public static class StateLeaf implements State, Serializable {
@@ -387,6 +439,23 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
         @Override
         public void processMessage(ActorAggregationReplicable self, Message<?> message) {
             self.processMessageBehavior(message);
+        }
+
+        @Override
+        public boolean processMessagePhase(ActorAggregationReplicable self, Message<?> message) {
+            Object val = message.getData();
+            if (val instanceof PhaseShift) {
+                ((PhaseShift) val).accept(self, message.getSender());
+                return true;
+            } else if (val instanceof PhaseShift.PhaseShiftIntermediate) {
+                ((PhaseShift.PhaseShiftIntermediate) val).accept(self, router, message.getSender());
+                return true;
+            } else if (val instanceof DisabledChange) {
+                processMessage(self, message);
+                return true;
+            } else {
+                return false;
+            }
         }
 
         @Override
@@ -412,6 +481,24 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
         public void processMessage(ActorAggregationReplicable self, Message<?> message) {
             router.tell(message.getData(), message.getSender());
         }
+
+        @Override
+        public boolean processMessagePhase(ActorAggregationReplicable self, Message<?> message) {
+            Object val = message.getData();
+            if (val instanceof PhaseShift) {
+                ((PhaseShift) val).accept(self, message.getSender());
+                return true;
+            } else if (val instanceof PhaseShift.PhaseShiftIntermediate) {
+                ((PhaseShift.PhaseShiftIntermediate) val).accept(self, router, message.getSender());
+                return true;
+            } else if (val instanceof DisabledChange) {
+                processMessage(self, message);
+                return true;
+            } else {
+                return false;
+            }
+        }
+
     }
 
     ////////////////////// Split
@@ -435,7 +522,7 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
 
         Split adjustDepth(int dep);
 
-        default <ActorType extends ActorAggregationReplicable> void accept(ActorType actor, ActorRef sender, Visitor<ActorType> v) {
+        default <ActorType extends Actor> void accept(ActorType actor, ActorRef sender, ActorVisitor<ActorType> v) {
             v.visitRouter(actor, sender, this);
         }
     }
@@ -496,8 +583,7 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
                 }
                 return router.internalCreateSplitNode(splitPoints, a1, a2, depth, height);
             } finally {
-                self.getMailboxAsReplicable().unlockRemainingProcesses(self); //above internalDisable change the instance
-                //the self may has remaining message on it's queue
+                self.getMailboxAsReplicable().unlockRemainingProcesses(self);
             }
         }
 
@@ -553,8 +639,8 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
                         ((ActorAggregationReplicable) self).hasRemainingProcesses())
                         .get(1, TimeUnit.SECONDS);
             } catch (Exception ex) {
-                router.log("#error hasRemainingProcesses: " + a + " : " + ex);
-                return false;
+                router.log("#hasRemainingProcesses: busy " + a + " : " + ex);
+                return true;
             }
         }
 
@@ -568,7 +654,7 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
         }
 
         @Override
-        public <ActorType extends ActorAggregationReplicable> void accept(ActorType actor, ActorRef sender, Visitor<ActorType> v) {
+        public <ActorType extends Actor> void accept(ActorType actor, ActorRef sender, ActorVisitor<ActorType> v) {
             v.visitRouterLeaf(actor, sender, this);
         }
     }
@@ -787,7 +873,7 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
         }
 
         @Override
-        public <ActorType extends ActorAggregationReplicable> void accept(ActorType actor, ActorRef sender, Visitor<ActorType> v) {
+        public <ActorType extends Actor> void accept(ActorType actor, ActorRef sender, ActorVisitor<ActorType> v) {
             v.visitRouterNode(actor, sender, this);
         }
     }
@@ -886,7 +972,9 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
             if (isRouterParallelRouting()) {
                 processMessageDelayWhileParallelRouting(message);
             } else {
-                super.processMessage(message);
+                if (!processMessagePhase(message)) {
+                    super.processMessage(message);
+                }
             }
         } else {
             state.processMessage(this, message);
@@ -897,6 +985,9 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
         getSystem().send(message);
     }
 
+    protected boolean processMessagePhase(Message<?> message) {
+        return getState().processMessagePhase(this, message);
+    }
 
     /////////////////////////// routing messages
 
@@ -958,10 +1049,17 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
     }
 
     public void internalMerge(ActorAggregationReplicable merged) {
+        getMailboxAsReplicable().lockRemainingProcesses();
+        merged.getMailboxAsReplicable().lockRemainingProcesses();
         getMailboxAsReplicable()
                 .merge(merged.getMailboxAsReplicable());
         merged.internalDisable();
-        initMerged(merged);
+        try {
+            initMerged(merged);
+        } finally {
+            merged.getMailboxAsReplicable().unlockRemainingProcesses(merged);
+            getMailboxAsReplicable().unlockRemainingProcesses(this);
+        }
     }
 
     public ActorAggregationReplicable internalCreateClone(ActorRef router) {
@@ -999,22 +1097,54 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
     public static class CallableToLocalSerializable implements CallableMessage<ActorAggregationReplicable, ActorReplicableSerializableState> {
         @Override
         public ActorReplicableSerializableState call(ActorAggregationReplicable self, ActorRef sender) {
-            self.internalDisable();
-            return self.toSerializable(-1);
+            self.getMailboxAsReplicable().lockRemainingProcesses();
+            try {
+                return self.toSerializable(-1);
+            } finally {
+                self.getMailboxAsReplicable().terminateAfterSerialized();
+                self.internalDisable();
+                self.getMailboxAsReplicable().unlockRemainingProcesses(self);
+            }
         }
     }
 
-    public void internalDisable() {
-        //TODO shutdown the scheduled process
-        getMailboxAsReplicable().lockRemainingProcesses(); //the self goes disable
+    public void internalDisable() { //remaining messages are processed by the disabled state
         state = new StateDisabled(router());
-        initMailboxForClone();
+        router().tell(new DisabledChange(this, DisabledChangeType.DisabledAdded));
+    }
+
+    public static class DisabledChange implements Serializable, NoRouting {
+        protected ActorRef disabledActor;
+        protected Object data;
+
+        public DisabledChange(ActorRef disabledActor, Object data) {
+            this.disabledActor = disabledActor;
+            this.data = data;
+        }
+
+        public ActorRef getDisabledActor() {
+            return disabledActor;
+        }
+
+        public Object getData() {
+            return data;
+        }
+
+        @Override
+        public String toString() {
+            return getClass().getSimpleName() + "(" + data + ", " + disabledActor + ")";
+        }
+    }
+
+    public enum DisabledChangeType {
+        DisabledAdded,
+        DisabledFinished,
     }
 
     /////////////////////////// split or merge APIs
 
     public void routerSplit(int height) {
-        tell(CallableMessage.<ActorAggregationReplicable>callableMessageConsumer((a,sender) -> {
+        router().tell(CallableMessage.<ActorAggregationReplicable>callableMessageConsumer((a,sender) -> {
             State state = a.state;
             if (state instanceof StateSplitRouter) {
                 ((StateSplitRouter) state).split(a, height);
@@ -1023,7 +1153,7 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
     }
 
     public void routerMergeInactive() {
-        tell(CallableMessage.<ActorAggregationReplicable>callableMessageConsumer((a,sender) -> {
+        router().tell(CallableMessage.<ActorAggregationReplicable>callableMessageConsumer((a,sender) -> {
             State state = a.state;
             if (state instanceof StateSplitRouter) {
                 ((StateSplitRouter) state).mergeInactive(a);
@@ -1032,7 +1162,7 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
     }
 
     public void routerSplitOrMerge(int height) {
-        tell(CallableMessage.<ActorAggregationReplicable>callableMessageConsumer((a,sender) -> {
+        router().tell(CallableMessage.<ActorAggregationReplicable>callableMessageConsumer((a,sender) -> {
             State state = a.state;
             if (state instanceof StateSplitRouter) {
                 ((StateSplitRouter) state).splitOrMerge(a, height);
@@ -1172,6 +1302,10 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
         config.log(str);
     }
 
+    public void logPhase(String str) {
+        config.log(config.logColorPhase, str);
+    }
+
     public void printStatus(PrintWriter out) {
         String str = toString();
         if (state instanceof StateSplitRouter) {
@@ -1194,8 +1328,25 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
     @Override
     public String toStringContents() {
         String nm = super.toStringContents();
-        return String.format("%s %s, %s", nm.isEmpty() ? "" : (nm + ","),
-                getSystem(), toStringMailboxStatus());
+        return String.format("%s %s, %s, %s",
+                nm.isEmpty() ? "" : (nm + ","),
+                getSystem(),
+                toStringState(),
+                toStringMailboxStatus());
+    }
+
+    public String toStringState() {
+        if (state instanceof StateSplitRouter) {
+            return "router";
+        } else if (state instanceof StateLeaf) {
+            return "leaf";
+        } else if (state instanceof StateDisabled) {
+            return "disabled";
+        } else if (state == null){
+            return "null";
+        } else {
+            return state.getClass().getName();
+        }
     }
 
     public String toStringMailboxStatus() {
@@ -1242,44 +1393,4 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
         config.println(out, line);
     }
 
-    /////////////////////////// Visitor
-
-    public interface Visitor<ActorType extends ActorAggregationReplicable>
-            extends CallableMessage.CallableMessageConsumer<ActorType>, NoRouting {
-        void visitActor(ActorType actor, ActorRef sender);
-
-        @Override
-        default void accept(ActorType actor, ActorRef sender) {
-            if (actor.getState() instanceof StateLeaf) {
-                visitActor(actor, sender);
-            } else if (actor.getState() instanceof StateSplitRouter) {
-                Split s = ((StateSplitRouter) actor.getState()).getSplit();
-                visitActor(actor, sender);
-                if (s != null) {
-                    s.accept(actor, sender, this);
-                }
-            }
-        }
-
-        default boolean visitRouter(ActorType actor, ActorRef sender, Split split) {
-            return true;
-        }
-
-        default void visitRouterNode(ActorType actor, ActorRef sender, SplitNode node) {
-            if (visitRouter(actor, sender, node)) {
-                node.getLeft().accept(actor, sender, this);
-                node.getRight().accept(actor, sender, this);
-            }
-        }
-
-        default void visitRouterLeaf(ActorType actor, ActorRef sender, SplitLeaf leaf) {
-            if (visitRouter(actor, sender, leaf)) {
-                leaf.getActor().tell(this, sender);
-            }
-        }
-    }
-
-    public <SelfType extends ActorAggregationReplicable> void tellVisitor(Visitor<SelfType> v, ActorRef sender) {
-        tell(v, sender);
-    }
 }
