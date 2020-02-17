@@ -29,6 +29,7 @@ public class WordCount {
         fileReader.setNextStage(mapper).get();
         mapper.setNextStage(reducer).get();
         fileReader.routerSplit(3);
+        mapper.routerSplit(2);
 
         fileReader.tell(new FileSplitter.FileSplit(src), finisher);
 

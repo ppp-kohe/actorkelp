@@ -812,21 +812,6 @@ public class ActorBehaviorAggregation {
         protected ActorBehaviorBuilderKeyValue.KeyExtractor<KeyType, ValueType> keyExtractorFromValue;
         protected BiConsumer<KeyType, List<ValueType>> handler;
 
-        public ActorBehaviorMatchKeyListFuture(int matchKeyEntryId,
-                                               KeyHistograms.KeyComparator<KeyType> keyComparator,
-                                               ActorBehaviorBuilderKeyValue.KeyExtractor<KeyType, ValueType> keyExtractorFromValue,
-                                               BiConsumer<KeyType, List<ValueType>> handler) {
-            this(matchKeyEntryId, 1, keyComparator, (k,vs) -> vs, keyExtractorFromValue, handler);
-        }
-
-        public ActorBehaviorMatchKeyListFuture(int matchKeyEntryId,
-                                               KeyHistograms.KeyComparator<KeyType> keyComparator,
-                                               BiFunction<KeyType, List<ValueType>, Iterable<ValueType>> keyValuesReducer,
-                                               ActorBehaviorBuilderKeyValue.KeyExtractor<KeyType, ValueType> keyExtractorFromValue,
-                                               BiConsumer<KeyType, List<ValueType>> handler) {
-            this(matchKeyEntryId, 1, keyComparator, keyValuesReducer, keyExtractorFromValue, handler);
-        }
-
         public ActorBehaviorMatchKeyListFuture(int matchKeyEntryId, int requiredSize,
                                                KeyHistograms.KeyComparator<KeyType> keyComparator,
                                                BiFunction<KeyType, List<ValueType>, Iterable<ValueType>> keyValuesReducer,
@@ -977,18 +962,6 @@ public class ActorBehaviorAggregation {
 
     public static class ActorBehaviorMatchKeyListFuturePhase<KeyType, ValueType>
             extends ActorBehaviorMatchKeyListFuture<KeyType, ValueType> {
-        public ActorBehaviorMatchKeyListFuturePhase(int matchKeyEntryId, KeyHistograms.KeyComparator<KeyType> keyComparator,
-                                                    ActorBehaviorBuilderKeyValue.KeyExtractor<KeyType, ValueType> keyExtractorFromValue,
-                                                    BiConsumer<KeyType, List<ValueType>> handler) {
-            super(matchKeyEntryId, keyComparator, keyExtractorFromValue, handler);
-        }
-
-        public ActorBehaviorMatchKeyListFuturePhase(int matchKeyEntryId, KeyHistograms.KeyComparator<KeyType> keyComparator,
-                                                    BiFunction<KeyType, List<ValueType>, Iterable<ValueType>> keyValuesReducer,
-                                                    ActorBehaviorBuilderKeyValue.KeyExtractor<KeyType, ValueType> keyExtractorFromValue,
-                                                    BiConsumer<KeyType, List<ValueType>> handler) {
-            super(matchKeyEntryId, keyComparator, keyValuesReducer, keyExtractorFromValue, handler);
-        }
 
         public ActorBehaviorMatchKeyListFuturePhase(int matchKeyEntryId, int requiredSize, KeyHistograms.KeyComparator<KeyType> keyComparator,
                                                     BiFunction<KeyType, List<ValueType>, Iterable<ValueType>> keyValuesReducer,

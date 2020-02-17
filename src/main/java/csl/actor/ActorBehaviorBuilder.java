@@ -6,12 +6,25 @@ import java.util.function.Consumer;
 public class ActorBehaviorBuilder {
     protected ActorBehavior behavior = BEHAVIOR_NOTHING;
 
+    protected MatchFactory matchFactory = new MatchFactory();
+
+    public ActorBehaviorBuilder matchFactory(MatchFactory matchFactory) {
+        this.matchFactory = matchFactory;
+        return this;
+    }
+
+    public static class MatchFactory {
+        public <DataType> ActorBehavior get(Class<DataType> dataType, BiConsumer<DataType, ActorRef> handler) {
+            return new ActorBehaviorMatch<>(dataType, handler);
+        }
+    }
+
     public <DataType> ActorBehaviorBuilder match(Class<DataType> dataType, Consumer<DataType> handler) {
-        return with(new ActorBehaviorMatch<>(dataType, (data, sender) -> handler.accept(data)));
+        return matchWithSender(dataType, (data, sender) -> handler.accept(data));
     }
 
     public <DataType> ActorBehaviorBuilder matchWithSender(Class<DataType> dataType, BiConsumer<DataType, ActorRef> handler) {
-        return with(new ActorBehaviorMatch<>(dataType, handler));
+        return with(matchFactory.get(dataType, handler));
     }
 
     public ActorBehaviorBuilder matchAny(BiConsumer<Object,ActorRef> handler) {
