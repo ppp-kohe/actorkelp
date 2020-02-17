@@ -1,6 +1,7 @@
 package csl.actor.example.wordcount;
 
 import csl.actor.*;
+import csl.actor.example.msgassoc.DebugBehavior;
 import csl.actor.msgassoc.*;
 
 import java.io.File;
@@ -124,6 +125,7 @@ public class WordCount {
         @Override
         protected ActorBehavior initBehavior() {
             return behaviorBuilder()
+                    .matchKeyFactory(new DebugBehavior.DebugFactory())
                     .matchKey(Count.class, Count::getWord)
                         .fold((k,vs) -> vs.stream().reduce(new Count(k, 0), Count::add))
                         .eventually()
@@ -210,12 +212,6 @@ public class WordCount {
                 }
                 System.err.println("===============");
             }
-        }
-
-        @Override
-        protected void processMessageDelayWhileParallelRouting(Message<?> message) {
-            super.processMessageDelayWhileParallelRouting(message);
-            log("WordCount: parallel routing delay: " + message);
         }
 
         @Override
