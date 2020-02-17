@@ -110,8 +110,16 @@ public class MailboxAggregation implements Mailbox, Cloneable {
         Object selectFromValue(Object value);
         Object extractKeyFromValue(Object value, Object position);
 
+        default boolean needToProcessTraversal(Actor self, KeyHistograms.HistogramTree tree) {
+            return false;
+        }
+
+        default boolean needToProcessPhase(Actor self, Object phaseKey, KeyHistograms.HistogramTree tree) {
+            return false;
+        }
+
         default void processTraversal(Actor self, ReducedSize reducedSize, KeyHistograms.HistogramNodeLeaf leaf) {}
-        default void processPhase(Actor self, ReducedSize reducedSize, KeyHistograms.HistogramNodeLeaf leaf) {}
+        default void processPhase(Actor self, Object phaseKey, ReducedSize reducedSize, KeyHistograms.HistogramNodeLeaf leaf) {}
     }
 
     public interface ReducedSize {
@@ -154,7 +162,9 @@ public class MailboxAggregation implements Mailbox, Cloneable {
         }
 
         public void processTraversal(Actor self, ReducedSize reducedSize) {
-            processTraversal(self, reducedSize, tree.getRoot());
+            if (processor.needToProcessTraversal(self, tree)) {
+                processTraversal(self, reducedSize, tree.getRoot());
+            }
         }
 
         public void processTraversal(Actor self, ReducedSize reducedSize, KeyHistograms.HistogramNode node) {
@@ -251,18 +261,22 @@ public class MailboxAggregation implements Mailbox, Cloneable {
             }
         }
 
-        public synchronized void processPhase(Actor self, ReducedSize reducedSize) {
-            processPhase(self, reducedSize, tree.getRoot());
+        public void processPhase(Actor self, Object phaseKey, ReducedSize reducedSize) {
+            if (processor.needToProcessPhase(self, phaseKey, tree)) {
+                synchronized (this) {
+                    processPhase(self, phaseKey, reducedSize, tree.getRoot());
+                }
+            }
         }
 
-        public void processPhase(Actor self, ReducedSize reducedSize, KeyHistograms.HistogramNode node) {
+        public void processPhase(Actor self, Object phaseKey, ReducedSize reducedSize, KeyHistograms.HistogramNode node) {
             if (node != null && node.size() > 0) {
                 if (node instanceof KeyHistograms.HistogramNodeTree) {
                     for (KeyHistograms.HistogramNode ch : ((KeyHistograms.HistogramNodeTree) node).getChildren()) {
-                        processPhase(self, reducedSize, ch);
+                        processPhase(self, phaseKey, reducedSize, ch);
                     }
                 } else if (node instanceof KeyHistograms.HistogramNodeLeaf) {
-                    processor.processPhase(self, reducedSize, (KeyHistograms.HistogramNodeLeaf) node);
+                    processor.processPhase(self, phaseKey, reducedSize, (KeyHistograms.HistogramNodeLeaf) node);
                 }
             }
         }
@@ -356,9 +370,9 @@ public class MailboxAggregation implements Mailbox, Cloneable {
         tables[entryId].processTraversal(self, reducedSize);
     }
 
-    public void processPhase(Actor self, ReducedSize reducedSize) {
+    public void processPhase(Actor self, Object phaseKey, ReducedSize reducedSize) {
         for (HistogramEntry e : tables) {
-            e.processPhase(self, reducedSize);
+            e.processPhase(self, phaseKey, reducedSize);
         }
     }
 }

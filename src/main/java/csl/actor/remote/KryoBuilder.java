@@ -259,6 +259,7 @@ public class KryoBuilder {
                 ActorBehaviorAggregation.HistogramNodeLeaf4.class,
                 ActorBehaviorAggregation.HistogramNodeLeafList.class,
                 ActorBehaviorAggregation.HistogramNodeLeafListReducible.class,
+                ActorBehaviorAggregation.HistogramNodeLeafListReducibleForPhase.class,
                 KeyHistograms.HistogramNodeLeafMap.class,
                 csl.actor.msgassoc.Config.class,
                 MailboxPersistable.MessageOnStorage.class,
@@ -275,8 +276,12 @@ public class KryoBuilder {
                 KeyHistogramsPersistable.NodeTreeData.class,
 
                 ActorVisitor.class,
+                ActorVisitor.VisitorNoSender.class,
                 PhaseShift.class,
                 PhaseShift.PhaseShiftCompleted.class,
-                PhaseShift.PhaseShiftIntermediate.class);
+                PhaseShift.PhaseShiftIntermediate.class,
+                PhaseShift.PhaseShiftIntermediateType.class,
+                ActorAggregationReplicable.DisabledChange.class,
+                ActorAggregationReplicable.DisabledChangeType.class);
     }
 }

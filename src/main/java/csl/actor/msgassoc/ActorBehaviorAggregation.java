@@ -889,6 +889,12 @@ public class ActorBehaviorAggregation {
             return keyExtractorFromValue.toKey((ValueType) value);
         }
 
+        @Override
+        public boolean needToProcessTraversal(Actor self, KeyHistograms.HistogramTree tree) {
+            this.putTree = tree;
+            return true;
+        }
+
         @SuppressWarnings({"unchecked", "rawtypes"})
         @Override
         public void processTraversal(Actor self, MailboxAggregation.ReducedSize reducedSize, KeyHistograms.HistogramNodeLeaf leaf) {
@@ -969,7 +975,6 @@ public class ActorBehaviorAggregation {
         }
     }
 
-    //TODO
     public static class ActorBehaviorMatchKeyListFuturePhase<KeyType, ValueType>
             extends ActorBehaviorMatchKeyListFuture<KeyType, ValueType> {
         public ActorBehaviorMatchKeyListFuturePhase(int matchKeyEntryId, KeyHistograms.KeyComparator<KeyType> keyComparator,
@@ -1000,21 +1005,23 @@ public class ActorBehaviorAggregation {
         @SuppressWarnings({"unchecked", "rawtypes"})
         @Override
         public void processTraversal(Actor self, MailboxAggregation.ReducedSize reducedSize, KeyHistograms.HistogramNodeLeaf leaf) {
-            long s = leaf.size();
             HistogramNodeLeafListReducible list = (HistogramNodeLeafListReducible) leaf;
             if (list.consume(putRequiredSize, putTree, reducedSize, (BiFunction) keyValuesReducer, (BiConsumer) handler)) {
                 if (list.size() > putRequiredSize) { //reducible
                     self.tell(new MailboxAggregation.TraversalProcess(matchKeyEntryId), self);
                 }
             }
-            if (leaf.size > 1) {
-                System.err.println(String.format("#processTrav consumed : %,d -> %,d", s, leaf.size()));
-            }
+        }
+
+        @Override
+        public boolean needToProcessPhase(Actor self, Object phaseKey, KeyHistograms.HistogramTree tree) {
+            this.putTree = tree;
+            return true;
         }
 
         @SuppressWarnings({"unchecked", "rawtypes"})
         @Override
-        public void processPhase(Actor self, MailboxAggregation.ReducedSize reducedSize, KeyHistograms.HistogramNodeLeaf leaf) {
+        public void processPhase(Actor self, Object phaseKey, MailboxAggregation.ReducedSize reducedSize, KeyHistograms.HistogramNodeLeaf leaf) {
             long prevSize = leaf.size();
             HistogramNodeLeafListReducibleForPhase list = (HistogramNodeLeafListReducibleForPhase) leaf;
 
@@ -1022,9 +1029,6 @@ public class ActorBehaviorAggregation {
                 if (prevSize <= leaf.size()) { //no consumption
                     break;
                 }
-            }
-            if (leaf.size > 0) {
-                System.err.println(String.format("#processPhase consumed : %,d -> %,d", prevSize, leaf.size()));
             }
         }
     }
@@ -1044,9 +1048,6 @@ public class ActorBehaviorAggregation {
             for (Object r : rs) {
                 values.add(tree, r);
                 consuming--;
-            }
-            if (vs.size() - consuming > 1) {
-                System.err.println(String.format("#reduceAndHandle: size=%,d - consuming:%,d -> %,d", size, vs.size(), consuming));
             }
             return consuming;
         }

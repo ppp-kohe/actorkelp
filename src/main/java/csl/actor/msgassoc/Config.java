@@ -358,12 +358,16 @@ public class Config implements Serializable {
 
     public void log(String msg) {
         PrintWriter out = getLogOut();
-        println(out, String.format("!!! [%s] %s", Instant.now(), msg));
+        println(out, logMessage(msg));
     }
 
     public void log(int color, String msg) {
         PrintWriter out = getLogOut();
-        println(out, color, String.format("!!! [%s] %s", Instant.now(), msg));
+        println(out, color, logMessage(msg));
+    }
+
+    public String logMessage(String msg) {
+        return String.format("!!! [%s] %s", Instant.now(), msg);
     }
 
     public PrintWriter getLogOut() {

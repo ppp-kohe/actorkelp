@@ -181,8 +181,7 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
                 split = split.split(self, height);
             }
             if (self.logSplit()) {
-                self.log("after split: height=" + height);
-                self.printStatus();
+                self.printStatus("after split: height=" + height);
             }
         }
 
@@ -190,8 +189,7 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
             split = split.mergeInactive(self);
             split.clearHistory();
             if (self.logSplit()) {
-                self.log("after mergeInactive");
-                self.printStatus();
+                self.printStatus("after mergeInactive");
             }
         }
 
@@ -203,8 +201,7 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
                 split = split.splitOrMerge(self, height);
             }
             if (self.logSplit()) {
-                self.log("after splitOrMerge: height=" + height);
-                self.printStatus();
+                self.printStatus("after splitOrMerge: height=" + height);
             }
         }
 
@@ -237,8 +234,7 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
                 if (logAfterParallelRouting && isNonParallelRouting()) {
                     logAfterParallelRouting = false;
                     if (self.logSplit()) {
-                        self.log("after parallelRouting");
-                        self.printStatus();
+                        self.printStatus("after parallelRouting");
                     }
                 }
                 route(self, self.getMailboxAsReplicable(), message, false);
@@ -343,7 +339,7 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
         protected void route(ActorAggregationReplicable self, MailboxAggregationReplicable m, Message<?> message, boolean fromParallelRouting) {
             if (split == null) {
                 if (fromParallelRouting) {
-                    self.tell(message.getData(), message.getSender());
+                    self.getSystem().send(message);
                 } else {
                     self.processMessageBehavior(message);
                 }
@@ -385,7 +381,7 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
                 processMessagePhaseShift(self, message, (PhaseShift) val);
                 return true;
             } else if (val instanceof PhaseShift.PhaseShiftIntermediate) {
-                processMessagePhaseShiftCompletedIntermediate(self, message, (PhaseShift.PhaseShiftIntermediate) val);
+                processMessagePhaseShiftIntermediate(self, message, (PhaseShift.PhaseShiftIntermediate) val);
                 return true;
             } else if (val instanceof DisabledChange) {
                 processMessageDisabledChange(self, message, (DisabledChange) val);
@@ -402,8 +398,11 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
             e.startRouter(self); //router only delivers to disabled actors without traversal
         }
 
-        protected void processMessagePhaseShiftCompletedIntermediate(ActorAggregationReplicable self, Message<?> message, PhaseShift.PhaseShiftIntermediate ps) {
+        protected void processMessagePhaseShiftIntermediate(ActorAggregationReplicable self, Message<?> message, PhaseShift.PhaseShiftIntermediate ps) {
             PhaseShift.PhaseEntry finish = phase.computeIfAbsent(ps.getKey(), PhaseShift.PhaseEntry::new);
+            if (ps.getActor() == self && ps.getType().equals(PhaseShift.PhaseShiftIntermediateType.PhaseIntermediateFinishLeaf)) {
+                self.processPhaseEnd(ps.getKey());
+            }
             if (finish.processIntermediate(self, ps)) {
                 phase.remove(ps.getKey());
             }
@@ -449,9 +448,8 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
                 return true;
             } else if (val instanceof PhaseShift.PhaseShiftIntermediate) {
                 PhaseShift.PhaseShiftIntermediate event = (PhaseShift.PhaseShiftIntermediate) val;
-                if (event.getType().equals(PhaseShift.PhaseShiftCompletedIntermediateType.PhaseIntermediateFinishLeaf)) {
-                    self.logPhase("processPhase " + self);
-                    self.getMailboxAsAggregation().processPhase(self, self::nextConsumingSize);
+                if (event.getType().equals(PhaseShift.PhaseShiftIntermediateType.PhaseIntermediateFinishLeaf)) {
+                    self.processPhaseEnd(event.getKey());
                 }
                 event.accept(self, router, message.getSender());
                 return true;
@@ -1300,7 +1298,11 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
     /////////////////////////// print status
 
     public void printStatus() {
-        printStatus(config.getLogOut());
+        printStatus("");
+    }
+
+    public void printStatus(String head) {
+        printStatus(config.getLogOut(), head);
     }
 
     public void log(String str) {
@@ -1311,22 +1313,27 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
         config.log(config.logColorPhase, str);
     }
 
-    public void printStatus(PrintWriter out) {
+    public String logMessage(String str) {
+        return config.logMessage(str);
+    }
+
+    public void printStatus(PrintWriter out, String head) {
         String str = toString();
         if (state instanceof StateSplitRouter) {
             StateSplitRouter sr = (StateSplitRouter) state;
-            println(out, String.format(" router %s \n" +
+            println(out, logMessage(String.format("%s router %s \n" +
                             "   threshold=%,d height=%,d/%,d parallelRouting=%s",
+                    head,
                     str,
                     mailboxThreshold(),
                     sr.getHeight(),
                     sr.getMaxHeight(),
-                    !sr.isNonParallelRouting()));
+                    !sr.isNonParallelRouting())));
             printStatus(sr.getSplit(), out);
         } else if (state instanceof StateLeaf) {
-            println(out, String.format(" leaf %s", str));
+            println(out, logMessage(String.format("%s leaf %s", head, str)));
         } else {
-            println(out, String.format(" %s %s", state, str));
+            println(out, logMessage(String.format("%s %s %s", state, head, str)));
         }
     }
 

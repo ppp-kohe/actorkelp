@@ -235,17 +235,38 @@ public class KeyHistograms {
     }
 
     public static abstract class HistogramPutContext {
+        /** (in most cases) fixed at construction */
         public int putRequiredSize;
+        /** fixed by put and processing methods */
         public HistogramTree putTree;
+        /** the value set after key-matching */
         public Comparable<?> putPosition;
+        /** set by put method */
         public Object putValue;
+        /** set by put and processing methods */
         public int putTreeLimit;
 
+        /** dynamically updated by put processes */
         public float putIndexCurrentRangeStart;
+        /** dynamically updated by put processes */
         public float putIndexCurrentRangeLength;
 
+        /**
+         * creates a new leaf. called under put processes
+         * @param key the key for the leaf
+         * @param height the height of the leaf
+         * @return a new leaf
+         */
         protected abstract HistogramNodeLeaf createLeaf(Object key, int height);
 
+        /**
+         * creates a new leaf (by {@link #createLeaf(Object, int)})
+         * and puts the value set to this. called under put processes. 
+         *  increments the size of {@link #putTree}
+         * @param key the key for the leaf
+         * @param height the height of the leaf
+         * @return a new leaf with a value
+         */
         public HistogramNodeLeaf createLeafWithCountUp(Object key, int height) {
             HistogramNodeLeaf l = createLeaf(key, height);
             l.putValue(this);
@@ -253,18 +274,30 @@ public class KeyHistograms {
             return l;
         }
 
+        /**
+         * just calls {@link #putTree}'s {@link HistogramTree#createEmptyList()} 
+         * @return a new empty list for constructing a new leaf
+         */
         public HistogramLeafList createEmptyList() {
             return putTree.createEmptyList();
         }
 
+        /**
+         * just calls {@link #putTree}'s 
+         *  {@link HistogramTree#incrementLeafSizeNonZero(int)} with +1
+         */
         public void incrementLeafSizeNonZero() {
             putTree.incrementLeafSizeNonZero(1);
         }
-
+        
         public Comparable<?> position(HistogramNodeLeaf leaf) {
             return putPosition;
         }
 
+        /**
+         * just calls {@link #putTree}'s {@link HistogramTree#complete(HistogramNodeLeaf)}
+         * @param leaf the completed leaf
+         */
         public void complete(HistogramNodeLeaf leaf) {
             putTree.complete(leaf);
         }

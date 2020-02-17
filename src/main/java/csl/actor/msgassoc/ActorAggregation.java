@@ -2,9 +2,12 @@ package csl.actor.msgassoc;
 
 import csl.actor.*;
 
+import java.util.concurrent.Future;
+
 public abstract class ActorAggregation extends ActorDefault
         implements KeyHistogramsPersistable.HistogramTreePersistableConfig {
     protected Config config = Config.CONFIG_DEFAULT;
+    protected volatile ActorRef nextStage;
 
     public ActorAggregation(ActorSystem system, String name, MailboxAggregation mailbox, ActorBehavior behavior) {
         super(system, name, mailbox, behavior);
@@ -148,14 +151,42 @@ public abstract class ActorAggregation extends ActorDefault
 
     public void processMessageBehavior(Message<?> message) {
         prune();
-        if (message.getData() instanceof MailboxAggregation.TraversalProcess) {
+        Object data = message.getData();
+        if (data instanceof MailboxAggregation.TraversalProcess) {
             getMailboxAsAggregation()
                     .processTraversal(this,
-                            ((MailboxAggregation.TraversalProcess) message.getData()).entryId,
+                            ((MailboxAggregation.TraversalProcess) data).entryId,
                             this::nextConsumingSize);
         } else {
             super.processMessage(message);
         }
+    }
+
+    @Override
+    protected void processMessageUnhandled(Message<?> message) {
+        Object data = message.getData();
+        if (data instanceof PhaseShift.PhaseShiftCompleted) {
+            processMessagePhaseCompleted((PhaseShift.PhaseShiftCompleted) data);
+        } else {
+            super.processMessageUnhandled(message);
+        }
+    }
+
+    protected void processMessagePhaseCompleted(PhaseShift.PhaseShiftCompleted comp) {
+        ActorRef next = nextStage();
+        if (next != null) {
+            comp.redirectTo(next);
+        } else {
+            comp.sendToTarget();
+        }
+    }
+
+    protected ActorRef nextStage() {
+        return nextStage;
+    }
+
+    public Future<Void> setNextStage(ActorRef nextStage) {
+        return ResponsiveCalls.sendTaskConsumer(this, (a,s) -> a.nextStage = nextStage);
     }
 
     public int nextConsumingSize(long size) {
@@ -176,5 +207,10 @@ public abstract class ActorAggregation extends ActorDefault
         getMailboxAsAggregation().prune(
                 pruneGreaterThanLeaf(),
                 pruneLessThanNonZeroLeafRate());
+    }
+
+    public void processPhaseEnd(Object phaseKey) {
+        getMailboxAsAggregation()
+                .processPhase(this, phaseKey, this::nextConsumingSize);
     }
 }

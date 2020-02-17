@@ -1,6 +1,5 @@
 package csl.actor.msgassoc;
 
-import csl.actor.Mailbox;
 import csl.actor.MailboxDefault;
 import csl.actor.Message;
 

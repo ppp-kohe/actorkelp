@@ -41,8 +41,12 @@ public abstract class ActorDefault extends Actor {
     @Override
     protected void processMessage(Message<?> message) {
         if (!behavior.process(this, message)) {
-            throw new RuntimeException(String.format("actor %s could not handle %s", this, message));
+            processMessageUnhandled(message);
         }
+    }
+
+    protected void processMessageUnhandled(Message<?> message) {
+        throw new RuntimeException(String.format("actor %s could not handle %s", this, message));
     }
 
     /** @return implementation field getter */

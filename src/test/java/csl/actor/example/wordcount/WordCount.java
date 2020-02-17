@@ -26,21 +26,25 @@ public class WordCount {
         WordCountMapper mapper = new WordCountMapper(system, "mapper", conf);
         WordCountReducer reducer = new WordCountReducer(system, "reducer", conf, dst);
 
-        ResponsiveCalls.sendTaskConsumer(fileReader, (fr,s) -> fr.mapper = mapper).get();
-        ResponsiveCalls.sendTaskConsumer(mapper, (m,s) -> m.reducer = reducer).get();
-
+        fileReader.setNextStage(mapper).get();
+        mapper.setNextStage(reducer).get();
         fileReader.routerSplit(3);
 
         fileReader.tell(new FileSplitter.FileSplit(src), finisher);
 
         system.getScheduledExecutor().scheduleAtFixedRate(() -> {
-            ResponsiveCalls.sendTaskConsumer(mapper, (m,s) -> m.printStatus());
-            ResponsiveCalls.sendTaskConsumer(reducer, (m,s) -> m.printStatus());
+            ResponsiveCalls.sendTaskConsumer(mapper, ActorVisitor.visitorNoSender(a -> a.printStatus("(scheduled) mapper:")));
+            ResponsiveCalls.sendTaskConsumer(reducer, ActorVisitor.visitorNoSender(a -> a.printStatus("(scheduled) reducer:")));
+            if (finisher.getCompletedCount(src) > 0) {
+                try {
+                    Thread.sleep(2_000);
+                } catch (Exception ex) { ex.printStackTrace(); }
+                system.close();
+            }
         }, 10, 10, TimeUnit.SECONDS);
     }
 
     public static class FileMapper extends ActorAggregationReplicable {
-        ActorRef mapper;
         FileSplitter splitter;
         long splitCount;
 
@@ -49,7 +53,7 @@ public class WordCount {
         }
 
         public FileMapper(ActorSystem system, String name, Config config, FileSplitter splitter) {
-            super(system, name);
+            this(system, name, config);
             this.splitter = splitter;
         }
 
@@ -57,7 +61,6 @@ public class WordCount {
         protected ActorBehavior initBehavior() {
             return behaviorBuilder()
                     .matchWithSender(FileSplitter.FileSplit.class, this::read)
-                    .match(PhaseShift.PhaseShiftCompleted.class, shift -> shift.redirectTo(mapper))
                     .build();
         }
 
@@ -76,7 +79,7 @@ public class WordCount {
                 } else {
                     splitCount = Math.max(splitCount, s.splitIndex);
                     splitter.openLineIterator(s)
-                            .forEachRemaining(mapper::tell);
+                            .forEachRemaining(nextStage()::tell);
                 }
             } catch (Exception ex) {
                 throw new RuntimeException(ex);
@@ -85,7 +88,6 @@ public class WordCount {
     }
 
     public static class WordCountMapper extends ActorAggregationReplicable {
-        ActorRef reducer;
         public WordCountMapper(ActorSystem system, String name, Config config) {
             super(system, name, config);
         }
@@ -93,9 +95,8 @@ public class WordCount {
         @Override
         protected ActorBehavior initBehavior() {
             return behaviorBuilder()
-                    .match(PhaseShift.PhaseShiftCompleted.class, s -> s.redirectTo(reducer))
                     .match(String.class, line -> Arrays.stream(line.split("\\W+"))
-                            .forEach(w -> reducer.tell(new Count(w, 1), this)))
+                            .forEach(w -> nextStage().tell(new Count(w, 1), this)))
                     .build();
         }
     }
@@ -122,10 +123,9 @@ public class WordCount {
         @Override
         protected ActorBehavior initBehavior() {
             return behaviorBuilder()
-                    .match(PhaseShift.PhaseShiftCompleted.class, PhaseShift.PhaseShiftCompleted::sendToTarget)
                     .matchKey(Count.class, Count::getWord)
                         .fold((k,vs) -> vs.stream().reduce(new Count(k, 0), Count::add))
-                        .atPhaseEnd()
+                        .eventually()
                     .forEach(this::write)
                     .build();
         }
@@ -248,6 +248,12 @@ public class WordCount {
             } catch (Exception ex) {
                 ex.printStackTrace();
             }
+        }
+
+        @Override
+        public void processPhaseEnd(Object phaseKey) {
+            super.processPhaseEnd(phaseKey);
+            printStatus("phaseEnd: " + phaseKey);
         }
     }
 

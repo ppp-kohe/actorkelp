@@ -6,6 +6,7 @@ import java.io.Serializable;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiConsumer;
 
 public class PhaseShift implements CallableMessage.CallableMessageConsumer<Actor>, ActorAggregationReplicable.NoRouting {
@@ -69,18 +70,18 @@ public class PhaseShift implements CallableMessage.CallableMessageConsumer<Actor
         return getClass().getSimpleName() + "@" + Integer.toHexString(System.identityHashCode(this)) + "(key=" + key + ", target=" + target + ")";
     }
 
-    public enum PhaseShiftCompletedIntermediateType {
+    public enum PhaseShiftIntermediateType {
         PhaseIntermediateRouterStart,
         PhaseIntermediateFinishDisabled,
         PhaseIntermediateFinishLeaf
     }
 
-    public static class PhaseShiftIntermediate implements Serializable, ActorAggregationReplicable.NoRouting {
+    public static class PhaseShiftIntermediate implements CallableMessageConsumer<Actor>, ActorAggregationReplicable.NoRouting {
         protected Object key;
         protected ActorRef actor;
-        protected PhaseShiftCompletedIntermediateType type;
+        protected PhaseShiftIntermediateType type;
 
-        public PhaseShiftIntermediate(Object key, ActorRef actor, PhaseShiftCompletedIntermediateType type) {
+        public PhaseShiftIntermediate(Object key, ActorRef actor, PhaseShiftIntermediateType type) {
             this.key = key;
             this.actor = actor;
             this.type = type;
@@ -102,8 +103,13 @@ public class PhaseShift implements CallableMessage.CallableMessageConsumer<Actor
                     '}';
         }
 
-        public PhaseShiftCompletedIntermediateType getType() {
+        public PhaseShiftIntermediateType getType() {
             return type;
+        }
+
+        @Override
+        public void accept(Actor self, ActorRef sender) {
+            accept(self, sender, sender);
         }
 
         public void accept(Actor self, ActorRef router, ActorRef sender) {
@@ -178,6 +184,8 @@ public class PhaseShift implements CallableMessage.CallableMessageConsumer<Actor
         protected boolean closeSystem;
         protected BiConsumer<ActorSystem, PhaseShiftCompleted> handler;
 
+        protected Map<Object, Integer> completed = new ConcurrentHashMap<>();
+
         public PhaseFinishActor(ActorSystem system, Instant start, boolean closeSystem, BiConsumer<ActorSystem, PhaseShiftCompleted> handler) {
             super(system);
             this.start = start;
@@ -210,10 +218,19 @@ public class PhaseShift implements CallableMessage.CallableMessageConsumer<Actor
             if (closeSystem) {
                 getSystem().close();
             }
+            completed.compute(c.getKey(), (k,v) -> v == null ? 1 : (v + 1));
         }
 
         public void start(Object key, ActorRef initialTarget) {
             initialTarget.tell(new PhaseShift(key, this), this);
+        }
+
+        public Map<Object, Integer> getCompleted() {
+            return new HashMap<>(completed);
+        }
+
+        public int getCompletedCount(Object key) {
+            return completed.getOrDefault(key, 0);
         }
     }
 
@@ -238,28 +255,28 @@ public class PhaseShift implements CallableMessage.CallableMessageConsumer<Actor
 
         public void startRouter(ActorAggregationReplicable router) {
             router.tell(new PhaseShiftIntermediate(key, router,
-                    PhaseShiftCompletedIntermediateType.PhaseIntermediateRouterStart));
+                    PhaseShiftIntermediateType.PhaseIntermediateRouterStart), router);
         }
 
         public boolean processIntermediate(ActorAggregationReplicable self, PhaseShift.PhaseShiftIntermediate ps) {
-            if (ps.getType().equals(PhaseShiftCompletedIntermediateType.PhaseIntermediateRouterStart)) {
+            if (ps.getType().equals(PhaseShiftIntermediateType.PhaseIntermediateRouterStart)) {
                 if (self.getMailboxAsReplicable().hasRemainingProcesses()) {
                     self.tell(ps);
                     return false;
                 } else {
                     Collection<ActorRef> disabled = ((ActorAggregationReplicable.StateSplitRouter) self.getState()).getDisabled();
-                    if (startDisabled(disabled)) { //delivers to disabled actors: if true, empty disabled, go to next step
+                    if (startDisabled(self, disabled)) { //delivers to disabled actors: if true, empty disabled, go to next step
                         return startRouterSplits(self);
                     } else {
                         return false;
                     }
                 }
-            } else if (ps.getType().equals(PhaseShiftCompletedIntermediateType.PhaseIntermediateFinishDisabled)) {
+            } else if (ps.getType().equals(PhaseShiftIntermediateType.PhaseIntermediateFinishDisabled)) {
                 if (completeDisabled(self, ps.getActor())) {
                     startRouter(self); //restart
                 }
                 return false;
-            } else if (ps.getType().equals(PhaseShiftCompletedIntermediateType.PhaseIntermediateFinishLeaf)) {
+            } else if (ps.getType().equals(PhaseShiftIntermediateType.PhaseIntermediateFinishLeaf)) {
                 return completed(self, ps.getActor());
             } else { //error
                 self.logPhase("??? " + self + " : " + ps);
@@ -267,20 +284,20 @@ public class PhaseShift implements CallableMessage.CallableMessageConsumer<Actor
             }
         }
 
-        public boolean startDisabled(Collection<ActorRef> disabled) {
+        public boolean startDisabled(Actor router, Collection<ActorRef> disabled) {
             boolean complete = true;
             for (ActorRef a : disabled) {
-                if (incompleteDisabled(a)) {
+                if (incompleteDisabled(router, a)) {
                     complete = false;
                 }
             }
             return complete;
         }
 
-        public boolean incompleteDisabled(ActorRef a) {
+        public boolean incompleteDisabled(Actor router, ActorRef a) {
             if (!finished.computeIfAbsent(a, _k -> false)) {
                 a.tell(new PhaseShiftIntermediate(key, a,
-                        PhaseShiftCompletedIntermediateType.PhaseIntermediateFinishDisabled));
+                        PhaseShiftIntermediateType.PhaseIntermediateFinishDisabled), router);
                 return true;
             } else {
                 return false;
@@ -306,18 +323,18 @@ public class PhaseShift implements CallableMessage.CallableMessageConsumer<Actor
 
             @Override
             public void visitActor(Actor actor) {
-                entry.incompleteLeaf(actor);
+                entry.incompleteLeaf(actor, actor);
             }
 
             @Override
             public void visitRouterLeaf(Actor actor, ActorRef sender, ActorAggregationReplicable.SplitLeaf leaf) {
-                entry.incompleteLeaf(leaf.getActor());
+                entry.incompleteLeaf(actor, leaf.getActor());
             }
         }
 
-        public void incompleteLeaf(ActorRef a) {
+        public void incompleteLeaf(Actor router, ActorRef a) {
             finished.put(a, false);
-            a.tell(new PhaseShiftIntermediate(key, a, PhaseShiftCompletedIntermediateType.PhaseIntermediateFinishLeaf));
+            a.tell(new PhaseShiftIntermediate(key, a, PhaseShiftIntermediateType.PhaseIntermediateFinishLeaf), router);
         }
 
         public boolean completeDisabled(ActorAggregationReplicable router, ActorRef disabled) {
@@ -330,7 +347,7 @@ public class PhaseShift implements CallableMessage.CallableMessageConsumer<Actor
             Set<ActorRef> currentSplits = collect(router);
             currentSplits.removeAll(finished.keySet());
             if (!currentSplits.isEmpty()) { //new splits
-                currentSplits.forEach(this::incompleteLeaf);
+                currentSplits.forEach(s -> incompleteLeaf(router, s));
                 return false;
             }
             if (completed(router, String.format("%s : SPLITS", a))) {

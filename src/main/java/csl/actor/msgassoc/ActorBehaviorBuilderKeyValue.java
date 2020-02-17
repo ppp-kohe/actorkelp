@@ -409,7 +409,7 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
                     new KeyExtractorList<>(extractors), handler));
         }
 
-        public RelayToCollectListPhase<KeyType, ValueType> atPhaseEnd() {
+        public RelayToCollectListPhase<KeyType, ValueType> eventually() {
             return new RelayToCollectListPhase<>(builder, keyComparator, keyValuesReducers, extractors);
         }
     }
