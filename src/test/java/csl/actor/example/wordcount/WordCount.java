@@ -34,16 +34,16 @@ public class WordCount {
 
         fileReader.tell(new FileSplitter.FileSplit(src), finisher);
 
-        system.getScheduledExecutor().scheduleAtFixedRate(() -> {
-            ResponsiveCalls.sendTaskConsumer(mapper, ActorVisitor.visitorNoSender(a -> a.printStatus("(scheduled) mapper:")));
-            ResponsiveCalls.sendTaskConsumer(reducer, ActorVisitor.visitorNoSender(a -> a.printStatus("(scheduled) reducer:")));
-            if (finisher.getCompletedCount(src) > 0) {
-                try {
-                    Thread.sleep(2_000);
-                } catch (Exception ex) { ex.printStackTrace(); }
-                system.close();
-            }
-        }, 10, 10, TimeUnit.SECONDS);
+//        system.getScheduledExecutor().scheduleAtFixedRate(() -> {
+//            ResponsiveCalls.sendTaskConsumer(mapper, ActorVisitor.visitorNoSender(a -> a.printStatus("(scheduled) mapper:")));
+//            ResponsiveCalls.sendTaskConsumer(reducer, ActorVisitor.visitorNoSender(a -> a.printStatus("(scheduled) reducer:")));
+//            if (finisher.getCompletedCount(src) > 0) {
+//                try {
+//                    Thread.sleep(2_000);
+//                } catch (Exception ex) { ex.printStackTrace(); }
+//                system.close();
+//            }
+//        }, 10, 10, TimeUnit.SECONDS);
     }
 
     public static class FileMapper extends ActorAggregationReplicable {

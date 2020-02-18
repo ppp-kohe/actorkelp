@@ -6,7 +6,7 @@ import csl.actor.CallableMessage;
 
 @FunctionalInterface
 public interface ActorVisitor <ActorType extends Actor>
-        extends CallableMessage.CallableMessageConsumer<ActorType>, ActorAggregationReplicable.NoRouting {
+        extends CallableMessage.CallableMessageConsumer<ActorType>, MessageNoRouting {
     void visitActor(ActorType actor, ActorRef sender);
 
     @Override

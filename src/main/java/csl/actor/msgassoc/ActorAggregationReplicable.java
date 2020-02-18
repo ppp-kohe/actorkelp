@@ -996,19 +996,10 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
 
     protected boolean isNoRoutingMessage(Message<?> message) {
         Object data = message.getData();
-        return data instanceof NoRouting ||
+        return data instanceof MessageNoRouting ||
                 data instanceof MailboxAggregation.TraversalProcess ||
                 (data instanceof CallableMessage<?,?> &&
-                        !(data instanceof Routing));
-    }
-
-    public interface NoRouting { }
-    public interface Routing { }
-
-    public interface CallableMessageRouting<A extends Actor,T> extends CallableMessage<A,T>, Routing { }
-
-    public static <A extends Actor,T> CallableMessageRouting<A,T> callableRouting(CallableMessageRouting<A,T> t) {
-        return t;
+                        !(data instanceof MessageNoRouting.Routing));
     }
 
     /////////////////////////// methods for state
@@ -1116,7 +1107,7 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
         router().tell(new DisabledChange(this, DisabledChangeType.DisabledAdded));
     }
 
-    public static class DisabledChange implements Serializable, NoRouting {
+    public static class DisabledChange implements Serializable, MessageNoRouting {
         protected ActorRef disabledActor;
         protected Object data;
 

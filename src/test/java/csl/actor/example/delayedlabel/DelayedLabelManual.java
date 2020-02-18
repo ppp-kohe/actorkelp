@@ -1,8 +1,8 @@
 package csl.actor.example.delayedlabel;
 
 import csl.actor.*;
-import csl.actor.msgassoc.ActorAggregationReplicable;
 import csl.actor.msgassoc.Config;
+import csl.actor.msgassoc.MessageNoRouting;
 
 import java.io.BufferedReader;
 import java.io.PrintWriter;
@@ -269,7 +269,7 @@ public class DelayedLabelManual {
         }
     }
 
-    public static class Finish implements ActorAggregationReplicable.NoRouting {
+    public static class Finish implements MessageNoRouting {
         public long numInstances;
 
         public Finish(long numInstances) {

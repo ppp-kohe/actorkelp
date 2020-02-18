@@ -39,7 +39,7 @@ public class PhaseExample {
         protected ActorBehavior initBehavior() {
             return behaviorBuilder()
                     .match(String.class, s -> count += s.length())
-                    .match(PhaseShift.PhaseShiftCompleted.class, s -> s.redirectTo(next))
+                    .match(PhaseShift.PhaseCompleted.class, s -> s.redirectTo(next))
                     .build();
         }
     }
@@ -55,7 +55,7 @@ public class PhaseExample {
         protected ActorBehavior initBehavior() {
             return behaviorBuilder()
                     .match(String.class, s -> count+=s.length())
-                    .match(PhaseShift.PhaseShiftCompleted.class, PhaseShift.PhaseShiftCompleted::sendToTarget)
+                    .match(PhaseShift.PhaseCompleted.class, PhaseShift.PhaseCompleted::sendToTarget)
                     .build();
         }
     }

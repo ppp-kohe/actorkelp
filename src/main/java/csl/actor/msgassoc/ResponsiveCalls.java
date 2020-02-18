@@ -1,6 +1,7 @@
 package csl.actor.msgassoc;
 
 import csl.actor.*;
+import csl.actor.CallableMessage.CallableResponseVoid;
 import csl.actor.remote.ActorAddress;
 import csl.actor.remote.ActorRefRemote;
 
@@ -86,7 +87,7 @@ public class ResponsiveCalls {
         return send(system, target, msg);
     }
 
-    public static <A extends Actor> Future<Void> sendTaskConsumer(ActorSystem system, ActorRef target, CallableMessage.CallableMessageConsumer<A> msg) {
+    public static <A extends Actor> Future<CallableResponseVoid> sendTaskConsumer(ActorSystem system, ActorRef target, CallableMessage.CallableMessageConsumer<A> msg) {
         return sendTask(system, target, msg);
     }
 
@@ -94,7 +95,7 @@ public class ResponsiveCalls {
         return sendTask(system, ActorRefRemote.get(system, target), task);
     }
 
-    public static <A extends Actor> Future<Void> sendTaskConsumer(ActorSystem system, ActorAddress.ActorAddressRemoteActor target, CallableMessage.CallableMessageConsumer<A> task) {
+    public static <A extends Actor> Future<CallableResponseVoid> sendTaskConsumer(ActorSystem system, ActorAddress.ActorAddressRemoteActor target, CallableMessage.CallableMessageConsumer<A> task) {
         return sendTask(system, target, task);
     }
 
@@ -113,7 +114,7 @@ public class ResponsiveCalls {
         return sendTask(system, target.getActor(name), task);
     }
 
-    public static <A extends Actor> Future<Void> sendTaskConsumer(ActorSystem system, ActorAddress.ActorAddressRemote target, String name, CallableMessage.CallableMessageConsumer<A> task) {
+    public static <A extends Actor> Future<?> sendTaskConsumer(ActorSystem system, ActorAddress.ActorAddressRemote target, String name, CallableMessage.CallableMessageConsumer<A> task) {
         return sendTask(system, target, name, task);
     }
 
@@ -136,7 +137,7 @@ public class ResponsiveCalls {
         return sendTask(system, target, CALLABLE_NAME, task);
     }
 
-    public static Future<Void> sendHostTaskConsumer(ActorSystem system, ActorAddress.ActorAddressRemote target, CallableMessage.CallableMessageConsumer<Actor> task) {
+    public static Future<CallableResponseVoid> sendHostTaskConsumer(ActorSystem system, ActorAddress.ActorAddressRemote target, CallableMessage.CallableMessageConsumer<Actor> task) {
         return sendHostTask(system, target, task);
     }
 
@@ -144,7 +145,7 @@ public class ResponsiveCalls {
         target.tell(task, new ResponsiveSenderActor<>(system, resultHandler));
     }
 
-    public static <A extends Actor> void sendTaskConsumer(ActorSystem system, ActorRef target, CallableMessage.CallableMessageConsumer<A> task, ResponsiveCompletable<Void> resultHandler) {
+    public static <A extends Actor> void sendTaskConsumer(ActorSystem system, ActorRef target, CallableMessage.CallableMessageConsumer<A> task, ResponsiveCompletable<CallableResponseVoid> resultHandler) {
         sendTask(system, target, task, resultHandler);
     }
 
@@ -152,7 +153,7 @@ public class ResponsiveCalls {
         return sendTask(target.getSystem(), target, task);
     }
 
-    public static <A extends Actor> Future<Void> sendTaskConsumer(A target, CallableMessage.CallableMessageConsumer<A> task) {
+    public static <A extends Actor> Future<CallableResponseVoid> sendTaskConsumer(A target, CallableMessage.CallableMessageConsumer<A> task) {
         return sendTaskConsumer(target.getSystem(), target, task);
     }
 
@@ -161,7 +162,7 @@ public class ResponsiveCalls {
         sendTask(target.getSystem(), target, task, future);
     }
 
-    public static <A extends Actor> void sendTaskConsumer(A target, CallableMessage.CallableMessageConsumer<A> task, ResponsiveCompletable<Void> future) {
+    public static <A extends Actor> void sendTaskConsumer(A target, CallableMessage.CallableMessageConsumer<A> task, ResponsiveCompletable<CallableResponseVoid> future) {
         sendTaskConsumer(target.getSystem(), target, task, future);
     }
 

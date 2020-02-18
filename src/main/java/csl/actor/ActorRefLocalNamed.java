@@ -2,6 +2,8 @@ package csl.actor;
 
 import csl.actor.remote.ActorAddress;
 
+import java.util.Objects;
+
 public class ActorRefLocalNamed implements ActorRef {
     protected ActorSystem system;
     protected String name;
@@ -32,6 +34,20 @@ public class ActorRefLocalNamed implements ActorRef {
     @Override
     public String toString() {
         return "ref(" + name + ")";
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        ActorRefLocalNamed that = (ActorRefLocalNamed) o;
+        return Objects.equals(system, that.system) &&
+                Objects.equals(name, that.name);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(system, name);
     }
 
     public static class ActorRefLocalNamedNoName extends ActorRefLocalNamed {

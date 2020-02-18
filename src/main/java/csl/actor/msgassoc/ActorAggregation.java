@@ -5,7 +5,7 @@ import csl.actor.*;
 import java.util.concurrent.Future;
 
 public abstract class ActorAggregation extends ActorDefault
-        implements KeyHistogramsPersistable.HistogramTreePersistableConfig {
+        implements KeyHistogramsPersistable.HistogramTreePersistableConfig, PhaseShift.StageSupported {
     protected Config config = Config.CONFIG_DEFAULT;
     protected volatile ActorRef nextStage;
 
@@ -163,29 +163,11 @@ public abstract class ActorAggregation extends ActorDefault
     }
 
     @Override
-    protected void processMessageUnhandled(Message<?> message) {
-        Object data = message.getData();
-        if (data instanceof PhaseShift.PhaseShiftCompleted) {
-            processMessagePhaseCompleted((PhaseShift.PhaseShiftCompleted) data);
-        } else {
-            super.processMessageUnhandled(message);
-        }
-    }
-
-    protected void processMessagePhaseCompleted(PhaseShift.PhaseShiftCompleted comp) {
-        ActorRef next = nextStage();
-        if (next != null) {
-            comp.redirectTo(next);
-        } else {
-            comp.sendToTarget();
-        }
-    }
-
-    protected ActorRef nextStage() {
+    public ActorRef nextStage() {
         return nextStage;
     }
 
-    public Future<Void> setNextStage(ActorRef nextStage) {
+    public Future<CallableMessage.CallableResponseVoid> setNextStage(ActorRef nextStage) {
         return ResponsiveCalls.sendTaskConsumer(this, (a,s) -> a.nextStage = nextStage);
     }
 

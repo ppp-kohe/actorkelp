@@ -82,7 +82,7 @@ public class FileSplitter {
         long startPos = split.splitStart;
         long endPos = startPos + split.splitLength;
 
-        boolean found = false;
+        boolean found = (startPos == 0);
 
         while (!found &&
                 startPos < endPos) {
@@ -102,106 +102,14 @@ public class FileSplitter {
             startPos += buf.position();
         }
         if (!found) {
-            startPos = split.splitStart;
+            startPos = endPos;
         }
         f.seek(startPos);
         return f;
     }
 
     public Iterator<String> openLineIterator(FileSplit split) throws IOException {
-        RandomAccessFile file = open(split);
-        return new Iterator<String>() {
-            RandomAccessFile reader = file;
-            ByteBuffer lineBuffer = ByteBuffer.allocate(4096);
-
-            {
-                lineBuffer.limit(0);
-            }
-
-            @Override
-            public boolean hasNext() {
-                try {
-                    if (lineBuffer.hasRemaining()) {
-                        return true;
-                    } else if (reader != null) {
-                        if (reader.getFilePointer() < split.splitEnd()) {
-                            return true;
-                        } else {
-                            reader.close();
-                            reader = null;
-                            return false;
-                        }
-                    } else {
-                        return false;
-                    }
-                } catch (IOException e) {
-                    report(e);
-                    return false;
-                }
-            }
-
-            @Override
-            public String next() {
-                try {
-                    if (lineBuffer.hasRemaining()) {
-                        byte[] array = lineBuffer.array();
-                        boolean newLine = false;
-                        int bufferLimit = lineBuffer.limit();
-                        for (int i = lineBuffer.position(); i < bufferLimit; ++i) {
-                            if (array[i] == '\n') {
-                                lineBuffer.limit(i);
-                                newLine = true;
-                                break;
-                            }
-                        }
-                        String line = StandardCharsets.UTF_8.decode(lineBuffer).toString();
-                        lineBuffer.limit(bufferLimit);
-                        if (newLine) {
-                            lineBuffer.get(); //discard new line
-                        }
-                        return line;
-                    } else {
-                        lineBuffer.clear();
-                        int bufferLimit = lineBuffer.capacity();
-                        boolean found = false;
-                        while (!found) {
-                            int len = reader.read(lineBuffer.array(), lineBuffer.position(), lineBuffer.remaining());
-                            if (len < 0) {
-                                break;
-                            }
-                            bufferLimit = lineBuffer.position() + len;
-                            for (int i = 0; i < len; ++i) {
-                                byte b = lineBuffer.get();
-                                if (b == '\n') {
-                                    lineBuffer.flip();
-                                    found = true;
-                                    break;
-                                }
-                            }
-                            if (!found) {
-                                if (lineBuffer.capacity() * 2L > Integer.MAX_VALUE) {
-                                    lineBuffer.flip();
-                                    break;
-                                }
-                                ByteBuffer newBuffer = ByteBuffer.allocate(lineBuffer.capacity() * 2);
-                                lineBuffer.flip();
-                                newBuffer.put(lineBuffer);
-                                lineBuffer = newBuffer;
-                            }
-                        }
-                        String line = StandardCharsets.UTF_8.decode(lineBuffer).toString();
-                        lineBuffer.limit(bufferLimit);
-                        return line;
-                    }
-                } catch (IOException e) {
-                    throw new RuntimeException(e);
-                }
-            }
-        };
-    }
-
-    public void report(IOException e) {
-        System.err.println(e);
+        return new FileSplitLineIterator(new FileSplitReader(split));
     }
 
     public static class FileSplit implements Serializable {
@@ -230,6 +138,203 @@ public class FileSplitter {
         @Override
         public String toString() {
             return String.format("(%s,%,d: [%,d] %,d,+%,d)", path, fileLength, splitIndex, splitStart, splitLength);
+        }
+    }
+
+    public static class FileSplitLineIterator implements Iterator<String> {
+        protected FileSplitReader reader;
+        protected ByteBuffer next;
+
+        public FileSplitLineIterator(FileSplitReader reader) {
+            this.reader = reader;
+        }
+
+        @Override
+        public boolean hasNext() {
+            if (next == null && reader == null) {
+                return false;
+            }
+            if (next == null) {
+                obtain();
+            }
+            return next != null;
+        }
+
+        @Override
+        public String next() {
+            if (next == null && reader != null) {
+                obtain();
+            }
+            String line = null;
+            if (next != null) {
+                line = StandardCharsets.UTF_8.decode(next).toString();
+                next = null;
+            }
+            return line;
+        }
+
+        private void obtain() {
+            try {
+                if (reader.isOver()) {
+                    reader.close();
+                    reader = null;
+                    next = null;
+                } else {
+                    next = reader.readLine();
+                    if (next == null) {
+                        next = reader.lastAfterReadLineNull();
+                        reader.close();
+                        reader = null;
+                    }
+                }
+            } catch (Exception ex) {
+                next = null;
+            }
+        }
+    }
+
+    public static class FileSplitReader {
+        protected FileSplit split;
+        protected RandomAccessFile file;
+        protected ByteBuffer buffer;
+        protected boolean over;
+        protected int bufferLineStart;
+        protected int newLinesBeforeLineStart;
+        protected long filePosition;
+
+        public FileSplitReader(FileSplit split) throws IOException {
+            this.split = split;
+            open();
+        }
+
+        public void open() throws IOException {
+            if (file != null) {
+                close();
+            }
+            RandomAccessFile f = new RandomAccessFile(split.path, "r");
+            if (buffer == null) {
+                buffer = ByteBuffer.allocate(4096);
+            } else {
+                buffer.clear();
+            }
+            buffer.limit(0);
+            this.file = f;
+            f.seek(split.splitStart);
+            filePosition = split.splitStart;
+            bufferLineStart = 0;
+            if (split.splitStart > 0) {
+                ByteBuffer last = readLine();
+                int ns = getNewLinesBeforeLineStart();
+                while (ns == 0 && last != null) {
+                    last = readLine();
+                    ns = getNewLinesBeforeLineStart();
+                }
+            }
+        }
+
+        public void close() throws IOException {
+            file.close();
+            file = null;
+        }
+
+        public boolean isOver() {
+            return over;
+        }
+
+        public int getNewLinesBeforeLineStart() {
+            return newLinesBeforeLineStart;
+        }
+
+        public ByteBuffer lastAfterReadLineNull() {
+            ByteBuffer lineBuffer = ByteBuffer.wrap(buffer.array());
+            lineBuffer.limit(buffer.position());
+            lineBuffer.position(bufferLineStart);
+            return lineBuffer;
+        }
+
+        public ByteBuffer readLine() throws IOException {
+            while (true) {
+                if (!buffer.hasRemaining()) {
+                    int bufferCapacityRemain = buffer.capacity() - buffer.position();
+                    int len = file.read(buffer.array(), buffer.position(), bufferCapacityRemain);
+                    if (len < 0 || (len == 0 && bufferCapacityRemain > 0)) {
+                        return null;
+                    }
+                    buffer.limit(buffer.position() + len);
+                }
+                int ns = 0;
+                while (buffer.hasRemaining()) {
+                    ns = bufferTopNewLine();
+                    if (ns > 0) {
+                        break;
+                    } else {
+                        buffer.get();
+                    }
+                }
+                if (!buffer.hasRemaining()) {
+                    if (bufferLineStart > 0) {
+                        ByteBuffer reset = ByteBuffer.wrap(buffer.array());
+                        buffer.position(bufferLineStart);
+                        reset.put(buffer); //write to same array: move data to top
+                        buffer.position(reset.position());
+                        buffer.limit(buffer.capacity());
+                        bufferLineStart = 0;
+                    }
+                    if (!buffer.hasRemaining()) {
+                        long nextCapacity = buffer.capacity() * 2L;
+                        if (nextCapacity > (long) Integer.MAX_VALUE) {
+                            ByteBuffer lineBuffer = ByteBuffer.wrap(buffer.array());
+                            lineBuffer.position(0);
+                            lineBuffer.limit(buffer.limit());
+                            newLinesBeforeLineStart = 0;
+                            filePosition += lineBuffer.remaining();
+                            return lineBuffer;
+                        } else {
+                            ByteBuffer newBuffer = ByteBuffer.allocate((int) nextCapacity);
+                            buffer.position(0);
+                            newBuffer.put(buffer);
+                            newBuffer.limit(newBuffer.position());
+                            buffer = newBuffer;
+                        }
+                    } else {
+                        buffer.limit(buffer.position());
+                    }
+                } else { //ns > 0
+                    ByteBuffer lineBuffer = ByteBuffer.wrap(buffer.array());
+                    lineBuffer.position(bufferLineStart);
+                    lineBuffer.limit(buffer.position());
+                    buffer.position(buffer.position() + ns);
+                    bufferLineStart = buffer.position();
+                    newLinesBeforeLineStart = ns;
+                    filePosition += lineBuffer.remaining() + ns;
+                    over = (filePosition >= split.splitEnd());
+                    return lineBuffer;
+                }
+            }
+        }
+
+        public int bufferTopNewLine() {
+            if (buffer.position() < buffer.limit()) {
+                byte b = buffer.get(buffer.position());
+                if (b == '\n') {
+                    if (buffer.position() + 1 < buffer.limit()) {
+                        b = buffer.get(buffer.position() + 1);
+                        if (b == '\r') {
+                            return 2;
+                        } else {
+                            return 1;
+                        }
+                    } else {
+                        return 1;
+                    }
+                } else if (b == '\r') {
+                    return 1;
+                } else {
+                    return 0;
+                }
+            } else {
+                return 0;
+            }
         }
     }
 }

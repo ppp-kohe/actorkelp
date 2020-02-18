@@ -278,7 +278,7 @@ public class KryoBuilder {
                 ActorVisitor.class,
                 ActorVisitor.VisitorNoSender.class,
                 PhaseShift.class,
-                PhaseShift.PhaseShiftCompleted.class,
+                PhaseShift.PhaseCompleted.class,
                 PhaseShift.PhaseShiftIntermediate.class,
                 PhaseShift.PhaseShiftIntermediateType.class,
                 ActorAggregationReplicable.DisabledChange.class,

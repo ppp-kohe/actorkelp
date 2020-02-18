@@ -32,13 +32,23 @@ public interface CallableMessage<ActorType extends Actor,RetType> extends Serial
         return m;
     }
 
-    interface CallableMessageConsumer<ActorType extends Actor> extends CallableMessage<ActorType,Void> {
+    interface CallableMessageConsumer<ActorType extends Actor> extends CallableMessage<ActorType,CallableResponseVoid> {
         void accept(ActorType self, ActorRef sender);
 
         @Override
-        default Void call(ActorType self, ActorRef sender) {
+        default CallableResponseVoid call(ActorType self, ActorRef sender) {
             accept(self, sender);
-            return null;
+            return Void;
         }
     }
+
+    class CallableResponseVoid {
+        @Override
+        public String toString() {
+            return "void";
+        }
+    }
+
+    CallableResponseVoid Void = new CallableResponseVoid();
+
 }

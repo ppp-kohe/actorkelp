@@ -9,9 +9,10 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiConsumer;
 
-public class PhaseShift implements CallableMessage.CallableMessageConsumer<Actor>, ActorAggregationReplicable.NoRouting {
+public class PhaseShift implements CallableMessage.CallableMessageConsumer<Actor>, MessageNoRouting {
     protected Object key;
     protected ActorRef target;
+    protected int count;
 
     public PhaseShift(Object key, ActorRef target) {
         this.key = key;
@@ -32,26 +33,35 @@ public class PhaseShift implements CallableMessage.CallableMessageConsumer<Actor
 
     @Override
     public void accept(Actor actor, ActorRef sender) {
-        if (!actor.getMailbox().isEmpty()) {
+        if (!actor.isEmptyMailbox()) {
+            count = 0;
+            retry(actor, sender);
+        } else if (count < 3) {
             retry(actor, sender);
         } else {
             completed(actor, sender);
         }
     }
 
-    protected void retry(Actor actor, ActorRef sender) {
+    public int getCount() {
+        return count;
+    }
+
+    public void retry(Actor actor, ActorRef sender) {
         try {
             Thread.sleep(10);
         } catch (InterruptedException ie) {
         }
+        ++count;
         actor.tell(this, sender);
     }
 
-    public PhaseShiftCompleted createCompleted(Actor actor) {
-        return new PhaseShiftCompleted(key, actor, this);
+    public PhaseCompleted createCompleted(Actor actor) {
+        return new PhaseCompleted(key, actor, this);
     }
 
     public void completed(Actor router, ActorRef sender) {
+        count = 0;
         log(router, "#phase    completed: " + key + " : " + router);
         router.tell(createCompleted(router), router);
     }
@@ -67,7 +77,8 @@ public class PhaseShift implements CallableMessage.CallableMessageConsumer<Actor
 
     @Override
     public String toString() {
-        return getClass().getSimpleName() + "@" + Integer.toHexString(System.identityHashCode(this)) + "(key=" + key + ", target=" + target + ")";
+        return getClass().getSimpleName() + "@" + Integer.toHexString(System.identityHashCode(this)) +
+                "(key=" + key + ", target=" + target + ", count=" + count + ")";
     }
 
     public enum PhaseShiftIntermediateType {
@@ -76,10 +87,16 @@ public class PhaseShift implements CallableMessage.CallableMessageConsumer<Actor
         PhaseIntermediateFinishLeaf
     }
 
-    public static class PhaseShiftIntermediate implements CallableMessageConsumer<Actor>, ActorAggregationReplicable.NoRouting {
+    public interface StageSupported {
+        ActorRef nextStage();
+    }
+
+    public static class PhaseShiftIntermediate implements CallableMessageConsumer<Actor>, MessageNoRouting {
         protected Object key;
         protected ActorRef actor;
         protected PhaseShiftIntermediateType type;
+
+        protected int count;
 
         public PhaseShiftIntermediate(Object key, ActorRef actor, PhaseShiftIntermediateType type) {
             this.key = key;
@@ -113,10 +130,11 @@ public class PhaseShift implements CallableMessage.CallableMessageConsumer<Actor
         }
 
         public void accept(Actor self, ActorRef router, ActorRef sender) {
-            if (!self.getMailbox().isEmpty()) {
+            if (!self.isEmptyMailbox() || count < 3) {
                 retry(self, sender);
             } else {
                 router.tell(this, self);
+                count = 0;
             }
         }
 
@@ -125,16 +143,18 @@ public class PhaseShift implements CallableMessage.CallableMessageConsumer<Actor
                 Thread.sleep(10);
             } catch (InterruptedException ie) {
             }
+            ++count;
             actor.tell(this, sender);
         }
     }
 
-    public static class PhaseShiftCompleted implements Serializable, ActorAggregationReplicable.NoRouting {
+    public static class PhaseCompleted implements Serializable, MessageNoRouting,
+        CallableMessageConsumer<Actor> {
         protected Object key;
         protected ActorRef actor;
         protected PhaseShift origin;
 
-        public PhaseShiftCompleted(Object key, ActorRef actor, PhaseShift origin) {
+        public PhaseCompleted(Object key, ActorRef actor, PhaseShift origin) {
             this.key = key;
             this.actor = actor;
             this.origin = origin;
@@ -154,6 +174,20 @@ public class PhaseShift implements CallableMessage.CallableMessageConsumer<Actor
                     "key=" + key +
                     ", actor=" + actor +
                     '}';
+        }
+
+        @Override
+        public void accept(Actor self, ActorRef sender) {
+            if (self instanceof StageSupported) {
+                ActorRef next = ((StageSupported) self).nextStage();
+                if (next != null) {
+                    redirectTo(next);
+                } else {
+                    sendToTarget();
+                }
+            } else {
+                sendToTarget();
+            }
         }
 
         public void redirectTo(ActorRef nextRouter) {
@@ -182,11 +216,11 @@ public class PhaseShift implements CallableMessage.CallableMessageConsumer<Actor
     public static class PhaseFinishActor extends ActorDefault {
         protected Instant start;
         protected boolean closeSystem;
-        protected BiConsumer<ActorSystem, PhaseShiftCompleted> handler;
+        protected BiConsumer<ActorSystem, PhaseCompleted> handler;
 
         protected Map<Object, Integer> completed = new ConcurrentHashMap<>();
 
-        public PhaseFinishActor(ActorSystem system, Instant start, boolean closeSystem, BiConsumer<ActorSystem, PhaseShiftCompleted> handler) {
+        public PhaseFinishActor(ActorSystem system, Instant start, boolean closeSystem, BiConsumer<ActorSystem, PhaseCompleted> handler) {
             super(system);
             this.start = start;
             this.closeSystem = closeSystem;
@@ -195,7 +229,7 @@ public class PhaseShift implements CallableMessage.CallableMessageConsumer<Actor
             system.register(this);
         }
 
-        public PhaseFinishActor(ActorSystem system, boolean closeSystem, BiConsumer<ActorSystem, PhaseShiftCompleted> handler) {
+        public PhaseFinishActor(ActorSystem system, boolean closeSystem, BiConsumer<ActorSystem, PhaseCompleted> handler) {
             this(system, Instant.now(), closeSystem, handler);
         }
 
@@ -206,11 +240,11 @@ public class PhaseShift implements CallableMessage.CallableMessageConsumer<Actor
         @Override
         protected ActorBehavior initBehavior() {
             return behaviorBuilder()
-                    .match(PhaseShiftCompleted.class, this::completed)
+                    .match(PhaseCompleted.class, this::completed)
                     .build();
         }
 
-        public void completed(PhaseShiftCompleted c) {
+        public void completed(PhaseCompleted c) {
             c.log("#phase       finish: " + c.getKey() + " : " + Instant.now() + " : " + Duration.between(start, Instant.now()));
             if (handler != null) {
                 handler.accept(getSystem(), c);

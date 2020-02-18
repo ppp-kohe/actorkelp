@@ -162,6 +162,9 @@ public class ActorBehaviorBuilder {
                     sender.tell(res, self);
                 }
                 return true;
+            } else if (d instanceof CallableMessage.CallableResponseVoid) { //the guard for Void response
+                //nothing
+                return true;
             }
             return false;
         }
