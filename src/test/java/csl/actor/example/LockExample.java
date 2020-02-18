@@ -1,33 +1,48 @@
 package csl.actor.example;
 
 import csl.actor.*;
-import csl.actor.example.LockExample.TreeActor;
 import csl.actor.example.msgassoc.DebugBehavior;
+import csl.actor.msgassoc.ActorBehaviorBuilderKeyValue;
+import csl.actor.msgassoc.KeyHistograms;
 
-import java.util.HashSet;
-import java.util.Random;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class LockExample {
+    static AtomicBoolean error = new AtomicBoolean();
     public static void main(String[] args) throws Exception {
         for (int n = 0; n < 1000; ++n) {
+            if (error.get()) {
+                System.err.println("error");
+                break;
+            }
             System.err.println("loop: "+ n);
             ActorSystemDefault system = new ActorSystemDefault();
 
-            long max = 10_000_000;
+            long max = 5_000_000;
 
             TreeActor t = new TreeActor(system, "root1");
             TreeActor t2 = new TreeActor(system, "root2");
             EndActor e = new EndActor(system, "end", max);
 
-            t.set(new Setting(0, 5, t2));
-            t2.set(new Setting(0, 5, e));
+            t.set(new Setting(10, t2));
+            t2.set(new Setting(10, e));
             Thread.sleep(100);
 
-            for (int i = 0; i < max; i++) {
-                t.tell("hello-" + i);
+            int ts = system.getThreads();
+            max /= ts;
+            max *= ts;
+
+            for (int i = 0; i < ts; ++i) {
+                long blk = max / ts;
+                system.execute(() -> {
+                    Random rand = new Random();
+                    for (long j = 0; j < blk; ++j) {
+                        t.tell("hello-" + rand.nextInt());
+                    }
+                });
             }
 
             system.getExecutorService().awaitTermination(1, TimeUnit.HOURS);
@@ -65,7 +80,9 @@ public class LockExample {
                     getSystem().close();
                 }
             } catch (Exception ex) {
+                checker.error(t, ex);
                 ex.printStackTrace();
+                error.set(true);
                 getSystem().close();
                 throw ex;
             } finally {
@@ -76,25 +93,20 @@ public class LockExample {
         }
     }
     static class Setting {
-        public int current;
         public int max;
-        public ActorRef root;
+        public ActorRef end;
 
-        public Setting(int current, int max, ActorRef root) {
-            this.current = current;
+        public Setting(int max, ActorRef end) {
             this.max = max;
-            this.root = root;
+            this.end = end;
         }
     }
 
     public static class TreeActor extends ActorDefault {
-        TreeActor left;
-        TreeActor right;
         Random rand = new Random();
-        ActorRef root;
-        int level;
-        volatile boolean isRoot;
         final DebugBehavior.DebugThreadChecker checker = new DebugBehavior.DebugThreadChecker(this);
+
+        List<ActorRef> children = new ArrayList<>();
 
         public TreeActor(ActorSystem system, String name) {
             super(system, name);
@@ -109,14 +121,8 @@ public class LockExample {
         }
 
         void set(Setting s) {
-            isRoot = s.current == 0;
-            root = s.root;
-            level = s.current;
-            if (s.current < s.max) {
-                left = new TreeActor(system, null);
-                right = new TreeActor(system, null);
-                left.tell(new Setting(s.current + 1, s.max, s.root));
-                right.tell(new Setting(s.current + 1, s.max, s.root));
+            for (int i = 0; i < s.max; ++i) {
+                children.add(new LeafActor(system, null, s.end));
             }
         }
 
@@ -135,7 +141,7 @@ public class LockExample {
         void receive(String s) {
             boolean t = checker.before();
             try {
-                if (!isParallel() && isRoot) {
+                if (!isParallel()) {
                     int c = ((MailboxCount) mailbox).getCount();
                     if (c > 10_000) {
                         parallel1 = true;
@@ -147,38 +153,25 @@ public class LockExample {
                 }
                 route(s);
             } catch (Exception ex) {
+                checker.error(t, ex);
                 ex.printStackTrace();
+                error.set(true);
                 getSystem().close();
                 throw ex;
             } finally {
                 if (!checker.after(t)) {
+                    error.set(true);
                     getSystem().close();
                 }
             }
         }
-        Set<String> data = new HashSet<>();
-        DebugBehavior.DebugThreadChecker leafChecker = new DebugBehavior.DebugThreadChecker(this);
         void route(String s) {
             try {
-                if (left != null && right != null) {
-                    if (rand.nextBoolean()) {
-                        left.tell(s);
-                    } else {
-                        right.tell(s);
-                    }
-                } else {
-                    boolean t = leafChecker.before();
-                    try {
-                        data.add(s);
-                        root.tell(s);
-                    } finally {
-                        if (!leafChecker.after(t)) {
-                            getSystem().close();
-                        }
-                    }
-                }
+                children.get(rand.nextInt(children.size()))
+                        .tell(s);
             } catch (Exception ex) {
                 ex.printStackTrace();
+                error.set(true);
                 getSystem().close();
                 throw ex;
             }
@@ -205,8 +198,52 @@ public class LockExample {
                 //System.err.println("finish parallel: " + ((MailboxCount) mailbox).getCount());
             }
         }
-
     }
+
+    static class LeafActor extends ActorDefault {
+        ActorRef end;
+        KeyHistograms.HistogramPutContextMap ctx = new KeyHistograms.HistogramPutContextMap();
+        public LeafActor(ActorSystem system, String name, ActorRef end) {
+            super(system, name);
+            this.end = end;
+            tree = new KeyHistograms.HistogramTree(new ActorBehaviorBuilderKeyValue.KeyComparatorDefault<>());
+        }
+
+        @Override
+        protected ActorBehavior initBehavior() {
+            return behaviorBuilder()
+                    .match(String.class, this::receive).build();
+        }
+        DebugBehavior.DebugThreadChecker leafChecker = new DebugBehavior.DebugThreadChecker(this);
+
+        KeyHistograms.HistogramTree tree;
+
+
+        void receive(String s) {
+            boolean t = leafChecker.before();
+            try {
+                ctx.putValue = s;
+                ctx.putPosition = 0;
+                ctx.putRequiredSize = 1;
+                tree.put(s, ctx);
+                end.tell(s);
+            } catch (Exception ex) {
+                leafChecker.error(t, ex);
+                ex.printStackTrace();
+                error.set(true);
+                getSystem().close();
+                throw ex;
+            } finally {
+                if (!leafChecker.after(t)) {
+                    error.set(true);
+                    getSystem().close();
+                }
+            }
+        }
+    }
+
+
+
     static class MailboxCount extends MailboxDefault {
         AtomicInteger count = new AtomicInteger();
 
