@@ -30,7 +30,7 @@ public class ActorSystemRemote implements ActorSystem {
 
     protected Pool<Kryo> serializerPool;
     protected Function<ActorSystem, Kryo> kryoFactory;
-    protected ObjectMessageServer.Serializer serializer;
+    protected KryoBuilder.SerializerFunction serializer;
 
     public static boolean debugLog = System.getProperty("csl.actor.debug", "false").equals("true");
     public static int debugLogColor = Integer.parseInt(System.getProperty("csl.actor.debug.color", "124"));
@@ -62,7 +62,7 @@ public class ActorSystemRemote implements ActorSystem {
                 return createSerializer();
             }
         };
-        serializer = new ObjectMessageServer.SerializerPool(serializerPool);
+        serializer = new KryoBuilder.SerializerPool(serializerPool);
     }
 
     public Kryo createSerializer() {
@@ -201,7 +201,7 @@ public class ActorSystemRemote implements ActorSystem {
         return output.getByteBuffer();
     }
 
-    public ObjectMessageServer.Serializer getSerializer() {
+    public KryoBuilder.SerializerFunction getSerializer() {
         return serializer;
     }
 

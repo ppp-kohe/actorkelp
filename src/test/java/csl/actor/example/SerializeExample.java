@@ -6,10 +6,7 @@ import csl.actor.ActorBehavior;
 import csl.actor.ActorDefault;
 import csl.actor.ActorRef;
 import csl.actor.ActorSystem;
-import csl.actor.remote.ActorAddress;
-import csl.actor.remote.ActorRefRemote;
-import csl.actor.remote.ActorSystemRemote;
-import csl.actor.remote.ObjectMessageServer;
+import csl.actor.remote.*;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -35,7 +32,7 @@ public class SerializeExample {
     public void run() throws Exception {
         ActorSystemRemote sys = new ActorSystemRemote();
         sys.setServerAddress(ActorAddress.get("hello-world", 12345));
-        ObjectMessageServer.Serializer k = sys.getSerializer();
+        KryoBuilder.SerializerFunction k = sys.getSerializer();
 
         writeRead(k, "hello");
         writeRead(k, 12345);
@@ -107,12 +104,12 @@ public class SerializeExample {
         Hello, World
     }
 
-    public <E> void writeRead(ObjectMessageServer.Serializer k, E obj) {
+    public <E> void writeRead(KryoBuilder.SerializerFunction k, E obj) {
         writeRead(k, obj, Objects::equals);
     }
 
     @SuppressWarnings("unchecked")
-    public <E> void writeRead(ObjectMessageServer.Serializer k, E obj, BiPredicate<E,E> p) {
+    public <E> void writeRead(KryoBuilder.SerializerFunction k, E obj, BiPredicate<E,E> p) {
         System.out.println("----------- " + (obj == null ? "null" : obj.getClass().getName()));
         byte[] data = write(o -> k.write(o, obj));
         print(data);

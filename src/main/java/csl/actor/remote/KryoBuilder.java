@@ -4,10 +4,13 @@ import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.KryoSerializable;
 import com.esotericsoftware.kryo.Registration;
 import com.esotericsoftware.kryo.Serializer;
+import com.esotericsoftware.kryo.io.Input;
+import com.esotericsoftware.kryo.io.Output;
 import com.esotericsoftware.kryo.serializers.ClosureSerializer;
 import com.esotericsoftware.kryo.serializers.FieldSerializer;
 import com.esotericsoftware.kryo.serializers.JavaSerializer;
 import com.esotericsoftware.kryo.util.DefaultInstantiatorStrategy;
+import com.esotericsoftware.kryo.util.Pool;
 import csl.actor.*;
 import csl.actor.msgassoc.*;
 import org.objenesis.instantiator.basic.ObjectStreamClassInstantiator;
@@ -283,5 +286,58 @@ public class KryoBuilder {
                 PhaseShift.PhaseShiftIntermediateType.class,
                 ActorAggregationReplicable.DisabledChange.class,
                 ActorAggregationReplicable.DisabledChangeType.class);
+    }
+
+    public interface SerializerFunction {
+        Object read(Input input);
+        void write(Output out, Object o);
+    }
+
+    public static class SerializerPool implements SerializerFunction {
+        protected Pool<Kryo> pool;
+
+        public SerializerPool(Pool<Kryo> pool) {
+            this.pool = pool;
+        }
+
+        @Override
+        public Object read(Input input) {
+            Kryo k = pool.obtain();
+            try {
+                Object o = k.readClassAndObject(input);
+                pool.free(k);
+                return o;
+            } catch (Exception ex) {
+                System.err.println(String.format("Kryo error: %s", ex));
+                throw new RuntimeException(ex);
+            }
+        }
+
+        @Override
+        public void write(Output out, Object o) {
+            Kryo k = pool.obtain();
+            try {
+                k.writeClassAndObject(out, o);
+                pool.free(k);
+            } catch (Exception ex) {
+                System.err.println(String.format("Kryo error: %s", ex));
+                throw new RuntimeException(ex);
+            }
+        }
+    }
+
+    public static class SerializerPoolDefault extends SerializerPool {
+        public SerializerPoolDefault() {
+            this(null);
+        }
+
+        public SerializerPoolDefault(ActorSystem system) {
+            super(new Pool<Kryo>(true, false, 8) {
+                @Override
+                protected Kryo create() {
+                    return KryoBuilder.builder().apply(system); //TODO null system
+                }
+            });
+        }
     }
 }

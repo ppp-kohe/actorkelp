@@ -20,7 +20,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 
 public class ObjectMessageClient implements Closeable {
-    protected ObjectMessageServer.Serializer serializer;
+    protected KryoBuilder.SerializerFunction serializer;
 
     protected Bootstrap bootstrap;
     protected int threads = 4;
@@ -32,7 +32,7 @@ public class ObjectMessageClient implements Closeable {
 
     public static boolean debugTraceLog = System.getProperty("csl.actor.trace.client", "false").equals("true");
 
-    public ObjectMessageClient setSerializer(ObjectMessageServer.Serializer serializer) {
+    public ObjectMessageClient setSerializer(KryoBuilder.SerializerFunction serializer) {
         this.serializer = serializer;
         return this;
     }
@@ -111,7 +111,7 @@ public class ObjectMessageClient implements Closeable {
         return started;
     }
 
-    public ObjectMessageServer.Serializer getSerializer() {
+    public KryoBuilder.SerializerFunction getSerializer() {
         return serializer;
     }
 
@@ -330,10 +330,10 @@ public class ObjectMessageClient implements Closeable {
     }
 
     public static class QueueClientHandler extends MessageToByteEncoder<Object> {
-        protected ObjectMessageServer.Serializer serializer;
+        protected KryoBuilder.SerializerFunction serializer;
         protected boolean firstError;
 
-        public QueueClientHandler(ObjectMessageServer.Serializer serializer) {
+        public QueueClientHandler(KryoBuilder.SerializerFunction serializer) {
             this.serializer = serializer;
         }
 
@@ -353,7 +353,7 @@ public class ObjectMessageClient implements Closeable {
         }
 
         /** @return implementation field getter */
-        public ObjectMessageServer.Serializer getSerializer() {
+        public KryoBuilder.SerializerFunction getSerializer() {
             return serializer;
         }
     }

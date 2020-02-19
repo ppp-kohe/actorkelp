@@ -1,22 +1,24 @@
 package csl.actor.example.wordcount;
 
+import com.esotericsoftware.kryo.io.Output;
 import csl.actor.*;
 import csl.actor.example.msgassoc.DebugBehavior;
 import csl.actor.msgassoc.*;
+import csl.actor.remote.KryoBuilder;
 
-import java.io.File;
-import java.io.FileWriter;
-import java.io.PrintWriter;
-import java.io.Serializable;
+import java.io.*;
+import java.nio.file.Paths;
 import java.util.*;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class WordCount {
     public static void main(String[] args) throws Exception {
         String src = args[0];
         String dst = args[1];
-        ActorSystem system = new ActorSystemDefault();
+        ActorSystemDefault system = new ActorSystemDefault();
+        pool = new KryoBuilder.SerializerPoolDefault(system);
 
         Config conf = Config.readConfig(System.getProperties());
         conf.log(conf.toString());
@@ -44,6 +46,9 @@ public class WordCount {
 //                system.close();
 //            }
 //        }, 10, 10, TimeUnit.SECONDS);
+
+        //system.getExecutorService().awaitTermination(1, TimeUnit.HOURS);
+
     }
 
     public static class FileMapper extends ActorAggregationReplicable {
@@ -252,6 +257,34 @@ public class WordCount {
             super.processPhaseEnd(phaseKey);
             printStatus("phaseEnd: " + phaseKey);
         }
+
+        @Override
+        public SplitLeaf newSplitLeaf(ActorRef actor, int depth) {
+            return new DebugSplitLeaf(actor, depth);
+        }
+
+        @Override
+        public void internalMerge(ActorAggregationReplicable merged) {
+            getMailboxAsReplicable().lockRemainingProcesses();
+            merged.getMailboxAsReplicable().lockRemainingProcesses();
+
+            save(new Object[] {
+                    getMailboxAsReplicable().getTable(0),
+                    merged.getMailboxAsReplicable().getTable(0)}, "%05d-merge-A.obj");
+
+            getMailboxAsReplicable()
+                    .merge(merged.getMailboxAsReplicable());
+
+            save(getMailboxAsReplicable().getTable(0), "%05d-merge-B.obj");
+
+            merged.internalDisable();
+            try {
+                initMerged(merged);
+            } finally {
+                merged.getMailboxAsReplicable().unlockRemainingProcesses(merged);
+                getMailboxAsReplicable().unlockRemainingProcesses(this);
+            }
+        }
     }
 
     public static class Count implements Serializable {
@@ -275,6 +308,51 @@ public class WordCount {
         @Override
         public String toString() {
             return "(" + word + "," + count + ")";
+        }
+    }
+
+    static KryoBuilder.SerializerPool pool;
+    static AtomicInteger saveCount = new AtomicInteger();
+
+    public static class DebugSplitLeaf extends ActorAggregationReplicable.SplitLeaf {
+        public DebugSplitLeaf(ActorRef actor, int depth) {
+            super(actor, depth);
+        }
+
+        @Override
+        protected ActorAggregationReplicable.Split split(ActorAggregationReplicable router, int height, ActorAggregationReplicable self) {
+            try {
+                self.getMailboxAsReplicable().lockRemainingProcesses();
+                save(self.getMailboxAsAggregation().getTable(0), "%05d-split-A.obj");
+
+                ActorRef routerRef = router.router();
+                ActorAggregationReplicable a1 = self.internalCreateClone(routerRef);
+                ActorAggregationReplicable a2 = self.internalCreateClone(routerRef);
+                List<Object> splitPoints = self.getMailboxAsReplicable()
+                        .splitMessageTableIntoReplicas(a1.getMailboxAsReplicable(), a2.getMailboxAsReplicable());
+
+                save(new Object[]{a1.getMailboxAsAggregation().getTable(0),
+                                a2.getMailboxAsAggregation().getTable(0)},
+                        "%05d-split-B.obj");
+
+
+                if (router != self) {
+                    self.internalDisable();
+                }
+                return router.internalCreateSplitNode(splitPoints, a1, a2, depth, height);
+            } finally {
+                self.getMailboxAsReplicable().unlockRemainingProcesses(self);
+            }
+        }
+    }
+
+    public static void save(Object obj, String name) {
+        File file = new File("target/debug-split", String.format(name, saveCount.incrementAndGet()));
+        file.getParentFile().mkdirs();
+        try (Output out = new Output(new FileOutputStream(file))) {
+            pool.write(out, obj);
+        } catch (Exception ex) {
+            ex.printStackTrace();
         }
     }
 }

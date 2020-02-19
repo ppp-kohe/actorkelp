@@ -1,5 +1,10 @@
 package csl.actor.msgassoc;
 
+import com.esotericsoftware.kryo.Kryo;
+import com.esotericsoftware.kryo.KryoSerializable;
+import com.esotericsoftware.kryo.io.Input;
+import com.esotericsoftware.kryo.io.Output;
+
 import java.io.Serializable;
 import java.util.*;
 
@@ -897,7 +902,7 @@ public class KeyHistograms {
         }
     }
 
-    public static class HistogramLeafList implements Iterable<Object>, Serializable {
+    public static class HistogramLeafList implements Iterable<Object>, Serializable, KryoSerializable {
         public HistogramLeafCell head;
         public HistogramLeafCell tail;
 
@@ -959,7 +964,35 @@ public class KeyHistograms {
                 }
             };
         }
+
+        @Override
+        public void write(Kryo kryo, Output output) {
+            for (Object o : this) {
+                kryo.writeClassAndObject(output, o);
+            }
+            kryo.writeClassAndObject(output, new HistogramLeafCellSerializedEnd());
+        }
+
+        @Override
+        public void read(Kryo kryo, Input input) {
+            Object o = kryo.readClassAndObject(input);
+            HistogramLeafCell prev = null;
+            while (!(o instanceof HistogramLeafCellSerializedEnd)) {
+                HistogramLeafCell cell = new HistogramLeafCell(o);
+                if (prev == null) {
+                    prev = cell;
+                    head = prev;
+                } else {
+                    prev.next = cell;
+                    prev = cell;
+                }
+                o = kryo.readClassAndObject(input);
+            }
+            tail = prev;
+        }
     }
+
+    public static class HistogramLeafCellSerializedEnd implements Serializable {}
 
     public static class HistogramLeafCell implements Serializable {
         public Object value;

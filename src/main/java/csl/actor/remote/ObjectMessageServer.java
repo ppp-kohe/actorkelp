@@ -1,9 +1,6 @@
 package csl.actor.remote;
 
-import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.io.Input;
-import com.esotericsoftware.kryo.io.Output;
-import com.esotericsoftware.kryo.util.Pool;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufInputStream;
@@ -31,7 +28,7 @@ public class ObjectMessageServer implements Closeable {
 
     protected String host = null;
     protected int port = 38888;
-    protected Serializer serializer;
+    protected KryoBuilder.SerializerFunction serializer;
 
     protected int leaderThreads = 1;
     protected int workerThreads = 4;
@@ -79,7 +76,7 @@ public class ObjectMessageServer implements Closeable {
         return this;
     }
 
-    public ObjectMessageServer setSerializer(Serializer serializer) {
+    public ObjectMessageServer setSerializer(KryoBuilder.SerializerFunction serializer) {
         this.serializer = serializer;
         return this;
     }
@@ -124,66 +121,7 @@ public class ObjectMessageServer implements Closeable {
         return channel;
     }
 
-    public static SerializerPool defaultSerializer = new SerializerPoolDefault();
-
-    public interface Serializer {
-        Object read(Input input);
-        void write(Output out, Object o);
-    }
-
-    public static class SerializerPool implements Serializer {
-        protected Pool<Kryo> pool;
-
-        public SerializerPool(Pool<Kryo> pool) {
-            this.pool = pool;
-        }
-
-        @Override
-        public Object read(Input input) {
-            Kryo k = pool.obtain();
-            try {
-                Object o = k.readClassAndObject(input);
-                pool.free(k);
-                return o;
-            } catch (Exception ex) {
-                System.err.println(String.format("Kryo error: %s", ex));
-                throw new RuntimeException(ex);
-            }
-        }
-
-        @Override
-        public void write(Output out, Object o) {
-            Kryo k = pool.obtain();
-            try {
-                k.writeClassAndObject(out, o);
-                pool.free(k);
-            } catch (Exception ex) {
-                System.err.println(String.format("Kryo error: %s", ex));
-                throw new RuntimeException(ex);
-            }
-        }
-    }
-
-    public static class SerializerPoolDefault extends SerializerPool {
-        public SerializerPoolDefault() {
-            super(new Pool<Kryo>(true, false, 8) {
-                @Override
-                protected Kryo create() {
-                    return new Kryo();
-                }
-            });
-        }
-
-        @Override
-        public Object read(Input input) {
-            return super.read(input);
-        }
-
-        @Override
-        public void write(Output out, Object o) {
-            super.write(out, o);
-        }
-    }
+    public static KryoBuilder.SerializerPool defaultSerializer = new KryoBuilder.SerializerPoolDefault();
 
     protected void initSerializer() {
         if (serializer == null) {
@@ -266,7 +204,7 @@ public class ObjectMessageServer implements Closeable {
         closeGroups();
     }
 
-    public Serializer getSerializer() {
+    public KryoBuilder.SerializerFunction getSerializer() {
         return serializer;
     }
 
@@ -316,11 +254,11 @@ public class ObjectMessageServer implements Closeable {
     }
 
     public static class QueueServerHandler extends ChannelInboundHandlerAdapter {
-        protected Serializer serializer;
+        protected KryoBuilder.SerializerFunction serializer;
         protected Function<Object,Integer> receiver;
         protected volatile boolean firstError = true;
 
-        public QueueServerHandler(Serializer serializer, Function<Object, Integer> receiver) {
+        public QueueServerHandler(KryoBuilder.SerializerFunction serializer, Function<Object, Integer> receiver) {
             this.serializer = serializer;
             this.receiver = receiver;
         }
@@ -363,7 +301,7 @@ public class ObjectMessageServer implements Closeable {
         }
 
         /** @return implementation field getter */
-        public Serializer getSerializer() {
+        public KryoBuilder.SerializerFunction getSerializer() {
             return serializer;
         }
 

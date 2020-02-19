@@ -2,6 +2,7 @@ package csl.actor.msgassoc;
 
 import csl.actor.*;
 import csl.actor.msgassoc.MailboxAggregationReplicable.MailboxStatus;
+import csl.actor.remote.KryoBuilder;
 
 import java.io.PrintWriter;
 import java.io.Serializable;
@@ -572,7 +573,10 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
             if (self == null) {
                 return this;
             }
+            return split(router, height, self);
+        }
 
+        protected Split split(ActorAggregationReplicable router, int height, ActorAggregationReplicable self) {
             try {
                 self.getMailboxAsReplicable().lockRemainingProcesses();
 
