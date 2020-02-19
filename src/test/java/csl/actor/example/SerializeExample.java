@@ -105,14 +105,22 @@ public class SerializeExample {
     }
 
     public <E> void writeRead(KryoBuilder.SerializerFunction k, E obj) {
-        writeRead(k, obj, Objects::equals);
+        writeRead(k, obj, true, Objects::equals);
+    }
+
+    public <E> void writeRead(KryoBuilder.SerializerFunction k, E obj, BiPredicate<E,E> p) {
+        writeRead(k, obj, true, p);
     }
 
     @SuppressWarnings("unchecked")
-    public <E> void writeRead(KryoBuilder.SerializerFunction k, E obj, BiPredicate<E,E> p) {
+    public <E> void writeRead(KryoBuilder.SerializerFunction k, E obj, boolean printAll, BiPredicate<E,E> p) {
         System.out.println("----------- " + (obj == null ? "null" : obj.getClass().getName()));
         byte[] data = write(o -> k.write(o, obj));
-        print(data);
+        if (printAll) {
+            print(data);
+        } else {
+            print(Arrays.copyOf(data, Math.min(30, data.length)));
+        }
         E r = (E) read(data, k::read);
         System.out.println(r);
         System.out.println(p.test(obj, r) ? formatColor(76,"[OK]") : formatColor(196, "DIFF"));

@@ -1,9 +1,6 @@
 package csl.actor.msgassoc;
 
-import csl.actor.Actor;
-import csl.actor.Mailbox;
-import csl.actor.MailboxDefault;
-import csl.actor.Message;
+import csl.actor.*;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -104,7 +101,7 @@ public class MailboxAggregation implements Mailbox, Cloneable {
         }
     }
 
-    public interface HistogramProcessor {
+    public interface HistogramProcessor extends ActorBehavior {
         KeyHistograms.KeyComparator<?> getKeyComparator();
         boolean processTable(MailboxAggregation m);
         Object selectFromValue(Object value);

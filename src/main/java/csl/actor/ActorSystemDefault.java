@@ -147,8 +147,10 @@ public class ActorSystemDefault implements ActorSystem {
         } else if (ref instanceof ActorRefLocalNamed) {
             return resolveActorLocalNamed((ActorRefLocalNamed) ref);
 
+        } else if (ref != null) {
+            return ref.asLocal();
         } else {
-            return null; //TODO
+            return null;
         }
     }
 
