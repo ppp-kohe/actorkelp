@@ -1,5 +1,6 @@
 package csl.actor.remote;
 
+import csl.actor.Actor;
 import csl.actor.ActorRef;
 import csl.actor.ActorSystem;
 import csl.actor.Message;
@@ -57,5 +58,10 @@ public class ActorRefRemote implements ActorRef {
     @Override
     public int hashCode() {
         return Objects.hash(system, address);
+    }
+
+    @Override
+    public Actor asLocal() {
+        return system.resolveActorLocalNamed(address.toLocal(system));
     }
 }

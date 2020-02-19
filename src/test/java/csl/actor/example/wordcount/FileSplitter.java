@@ -74,40 +74,6 @@ public class FileSplitter {
         return splits == 0 ? Math.min(splitLength, length) : Math.min(length / splits, length);
     }
 
-    public RandomAccessFile open(FileSplit split) throws IOException {
-        RandomAccessFile f = new RandomAccessFile(split.path, "r");
-        f.seek(split.splitStart);
-
-        ByteBuffer buf = ByteBuffer.allocate(4096);
-        long startPos = split.splitStart;
-        long endPos = startPos + split.splitLength;
-
-        boolean found = (startPos == 0);
-
-        while (!found &&
-                startPos < endPos) {
-            buf.clear();
-            int len = f.read(buf.array());
-            if (len == 0) {
-                break;
-            }
-            buf.position(len).flip();
-
-            while (buf.hasRemaining()) {
-                if (buf.get() == '\n') {
-                    found = true;
-                    break;
-                }
-            }
-            startPos += buf.position();
-        }
-        if (!found) {
-            startPos = endPos;
-        }
-        f.seek(startPos);
-        return f;
-    }
-
     public Iterator<String> openLineIterator(FileSplit split) throws IOException {
         return new FileSplitLineIterator(new FileSplitReader(split));
     }

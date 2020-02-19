@@ -10,4 +10,12 @@ public interface ActorRef {
     default void tell(Object data) {
         tell(data, null);
     }
+
+    default Actor asLocal() {
+        if (this instanceof Actor) {
+            return (Actor) this;
+        } else {
+            return null;
+        }
+    }
 }

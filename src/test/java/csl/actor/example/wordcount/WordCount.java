@@ -12,6 +12,7 @@ import java.util.*;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 public class WordCount {
     public static void main(String[] args) throws Exception {
@@ -23,7 +24,7 @@ public class WordCount {
         Config conf = Config.readConfig(System.getProperties());
         conf.log(conf.toString());
 
-        PhaseShift.PhaseFinishActor finisher = new PhaseShift.PhaseFinishActor(system, false);
+        PhaseShift.PhaseFinishActor finisher = new PhaseShift.PhaseFinishActor(system, true);
 
         FileMapper fileReader = new FileMapper(system, "fileReader", conf, FileSplitter.getWithSplitCount(10));
         WordCountMapper mapper = new WordCountMapper(system, "mapper", conf);
@@ -157,6 +158,9 @@ public class WordCount {
         volatile Thread thread2;
         volatile State state1;
         volatile State state2;
+
+        AtomicLong count = new AtomicLong();
+
         @Override
         protected void processMessage(Message<?> message) {
             boolean err = false;
@@ -174,6 +178,11 @@ public class WordCount {
             }
             proc = true;
             try {
+                long n = count.incrementAndGet();
+                if (n % 1000_000L == 0 && state instanceof StateLeaf) {
+                    save(getMailboxAsReplicable().getTable(0), String.format("%%05d-proc-%d.obj", n));
+                }
+
                 super.processMessage(message);
             } catch (Exception ex) {
                 System.err.println(this + " :" + ex + " thread1:" + thread1 + " thread2:" + thread2);

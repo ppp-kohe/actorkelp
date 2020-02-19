@@ -8,7 +8,9 @@ import java.nio.file.Paths;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public class WordCountStream {
     public static void main(String[] args) throws Exception {
@@ -20,13 +22,15 @@ public class WordCountStream {
         Instant start = Instant.now();
         try (PrintWriter out = new PrintWriter(Files.newBufferedWriter(new File(dstDir,  "out-stream.txt").toPath()))){
             WordCountStream.out = out;
-            Files.readAllLines(Paths.get(src))
-                   // .parallelStream()
-                    .stream()
-                    .flatMap(line -> Arrays.stream(line.split("\\W+")))
-                    .map(w -> new Count(w, 1))
-                    .collect(Collectors.toConcurrentMap(w -> w.word, w -> w, Count::add)).values()
-                    .forEach(WordCountStream::write);
+            try (Stream<String> ls = Files.lines(Paths.get(src))) {
+                //.stream()
+                    ls.flatMap(line -> Arrays.stream(line.split("\\W+")))
+                        .map(w -> new Count(w, 1))
+                        .collect(Collectors.toConcurrentMap(w -> w.word, w -> w, Count::add)).values()
+                        .stream()
+                        .sorted(Comparator.comparing(c -> c.word))
+                        .forEach(WordCountStream::write);
+            }
         }
         System.err.println("finish: " + Duration.between(start, Instant.now()));
     }

@@ -15,7 +15,7 @@ public class KeyHistograms {
         return new HistogramTree(comparator, treeLimit);
     }
 
-    public static class HistogramTree implements Serializable {
+    public static class HistogramTree implements Serializable, KryoSerializable {
         protected HistogramNode root;
         protected KeyComparator<?> comparator;
 
@@ -38,6 +38,8 @@ public class KeyHistograms {
             this.comparator = comparator;
             this.treeLimit = treeLimit;
         }
+
+        public HistogramTree() {}
 
         public boolean hasSufficientPoints() {
             if (root == null) {
@@ -236,6 +238,27 @@ public class KeyHistograms {
 
         public HistogramLeafList createEmptyList() {
             return new HistogramLeafList();
+        }
+
+        @SuppressWarnings("unchecked")
+        @Override
+        public void read(Kryo kryo, Input input) {
+            this.root = (HistogramNode) kryo.readClassAndObject(input);
+            this.comparator = (KeyComparator<?>) kryo.readClassAndObject(input);
+            this.completed = (LinkedList<HistogramNodeLeaf>) kryo.readClassAndObject(input);
+            this.leafSize = input.readLong();
+            this.leafSizeNonZero = input.readLong();
+            this.treeLimit = input.readInt();
+        }
+
+        @Override
+        public void write(Kryo kryo, Output output) {
+            kryo.writeClassAndObject(output, this.root);
+            kryo.writeClassAndObject(output, this.comparator);
+            kryo.writeClassAndObject(output, this.completed);
+            output.writeLong(this.leafSize);
+            output.writeLong(this.leafSizeNonZero);
+            output.writeInt(this.treeLimit);
         }
     }
 

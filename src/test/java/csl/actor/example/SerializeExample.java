@@ -115,7 +115,11 @@ public class SerializeExample {
         print(data);
         E r = (E) read(data, k::read);
         System.out.println(r);
-        System.out.println(p.test(obj, r) ? "[OK]" : "DIFF");
+        System.out.println(p.test(obj, r) ? formatColor(76,"[OK]") : formatColor(196, "DIFF"));
+    }
+
+    private String formatColor(int c, String s) {
+        return String.format("\033[38;5;%dm%s\033[0m",c, s);
     }
 
     public byte[] write(Consumer<Output> p) {
