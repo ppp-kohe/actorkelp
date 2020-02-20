@@ -11,7 +11,10 @@ import csl.actor.Message;
 import csl.actor.remote.ActorSystemRemote;
 import csl.actor.remote.KryoBuilder;
 
-import java.io.*;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.Serializable;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -19,11 +22,13 @@ import java.util.Map;
 import java.util.WeakHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Supplier;
 
 public class MailboxPersistable extends MailboxDefault implements Mailbox, Cloneable {
-    protected AtomicLong size = new AtomicLong();
+    protected AtomicLong size;
     protected volatile long previousSize;
+    protected ReentrantLock persistLock;
 
     protected long sizeLimit;
     protected long onMemorySize;
@@ -46,12 +51,26 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
 
         public abstract boolean isOpened();
         public abstract Message<?> readNext();
+
+        @Override
+        public String toString() {
+            return getClass().getSimpleName() + "(" + toStringContents() + ")";
+        }
+
+        public String toStringContents() {
+            return "open=" + isOpened();
+        }
+    }
+
+    public MailboxPersistable(PersistentFileManager manager, long sizeLimit, long onMemorySize) {
+        this(new MessagePersistentFile(manager), sizeLimit, onMemorySize);
     }
 
     public MailboxPersistable(MessagePersistent persistent, long sizeLimit, long onMemorySize) {
         this.sizeLimit = sizeLimit;
         this.onMemorySize = onMemorySize;
         this.persistent = persistent;
+        init();
     }
 
     public MessagePersistent getPersistent() {
@@ -77,13 +96,18 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
     public MailboxPersistable create() {
         try {
             MailboxPersistable p = (MailboxPersistable) super.clone();
-            p.queue = new ConcurrentLinkedQueue<>();
-            p.size = new AtomicLong();
-            p.previousSize = 0;
+            p.init();
             return p;
         } catch (CloneNotSupportedException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    protected void init() {
+        queue = new ConcurrentLinkedQueue<>();
+        size = new AtomicLong();
+        previousSize = 0;
+        persistLock = new ReentrantLock();
     }
 
     @Override
@@ -94,21 +118,30 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
     @Override
     public void offer(Message<?> message) {
         long s = size.incrementAndGet();
-        boolean increasing = s > previousSize;
         previousSize = s;
-        queue.offer(message);
-        if (s > sizeLimit && increasing) {
-            persist();
+        if (s > sizeLimit) {
+            persistLock.lock(); //delay offering
+            queue.offer(message);
+            persistLock.unlock();
+        } else {
+            queue.offer(message);
         }
     }
 
-    public synchronized void persist() {
+    public void persist() {
+        persistLock.lock();
+        try {
+            persist();
+        } finally {
+            persistLock.unlock();
+        }
+    }
+
+    protected void persistLocked() {
         long s = size.get();
         if (s > sizeLimit) {
             ConcurrentLinkedQueue<Message<?>> oldQueue = queue;
             ConcurrentLinkedQueue<Message<?>> newQueue = new ConcurrentLinkedQueue<>();
-            this.queue = newQueue;
-            size.addAndGet(-s);
             long end = onMemorySize;
 
             long newQueueSize = 0;
@@ -151,7 +184,8 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
                 newQueue.offer(reader);
                 newQueueSize++;
             }
-            size.addAndGet(newQueueSize);
+            this.queue = newQueue;
+            size.addAndGet(-s + newQueueSize);
         }
     }
 
@@ -171,21 +205,45 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
 
     @Override
     public Message<?> poll() {
-        Message<?> m = queue.peek();
-
+        Message<?> m = peekForPoll();
         if (m instanceof MessageOnStorage) {
-            Message<?> next = ((MessageOnStorage) m).readNext();
-            if (next == null) {
-                queue.poll();
-                size.getAndDecrement();
-            }
-            return poll();
+            return pollByReadNext((MessageOnStorage) m);
         } else {
-            if (m != null) {
-                size.getAndDecrement();
-            }
             return queue.poll();
         }
+    }
+
+    protected Message<?> peekForPoll() {
+        Message<?> m = queue.peek();
+        if (m != null) {
+            long n = size.decrementAndGet();
+            if (n > sizeLimit && previousSize <= n) {
+                persistLock.lock();
+                try {
+                    n = size.get();
+                    persistLocked();
+                    m = queue.peek();
+                } finally {
+                    persistLock.unlock();
+                }
+            }
+            previousSize = n;
+        }
+        return m;
+    }
+
+    protected Message<?> pollByReadNext(MessageOnStorage mOnS) {
+        Message<?> next = mOnS.readNext();
+        if (next == null) {
+            pollClose(mOnS);
+            return poll();
+        } else {
+            return next;
+        }
+    }
+
+    protected void pollClose(MessageOnStorage mOnS) {
+        queue.poll();
     }
 
     ////// PersistentFile
@@ -216,6 +274,7 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
             while (Files.exists(p)) {
                 p = Paths.get(path, String.format("%s-%05d", head, c));
                 ++fileCount;
+                c = fileCount;
             }
             return p;
         }
@@ -236,8 +295,9 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
         public PersistentFileWriter(Path path, PersistentFileManager manager) throws IOException  {
             this.path = path;
             this.manager = manager;
-            if (!Files.exists(path)) {
-                Files.createDirectories(path);
+            Path dir = path.getParent();
+            if (dir != null && !Files.exists(dir)) {
+                Files.createDirectories(dir);
             }
             output = new Output(Files.newOutputStream(path));
             serializer = manager.getSerializer();
@@ -292,6 +352,14 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
         public PersistentFileReaderSource newSource(long offset) {
             return new PersistentFileReaderSource(path, offset, manager);
         }
+
+        @Override
+        public String toString() {
+            return "source(" +
+                    "path=" + path +
+                    ", offset=" + offset +
+                    ')';
+        }
     }
 
     public static class PersistentFileReader implements AutoCloseable {
@@ -330,6 +398,11 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
         @Override
         public void close() throws IOException {
             input.close();
+        }
+
+        @Override
+        public String toString() {
+            return String.format("reader(path=%s,offset=%,d,pos=%,d)", path, offset, position());
         }
     }
 
@@ -427,6 +500,11 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
             } catch (Exception ex) {
                 throw new RuntimeException(ex);
             }
+        }
+
+        @Override
+        public String toStringContents() {
+            return super.toStringContents() + (reader == null ? "" : ", " + reader);
         }
     }
 

@@ -24,7 +24,7 @@ public class PhaseExample {
         b.tell("aaa");
         b.tell("bbb");
         b.tell("ccc");
-        new PhaseShift.PhaseFinishActor(system, true).start("end2", b);
+        new PhaseShift.PhaseTerminalActor(system, true).start("end2", b);
     }
 
     public static class MyActor extends ActorAggregationReplicable {

@@ -21,7 +21,7 @@ public interface ActorVisitor <ActorType extends Actor>
                 if (s != null) {
                     s.accept(actor, sender, this);
                 }
-            } else if (ar.getState() instanceof ActorAggregationReplicable.StateDisabled) {
+            } else if (ar.getState() instanceof ActorAggregationReplicable.StateCanceled) {
                 visitActor(actor, sender);
             }
         } else {

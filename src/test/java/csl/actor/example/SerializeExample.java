@@ -119,6 +119,7 @@ public class SerializeExample {
         if (printAll) {
             print(data);
         } else {
+            System.out.print(String.format("[%,d] ", data.length));
             print(Arrays.copyOf(data, Math.min(30, data.length)));
         }
         E r = (E) read(data, k::read);

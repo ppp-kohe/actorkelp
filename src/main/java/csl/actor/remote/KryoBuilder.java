@@ -284,8 +284,8 @@ public class KryoBuilder {
                 PhaseShift.PhaseCompleted.class,
                 PhaseShift.PhaseShiftIntermediate.class,
                 PhaseShift.PhaseShiftIntermediateType.class,
-                ActorAggregationReplicable.DisabledChange.class,
-                ActorAggregationReplicable.DisabledChangeType.class);
+                ActorAggregationReplicable.CancelChange.class,
+                ActorAggregationReplicable.CanceledChangeType.class);
     }
 
     public interface SerializerFunction {

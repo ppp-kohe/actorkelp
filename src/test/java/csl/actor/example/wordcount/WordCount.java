@@ -7,7 +7,6 @@ import csl.actor.msgassoc.*;
 import csl.actor.remote.KryoBuilder;
 
 import java.io.*;
-import java.nio.file.Paths;
 import java.util.*;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -24,7 +23,7 @@ public class WordCount {
         Config conf = Config.readConfig(System.getProperties());
         conf.log(conf.toString());
 
-        PhaseShift.PhaseFinishActor finisher = new PhaseShift.PhaseFinishActor(system, true);
+        PhaseShift.PhaseTerminalActor finisher = new PhaseShift.PhaseTerminalActor(system, true);
 
         FileMapper fileReader = new FileMapper(system, "fileReader", conf, FileSplitter.getWithSplitCount(10));
         WordCountMapper mapper = new WordCountMapper(system, "mapper", conf);
@@ -286,7 +285,7 @@ public class WordCount {
 
             save(getMailboxAsReplicable().getTable(0), "%05d-merge-B.obj");
 
-            merged.internalDisable();
+            merged.internalCancel();
             try {
                 initMerged(merged);
             } finally {
@@ -346,7 +345,7 @@ public class WordCount {
 
 
                 if (router != self) {
-                    self.internalDisable();
+                    self.internalCancel();
                 }
                 return router.internalCreateSplitNode(splitPoints, a1, a2, depth, height);
             } finally {

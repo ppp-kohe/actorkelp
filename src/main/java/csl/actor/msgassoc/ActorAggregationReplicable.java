@@ -2,7 +2,6 @@ package csl.actor.msgassoc;
 
 import csl.actor.*;
 import csl.actor.msgassoc.MailboxAggregationReplicable.MailboxStatus;
-import csl.actor.remote.KryoBuilder;
 
 import java.io.PrintWriter;
 import java.io.Serializable;
@@ -134,8 +133,8 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
             return this;
         } else if (state instanceof StateLeaf) {
             return ((StateLeaf) state).getRouter();
-        } else if (state instanceof StateDisabled) {
-            return ((StateDisabled) state).getRouter();
+        } else if (state instanceof StateCanceled) {
+            return ((StateCanceled) state).getRouter();
         } else {
             return null;
         }
@@ -172,7 +171,7 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
         protected volatile boolean logAfterParallelRouting;
 
         protected Map<Object, PhaseShift.PhaseEntry> phase = new HashMap<>();
-        protected Set<ActorRef> disabled = new HashSet<>();
+        protected Set<ActorRef> canceled = new HashSet<>();
 
         public void split(ActorAggregationReplicable self, int height) {
             this.height = height;
@@ -384,8 +383,8 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
             } else if (val instanceof PhaseShift.PhaseShiftIntermediate) {
                 processMessagePhaseShiftIntermediate(self, message, (PhaseShift.PhaseShiftIntermediate) val);
                 return true;
-            } else if (val instanceof DisabledChange) {
-                processMessageDisabledChange(self, message, (DisabledChange) val);
+            } else if (val instanceof CancelChange) {
+                processMessageCanceledChange(self, message, (CancelChange) val);
                 return true;
             } else {
                 return false;
@@ -396,7 +395,7 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
             self.logPhase("#phase        start: " + ps.getKey() + " : " + self + " : target=" + ps.getTarget());
             PhaseShift.PhaseEntry e = phase.computeIfAbsent(ps.getKey(), PhaseShift.PhaseEntry::new);
             e.setOriginAndSender(ps, message.getSender());
-            e.startRouter(self); //router only delivers to disabled actors without traversal
+            e.startRouter(self); //router only delivers to canceled actors without traversal
         }
 
         protected void processMessagePhaseShiftIntermediate(ActorAggregationReplicable self, Message<?> message, PhaseShift.PhaseShiftIntermediate ps) {
@@ -409,19 +408,19 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
             }
         }
 
-        protected void processMessageDisabledChange(ActorAggregationReplicable self, Message<?> message, DisabledChange changed) {
+        protected void processMessageCanceledChange(ActorAggregationReplicable self, Message<?> message, CancelChange changed) {
             Object data = changed.getData();
-            ActorRef disabledActor = changed.getDisabledActor();
-            if (data.equals(DisabledChangeType.DisabledAdded)) {
-                disabled.add(disabledActor);
-                disabledActor.tell(new DisabledChange(disabledActor, DisabledChangeType.DisabledFinished), self);
-            } else if (data.equals(DisabledChangeType.DisabledFinished)) {
-                disabled.remove(disabledActor);
+            ActorRef canceledActor = changed.getCanceledActor();
+            if (data.equals(CanceledChangeType.CancelAdded)) {
+                canceled.add(canceledActor);
+                canceledActor.tell(new CancelChange(canceledActor, CanceledChangeType.CancelFinished), self);
+            } else if (data.equals(CanceledChangeType.CancelFinished)) {
+                canceled.remove(canceledActor);
             }
         }
 
-        public Set<ActorRef> getDisabled() {
-            return disabled;
+        public Set<ActorRef> getCanceled() {
+            return canceled;
         }
     }
 
@@ -454,7 +453,7 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
                 }
                 event.accept(self, router, message.getSender());
                 return true;
-            } else if (val instanceof DisabledChange) {
+            } else if (val instanceof CancelChange) {
                 processMessage(self, message);
                 return true;
             } else {
@@ -470,10 +469,10 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
         }
     }
 
-    public static class StateDisabled implements State {
+    public static class StateCanceled implements State {
         protected ActorRef router;
 
-        public StateDisabled(ActorRef router) {
+        public StateCanceled(ActorRef router) {
             this.router = router;
         }
 
@@ -495,7 +494,7 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
             } else if (val instanceof PhaseShift.PhaseShiftIntermediate) {
                 ((PhaseShift.PhaseShiftIntermediate) val).accept(self, router, message.getSender());
                 return true;
-            } else if (val instanceof DisabledChange) {
+            } else if (val instanceof CancelChange) {
                 processMessage(self, message);
                 return true;
             } else {
@@ -586,7 +585,7 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
                 List<Object> splitPoints = self.getMailboxAsReplicable()
                         .splitMessageTableIntoReplicas(a1.getMailboxAsReplicable(), a2.getMailboxAsReplicable());
                 if (router != self) {
-                    self.internalDisable();
+                    self.internalCancel();
                 }
                 return router.internalCreateSplitNode(splitPoints, a1, a2, depth, height);
             } finally {
@@ -1051,7 +1050,7 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
         merged.getMailboxAsReplicable().lockRemainingProcesses();
         getMailboxAsReplicable()
                 .merge(merged.getMailboxAsReplicable());
-        merged.internalDisable();
+        merged.internalCancel();
         try {
             initMerged(merged);
         } finally {
@@ -1100,28 +1099,28 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
                 return self.toSerializable(-1);
             } finally {
                 self.getMailboxAsReplicable().terminateAfterSerialized();
-                self.internalDisable();
+                self.internalCancel();
                 self.getMailboxAsReplicable().unlockRemainingProcesses(self);
             }
         }
     }
 
-    public void internalDisable() { //remaining messages are processed by the disabled state
-        state = new StateDisabled(router());
-        router().tell(new DisabledChange(this, DisabledChangeType.DisabledAdded));
+    public void internalCancel() { //remaining messages are processed by the canceled state
+        state = new StateCanceled(router());
+        router().tell(new CancelChange(this, CanceledChangeType.CancelAdded));
     }
 
-    public static class DisabledChange implements Serializable, MessageNoRouting {
-        protected ActorRef disabledActor;
+    public static class CancelChange implements Serializable, MessageNoRouting {
+        protected ActorRef canceledActor;
         protected Object data;
 
-        public DisabledChange(ActorRef disabledActor, Object data) {
-            this.disabledActor = disabledActor;
+        public CancelChange(ActorRef canceledActor, Object data) {
+            this.canceledActor = canceledActor;
             this.data = data;
         }
 
-        public ActorRef getDisabledActor() {
-            return disabledActor;
+        public ActorRef getCanceledActor() {
+            return canceledActor;
         }
 
         public Object getData() {
@@ -1130,13 +1129,13 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
 
         @Override
         public String toString() {
-            return getClass().getSimpleName() + "(" + data + ", " + disabledActor + ")";
+            return getClass().getSimpleName() + "(" + data + ", " + canceledActor + ")";
         }
     }
 
-    public enum DisabledChangeType {
-        DisabledAdded,
-        DisabledFinished,
+    public enum CanceledChangeType {
+        CancelAdded,
+        CancelFinished,
     }
 
     /////////////////////////// split or merge APIs
@@ -1347,8 +1346,8 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
             return "router";
         } else if (state instanceof StateLeaf) {
             return "leaf";
-        } else if (state instanceof StateDisabled) {
-            return "disabled";
+        } else if (state instanceof StateCanceled) {
+            return "canceled";
         } else if (state == null){
             return "null";
         } else {

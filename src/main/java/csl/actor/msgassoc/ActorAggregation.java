@@ -57,8 +57,7 @@ public abstract class ActorAggregation extends ActorDefault
 
     protected MailboxDefault initMailboxDefault(MailboxPersistable.PersistentFileManager m) {
         if (m != null) {
-             return new MailboxPersistable(
-                            new MailboxPersistable.MessagePersistentFile(m),
+             return new MailboxPersistable(m,
                             persistMailboxSizeLimit(), persistMailboxOnMemorySize());
         } else {
             return new MailboxDefault();
