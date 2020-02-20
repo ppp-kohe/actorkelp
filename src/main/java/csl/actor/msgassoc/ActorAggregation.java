@@ -32,7 +32,7 @@ public abstract class ActorAggregation extends ActorDefault
     public ActorAggregation(ActorSystem system, String name, Config config) {
         super(system, name, null, null);
         this.config = config;
-        initMailbox();
+        mailbox = initMailbox();
         behavior = initBehavior();
     }
 
@@ -42,9 +42,9 @@ public abstract class ActorAggregation extends ActorDefault
 
 
     @Override
-    protected void initMailbox() {
+    protected Mailbox initMailbox() {
         MailboxPersistable.PersistentFileManager m = getPersistentFile();
-        this.mailbox = new MailboxAggregation(mailboxTreeSize(), initMailboxDefault(m), initTreeFactory(m));
+        return new MailboxAggregation(mailboxTreeSize(), initMailboxDefault(m), initTreeFactory(m));
     }
 
     protected KeyHistograms initTreeFactory(MailboxPersistable.PersistentFileManager m) {

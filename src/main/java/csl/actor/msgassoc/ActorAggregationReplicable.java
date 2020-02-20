@@ -107,15 +107,15 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
     }
 
     @Override
-    protected void initMailbox() {
+    protected Mailbox initMailbox() {
         MailboxPersistable.PersistentFileManager m = getPersistentFile();
-        mailbox = new MailboxAggregationReplicable(mailboxThreshold(), mailboxTreeSize(),
+        return new MailboxAggregationReplicable(mailboxThreshold(), mailboxTreeSize(),
                 initMailboxDefault(m),
                 initTreeFactory(m));
     }
 
-    protected void initMailboxForClone() {
-        mailbox = getMailboxAsReplicable().create();
+    protected Mailbox initMailboxForClone() {
+        return getMailboxAsReplicable().create();
     }
 
     protected void initMerged(ActorAggregationReplicable m) { }
@@ -1065,7 +1065,7 @@ public abstract class ActorAggregationReplicable extends ActorAggregation implem
             //if the actor has the name, it copies the reference to the name,
             // but it does not register the actor
             a.processLock = new AtomicBoolean(false);
-            a.initMailboxForClone();
+            a.mailbox = a.initMailboxForClone();
             a.behavior = a.initBehavior(); //recreate behavior with initMessageTable by ActorBehaviorBuilderKeyValue
             a.state = new StateLeaf(router);
             a.initClone(this);

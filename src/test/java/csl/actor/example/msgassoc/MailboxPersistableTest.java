@@ -11,6 +11,7 @@ import csl.actor.remote.KryoBuilder;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 import java.util.function.BiPredicate;
 
 public class MailboxPersistableTest {
@@ -21,6 +22,7 @@ public class MailboxPersistableTest {
         runPersistentFileManager();
         runPersistentFileManagerRecursive();
         runMailboxPersistable();
+        runMailboxPersistableSpeed();
     }
 
     private void runPersistentFileManager() throws Exception {
@@ -148,7 +150,7 @@ public class MailboxPersistableTest {
     }
 
 
-    private void runMailboxPersistable() {
+    private void runMailboxPersistable() throws Exception {
         System.err.println("------------ runMailboxPersistable");
         ActorSystemDefault system = new ActorSystemDefault();
         TestActor a = new TestActor(system, "a");
@@ -188,6 +190,7 @@ public class MailboxPersistableTest {
                 });
 
         a.tell(new PhaseShift("", finishActor));
+        system.getExecutorService().awaitTermination(1, TimeUnit.HOURS);
     }
 
     public static class TestActor extends ActorDefault {
@@ -198,8 +201,8 @@ public class MailboxPersistableTest {
         }
 
         @Override
-        protected void initMailbox() {
-            mailbox = new TestMailboxPersistable(MailboxPersistable.getPersistentFile(system, () -> "target/debug-persist"),
+        protected Mailbox initMailbox() {
+            return new TestMailboxPersistable(MailboxPersistable.getPersistentFile(system, () -> "target/debug-persist"),
                     5_000,
                     100);
         }
@@ -244,13 +247,12 @@ public class MailboxPersistableTest {
         }
 
         @Override
-        protected Message<?> peekForPoll() {
-            Message<?> m = super.peekForPoll();
-            if (m != prev && m instanceof MessageOnStorage) {
+        protected Message<?> pollByReadNext(MessageOnStorage m) {
+            if (m != prev) {
                 System.err.println("storage: " + m);
             }
             prev = m;
-            return m;
+            return super.pollByReadNext(m);
         }
 
         @Override
@@ -260,4 +262,80 @@ public class MailboxPersistableTest {
         }
     }
 
+    private void runMailboxPersistableSpeed() throws Exception {
+        System.err.println("------------ runMailboxPersistableSpeed: no persistent");
+        runPersistSpeed(false);
+        System.err.println("------------ runMailboxPersistableSpeed");
+        runPersistSpeed(true);
+    }
+
+    private void runPersistSpeed(boolean p) throws Exception {
+        ActorSystemDefault system = new ActorSystemDefault();
+        TestActorForSpeed a = new TestActorForSpeed(system, "a", p);
+
+        int num = 10_000_000;
+        Instant start = Instant.now();
+        for (int i = 0; i < num; ++i) {
+            a.tell(i);
+        }
+        System.err.println(String.format("%s: finish input", Duration.between(start, Instant.now())));
+
+        PhaseShift.PhaseTerminalActor finishActor = new PhaseShift.PhaseTerminalActor(system, false,
+                (sys, comp) -> {
+                    try {
+                        ResponsiveCalls.<TestActorForSpeed>sendTaskConsumer(sys, a, (self, send) -> {
+                            if (self.getMailbox() instanceof TestMailboxPersistable) {
+                                TestMailboxPersistable m = (TestMailboxPersistable) self.getMailbox();
+                                System.err.println("persist: " + m.persistCount);
+                            }
+                            self.log();
+                        }).get();
+                    } catch (Exception ex) {
+                        ex.printStackTrace();
+                    }
+                    System.err.println("finish");
+                    sys.close();
+                });
+
+        a.tell(new PhaseShift("", finishActor));
+        system.getExecutorService().awaitTermination(1, TimeUnit.HOURS);
+    }
+
+    public static class TestActorForSpeed extends ActorDefault {
+        long n;
+        boolean persist;
+        Instant start = Instant.now();
+        public TestActorForSpeed(ActorSystem system, String name, boolean persist) {
+            super(system, name, null, null);
+            this.persist = persist;
+            behavior = initBehavior();
+            mailbox = initMailbox();
+            start = Instant.now();
+        }
+
+        @Override
+        protected Mailbox initMailbox() {
+            if (persist) {
+                return new TestMailboxPersistable(MailboxPersistable.getPersistentFile(system, () -> "target/debug-persist"),
+                        100_000,
+                        100);
+            } else {
+                return new MailboxDefault();
+            }
+        }
+
+        @Override
+        protected ActorBehavior initBehavior() {
+            return behaviorBuilder()
+                    .match(Integer.class, this::receive)
+                    .build();
+        }
+
+        void receive(Object msg) {
+            ++n;
+        }
+        public void log() {
+            System.err.println(String.format("%s: n=%,d", Duration.between(start, Instant.now()), n));
+        }
+    }
 }

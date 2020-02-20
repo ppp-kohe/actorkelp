@@ -3,7 +3,7 @@ package csl.actor;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
 public class MailboxDefault implements Mailbox, Cloneable {
-    protected ConcurrentLinkedQueue<Message<?>> queue = new ConcurrentLinkedQueue<>();
+    protected volatile ConcurrentLinkedQueue<Message<?>> queue = new ConcurrentLinkedQueue<>();
 
     @Override
     public MailboxDefault create() {

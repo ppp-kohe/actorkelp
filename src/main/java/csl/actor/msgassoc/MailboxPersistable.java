@@ -4,10 +4,7 @@ import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 import com.esotericsoftware.kryo.util.Pool;
-import csl.actor.ActorSystem;
-import csl.actor.Mailbox;
-import csl.actor.MailboxDefault;
-import csl.actor.Message;
+import csl.actor.*;
 import csl.actor.remote.ActorSystemRemote;
 import csl.actor.remote.KryoBuilder;
 
@@ -21,6 +18,7 @@ import java.nio.file.Paths;
 import java.util.Map;
 import java.util.WeakHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Supplier;
@@ -30,13 +28,14 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
     protected volatile long previousSize;
     protected ReentrantLock persistLock;
 
-    protected long sizeLimit;
+    protected PersistentCondition condition;
     protected long onMemorySize;
 
     protected volatile MessagePersistent persistent;
 
     public interface MessagePersistent {
         MessagePersistentWriter get();
+        KryoBuilder.SerializerFunction getSerializer();
     }
 
     public interface MessagePersistentWriter extends AutoCloseable {
@@ -62,12 +61,37 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
         }
     }
 
+    @FunctionalInterface
+    public interface PersistentCondition {
+        boolean needToPersist(MailboxPersistable mailbox, long size);
+
+        default boolean needToPersistInPersistLock(MailboxPersistable mailbox, long size) {
+            return needToPersist(mailbox, size);
+        }
+
+        default boolean needToPersistInOffer(MailboxPersistable mailbox, long size) {
+            return needToPersist(mailbox, size);
+        }
+
+        default boolean needToPersistInPoll(MailboxPersistable mailbox, long size) {
+            return needToPersist(mailbox, size);
+        }
+    }
+
     public MailboxPersistable(PersistentFileManager manager, long sizeLimit, long onMemorySize) {
         this(new MessagePersistentFile(manager), sizeLimit, onMemorySize);
     }
 
+    public MailboxPersistable(PersistentFileManager manager, PersistentCondition condition, long onMemorySize) {
+        this(new MessagePersistentFile(manager), condition, onMemorySize);
+    }
+
     public MailboxPersistable(MessagePersistent persistent, long sizeLimit, long onMemorySize) {
-        this.sizeLimit = sizeLimit;
+        this(persistent, new PersistentConditionSizeLimit(sizeLimit), onMemorySize);
+    }
+
+    public MailboxPersistable(MessagePersistent persistent, PersistentCondition condition, long onMemorySize) {
+        this.condition = condition;
         this.onMemorySize = onMemorySize;
         this.persistent = persistent;
         init();
@@ -91,6 +115,14 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
         return previousSize;
     }
 
+    public long getOnMemorySize() {
+        return onMemorySize;
+    }
+
+    /** @return implementation field getter */
+    public PersistentCondition getCondition() {
+        return condition;
+    }
 
     @Override
     public MailboxPersistable create() {
@@ -119,85 +151,88 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
     public void offer(Message<?> message) {
         long s = size.incrementAndGet();
         previousSize = s;
-        if (s > sizeLimit) {
-            persistLock.lock(); //delay offering
-            queue.offer(message);
-            persistLock.unlock();
-        } else {
-            queue.offer(message);
+        queue.offer(message);
+        if (condition.needToPersistInOffer(this, s)) {
+            persist();
         }
     }
 
     public void persist() {
-        persistLock.lock();
-        try {
-            persist();
-        } finally {
-            persistLock.unlock();
+        if (persistLock.tryLock()) {
+            try {
+                persistLocked();
+            } finally {
+                persistLock.unlock();
+            }
         }
     }
 
     protected void persistLocked() {
         long s = size.get();
-        if (s > sizeLimit) {
+        if (condition.needToPersistInPersistLock(this, s)) {
+
             ConcurrentLinkedQueue<Message<?>> oldQueue = queue;
             ConcurrentLinkedQueue<Message<?>> newQueue = new ConcurrentLinkedQueue<>();
             long end = onMemorySize;
 
-            long newQueueSize = 0;
+            long offered = 0;
 
+            boolean hasOnMemory = false;
             for (int i = 0; i < end; ++i) {
                 Message<?> m = oldQueue.poll();
                 if (m == null) {
                     break;
                 }
+                hasOnMemory = true;
                 newQueue.offer(m);
-                newQueueSize++;
             }
-            long saved = 0;
-            MessageOnStorage reader = null;
+            boolean top = true;
+            long polled = 0;
+            MessageOnStorage reader;
             try (MessagePersistentWriter ms = persistent.get()) {
                 reader = ms.reader();
+                if (reader != null) {
+                    newQueue.offer(reader);
+                    offered++;
+                }
+                queue = newQueue;
+                //from here any other threads cannot touch the oldQueue
                 while (true) {
                     Message<?> m = oldQueue.peek();
                     if (m == null) {
                         break;
                     }
-                    if (saved == 0 && newQueueSize == 0 && m instanceof MessageOnStorage) { //top item might be intermediate state
+                    if (top && !hasOnMemory && m instanceof MessageOnStorage) { //top item might be intermediate state
                         MessageOnStorage mOnS = (MessageOnStorage) m;
                         if (mOnS.isOpened()) {
-                            saved += persistRemaining(ms, mOnS);
+                            top = !persistRemaining(ms, mOnS);
                         } else {
                             ms.save(m);
-                            ++saved;
+                            top = false;
                         }
                     } else {
                         ms.save(m);
-                        ++saved;
+                        top = false;
                     }
                     oldQueue.poll();
+                    ++polled;
                 }
             } catch (Exception ex) {
                 ex.printStackTrace(); //TODO retry?
             }
-            if (reader != null && saved > 0) {
-                newQueue.offer(reader);
-                newQueueSize++;
-            }
-            this.queue = newQueue;
-            size.addAndGet(-s + newQueueSize);
+            size.addAndGet(-polled + offered);
         }
     }
 
-    private long persistRemaining(MessagePersistentWriter ms, MessageOnStorage mOnS) {
-        long saved = 0;
+    private boolean persistRemaining(MessagePersistentWriter ms, MessageOnStorage mOnS) {
+        boolean saved = false;
         while (true) {
             Message<?> m = mOnS.readNext();
             if (m == null) {
                 break;
             } else {
                 ms.save(m);
-                ++saved;
+                saved = true;
             }
         }
         return saved;
@@ -205,31 +240,29 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
 
     @Override
     public Message<?> poll() {
-        Message<?> m = peekForPoll();
-        if (m instanceof MessageOnStorage) {
-            return pollByReadNext((MessageOnStorage) m);
-        } else {
-            return queue.poll();
+        persistLock.lock();
+        try {
+            persistInPoll();
+            Message<?> m = queue.peek();
+            if (m instanceof MessageOnStorage) {
+                return pollByReadNext((MessageOnStorage) m);
+            } else if (m != null) {
+                size.decrementAndGet();
+                return queue.poll();
+            } else {
+                return null;
+            }
+        } finally {
+            persistLock.unlock();
         }
     }
 
-    protected Message<?> peekForPoll() {
-        Message<?> m = queue.peek();
-        if (m != null) {
-            long n = size.decrementAndGet();
-            if (n > sizeLimit && previousSize <= n) {
-                persistLock.lock();
-                try {
-                    n = size.get();
-                    persistLocked();
-                    m = queue.peek();
-                } finally {
-                    persistLock.unlock();
-                }
-            }
-            previousSize = n;
+    protected void persistInPoll() {
+        long n = size.get();
+        if (condition.needToPersistInPoll(this, n)) {
+            persist();
         }
-        return m;
+        previousSize = n;
     }
 
     protected Message<?> pollByReadNext(MessageOnStorage mOnS) {
@@ -244,6 +277,83 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
 
     protected void pollClose(MessageOnStorage mOnS) {
         queue.poll();
+        size.decrementAndGet();
+    }
+
+    public static class PersistentConditionSizeLimit implements PersistentCondition {
+        protected long sizeLimit;
+
+        public PersistentConditionSizeLimit(long sizeLimit) {
+            this.sizeLimit = sizeLimit;
+        }
+
+        @Override
+        public boolean needToPersist(MailboxPersistable mailbox, long size) {
+            return size > sizeLimit;
+        }
+
+        @Override
+        public boolean needToPersistInOffer(MailboxPersistable mailbox, long size) {
+            return size > sizeLimit && size > mailbox.getPreviousSize();
+        }
+
+        @Override
+        public boolean needToPersistInPoll(MailboxPersistable mailbox, long size) {
+            return size > sizeLimit && size > mailbox.getPreviousSize();
+        }
+    }
+
+    public static class PersistentConditionSampling implements PersistentCondition {
+        protected long sizeLimit;
+        protected AtomicLong sampleTotal = new AtomicLong();
+        protected AtomicLong sampleCount = new AtomicLong();
+        protected AtomicInteger sampleTiming = new AtomicInteger();
+
+        public PersistentConditionSampling(long sizeLimit) {
+            this.sizeLimit = sizeLimit;
+        }
+
+        @Override
+        public boolean needToPersist(MailboxPersistable mailbox, long size) {
+            if (size > sizeLimit) {
+                long currentSample;
+                Message<?> msg;
+                if (sampleTiming.getAndIncrement() % 100 == 0 &&
+                        !((msg = mailbox.getQueue().peek()) instanceof MessageOnStorage)) {
+                    currentSample = updateCurrentSample(mailbox, msg);
+                } else {
+                    currentSample = currentSample();
+                }
+                long totalSize = size * currentSample;
+                Runtime rt = Runtime.getRuntime();
+                long available = rt.maxMemory() - rt.totalMemory();
+                return totalSize + sizeLimit * currentSample > available;
+            }
+            return false;
+        }
+
+        public long updateCurrentSample(MailboxPersistable mailbox, Message<?> msg) {
+            long sampleSize;
+            try (Output output = new Output()) {
+                mailbox.getPersistent().getSerializer().write(output, msg);
+                output.flush();
+                sampleSize = output.total();
+                sampleTiming.set(0);
+                return sampleTotal.addAndGet(sampleSize) / sampleCount.incrementAndGet();
+            } catch (Exception ex) {
+                //serialization failure
+                return currentSample();
+            }
+        }
+
+        public long currentSample() {
+            long count = sampleCount.get();
+            if (count == 0) {
+                return 100;
+            } else {
+                return sampleTotal.get() / sampleCount.get();
+            }
+        }
     }
 
     ////// PersistentFile
@@ -355,10 +465,7 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
 
         @Override
         public String toString() {
-            return "source(" +
-                    "path=" + path +
-                    ", offset=" + offset +
-                    ')';
+            return String.format("source(path=%s,offset=%,d)", path, offset);
         }
     }
 
@@ -422,6 +529,11 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
 
         public PersistentFileManager getManager() {
             return manager;
+        }
+
+        @Override
+        public KryoBuilder.SerializerFunction getSerializer() {
+            return manager.getSerializer();
         }
     }
 
@@ -504,7 +616,7 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
 
         @Override
         public String toStringContents() {
-            return super.toStringContents() + (reader == null ? "" : ", " + reader);
+            return super.toStringContents() + (reader == null ? ", " + source : ", " + reader);
         }
     }
 

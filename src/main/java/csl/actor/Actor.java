@@ -14,7 +14,7 @@ public abstract class Actor implements ActorRef {
 
     public Actor(ActorSystem system, String name) {
         this(system, name, null);
-        initMailbox();
+        mailbox = initMailbox();
     }
 
     public Actor(ActorSystem system, String name, Mailbox mailbox) {
@@ -30,8 +30,8 @@ public abstract class Actor implements ActorRef {
         return name;
     }
 
-    protected void initMailbox() {
-        this.mailbox = new MailboxDefault();
+    protected Mailbox initMailbox() {
+        return new MailboxDefault();
     }
 
     public Mailbox getMailbox() {

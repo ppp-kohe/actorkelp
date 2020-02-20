@@ -62,8 +62,8 @@ public class LockExample {
         }
 
         @Override
-        protected void initMailbox() {
-            mailbox = new MailboxCount();
+        protected Mailbox initMailbox() {
+            return new MailboxCount();
         }
 
         @Override
@@ -157,8 +157,8 @@ public class LockExample {
         }
 
         @Override
-        protected void initMailbox() {
-            mailbox = new MailboxCount();
+        protected Mailbox initMailbox() {
+            return new MailboxCount();
         }
 
         volatile boolean parallel1;
