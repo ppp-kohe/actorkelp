@@ -2,6 +2,7 @@ package csl.actor.msgassoc;
 
 import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.io.Output;
+import csl.actor.remote.KryoBuilder;
 
 import java.io.IOException;
 import java.io.RandomAccessFile;
@@ -22,7 +23,7 @@ public class KeyHistogramsPersistable extends KeyHistograms {
     }
 
     @Override
-    public HistogramTree create(KeyComparator<?> comparator, int treeLimit) {
+    public HistogramTreePersistable create(KeyComparator<?> comparator, int treeLimit) {
         return new HistogramTreePersistable(comparator, treeLimit, config, persistent);
     }
 
@@ -407,13 +408,15 @@ public class KeyHistogramsPersistable extends KeyHistograms {
         protected MailboxPersistable.PersistentFileManager manager;
         protected Path path;
         protected RandomAccessFile dataStore;
-        protected Kryo serializer;
-        protected Output out = new Output();
+        protected KryoBuilder.SerializerFunction serializer;
+        protected Output out;
 
         public TreeWriting(MailboxPersistable.PersistentFileManager manager, Path path) throws IOException {
             this.manager = manager;
+            this.serializer = manager.getSerializer();
             this.path = path;
-            dataStore = new RandomAccessFile(path.toFile(), "w");
+            dataStore = new RandomAccessFile(path.toFile(), "rw");
+            out = new Output(4096);
         }
 
         @Override
@@ -442,7 +445,7 @@ public class KeyHistogramsPersistable extends KeyHistograms {
 
         public void write(Object obj) throws IOException {
             out.reset();
-            serializer.writeClassAndObject(out, obj);
+            serializer.write(out, obj);
             out.flush();
             long len = out.total();
             lastLength += len;
@@ -489,7 +492,7 @@ public class KeyHistogramsPersistable extends KeyHistograms {
 
         public void add(float v) {
             int len = indexHistogram.length;
-            indexHistogram[Math.max(0, Math.min(len, (int) (len * v)))]++;
+            indexHistogram[Math.max(0, Math.min(len - 1, (int) (len * v)))]++;
             ++count;
         }
 

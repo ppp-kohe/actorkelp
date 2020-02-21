@@ -544,7 +544,7 @@ public class KeyHistograms {
             float s = context.putIndexCurrentRangeStart;
             float l = context.putIndexCurrentRangeLength;
             float cs = children.size();
-            float p = ((float) Math.abs(index)) / cs;
+            float p = Math.min(1.0f, ((float) Math.abs(index)) / cs);
             context.putIndexCurrentRangeStart = s + l * p;
             context.putIndexCurrentRangeLength = l * (1f / cs);
         }
