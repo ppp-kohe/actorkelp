@@ -711,11 +711,9 @@ public class KeyHistogramsTest {
 
     protected List<Object> values(KeyHistograms.HistogramNode node, Object pos) {
         List<Object> vs = new ArrayList<>();
-        Iterable<Object> is = ((KeyHistograms.HistogramNodeLeafMap) node).getValues().get(pos);
-        if (is != null) {
-            for (Object o : is) {
-                vs.add(o);
-            }
+        KeyHistograms.HistogramLeafList l = ((KeyHistograms.HistogramNodeLeafMap) node).getValues().get(pos);
+        if (l != null) {
+            l.iterator().forEachRemaining(vs::add);
         }
         return vs;
     }

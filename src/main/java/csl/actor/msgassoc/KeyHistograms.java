@@ -363,6 +363,7 @@ public class KeyHistograms {
         HistogramNode split(long halfSize, long currentLeft);
 
         void setParent(HistogramNodeTree node);
+        HistogramNodeTree getParent();
 
         boolean prune(HistogramTree tree, boolean countUpLeafSize);
 
@@ -400,6 +401,7 @@ public class KeyHistograms {
             return children;
         }
 
+        @Override
         public HistogramNodeTree getParent() {
             return parent;
         }
@@ -718,10 +720,15 @@ public class KeyHistograms {
             initStruct(context);
         }
 
+        public void setSize(long size) {
+            this.size = size;
+        }
+
         public Object getKey() {
             return key;
         }
 
+        @Override
         public HistogramNodeTree getParent() {
             return parent;
         }
@@ -886,8 +893,12 @@ public class KeyHistograms {
                      ei.hasNext(); ) {
                     Map.Entry<Comparable<?>, HistogramLeafList> e = ei.next();
                     HistogramLeafList ev = e.getValue();
-                    res[i] = ev.poll(tree);
-                    ++i;
+                    if (!ev.isEmpty()) {
+                        res[i] = ev.poll(tree);
+                        if (res[i] != null) {
+                            ++i;
+                        }
+                    }
                     if (ev.isEmpty()) {
                         ei.remove();
                     }
@@ -925,7 +936,7 @@ public class KeyHistograms {
         }
     }
 
-    public static class HistogramLeafList implements Iterable<Object>, Serializable, KryoSerializable {
+    public static class HistogramLeafList implements /*Iterable<Object>, */Serializable, KryoSerializable {
         public HistogramLeafCell head;
         public HistogramLeafCell tail;
 
@@ -990,9 +1001,7 @@ public class KeyHistograms {
 
         @Override
         public void write(Kryo kryo, Output output) {
-            for (Object o : this) {
-                kryo.writeClassAndObject(output, o);
-            }
+            iterator().forEachRemaining(o -> kryo.writeClassAndObject(output, o));
             kryo.writeClassAndObject(output, new HistogramLeafCellSerializedEnd());
         }
 

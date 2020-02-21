@@ -475,31 +475,42 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
         protected KryoBuilder.SerializerFunction serializer;
         protected Input input;
         protected long offset;
+        protected long position;
+        protected InputStream inputStream;
+        protected int bufferSize = 4096;
 
         public PersistentFileReader(Path path, long offset, PersistentFileManager manager) throws IOException {
             this.path = path;
             this.manager = manager;
             this.serializer = manager.getSerializer();
-            InputStream in = new FileInputStream(path.toFile()); //Files.newInputStream(path).skip(n) is slow
+            inputStream = new FileInputStream(path.toFile()); //Files.newInputStream(path).skip(n) is slow
             this.offset = offset;
-            in.skip(offset);
-            input = new Input(in);
+            inputStream.skip(offset);
+            this.position = offset;
+            input = new Input(inputStream, bufferSize);
         }
 
         public Object next() throws IOException {
-            return serializer.read(input);
+            long prev = input.position();
+            Object v = serializer.read(input);
+            position += input.position() - prev;
+            return v;
         }
 
         public long nextLong() {
-            return input.readLong();
+            long prev = input.position();
+            long v = input.readLong();
+            position += input.position() - prev;
+            return v;
         }
 
         public long position() {
-            return offset + input.position();
+            return position;
         }
 
-        public void position(long newPosition) {
+        public void position(long newPosition) throws IOException {
             input.skip(newPosition - position());
+            position = newPosition;
         }
 
         @Override
