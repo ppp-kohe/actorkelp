@@ -208,13 +208,13 @@ public class KeyHistogramsPersistable extends KeyHistograms {
                 for (int i = 0; i < li; ++i) {
                     HistogramLeafCell c = currents[i];
                     if (c != null) {
-                        HistogramLeafCell next = currents[i].next;
+                        HistogramLeafCell next = c.next;
                         currents[i] = next;
                         if (next == null) {
                             sizeRemaining--;
                         }
                         onMemoryRemaining--;
-                        if (onMemoryRemaining < 0) {
+                        if (onMemoryRemaining <= 0) {
                             break;
                         }
                     }
@@ -231,6 +231,7 @@ public class KeyHistogramsPersistable extends KeyHistograms {
                     c = c.next;
                     ++persistedSize;
                 }
+                w.write(new MailboxPersistable.PersistentFileEnd());
                 last.next = new HistogramLeafCellOnStorageFile(new PersistentFileReaderSourceWithSize(src, persistedSize));
                 this.persistedSize += persistedSize;
                 ++i;
@@ -382,6 +383,7 @@ public class KeyHistogramsPersistable extends KeyHistograms {
                                 persistTreeNodeReplace(child, sw);
                             }
                         }
+                        w.write(0L); //long sibling; invalid
                         w.write(new MailboxPersistable.PersistentFileEnd()); //PersistentFileEnd
                         return replaceEnd(node, new HistogramNodeTreeOnStorage(data, src), w);
                     }
@@ -442,7 +444,7 @@ public class KeyHistogramsPersistable extends KeyHistograms {
             this.serializer = manager.getSerializer();
             this.path = path;
             dataStore = new RandomAccessFile(path.toFile(), "rw");
-            out = new Output(4096);
+            out = new Output(4096, Integer.MAX_VALUE);
         }
 
         @Override

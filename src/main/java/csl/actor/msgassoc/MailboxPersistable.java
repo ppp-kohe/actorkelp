@@ -1,6 +1,7 @@
 package csl.actor.msgassoc;
 
 import com.esotericsoftware.kryo.Kryo;
+import com.esotericsoftware.kryo.KryoException;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 import com.esotericsoftware.kryo.util.Pool;
@@ -334,15 +335,19 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
 
         public long updateCurrentSample(MailboxPersistable mailbox, Message<?> msg) {
             long sampleSize;
-            try (Output output = new Output()) {
+            try (Output output = new Output(4096)) { //a lengthy message causes a buffer overflow error
                 mailbox.getPersistent().getSerializer().write(output, msg);
                 output.flush();
                 sampleSize = output.total();
                 sampleTiming.set(0);
                 return sampleTotal.addAndGet(sampleSize) / sampleCount.incrementAndGet();
             } catch (Exception ex) {
-                //serialization failure
-                return currentSample();
+                if (ex instanceof KryoException && ex.getMessage().contains("overflow")) {
+                    return sampleTotal.addAndGet(4096) / sampleCount.incrementAndGet();
+                } else {
+                    //serialization failure
+                    return currentSample();
+                }
             }
         }
 
@@ -491,16 +496,16 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
         }
 
         public Object next() throws IOException {
-            long prev = input.position();
+            long prev = input.total();
             Object v = serializer.read(input);
-            position += input.position() - prev;
+            position += input.total() - prev;
             return v;
         }
 
         public long nextLong() {
-            long prev = input.position();
+            long prev = input.total();
             long v = input.readLong();
-            position += input.position() - prev;
+            position += input.total() - prev;
             return v;
         }
 

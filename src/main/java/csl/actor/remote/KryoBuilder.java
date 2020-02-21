@@ -264,6 +264,7 @@ public class KryoBuilder {
                 ActorBehaviorAggregation.HistogramNodeLeafListReducible.class,
                 ActorBehaviorAggregation.HistogramNodeLeafListReducibleForPhase.class,
                 KeyHistograms.HistogramNodeLeafMap.class,
+                KeyHistograms.HistogramLeafCellSerializedEnd.class,
                 csl.actor.msgassoc.Config.class,
                 MailboxPersistable.MessageOnStorage.class,
                 MailboxPersistable.PersistentFileEnd.class,
