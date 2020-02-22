@@ -88,7 +88,7 @@ public class ObjectMessageClient implements Closeable {
     protected void initSerializer() {
         if (serializer == null) {
             serializer = ObjectMessageServer.defaultSerializer;
-            ActorSystemRemote.log(18, "%s use default serializer", this);
+            ActorSystemRemote.log(ActorSystemRemote.debugLog, 18, "%s use default serializer", this);
         }
     }
 
@@ -118,7 +118,7 @@ public class ObjectMessageClient implements Closeable {
     public ObjectMessageConnection connect() {
         synchronized (this) {
             if (!isStarted()) {
-                ActorSystemRemote.log(18, "%s connect start", this);
+                ActorSystemRemote.log(ActorSystemRemote.debugLog, 18, "%s connect start", this);
                 start();
             }
         }
@@ -167,7 +167,7 @@ public class ObjectMessageClient implements Closeable {
         }
 
         public ObjectMessageConnection open() throws InterruptedException {
-            ActorSystemRemote.log(18, "%s open", this);
+            ActorSystemRemote.log(ActorSystemRemote.debugLog, 18, "%s open", this);
             channel = client.getBootstrap()
                     .handler(new ClientInitializer(client, this))
                     .connect(host, port)
@@ -194,12 +194,7 @@ public class ObjectMessageClient implements Closeable {
             try {
                 clearResult();
                 ChannelFuture f = channel.writeAndFlush(msg);
-                if (ActorSystemRemote.isClose(msg)) {
-                    clearResult();
-                    close();
-                } else {
-                    checkResult(f);
-                }
+                checkResult(f);
             } catch (Exception c) {
                 System.err.println(String.format("%s write failure: %s", this, c));
                 logWrite(retryCount, String.format("write failure %s", c));
@@ -215,10 +210,10 @@ public class ObjectMessageClient implements Closeable {
         private void logWrite(int retryCount, String msg) {
             if (ActorSystemRemote.debugLog) {
                 if (channel == null) {
-                    ActorSystemRemote.log(18, "%s %s, retry=%d, channel=null",
+                    ActorSystemRemote.log(ActorSystemRemote.debugLogMsg, 18, "%s %s, retry=%d, channel=null",
                             this, msg, retryCount);
                 } else {
-                    ActorSystemRemote.log(18, "%s %s, retry=%d, open=%s, active=%s, writable=%s",
+                    ActorSystemRemote.log(ActorSystemRemote.debugLogMsg, 18, "%s %s, retry=%d, open=%s, active=%s, writable=%s",
                             this, msg, retryCount,
                             channel.isOpen(), channel.isActive(),
                             channel.isWritable());
@@ -227,7 +222,7 @@ public class ObjectMessageClient implements Closeable {
         }
 
         public void setResult(int result) {
-            ActorSystemRemote.log(18, "%s result-code %d", this, result);
+            ActorSystemRemote.log(ActorSystemRemote.debugLogMsg, 18, "%s result-code %d", this, result);
 
         }
 
@@ -258,7 +253,7 @@ public class ObjectMessageClient implements Closeable {
         protected void checkResult(ChannelFuture f) throws Exception {
             last.add(f);
             f.addListener(sf -> {
-                ActorSystemRemote.log(18, "%s finish write", this);
+                ActorSystemRemote.log(ActorSystemRemote.debugLogMsg, 18, "%s finish write", this);
                 if (last.remove(f)) {
                     lastSize.decrementAndGet();
                 }
@@ -267,7 +262,7 @@ public class ObjectMessageClient implements Closeable {
 
         public void close() {
             if (channel != null && channel.isOpen()) {
-                ActorSystemRemote.log(18, "%s close", this);
+                ActorSystemRemote.log(ActorSystemRemote.debugLog, 18, "%s close", this);
                 channel.close();
                 channel = null;
             }

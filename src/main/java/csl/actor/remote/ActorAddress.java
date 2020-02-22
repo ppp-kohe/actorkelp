@@ -29,6 +29,10 @@ public class ActorAddress {
         return new ActorRefLocalNamed.ActorRefLocalNamedNoName(system, this);
     }
 
+    public ActorAddress getActor(String name) {
+        return this;
+    }
+
     public static class ActorAddressRemote extends ActorAddress implements Serializable {
         protected String host;
         protected int port;
@@ -67,6 +71,7 @@ public class ActorAddress {
             return host + ":" + port;
         }
 
+        @Override
         public ActorAddressRemoteActor getActor(String name) {
             return new ActorAddressRemoteActor(host, port, name);
         }
@@ -138,6 +143,10 @@ public class ActorAddress {
             if (!super.equals(o)) return false;
             ActorAddressRemoteActor that = (ActorAddressRemoteActor) o;
             return Objects.equals(actorName, that.actorName);
+        }
+
+        public ActorRefRemote ref(ActorSystem system) {
+            return ActorRefRemote.get(system, this);
         }
 
         @Override

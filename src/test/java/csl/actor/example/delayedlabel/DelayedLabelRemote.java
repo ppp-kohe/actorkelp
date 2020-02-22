@@ -6,6 +6,7 @@ import csl.actor.CallableMessage;
 import csl.actor.example.ExampleRemote;
 import csl.actor.keyaggregate.ActorKeyAggregation;
 import csl.actor.keyaggregate.ActorPlacement;
+import csl.actor.keyaggregate.Config;
 import csl.actor.keyaggregate.ResponsiveCalls;
 import csl.actor.remote.ActorAddress;
 import csl.actor.remote.ActorSystemRemote;
@@ -15,6 +16,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 public class DelayedLabelRemote extends DelayedLabelAggregationReplicable {
     public static void main(String[] args) {
@@ -58,10 +60,42 @@ public class DelayedLabelRemote extends DelayedLabelAggregationReplicable {
 
     @Override
     public ActorRef learnerActor(ActorSystem system, PrintWriter out, ActorRef resultActor) {
-        LearnerActorAggregationReplicable r = (LearnerActorAggregationReplicable) super.learnerActor(system, out, resultActor);
+        LearnerActorAggregationReplicable r = new LearnerRemote(system, out, resultActor, config);
+        root = r;
         ResponsiveCalls.sendTask(system, r,
                 CallableMessage.callableMessageConsumer((a, s) -> ((ActorKeyAggregation) a).routerSplit(3)));
         return r;
+    }
+
+    static class LearnerRemote extends LearnerActorAggregationReplicable {
+        public LearnerRemote(ActorSystem system, String name, Config config, ActorRef result, State state) {
+            super(system, name, config, result, state);
+        }
+
+        public LearnerRemote(ActorSystem system, String name, PrintWriter out, ActorRef resultActor, DelayedLabelConfig config, State state) {
+            super(system, name, out, resultActor, config, state);
+        }
+
+        public LearnerRemote(ActorSystem system, PrintWriter out, ActorRef resultActor, DelayedLabelConfig config) {
+            super(system, out, resultActor, config);
+        }
+
+        @Override
+        public void finish(Finish f) {
+            super.finish(f);
+            ((ActorPlacement.PlacemenActor) getPlacement()).getCluster().stream()
+                .map(ActorPlacement.AddressListEntry::getPlacementActor)
+                .forEach(a -> ResponsiveCalls.sendTaskConsumer(system, a, (act,sen) -> {
+                    System.out.println("#remote close: " + act);
+                    act.getSystem().getScheduledExecutor().schedule(() -> act.getSystem().close(), 1, TimeUnit.SECONDS);
+                }));
+            try {
+                Thread.sleep(3000);
+            } catch (Exception ex) {
+                ex.printStackTrace();
+            }
+            getSystem().close();
+        }
     }
 
     public static class Follower {

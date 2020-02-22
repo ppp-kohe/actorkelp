@@ -5,9 +5,7 @@ import csl.actor.ActorDefault;
 import csl.actor.ActorRef;
 import csl.actor.ActorSystem;
 import csl.actor.remote.ActorAddress;
-import csl.actor.remote.ActorRefRemote;
 import csl.actor.remote.ActorSystemRemote;
-import jdk.jfr.Threshold;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -15,6 +13,7 @@ import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Random;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -23,12 +22,13 @@ public class RemoteSending {
     public static void main(String[] args) throws Exception {
         int msgBytes = 1000_000;
         int msgs = 1_000;
-        ExampleRemote.setMvnClasspath();
-        ExampleRemote.launchJava(Receiver.class.getName(), Integer.toString(msgs));
-        Thread.sleep(1000);
-
         ActorSystemRemote s2 = new ActorSystemRemote();
         s2.startWithoutWait(20001);
+
+        MasterActor masterActor = new MasterActor(s2);
+
+        ExampleRemote.setMvnClasspath();
+        ExampleRemote.launchJava(Receiver.class.getName(), Integer.toString(msgs));
 
         List<long[]> data = new ArrayList<>();
         Random r = new Random(12345);
@@ -39,8 +39,9 @@ public class RemoteSending {
         }
         System.err.println("created inputs");
 
-        ActorAddress addr = ActorAddress.get("localhost", 20000).getActor("r");
-        ActorRef rec = ActorRefRemote.get(s2, addr);
+        masterActor.getConnected().get();
+
+        ActorRef rec = ActorAddress.get("localhost", 20000).getActor("r").ref(s2);
 
         System.err.println("remote target: " + rec);
         rec.tell("start", null);
@@ -49,25 +50,31 @@ public class RemoteSending {
             rec.tell(d, null);
         }
 
-        rec.tell("end", new Manager(s2, "closer"));
-
-
+        rec.tell("end");
+        s2.closeAfterOtherConnectionsClosed();
     }
 
-    public static class Manager extends ActorDefault {
-        public Manager(ActorSystem system, String name) {
-            super(system, name);
+    static class MasterActor extends ActorDefault {
+        CompletableFuture<Object> connected;
+        MasterActor(ActorSystem s) {
+            super(s, "master");
+            connected = new CompletableFuture<>();
+        }
+
+        public CompletableFuture<Object> getConnected() {
+            return connected;
         }
 
         @Override
         protected ActorBehavior initBehavior() {
             return behaviorBuilder()
-                    .matchWithSender(ActorSystemRemote.ConnectionClose.class, this::receive)
+                    .match(String.class, this::receive)
                     .build();
         }
 
-        void receive(ActorSystemRemote.ConnectionClose s, ActorRef sender) {
-            getSystem().close();
+        void receive(Object m) {
+            System.err.println(m);
+            connected.complete(m);
         }
     }
 
@@ -77,6 +84,9 @@ public class RemoteSending {
             ActorSystemRemote s1 = new ActorSystemRemote();
             s1.startWithoutWait(20000);
             new ActorReceiver(s1, "r", msgs);
+
+            ActorAddress.get("localhost", 20001).getActor("master").ref(s1)
+                    .tell("start");
         }
     }
 
@@ -125,12 +135,7 @@ public class RemoteSending {
                     nextExtension *= 2L;
                 }
                 if (msg.equals("end")) {
-                    sender.tell(new ActorSystemRemote.ConnectionClose());
-                    try {
-                        Thread.sleep(3000);
-                    } catch (Exception ex) {
-                        ex.printStackTrace();
-                    }
+                    System.out.println("END " + system);
                     getSystem().close();
                 }
             }

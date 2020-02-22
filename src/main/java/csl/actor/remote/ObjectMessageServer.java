@@ -126,7 +126,7 @@ public class ObjectMessageServer implements Closeable {
     protected void initSerializer() {
         if (serializer == null) {
             serializer = defaultSerializer;
-            ActorSystemRemote.log(161, "%s use default serializer", this);
+            ActorSystemRemote.log(ActorSystemRemote.debugLog, 161, "%s use default serializer", this);
         }
     }
 
@@ -228,7 +228,7 @@ public class ObjectMessageServer implements Closeable {
         @Override
         protected void initChannel(SocketChannel socketChannel) throws Exception {
             QueueServerHandler handler = new QueueServerHandler(owner.getSerializer(), owner.getReceiver());
-            ActorSystemRemote.log(161, "%s local:%s, remote:%s, handler:%s", this, socketChannel.localAddress(), socketChannel.remoteAddress(), handler);
+            ActorSystemRemote.log(ActorSystemRemote.debugLog, 161, "%s local:%s, remote:%s, handler:%s", this, socketChannel.localAddress(), socketChannel.remoteAddress(), handler);
             ActorSystemRemote.settingsSocketChannel(socketChannel);
 
             //length[4] + contents[length]
@@ -268,7 +268,7 @@ public class ObjectMessageServer implements Closeable {
             if (msg instanceof ByteBuf) {
                 ByteBuf buf = (ByteBuf) msg;
                 int length = buf.readInt();
-                ActorSystemRemote.log(161, "%s bytes %,d  len %,d, serializer=%s", this, buf.readableBytes(), length, serializer);
+                ActorSystemRemote.log(ActorSystemRemote.debugLogMsg, 161, "%s bytes %,d  len %,d, serializer=%s", this, buf.readableBytes(), length, serializer);
                 Input input = new Input(new ByteBufInputStream(buf, length));
                 Object value = serializer.read(input);
                 ReferenceCountUtil.release(buf);
@@ -283,17 +283,17 @@ public class ObjectMessageServer implements Closeable {
                 if (ActorSystemRemote.CLOSE_EACH_WRITE) {
                     ctx.close();
                 }
-                ActorSystemRemote.log(161, "%s read finish: %d", this, r);
+                ActorSystemRemote.log(ActorSystemRemote.debugLogMsg, 161, "%s read finish: %d", this, r);
             } else {
-                ActorSystemRemote.log(161, "%s ignore %s", this, msg);
+                ActorSystemRemote.log(ActorSystemRemote.debugLogMsg, 161, "%s ignore %s", this, msg);
             }
         }
 
         @Override
         public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
-            ActorSystemRemote.log(161, "%s exceptionCaught %s", this, cause);
+            ActorSystemRemote.log(ActorSystemRemote.debugLogMsg, 161, "%s exceptionCaught %s", this, cause);
             System.err.println(String.format("%s exceptionCaught %s", this, cause));
-            if (firstError) {
+            if (firstError && (cause.getMessage() == null || !cause.getMessage().contains("Connection reset by peer"))) {
                 cause.printStackTrace();
                 firstError = false;
             }

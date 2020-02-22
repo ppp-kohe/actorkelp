@@ -28,6 +28,10 @@ public class ExampleRemote2 {
         Thread.sleep(5000);
         a.tell("#30001/b", null);
         System.out.println("after sending 2 messages");
+
+        Thread.sleep(10_000);
+        sys1.close();
+        sys2.closeAfterOtherConnectionsClosed();
     }
 
     public static class MyActor extends ActorDefault {
@@ -47,7 +51,7 @@ public class ExampleRemote2 {
                 String s = msg.toString();
                 if (s.startsWith("#")) {
                     String[] t = s.substring(1).split("/");
-                    int port = Integer.valueOf(t[0]);
+                    int port = Integer.parseInt(t[0]);
                     String name = t[1];
                     ActorRefRemote.get(getSystem(), "localhost", port, name)
                         .tell("hello", this);

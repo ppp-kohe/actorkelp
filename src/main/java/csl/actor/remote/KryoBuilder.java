@@ -231,7 +231,7 @@ public class KryoBuilder {
                 CallableMessage.class,
                 CallableMessage.CallableFailure.class,
                 Message.MessageNone.class,
-                ActorSystemRemote.ConnectionClose.class,
+                ActorSystemRemote.ConnectionCloseNotice.class,
                 ActorSystemRemote.TransferredMessage.class,
 
                 ActorRefRemote.class, //those classes are not serialized, but may appear as class-info by writeClassAndObject

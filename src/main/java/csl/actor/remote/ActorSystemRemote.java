@@ -14,7 +14,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 
 public class ActorSystemRemote implements ActorSystem {
@@ -31,9 +33,12 @@ public class ActorSystemRemote implements ActorSystem {
     protected Pool<Kryo> serializerPool;
     protected Function<ActorSystem, Kryo> kryoFactory;
     protected KryoBuilder.SerializerFunction serializer;
+    protected volatile boolean closeAfterOtherConnectionsClosed;
 
     public static boolean debugLog = System.getProperty("csl.actor.debug", "false").equals("true");
     public static int debugLogColor = Integer.parseInt(System.getProperty("csl.actor.debug.color", "124"));
+
+    public static boolean debugLogMsg = System.getProperty("csl.actor.debugMsg", "false").equals("true");
 
     public ActorSystemRemote() {
         this(new ActorSystemDefaultForRemote(), KryoBuilder.builder());
@@ -83,6 +88,7 @@ public class ActorSystemRemote implements ActorSystem {
         }
         server.setSerializer(getSerializer());
         client.setSerializer(getSerializer());
+        new ConnectionCloseActor(this); //register the actor for handling closing connections
     }
 
     /** @return implementation field getter */
@@ -156,7 +162,7 @@ public class ActorSystemRemote implements ActorSystem {
         ActorRef target = message.getTarget();
         if (target instanceof ActorRefRemote) {
             ActorAddress addr = ((ActorRefRemote) target).getAddress().getHostAddress();
-            log(19, "%s: client tell to remote %s", this, addr);
+            log(debugLogMsg, 19, "%s: client tell to remote %s", this, addr);
             ConnectionActor a = connectionMap.computeIfAbsent(addr.getKey(), k -> createConnection(addr));
             if (a != null) {
                 a.tell(message);
@@ -182,11 +188,11 @@ public class ActorSystemRemote implements ActorSystem {
     }
 
     public static void log(String msg, Object... args) {
-        log(debugLogColor, msg, args);
+        log(debugLog, debugLogColor, msg, args);
     }
 
-    public static void log(int n, String msg, Object... args) {
-        if (debugLog) {
+    public static void log(boolean flag, int n, String msg, Object... args) {
+        if (flag) {
             System.err.println("\033[38;5;" + n + "m" + String.format(msg, args) + "\033[0m");
         }
     }
@@ -234,7 +240,6 @@ public class ActorSystemRemote implements ActorSystem {
     }
 
 
-
     @Override
     public void register(Actor actor) {
         localSystem.register(actor);
@@ -253,10 +258,10 @@ public class ActorSystemRemote implements ActorSystem {
     @Override
     public void close() {
         try {
-            log("%s: close", this);
+            log("%s: close, connections=%,d", this, connectionMap.size());
             server.close();
             new ArrayList<>(connectionMap.values())
-                    .forEach(ConnectionActor::close);
+                    .forEach(ConnectionActor::notifyAndClose);
             client.close();
         } finally {
             localSystem.close();
@@ -275,6 +280,25 @@ public class ActorSystemRemote implements ActorSystem {
 
     public void connectionClosed(ConnectionActor ca) {
         connectionMap.remove(ca.getAddress().getKey(), ca);
+        checkClose();
+    }
+
+    public void closeAfterOtherConnectionsClosed() {
+        closeAfterOtherConnectionsClosed = true;
+        checkClose();
+    }
+
+    public void checkClose() {
+        if (connectionMap.isEmpty() && closeAfterOtherConnectionsClosed) {
+            ExecutorService service = localSystem.getExecutorService();
+            service.shutdown();
+            try {
+                service.awaitTermination(3_000, TimeUnit.MILLISECONDS);
+            } catch (Exception ex) {
+                log("%s: awaiting termination: %s", this, ex);
+            }
+            close();
+        }
     }
 
     @Override
@@ -332,7 +356,7 @@ public class ActorSystemRemote implements ActorSystem {
                     .setHost(address.getHost())
                     .setPort(address.getPort())
                     .open();
-            log(20, "%s connection: %s", this, connection);
+            log(debugLog, 20, "%s connection: %s", this, connection);
         }
 
         @Override
@@ -341,13 +365,13 @@ public class ActorSystemRemote implements ActorSystem {
         }
 
         public void send(Message<?> message) {
-            if (message.getData() instanceof ConnectionClose) {
-                log(20, "%s close", message);
+            if (message.getData() instanceof ConnectionCloseNotice) {
+                log(debugLogMsg, 20, "%s close", message);
                 connection.write(new TransferredMessage(count, message));
                 close();
             } else {
                 if (mailbox.isEmpty()) {
-                    log(20, "%s write %s", this, message);
+                    log(debugLogMsg, 20, "%s write %s", this, message);
                     connection.write(new TransferredMessage(count, message));
                 } else {
                     int maxBundle = 30;
@@ -363,11 +387,25 @@ public class ActorSystemRemote implements ActorSystem {
                             break;
                         }
                     }
-                    log(20, "%s write %,d messages: %s,...", this, messageBundle.size(), message);
+                    log(debugLogMsg, 20, "%s write %,d messages: %s,...", this, messageBundle.size(), message);
                     connection.write(new TransferredMessage(count, messageBundle));
                 }
             }
             ++count;
+        }
+
+        public void notifyAndClose() {
+            log(debugLog, 20, "%s %s notifyAncClose -> %s", remoteSystem, this, address);
+            tell(new Message<Object>(
+                    ActorRefRemote.get(remoteSystem, address.getActor(NAME_CONNECTION_ACTOR)),
+                    this,
+                    new ConnectionCloseNotice(remoteSystem.getServerAddress())));
+            try {
+                Thread.sleep(3_000);
+            } catch (Exception ex) {
+                ex.printStackTrace();
+            }
+            close();
         }
 
         public void close() {
@@ -396,17 +434,50 @@ public class ActorSystemRemote implements ActorSystem {
         }
     }
 
-    public static class ConnectionClose implements Serializable {
+    public static final String NAME_CONNECTION_ACTOR = "$ConnectionClose";
+
+    public static class ConnectionCloseNotice implements Serializable {
+        protected ActorAddress address;
+
+        public ConnectionCloseNotice(ActorAddress address) {
+            this.address = address;
+        }
+
+        public ActorAddress getAddress() {
+            return address;
+        }
+
+        @Override
+        public String toString() {
+            return getClass().getSimpleName() + "(" + address + ")";
+        }
     }
 
-    public static boolean isClose(Object msg) {
-        if (msg instanceof ActorSystemRemote.TransferredMessage) {
-            msg = ((ActorSystemRemote.TransferredMessage) msg).body;
+    public static class ConnectionCloseActor extends ActorDefault {
+        public ConnectionCloseActor(ActorSystemRemote system) {
+            super(system, NAME_CONNECTION_ACTOR);
         }
-        if (msg instanceof Message<?>) {
-            msg = ((Message<?>) msg).getData();
+
+        @Override
+        protected ActorBehavior initBehavior() {
+            return behaviorBuilder()
+                    .match(ConnectionCloseNotice.class, this::receive)
+                    .build();
         }
-        return (msg instanceof ActorSystemRemote.ConnectionClose);
+
+        public void receive(ConnectionCloseNotice notice) {
+            ActorSystemRemote remote = getSystem();
+            ConnectionActor a = remote.getConnectionMap().get(notice.getAddress());
+            log("receive: %s -> close %s", notice, a);
+            if (a != null) {
+                a.close();
+            }
+        }
+
+        @Override
+        public ActorSystemRemote getSystem() {
+            return (ActorSystemRemote) system;
+        }
     }
 
     public static void settingsSocketChannel(SocketChannel ch) {
@@ -434,11 +505,11 @@ public class ActorSystemRemote implements ActorSystem {
             }
             if (msg instanceof List<?>) { //message bundle
                 List<?> msgs = (List<?>) msg;
-                log(163, "%s receive-remote: messages %,d", this, msgs.size());
+                log(debugLogMsg, 163, "%s receive-remote: messages %,d", this, msgs.size());
                 int i = 0;
                 for (Object elem : msgs) {
                     Message<?> msgElem = (Message<?>) elem;
-                    log(163, "%s receive-remote: [%,d] %s", this, i, msgElem);
+                    log(debugLogMsg, 163, "%s receive-remote: [%,d] %s", this, i, msgElem);
                     remote.getLocalSystem().send(new Message<>(
                             remote.localize(msgElem.getTarget()),
                             msgElem.getSender(),
@@ -447,13 +518,13 @@ public class ActorSystemRemote implements ActorSystem {
                 }
             } else if (msg instanceof Message<?>) {
                 Message<?> m = (Message<?>)  msg;
-                log(163, "%s receive-remote: %s", this, m);
+                log(debugLogMsg, 163, "%s receive-remote: %s", this, m);
                 remote.getLocalSystem().send(new Message<>(
                         remote.localize(m.getTarget()),
                         m.getSender(),
                         m.getData()));
             } else {
-                log(163, "%s receive unintended object: %s", this, msg);
+                log(debugLogMsg, 163, "%s receive unintended object: %s", this, msg);
             }
         }
 

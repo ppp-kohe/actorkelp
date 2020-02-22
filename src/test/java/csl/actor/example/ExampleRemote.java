@@ -32,6 +32,8 @@ public class ExampleRemote {
             ActorSystemRemote sys = new ActorSystemRemote();
             sys.startWithoutWait(p);
 
+            new CustomCloser(sys);
+
             Example.MyActor a = new Example.MyActor(sys, ActorRefRemote.get(sys, host, lp, "example"));
             if (args.length >= 3) {
                 String msgVal = args[2];
@@ -42,6 +44,19 @@ public class ExampleRemote {
             }
         }
     }
+
+    static class CustomCloser extends ActorSystemRemote.ConnectionCloseActor {
+        public CustomCloser(ActorSystemRemote system) {
+            super(system);
+        }
+
+        @Override
+        public void receive(ActorSystemRemote.ConnectionCloseNotice notice) {
+            super.receive(notice);
+            getSystem().close();
+        }
+    }
+
     static String classpath;
     public static void setMvnClasspath() {
         try {
