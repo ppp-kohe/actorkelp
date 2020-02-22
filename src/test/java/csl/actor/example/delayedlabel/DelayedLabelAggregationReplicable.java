@@ -4,15 +4,13 @@ import csl.actor.ActorBehavior;
 import csl.actor.ActorRef;
 import csl.actor.ActorSystem;
 import csl.actor.Message;
-import csl.actor.msgassoc.ActorAggregationReplicable;
-import csl.actor.msgassoc.ActorVisitor;
-import csl.actor.msgassoc.Config;
-import csl.actor.msgassoc.ResponsiveCalls;
+import csl.actor.keyaggregate.ActorKeyAggregation;
+import csl.actor.keyaggregate.ActorKeyAggregationVisitor;
+import csl.actor.keyaggregate.Config;
+import csl.actor.keyaggregate.ResponsiveCalls;
 
 import java.io.PrintWriter;
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class DelayedLabelAggregationReplicable extends DelayedLabelManual {
@@ -33,8 +31,6 @@ public class DelayedLabelAggregationReplicable extends DelayedLabelManual {
 
     static LearnerActorAggregationReplicable root;
 
-    static List<LearnerActorAggregationReplicable> processing = new ArrayList<>();
-
     static class ResultActorAggregationReplicable extends ResultActor {
         boolean printed;
         public ResultActorAggregationReplicable(ActorSystem system, PrintWriter out, Instant startTime, int numInstances) {
@@ -50,7 +46,7 @@ public class DelayedLabelAggregationReplicable extends DelayedLabelManual {
             if (!printed && (numInstances * 0.9) < this.finishedInstances) {
                 ResponsiveCalls.sendTask(system, root, (a, s) -> {
                     System.err.println("print router");
-                    ActorVisitor.tell((ActorAggregationReplicable) a, (v, snd) -> v.printStatus(), null);
+                    ActorKeyAggregationVisitor.tell((ActorKeyAggregation) a, (v, snd) -> v.printStatus(), null);
                     return null;
                 });
                 printed = true;
@@ -58,37 +54,38 @@ public class DelayedLabelAggregationReplicable extends DelayedLabelManual {
         }
     }
 
-    public static class LearnerState extends ActorAggregationReplicable.ActorReplicableSerializableState {
+    public static class LearnerState extends ActorKeyAggregation.ActorKeyAggregationSerializable {
         public ActorRef resultActor;
 
         @Override
-        protected ActorAggregationReplicable create(ActorSystem system, String name, Config config) throws Exception {
-            return new LearnerActorAggregationReplicable(system, name, config, resultActor);
+        protected ActorKeyAggregation create(ActorSystem system, String name, Config config, ActorKeyAggregation.State state) throws Exception {
+            return new LearnerActorAggregationReplicable(system, name, config, resultActor, state);
         }
     }
 
-    public static class LearnerActorAggregationReplicable extends ActorAggregationReplicable {
+    public static class LearnerActorAggregationReplicable extends ActorKeyAggregation {
         DelayedLabelAggregation.LearnerAggregationSupport support;
 
-        public LearnerActorAggregationReplicable(ActorSystem system, String name, Config config, ActorRef result) {
-            super(system, name, config);
+        public LearnerActorAggregationReplicable(ActorSystem system, String name, Config config, ActorRef result, State state) {
+            super(system, name, config, state);
             support = new DelayedLabelAggregation.LearnerAggregationSupport(this, config.getLogOut(), result,
                     ((DelayedLabelConfig) config).instances);
         }
 
         public LearnerActorAggregationReplicable(ActorSystem system, String name, PrintWriter out, ActorRef resultActor,
-                                                 DelayedLabelConfig config) {
-            super(system, name, config);
+                                                 DelayedLabelConfig config, State state) {
+            super(system, name, config, state);
             support = new DelayedLabelAggregation.LearnerAggregationSupport(this, out, resultActor, config.instances);
         }
 
         public LearnerActorAggregationReplicable(ActorSystem system, PrintWriter out, ActorRef resultActor,
                                                  DelayedLabelConfig config) {
-            this(system, "learner", out, resultActor, config);
+            this(system, "learner", out, resultActor, config, null);
+            state = initStateRouter();
         }
 
         @Override
-        protected ActorReplicableSerializableState newSerializableState() {
+        protected ActorKeyAggregationSerializable newSerializableState() {
             LearnerState ls = new LearnerState();
             ls.resultActor = support.model.resultActor;
             return ls;
@@ -120,14 +117,14 @@ public class DelayedLabelAggregationReplicable extends DelayedLabelManual {
         AtomicInteger rec = new AtomicInteger();
 
         @Override
-        protected void initClone(ActorAggregationReplicable original) {
+        protected void initClone(ActorKeyAggregation original) {
             log("clone");
             rec = new AtomicInteger();
             support = support.createClone(this);
         }
 
         @Override
-        protected void initMerged(ActorAggregationReplicable m) {
+        protected void initMerged(ActorKeyAggregation m) {
             log("merge");
         }
 
@@ -136,7 +133,7 @@ public class DelayedLabelAggregationReplicable extends DelayedLabelManual {
             if (root == this) {
                 support.processMessageBefore(message);
             } else {
-                DelayedLabelAggregation.LearnerAggregationSupport.pruneCount.addAndGet(getMailboxAsReplicable().prune(32, 0.5));
+                DelayedLabelAggregation.LearnerAggregationSupport.pruneCount.addAndGet(getMailboxAsKeyAggregation().prune(32, 0.5));
             }
             super.processMessage(message);
         }

@@ -4,9 +4,9 @@ import csl.actor.ActorRef;
 import csl.actor.ActorSystem;
 import csl.actor.CallableMessage;
 import csl.actor.example.ExampleRemote;
-import csl.actor.msgassoc.ActorAggregationReplicable;
-import csl.actor.msgassoc.ActorPlacement;
-import csl.actor.msgassoc.ResponsiveCalls;
+import csl.actor.keyaggregate.ActorKeyAggregation;
+import csl.actor.keyaggregate.ActorPlacement;
+import csl.actor.keyaggregate.ResponsiveCalls;
 import csl.actor.remote.ActorAddress;
 import csl.actor.remote.ActorSystemRemote;
 
@@ -31,7 +31,7 @@ public class DelayedLabelRemote extends DelayedLabelAggregationReplicable {
         int serverPort = 10000;
         system.startWithoutWait(serverPort);
 
-        new ActorAggregationReplicable.PlacemenActorReplicable(system,
+        new ActorKeyAggregation.PlacemenActorKeyAggregation(system,
                 new ActorPlacement.PlacementStrategyRoundRobin(0));
 
         List<Process> ps = new ArrayList<>();
@@ -60,7 +60,7 @@ public class DelayedLabelRemote extends DelayedLabelAggregationReplicable {
     public ActorRef learnerActor(ActorSystem system, PrintWriter out, ActorRef resultActor) {
         LearnerActorAggregationReplicable r = (LearnerActorAggregationReplicable) super.learnerActor(system, out, resultActor);
         ResponsiveCalls.sendTask(system, r,
-                CallableMessage.callableMessageConsumer((a, s) -> ((ActorAggregationReplicable) a).routerSplit(3)));
+                CallableMessage.callableMessageConsumer((a, s) -> ((ActorKeyAggregation) a).routerSplit(3)));
         return r;
     }
 
@@ -72,7 +72,7 @@ public class DelayedLabelRemote extends DelayedLabelAggregationReplicable {
             int joinPort = Integer.parseInt(args[1]);
             system.startWithoutWait(port);
 
-            ActorAggregationReplicable.PlacemenActorReplicable p = new ActorAggregationReplicable.PlacemenActorReplicable(system,
+            ActorKeyAggregation.PlacemenActorKeyAggregation p = new ActorKeyAggregation.PlacemenActorKeyAggregation(system,
                 new ActorPlacement.PlacementStrategyUndertaker());
 
             p.join(ActorAddress.get("localhost", joinPort));

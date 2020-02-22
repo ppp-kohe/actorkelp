@@ -28,7 +28,7 @@ public class Message<DataType> implements Serializable {
 
     @Override
     public String toString() {
-        return getClass().getSimpleName() + "(" + target + " ! " + data + " <- " + sender + ")";
+        return getClass().getSimpleName() + "(" + data + " : " + target + " <- " + sender + ")";
     }
 
     /**

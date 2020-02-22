@@ -1,7 +1,7 @@
-package csl.actor.example.msgassoc;
+package csl.actor.example.keyaggregate;
 
 import csl.actor.Actor;
-import csl.actor.msgassoc.*;
+import csl.actor.keyaggregate.*;
 
 import java.io.Serializable;
 import java.util.ArrayList;
@@ -27,15 +27,15 @@ public class KeyHistogramSizeChecker {
         }
     }
 
-    public static KeyHistogramSizeChecker.SizeInfo checkSize(Actor self, ActorAggregationReplicable.Split sp, String path) {
-        if (sp instanceof ActorAggregationReplicable.SplitNode) {
+    public static KeyHistogramSizeChecker.SizeInfo checkSize(Actor self, KeyAggregationRoutingSplit sp, String path) {
+        if (sp instanceof KeyAggregationRoutingSplit.RoutingSplitNode) {
             return new KeyHistogramSizeChecker.SizeInfo(path,
-                    checkSize(self, ((ActorAggregationReplicable.SplitNode) sp).getLeft(), path + "/l"),
-                    checkSize(self, ((ActorAggregationReplicable.SplitNode) sp).getRight(), path + "/r"));
-        } else if (sp instanceof ActorAggregationReplicable.SplitLeaf) {
+                    checkSize(self, ((KeyAggregationRoutingSplit.RoutingSplitNode) sp).getLeft(), path + "/l"),
+                    checkSize(self, ((KeyAggregationRoutingSplit.RoutingSplitNode) sp).getRight(), path + "/r"));
+        } else if (sp instanceof KeyAggregationRoutingSplit.RoutingSplitLeaf) {
             try {
                 return ResponsiveCalls.sendTask(self.getSystem(),
-                        ((ActorAggregationReplicable.SplitLeaf) sp).getActor(),
+                        ((KeyAggregationRoutingSplit.RoutingSplitLeaf) sp).getActor(),
                         (a, s) -> checkSize(a, path)).get(10, TimeUnit.SECONDS);
             } catch (Exception ex) {
                 return new KeyHistogramSizeChecker.SizeInfo(path + "<ERROR:" + ex + ">");
@@ -45,7 +45,7 @@ public class KeyHistogramSizeChecker {
         }
     }
 
-    public static KeyHistogramSizeChecker.SizeInfo checkSizeStart(ActorAggregationReplicable self) {
+    public static KeyHistogramSizeChecker.SizeInfo checkSizeStart(ActorKeyAggregation self) {
         try {
             Thread.sleep(self.traverseDelayTimeMs() + 100);
         } catch (Exception ex) {
@@ -55,19 +55,17 @@ public class KeyHistogramSizeChecker {
     }
 
     static KeyHistogramSizeChecker.SizeInfo checkSize(Actor a, String path) {
-        if (a instanceof ActorAggregation) {
+        if (a instanceof ActorKeyAggregation) {
             List<KeyHistogramSizeChecker.SizeInfo> cs = new ArrayList<>();
 
-            List<MailboxAggregation.HistogramEntry> es = ((ActorAggregation) a).getMailboxAsAggregation().getTableEntries();
+            List<MailboxKeyAggregation.HistogramEntry> es = ((ActorKeyAggregation) a).getMailboxAsKeyAggregation().getEntries();
             IntStream.range(0, es.size()).mapToObj(i ->
                     checkSize(es.get(i).getTree(), path + "/sp" + i))
                     .forEach(cs::add);
 
-            if (a instanceof ActorAggregationReplicable) {
-                if (((ActorAggregationReplicable) a).getState() instanceof ActorAggregationReplicable.StateSplitRouter) {
-                    ActorAggregationReplicable.StateSplitRouter r = (ActorAggregationReplicable.StateSplitRouter) ((ActorAggregationReplicable) a).getState();
-                    cs.add(checkSize(a, r.getSplit(), path + "/state"));
-                }
+            if (((ActorKeyAggregation) a).getState() instanceof KeyAggregationStateRouter) {
+                KeyAggregationStateRouter r = (KeyAggregationStateRouter) ((ActorKeyAggregation) a).getState();
+                cs.add(checkSize(a, r.getSplit(), path + "/state"));
             }
 
             return new KeyHistogramSizeChecker.SizeInfo(path, cs);
@@ -161,9 +159,9 @@ public class KeyHistogramSizeChecker {
         }
     }
 
-    public static class StateSplitRouterSizeDebug extends ActorAggregationReplicable.StateSplitRouter {
+    public static class StateSplitRouterSizeDebug extends KeyAggregationStateRouter {
         @Override
-        public void split(ActorAggregationReplicable self, int height) {
+        public void split(ActorKeyAggregation self, int height) {
             SizeInfo before = checkSizeStart(self);
             super.split(self, height);
             SizeInfo after = checkSizeStart(self);
@@ -171,7 +169,7 @@ public class KeyHistogramSizeChecker {
         }
 
         @Override
-        public void splitOrMerge(ActorAggregationReplicable self, int height) {
+        public void splitOrMerge(ActorKeyAggregation self, int height) {
             SizeInfo before = checkSizeStart(self);
             super.splitOrMerge(self, height);
             SizeInfo after = checkSizeStart(self);
@@ -179,7 +177,7 @@ public class KeyHistogramSizeChecker {
         }
 
         @Override
-        public void mergeInactive(ActorAggregationReplicable self) {
+        public void mergeInactive(ActorKeyAggregation self) {
             SizeInfo before = checkSizeStart(self);
             super.mergeInactive(self);
             SizeInfo after = checkSizeStart(self);

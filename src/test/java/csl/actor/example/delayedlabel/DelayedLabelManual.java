@@ -1,8 +1,8 @@
 package csl.actor.example.delayedlabel;
 
 import csl.actor.*;
-import csl.actor.msgassoc.Config;
-import csl.actor.msgassoc.MessageNoRouting;
+import csl.actor.keyaggregate.Config;
+import csl.actor.keyaggregate.MessageNoRouting;
 
 import java.io.BufferedReader;
 import java.io.PrintWriter;

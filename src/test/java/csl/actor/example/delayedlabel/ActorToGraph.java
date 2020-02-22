@@ -1,7 +1,7 @@
 package csl.actor.example.delayedlabel;
 
 import csl.actor.*;
-import csl.actor.msgassoc.*;
+import csl.actor.keyaggregate.*;
 import csl.actor.remote.ActorRefRemote;
 import csl.actor.remote.ActorSystemRemote;
 
@@ -178,17 +178,15 @@ public class ActorToGraph {
             table.add(Arrays.asList("queue", String.format("%,d", ((MailboxDefault) a.getMailbox()).getQueue().size())));
         }
         n.tableLabel = table;
-        if (a instanceof ActorAggregation) {
-            ActorAggregation ag = (ActorAggregation) a;
-            for (int i = 0, size = ag.getMailboxAsAggregation().getTableSize(); i < size; ++i) {
-                table.add(Arrays.asList("t" + i + ".processor", idStr(ag.getMailboxAsAggregation().getTableEntries().get(i).getProcessor())));
+        if (a instanceof ActorKeyAggregation) {
+            ActorKeyAggregation ag = (ActorKeyAggregation) a;
+            for (int i = 0, size = ag.getMailboxAsKeyAggregation().getEntrySize(); i < size; ++i) {
+                table.add(Arrays.asList("t" + i + ".processor", idStr(ag.getMailboxAsKeyAggregation().getEntries().get(i).getProcessor())));
 
-                KeyHistograms.HistogramTree tree = ag.getMailboxAsAggregation().getTable(i);
+                KeyHistograms.HistogramTree tree = ag.getMailboxAsKeyAggregation().getHistogram(i);
                 save(n, tree, i);
             }
-            if (a instanceof ActorAggregationReplicable) {
-                save(n, (ActorAggregationReplicable) a);
-            }
+            save(n, (ActorKeyAggregation) a);
         }
         return n;
     }
@@ -230,8 +228,8 @@ public class ActorToGraph {
                 n.label = "refRemote:" + ((ActorRefRemote) ref).getAddress();
                 nodeMap.put(ref, n);
                 n.fromEdge(from).label = edgeLabel;
-            } else if (ref instanceof ActorAggregation) {
-                save(from, (ActorAggregation) ref, edgeLabel);
+            } else if (ref instanceof ActorKeyAggregation) {
+                save(from, (ActorKeyAggregation) ref, edgeLabel);
             } else if (ref == null) {
                 GraphNode n = createNode();
                 n.label = "ref null";
@@ -255,8 +253,8 @@ public class ActorToGraph {
         }
     }
 
-    protected void save(GraphNode n, ActorAggregationReplicable a) {
-        ActorAggregationReplicable.State s = a.getState();
+    protected void save(GraphNode n, ActorKeyAggregation a) {
+        ActorKeyAggregation.State s = a.getState();
         n.tableLabel.add(Arrays.asList("state", s.getClass().getSimpleName()));
         /*
         n.tableLabel.add(Arrays.asList("depth", Integer.toString(s.getDepth())));
@@ -279,8 +277,8 @@ public class ActorToGraph {
             n.tableLabel.add(Arrays.asList("forecasts", Long.toString(ru.forecastCount())));
             ((ActorAggregationReplicable.StateRouter) s).getSplits().forEach(c -> saveSplitTree(n, c,  "split"));
         }*/
-        if (s instanceof ActorAggregationReplicable.StateSplitRouter) {
-            ActorAggregationReplicable.StateSplitRouter r = (ActorAggregationReplicable.StateSplitRouter) s;
+        if (s instanceof KeyAggregationStateRouter) {
+            KeyAggregationStateRouter r = (KeyAggregationStateRouter) s;
             n.tableLabel.add(Arrays.asList("state.height", Integer.toString(r.getHeight())));
             saveSplit(n, r.getSplit(), "root");
         }
@@ -345,8 +343,8 @@ public class ActorToGraph {
         }
         table.add(Arrays.asList("key", Objects.toString(l.getKey())));
         table.add(Arrays.asList("size", String.format("%,d", l.size())));
-        if (l instanceof ActorBehaviorAggregation.HistogramNodeLeafN) {
-            for (KeyHistograms.HistogramLeafList list : ((ActorBehaviorAggregation.HistogramNodeLeafN) l).getStructList()) {
+        if (l instanceof ActorBehaviorKeyAggregation.HistogramNodeLeafN) {
+            for (KeyHistograms.HistogramLeafList list : ((ActorBehaviorKeyAggregation.HistogramNodeLeafN) l).getStructList()) {
                 long n = list.count();
                 table.add(Arrays.asList("v" + vi + ".count", String.format("%,d", n)));
                 ++vi;
@@ -358,13 +356,13 @@ public class ActorToGraph {
         return n.fromEdge(from);
     }
 
-    protected void saveSplit(GraphNode from, ActorAggregationReplicable.Split s, String edgeLabel) {
+    protected void saveSplit(GraphNode from, KeyAggregationRoutingSplit s, String edgeLabel) {
         if (s == null) {
             GraphNode n = createNode();
             n.label = "null";
             n.fromEdge(from);
-        } else if (s instanceof ActorAggregationReplicable.SplitNode) {
-            ActorAggregationReplicable.SplitNode st = (ActorAggregationReplicable.SplitNode) s;
+        } else if (s instanceof KeyAggregationRoutingSplit.RoutingSplitNode) {
+            KeyAggregationRoutingSplit.RoutingSplitNode st = (KeyAggregationRoutingSplit.RoutingSplitNode) s;
             GraphNode n = createNode();
             n.tableLabel = new ArrayList<>();
             n.tableLabel.add(Arrays.asList("split", limitString(Objects.toString(st.getSplitPoints()))));
@@ -372,7 +370,7 @@ public class ActorToGraph {
             n.tableLabel.add(Arrays.asList("ratioAll", String.format("%4.2f", st.getHistory().ratioAll())));
 
             int hi = 0;
-            for (ActorAggregationReplicable.RoutingHistory h : st.getHistory().toList()) {
+            for (KeyAggregationRoutingSplit.RoutingHistory h : st.getHistory().toList()) {
                 n.tableLabel.add(Arrays.asList("hist" + hi, String.format("%4.2f", h.ratio()), String.format("%,d", h.left.get()), String.format("%,d", h.right.get())));
                 ++hi;
             }
@@ -381,8 +379,8 @@ public class ActorToGraph {
             saveSplit(n, st.getRight(), "right");
 
             n.fromEdge(from).label = edgeLabel;
-        } else if (s instanceof ActorAggregationReplicable.SplitLeaf) {
-            link(from, ((ActorAggregationReplicable.SplitLeaf) s).getActor(), edgeLabel + " dep:" + s.getDepth());
+        } else if (s instanceof KeyAggregationRoutingSplit.RoutingSplitLeaf) {
+            link(from, ((KeyAggregationRoutingSplit.RoutingSplitLeaf) s).getActor(), edgeLabel + " dep:" + s.getDepth());
         }
     }
 

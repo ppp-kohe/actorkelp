@@ -1,4 +1,4 @@
-package csl.actor.example.msgassoc;
+package csl.actor.example.keyaggregate;
 
 import csl.actor.*;
 

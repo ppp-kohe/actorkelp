@@ -1,4 +1,4 @@
-package csl.actor.msgassoc;
+package csl.actor.keyaggregate;
 
 import java.io.PrintWriter;
 import java.io.Serializable;
@@ -48,7 +48,7 @@ public class Config implements Serializable {
     protected transient PrintWriter logOut;
 
     public static Config readConfig(Map<Object, Object> properties) {
-        return readConfig("csl.actor.msgassoc", properties);
+        return readConfig("csl.actor.keyaggregate", properties);
     }
 
     public static Config readConfig(String propHead, Map<Object, Object> properties) {

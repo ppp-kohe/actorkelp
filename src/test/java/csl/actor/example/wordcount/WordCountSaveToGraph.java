@@ -1,10 +1,9 @@
 package csl.actor.example.wordcount;
 
 import com.esotericsoftware.kryo.io.Input;
-import csl.actor.ActorSystem;
 import csl.actor.ActorSystemDefault;
 import csl.actor.example.delayedlabel.ActorToGraph;
-import csl.actor.msgassoc.KeyHistograms;
+import csl.actor.keyaggregate.KeyHistograms;
 import csl.actor.remote.KryoBuilder;
 
 import java.io.FileInputStream;

@@ -1,11 +1,10 @@
 package csl.actor.example;
 
 import csl.actor.*;
-import csl.actor.msgassoc.*;
+import csl.actor.keyaggregate.*;
 import csl.actor.remote.ActorAddress;
 import csl.actor.remote.KryoBuilder;
 
-import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -55,7 +54,7 @@ public class SerializeExample2 extends SerializeExample{
 
     private void runStateLeaf() {
         ExampleActor a = new ExampleActor(system, "a");
-        ActorAggregationReplicable.StateLeaf leaf = new ActorAggregationReplicable.StateLeaf(a);
+        ActorKeyAggregation.StateUnit leaf = new ActorKeyAggregation.StateUnit(a);
         writeRead(p, leaf, (s,c) -> c.getRouter().asLocal().equals(a));
     }
 
@@ -101,7 +100,7 @@ public class SerializeExample2 extends SerializeExample{
 
     private void runHistogramTree() {
         KeyHistograms.HistogramTree tree = new KeyHistograms.HistogramTree(null,
-                new ActorBehaviorBuilderKeyValue.KeyComparatorDefault<>(), 10);
+                new ActorBehaviorBuilderKeyAggregation.KeyComparatorDefault<>(), 10);
 
         List<Object> os = values();
         int i = 0;
@@ -218,7 +217,7 @@ public class SerializeExample2 extends SerializeExample{
         a.getMailbox().offer(new Message<>(a, null, "msg1"));
         a.getMailbox().offer(new Message<>(a, null, "msg2"));
         a.getMailbox().offer(new Message<>(a, null, "msg3"));
-        MailboxAggregation.HistogramEntry e = a.getMailboxAsReplicable().getTableEntries().get(0);
+        MailboxKeyAggregation.HistogramEntry e = a.getMailboxAsKeyAggregation().getEntries().get(0);
 
 
         for (Object o : values()) {
@@ -226,22 +225,22 @@ public class SerializeExample2 extends SerializeExample{
         }
         checkTree(e.getTree(), "actor-construction");
 
-        ActorAggregationReplicable.ActorReplicableSerializableState s = a.toSerializable(123);
+        ActorKeyAggregation.ActorKeyAggregationSerializable s = a.toSerializable(123);
         writeRead(p, s, false, (pre,post) ->
                 check("post.name", MyActor.class, post.actorType) &&
                 check("post.name", "hello#123", post.name) &&
-                check("post.size", 1, post.tables.size()) &&
+                check("post.size", 1, post.histograms.size()) &&
                 check("post.mailbox.data", Arrays.asList("msg1", "msg2", "msg3"),
                         Arrays.stream(post.messages).map(Message::getData).collect(Collectors.toList())) &&
                 check("post.mailbox.tgt", Arrays.asList(a, a, a),
                                 Arrays.stream(post.messages).map(Message::getTarget)
                                         .map(system::resolveActor)
                                         .collect(Collectors.toList())) &&
-                checkTree(post.tables.get(0), "post.tree") &&
+                checkTree(post.histograms.get(0), "post.tree") &&
                 check("post.config", 123456, post.config.mailboxThreshold));
     }
 
-    public static class MyActor extends ActorAggregationReplicable {
+    public static class MyActor extends ActorKeyAggregation {
         public MyActor(ActorSystem system, String name, Config config) {
             super(system, name, config);
         }

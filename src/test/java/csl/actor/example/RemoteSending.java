@@ -7,6 +7,7 @@ import csl.actor.ActorSystem;
 import csl.actor.remote.ActorAddress;
 import csl.actor.remote.ActorRefRemote;
 import csl.actor.remote.ActorSystemRemote;
+import jdk.jfr.Threshold;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -48,7 +49,26 @@ public class RemoteSending {
             rec.tell(d, null);
         }
 
-        rec.tell("end", null);
+        rec.tell("end", new Manager(s2, "closer"));
+
+
+    }
+
+    public static class Manager extends ActorDefault {
+        public Manager(ActorSystem system, String name) {
+            super(system, name);
+        }
+
+        @Override
+        protected ActorBehavior initBehavior() {
+            return behaviorBuilder()
+                    .matchWithSender(ActorSystemRemote.ConnectionClose.class, this::receive)
+                    .build();
+        }
+
+        void receive(ActorSystemRemote.ConnectionClose s, ActorRef sender) {
+            getSystem().close();
+        }
     }
 
     public static class Receiver {
@@ -80,7 +100,7 @@ public class RemoteSending {
         protected ActorBehavior initBehavior() {
             return behaviorBuilder()
                     .match(long[].class, this::receive)
-                    .match(String.class, this::info)
+                    .matchWithSender(String.class, this::info)
                     .build();
         }
 
@@ -96,13 +116,22 @@ public class RemoteSending {
             }
         }
 
-        void info(String msg) {
+        void info(String msg, ActorRef sender) {
             printInfo(msg);
             prevTime = Instant.now();
             if (msg.equals("end") || msg.equals("extension")) {
                 if (receivedMessages < maxMessages) {
                     service.schedule(() -> tell("extension", this), nextExtension, TimeUnit.SECONDS);
                     nextExtension *= 2L;
+                }
+                if (msg.equals("end")) {
+                    sender.tell(new ActorSystemRemote.ConnectionClose());
+                    try {
+                        Thread.sleep(3000);
+                    } catch (Exception ex) {
+                        ex.printStackTrace();
+                    }
+                    getSystem().close();
                 }
             }
         }

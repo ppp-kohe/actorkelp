@@ -1,10 +1,10 @@
 package csl.actor.example;
 
 import csl.actor.*;
-import csl.actor.example.msgassoc.DebugBehavior;
-import csl.actor.msgassoc.ActorBehaviorBuilderKeyValue;
-import csl.actor.msgassoc.KeyHistograms;
-import csl.actor.msgassoc.PhaseShift;
+import csl.actor.example.keyaggregate.DebugBehavior;
+import csl.actor.keyaggregate.ActorBehaviorBuilderKeyAggregation;
+import csl.actor.keyaggregate.KeyHistograms;
+import csl.actor.keyaggregate.PhaseShift;
 
 import java.util.*;
 import java.util.concurrent.TimeUnit;
@@ -15,7 +15,7 @@ import java.util.function.BiFunction;
 public class LockExample {
     static AtomicBoolean error = new AtomicBoolean();
     public static void main(String[] args) throws Exception {
-        for (int n = 0; n < 100; ++n) {
+        for (int n = 0; n < 7; ++n) {
             if (error.get()) {
                 System.err.println("error");
                 break;
@@ -238,7 +238,7 @@ public class LockExample {
         public MapActor(ActorSystem system, ActorRef end) {
             super(system);
             this.end = end;
-            tree = new KeyHistograms.HistogramTree(new ActorBehaviorBuilderKeyValue.KeyComparatorDefault<>());
+            tree = new KeyHistograms.HistogramTree(new ActorBehaviorBuilderKeyAggregation.KeyComparatorDefault<>());
         }
 
         @Override
@@ -282,7 +282,7 @@ public class LockExample {
         public LeafActor(ActorSystem system, ActorRef end) {
             super(system);
             this.end = end;
-            tree = new KeyHistograms.HistogramTree(new ActorBehaviorBuilderKeyValue.KeyComparatorDefault<>());
+            tree = new KeyHistograms.HistogramTree(new ActorBehaviorBuilderKeyAggregation.KeyComparatorDefault<>());
         }
 
         @Override

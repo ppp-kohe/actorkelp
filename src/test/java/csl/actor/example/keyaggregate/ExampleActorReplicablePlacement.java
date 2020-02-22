@@ -1,14 +1,14 @@
-package csl.actor.example.msgassoc;
+package csl.actor.example.keyaggregate;
 
 import csl.actor.ActorBehavior;
 import csl.actor.ActorDefault;
 import csl.actor.ActorRef;
 import csl.actor.ActorSystem;
 import csl.actor.example.ExampleRemote;
-import csl.actor.msgassoc.ActorAggregationReplicable;
-import csl.actor.msgassoc.ActorPlacement;
-import csl.actor.msgassoc.Config;
-import csl.actor.msgassoc.ResponsiveCalls;
+import csl.actor.keyaggregate.ActorKeyAggregation;
+import csl.actor.keyaggregate.ActorPlacement;
+import csl.actor.keyaggregate.Config;
+import csl.actor.keyaggregate.ResponsiveCalls;
 import csl.actor.remote.ActorAddress;
 import csl.actor.remote.ActorRefRemote;
 import csl.actor.remote.ActorSystemRemote;
@@ -22,7 +22,7 @@ public class ExampleActorReplicablePlacement {
         int serverPort = 10000;
         system.startWithoutWait(serverPort);
 
-        new ActorAggregationReplicable.PlacemenActorReplicable(system,
+        new ActorKeyAggregation.PlacemenActorKeyAggregation(system,
                 new ActorPlacement.PlacementStrategyRoundRobin(0));
 
         ExampleRemote.setMvnClasspath();
@@ -45,7 +45,7 @@ public class ExampleActorReplicablePlacement {
 
     }
 
-    public static class TestActor extends ActorAggregationReplicable {
+    public static class TestActor extends ActorKeyAggregation {
         long[] model;
         public TestActor(ActorSystem system, String name, Config config) {
             super(system, name, config);
@@ -54,7 +54,7 @@ public class ExampleActorReplicablePlacement {
         }
 
         @Override
-        protected void initClone(ActorAggregationReplicable original) {
+        protected void initClone(ActorKeyAggregation original) {
             super.initClone(original);
             System.err.println("clone");
         }
@@ -69,13 +69,13 @@ public class ExampleActorReplicablePlacement {
         }
 
         @Override
-        public ActorReplicableSerializableState toSerializable(long num) {
+        public ActorKeyAggregationSerializable toSerializable(long num) {
             System.err.println("toSerializable");
             return super.toSerializable(num);
         }
 
         @Override
-        protected ActorReplicableSerializableState newSerializableState() {
+        protected ActorKeyAggregationSerializable newSerializableState() {
             return new ExampleActorReplicablePlacement.State(model);
         }
 
@@ -90,7 +90,7 @@ public class ExampleActorReplicablePlacement {
         }
     }
 
-    static class State extends ActorAggregationReplicable.ActorReplicableSerializableState {
+    static class State extends ActorKeyAggregation.ActorKeyAggregationSerializable {
         long[] model;
 
         public State(long[] model) {
@@ -109,7 +109,7 @@ public class ExampleActorReplicablePlacement {
 
             new RecvActor(system, "recv");
 
-            ActorAggregationReplicable.PlacemenActorReplicable p = new ActorAggregationReplicable.PlacemenActorReplicable(system,
+            ActorKeyAggregation.PlacemenActorKeyAggregation p = new ActorKeyAggregation.PlacemenActorKeyAggregation(system,
                     new ActorPlacement.PlacementStrategyUndertaker());
             Thread.sleep(10000);
             p.join(ActorAddress.get("localhost", joinPort));

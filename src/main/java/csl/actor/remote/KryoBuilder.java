@@ -12,7 +12,7 @@ import com.esotericsoftware.kryo.serializers.JavaSerializer;
 import com.esotericsoftware.kryo.util.DefaultInstantiatorStrategy;
 import com.esotericsoftware.kryo.util.Pool;
 import csl.actor.*;
-import csl.actor.msgassoc.*;
+import csl.actor.keyaggregate.*;
 import org.objenesis.instantiator.basic.ObjectStreamClassInstantiator;
 import org.objenesis.strategy.StdInstantiatorStrategy;
 
@@ -248,24 +248,24 @@ public class KryoBuilder {
                 ActorPlacement.AddressListEntry.class,
                 ActorPlacement.ActorCreationRequest.class,
                 ActorPlacement.CallableMasterThreads.class,
-                ActorAggregationReplicable.StateLeaf.class,
-                ActorAggregationReplicable.ActorReplicableSerializableState.class,
-                ActorAggregationReplicable.CallableToLocalSerializable.class,
+                ActorKeyAggregation.StateUnit.class,
+                ActorKeyAggregation.ActorKeyAggregationSerializable.class,
+                ActorKeyAggregation.CallableToLocalSerializable.class,
                 KeyHistograms.HistogramTree.class,
                 KeyHistograms.HistogramNodeTree.class,
                 KeyHistograms.HistogramNodeLeaf.class,
                 KeyHistograms.HistogramLeafList.class,
                 KeyHistograms.HistogramLeafCell.class,
-                ActorBehaviorAggregation.HistogramNodeLeaf1.class,
-                ActorBehaviorAggregation.HistogramNodeLeaf2.class,
-                ActorBehaviorAggregation.HistogramNodeLeaf3.class,
-                ActorBehaviorAggregation.HistogramNodeLeaf4.class,
-                ActorBehaviorAggregation.HistogramNodeLeafList.class,
-                ActorBehaviorAggregation.HistogramNodeLeafListReducible.class,
-                ActorBehaviorAggregation.HistogramNodeLeafListReducibleForPhase.class,
+                ActorBehaviorKeyAggregation.HistogramNodeLeaf1.class,
+                ActorBehaviorKeyAggregation.HistogramNodeLeaf2.class,
+                ActorBehaviorKeyAggregation.HistogramNodeLeaf3.class,
+                ActorBehaviorKeyAggregation.HistogramNodeLeaf4.class,
+                ActorBehaviorKeyAggregation.HistogramNodeLeafList.class,
+                ActorBehaviorKeyAggregation.HistogramNodeLeafListReducible.class,
+                ActorBehaviorKeyAggregation.HistogramNodeLeafListReducibleForPhase.class,
                 KeyHistograms.HistogramNodeLeafMap.class,
                 KeyHistograms.HistogramLeafCellSerializedEnd.class,
-                csl.actor.msgassoc.Config.class,
+                csl.actor.keyaggregate.Config.class,
                 MailboxPersistable.MessageOnStorage.class,
                 MailboxPersistable.PersistentFileEnd.class,
                 MailboxPersistable.PersistentFileReaderSource.class,
@@ -279,14 +279,14 @@ public class KryoBuilder {
                 KeyHistogramsPersistable.HistogramNodeLeafOnStorage.class,
                 KeyHistogramsPersistable.NodeTreeData.class,
 
-                ActorVisitor.class,
-                ActorVisitor.VisitorNoSender.class,
+                ActorKeyAggregationVisitor.class,
+                ActorKeyAggregationVisitor.VisitorNoSender.class,
                 PhaseShift.class,
                 PhaseShift.PhaseCompleted.class,
                 PhaseShift.PhaseShiftIntermediate.class,
                 PhaseShift.PhaseShiftIntermediateType.class,
-                ActorAggregationReplicable.CancelChange.class,
-                ActorAggregationReplicable.CanceledChangeType.class);
+                ActorKeyAggregation.CancelChange.class,
+                ActorKeyAggregation.CanceledChangeType.class);
     }
 
     public interface SerializerFunction {

@@ -42,6 +42,7 @@ public class Example {
             }
             if (n >= 50) {
                 System.err.println("end");
+                getSystem().close();
                 return;
             }
             if (ref != null) {

@@ -1,7 +1,7 @@
-package csl.actor.example.msgassoc;
+package csl.actor.example.keyaggregate;
 
 import csl.actor.*;
-import csl.actor.msgassoc.ActorPlacement;
+import csl.actor.keyaggregate.ActorPlacement;
 import csl.actor.remote.ActorSystemRemote;
 
 import java.io.Serializable;

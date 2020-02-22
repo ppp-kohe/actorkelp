@@ -1,12 +1,12 @@
-package csl.actor.msgassoc;
+package csl.actor.keyaggregate;
 
 import csl.actor.ActorBehavior;
 import csl.actor.ActorBehaviorBuilder;
 import csl.actor.ActorRef;
-import csl.actor.msgassoc.ActorBehaviorAggregation.ActorBehaviorMatchKeyList;
-import csl.actor.msgassoc.ActorBehaviorAggregation.ActorBehaviorMatchKeyListFuture;
-import csl.actor.msgassoc.ActorBehaviorAggregation.ActorBehaviorMatchKeyListFuturePhase;
-import csl.actor.msgassoc.KeyHistograms.KeyComparator;
+import csl.actor.keyaggregate.ActorBehaviorKeyAggregation.ActorBehaviorMatchKeyList;
+import csl.actor.keyaggregate.ActorBehaviorKeyAggregation.ActorBehaviorMatchKeyListFuture;
+import csl.actor.keyaggregate.ActorBehaviorKeyAggregation.ActorBehaviorMatchKeyListFuturePhase;
+import csl.actor.keyaggregate.KeyHistograms.KeyComparator;
 
 import java.util.*;
 import java.util.function.BiConsumer;
@@ -15,17 +15,17 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
-    protected Consumer<List<MailboxAggregation.HistogramProcessor>> histogramProcessorsTarget;
-    protected Map<Integer, MailboxAggregation.HistogramProcessor> processors = new HashMap<>();
+public class ActorBehaviorBuilderKeyAggregation extends ActorBehaviorBuilder {
+    protected Consumer<List<MailboxKeyAggregation.HistogramProcessor>> histogramProcessorsTarget;
+    protected Map<Integer, MailboxKeyAggregation.HistogramProcessor> processors = new HashMap<>();
     protected ActorBehaviorMatchKeyFactory matchKeyFactory = new ActorBehaviorMatchKeyFactory();
 
-    public ActorBehaviorBuilderKeyValue(
-            Consumer<List<MailboxAggregation.HistogramProcessor>> histogramProcessorsTarget) {
+    public ActorBehaviorBuilderKeyAggregation(
+            Consumer<List<MailboxKeyAggregation.HistogramProcessor>> histogramProcessorsTarget) {
         this.histogramProcessorsTarget = histogramProcessorsTarget;
     }
 
-    public ActorBehaviorBuilderKeyValue matchKeyFactory(ActorBehaviorMatchKeyFactory matchKeyFactory) {
+    public ActorBehaviorBuilderKeyAggregation matchKeyFactory(ActorBehaviorMatchKeyFactory matchKeyFactory) {
         this.matchKeyFactory = matchKeyFactory;
         return this;
     }
@@ -35,25 +35,25 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
     }
 
     @Override
-    public <DataType> ActorBehaviorBuilderKeyValue match(Class<DataType> dataType, Consumer<DataType> handler) {
+    public <DataType> ActorBehaviorBuilderKeyAggregation match(Class<DataType> dataType, Consumer<DataType> handler) {
         super.match(dataType, handler);
         return this;
     }
 
     @Override
-    public <DataType> ActorBehaviorBuilderKeyValue matchWithSender(Class<DataType> dataType, BiConsumer<DataType, ActorRef> handler) {
+    public <DataType> ActorBehaviorBuilderKeyAggregation matchWithSender(Class<DataType> dataType, BiConsumer<DataType, ActorRef> handler) {
         super.matchWithSender(dataType, handler);
         return this;
     }
 
     @Override
-    public ActorBehaviorBuilderKeyValue matchAny(BiConsumer<Object, ActorRef> handler) {
+    public ActorBehaviorBuilderKeyAggregation matchAny(BiConsumer<Object, ActorRef> handler) {
         super.matchAny(handler);
         return this;
     }
 
     @Override
-    public ActorBehaviorBuilderKeyValue with(ActorBehavior behavior) {
+    public ActorBehaviorBuilderKeyAggregation with(ActorBehavior behavior) {
         super.with(behavior);
         return this;
     }
@@ -77,7 +77,7 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
     public <ValueType, KeyType extends Comparable<KeyType>> RelayToCollect1<KeyType, ValueType> matchKeyOrdered(
             Class<ValueType> valueType, Function<ValueType, KeyType> keyExtractorFromValue) {
         return new RelayToCollect1<>(this, new KeyExtractorClass<>(valueType, keyExtractorFromValue))
-                .sort(new ActorBehaviorAggregation.KeyComparatorOrdered<>());
+                .sort(new ActorBehaviorKeyAggregation.KeyComparatorOrdered<>());
     }
 
     public int nextMatchKeyEntry() {
@@ -86,26 +86,26 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
         return id;
     }
 
-    public void setProcessor(int matchKeyEntryId, MailboxAggregation.HistogramProcessor processor) {
+    public void setProcessor(int matchKeyEntryId, MailboxKeyAggregation.HistogramProcessor processor) {
         processors.put(matchKeyEntryId, processor);
     }
 
-    public ActorBehaviorBuilderKeyValue withProcessor(int matchKeyEntryId, ActorBehavior behavior) {
-        if (behavior instanceof MailboxAggregation.HistogramProcessor) {
-            setProcessor(matchKeyEntryId, (MailboxAggregation.HistogramProcessor) behavior);
+    public ActorBehaviorBuilderKeyAggregation withProcessor(int matchKeyEntryId, ActorBehavior behavior) {
+        if (behavior instanceof MailboxKeyAggregation.HistogramProcessor) {
+            setProcessor(matchKeyEntryId, (MailboxKeyAggregation.HistogramProcessor) behavior);
         }
         return with(behavior);
     }
 
     public static class RelayToCollect<KeyType> {
-        protected ActorBehaviorBuilderKeyValue builder;
+        protected ActorBehaviorBuilderKeyAggregation builder;
         protected KeyComparator<KeyType> keyComparator;
 
-        public RelayToCollect(ActorBehaviorBuilderKeyValue builder) {
+        public RelayToCollect(ActorBehaviorBuilderKeyAggregation builder) {
             this(builder, new KeyComparatorDefault<>());
         }
 
-        public RelayToCollect(ActorBehaviorBuilderKeyValue builder, KeyComparator<KeyType> keyComparator) {
+        public RelayToCollect(ActorBehaviorBuilderKeyAggregation builder, KeyComparator<KeyType> keyComparator) {
             this.builder = builder;
             this.keyComparator = keyComparator;
         }
@@ -115,7 +115,7 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
             return this;
         }
 
-        protected ActorBehaviorBuilderKeyValue action(Function<Integer, ActorBehavior> behaviorFactory) {
+        protected ActorBehaviorBuilderKeyAggregation action(Function<Integer, ActorBehavior> behaviorFactory) {
             int id = builder.nextMatchKeyEntry();
             return builder.withProcessor(id, behaviorFactory.apply(id));
         }
@@ -125,7 +125,7 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
     public static class RelayToCollect1<KeyType, ValueType> extends RelayToCollect<KeyType> {
         protected KeyExtractor<KeyType, ValueType> extractor1;
 
-        public RelayToCollect1(ActorBehaviorBuilderKeyValue builder, KeyExtractor<KeyType, ValueType> extractor1) {
+        public RelayToCollect1(ActorBehaviorBuilderKeyAggregation builder, KeyExtractor<KeyType, ValueType> extractor1) {
             super(builder);
             this.extractor1 = extractor1;
         }
@@ -151,19 +151,19 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
             return reduce((k,vs) -> Collections.singletonList(keyValuesReducer.apply(k, vs)));
         }
 
-        public ActorBehaviorBuilderKeyValue forEachKeyValue(BiConsumer<KeyType, ValueType> handler) {
+        public ActorBehaviorBuilderKeyAggregation forEachKeyValue(BiConsumer<KeyType, ValueType> handler) {
             return action(id -> builder.getMatchKeyFactory().get1(id, keyComparator, extractor1, handler));
         }
 
-        public ActorBehaviorBuilderKeyValue forEach(Consumer<ValueType> handler) {
+        public ActorBehaviorBuilderKeyAggregation forEach(Consumer<ValueType> handler) {
             return forEachKeyValue((k,v) -> handler.accept(v));
         }
 
-        public ActorBehaviorBuilderKeyValue forEachKeyList(int requiredSize, BiConsumer<KeyType, List<ValueType>> handler) {
+        public ActorBehaviorBuilderKeyAggregation forEachKeyList(int requiredSize, BiConsumer<KeyType, List<ValueType>> handler) {
             return action(id -> builder.getMatchKeyFactory().getList(id, requiredSize, keyComparator, extractor1, handler));
         }
 
-        public ActorBehaviorBuilderKeyValue forEachKeyList(BiConsumer<KeyType, List<ValueType>> handler) {
+        public ActorBehaviorBuilderKeyAggregation forEachKeyList(BiConsumer<KeyType, List<ValueType>> handler) {
             return action(id -> builder.getMatchKeyFactory().getListFuture(id, keyComparator, extractor1, handler));
         }
     }
@@ -172,7 +172,7 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
         protected KeyExtractor<KeyType, ValueType1> extractor1;
         protected KeyExtractor<KeyType, ValueType2> extractor2;
 
-        public RelayToCollect2(ActorBehaviorBuilderKeyValue builder,
+        public RelayToCollect2(ActorBehaviorBuilderKeyAggregation builder,
                                KeyExtractor<KeyType, ValueType1> extractor1,
                                KeyExtractor<KeyType, ValueType2> extractor2) {
             super(builder);
@@ -201,25 +201,25 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
             return reduce((k,vs) -> Collections.singletonList(keyValuesReducer.apply(k, vs)));
         }
 
-        public ActorBehaviorBuilderKeyValue forEachPair(BiConsumer<ValueType1, ValueType2> handler) {
+        public ActorBehaviorBuilderKeyAggregation forEachPair(BiConsumer<ValueType1, ValueType2> handler) {
             return forEachKeyPair((k,v1,v2) -> handler.accept(v1,v2));
         }
 
-        public ActorBehaviorBuilderKeyValue forEachKeyPair(TriConsumer<KeyType, ValueType1, ValueType2> handler) {
+        public ActorBehaviorBuilderKeyAggregation forEachKeyPair(TriConsumer<KeyType, ValueType1, ValueType2> handler) {
             return action(id -> builder.getMatchKeyFactory().get2(id,
                     keyComparator, extractor1, extractor2, handler));
         }
 
-        public ActorBehaviorBuilderKeyValue forEachKeyValue(BiConsumer<KeyType, Object> handler) {
+        public ActorBehaviorBuilderKeyAggregation forEachKeyValue(BiConsumer<KeyType, Object> handler) {
             return forEachKeyList(1, (k,vs) -> handler.accept(k, vs.get(0)));
         }
 
-        public ActorBehaviorBuilderKeyValue forEachKeyList(int requiredSize, BiConsumer<KeyType, List<Object>> handler) {
+        public ActorBehaviorBuilderKeyAggregation forEachKeyList(int requiredSize, BiConsumer<KeyType, List<Object>> handler) {
             return action(id -> builder.getMatchKeyFactory().getList(id, requiredSize, keyComparator,
                     new KeyExtractorList<>(extractor1, extractor2), handler));
         }
 
-        public ActorBehaviorBuilderKeyValue forEachKeyList(BiConsumer<KeyType, List<Object>> handler) {
+        public ActorBehaviorBuilderKeyAggregation forEachKeyList(BiConsumer<KeyType, List<Object>> handler) {
             return action(id -> builder.getMatchKeyFactory().getListFuture(id, keyComparator,
                     new KeyExtractorList<>(extractor1, extractor2), handler));
         }
@@ -230,7 +230,7 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
         protected KeyExtractor<KeyType, ValueType2> extractor2;
         protected KeyExtractor<KeyType, ValueType3> extractor3;
 
-        public RelayToCollect3(ActorBehaviorBuilderKeyValue builder,
+        public RelayToCollect3(ActorBehaviorBuilderKeyAggregation builder,
                                KeyExtractor<KeyType, ValueType1> extractor1,
                                KeyExtractor<KeyType, ValueType2> extractor2,
                                KeyExtractor<KeyType, ValueType3> extractor3) {
@@ -261,25 +261,25 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
             return reduce((k,vs) -> Collections.singletonList(keyValuesReducer.apply(k, vs)));
         }
 
-        public ActorBehaviorBuilderKeyValue forEachTriple(TriConsumer<ValueType1, ValueType2, ValueType3> handler) {
+        public ActorBehaviorBuilderKeyAggregation forEachTriple(TriConsumer<ValueType1, ValueType2, ValueType3> handler) {
             return forEachKeyTriple((k,v1,v2,v3) -> handler.accept(v1,v2,v3));
         }
 
-        public ActorBehaviorBuilderKeyValue forEachKeyTriple(QuadConsumer<KeyType, ValueType1, ValueType2, ValueType3> handler) {
+        public ActorBehaviorBuilderKeyAggregation forEachKeyTriple(QuadConsumer<KeyType, ValueType1, ValueType2, ValueType3> handler) {
             return action(id -> builder.getMatchKeyFactory().get3(id,
                     keyComparator, extractor1, extractor2, extractor3, handler));
         }
 
-        public ActorBehaviorBuilderKeyValue forEachKeyValue(BiConsumer<KeyType, Object> handler) {
+        public ActorBehaviorBuilderKeyAggregation forEachKeyValue(BiConsumer<KeyType, Object> handler) {
             return forEachKeyList(1, (k,vs) -> handler.accept(k, vs.get(0)));
         }
 
-        public ActorBehaviorBuilderKeyValue forEachKeyList(int requiredSize, BiConsumer<KeyType, List<Object>> handler) {
+        public ActorBehaviorBuilderKeyAggregation forEachKeyList(int requiredSize, BiConsumer<KeyType, List<Object>> handler) {
             return action(id -> builder.getMatchKeyFactory().getList(id, requiredSize, keyComparator,
                     new KeyExtractorList<>(extractor1, extractor2, extractor3), handler));
         }
 
-        public ActorBehaviorBuilderKeyValue forEachKeyList(BiConsumer<KeyType, List<Object>> handler) {
+        public ActorBehaviorBuilderKeyAggregation forEachKeyList(BiConsumer<KeyType, List<Object>> handler) {
             return action(id -> builder.getMatchKeyFactory().getListFuture(id, keyComparator,
                     new KeyExtractorList<>(extractor1, extractor2, extractor3), handler));
         }
@@ -291,7 +291,7 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
         protected KeyExtractor<KeyType, ValueType3> extractor3;
         protected KeyExtractor<KeyType, ValueType4> extractor4;
 
-        public RelayToCollect4(ActorBehaviorBuilderKeyValue builder,
+        public RelayToCollect4(ActorBehaviorBuilderKeyAggregation builder,
                                KeyExtractor<KeyType, ValueType1> extractor1,
                                KeyExtractor<KeyType, ValueType2> extractor2,
                                KeyExtractor<KeyType, ValueType3> extractor3,
@@ -324,25 +324,25 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
             return reduce((k,vs) -> Collections.singletonList(keyValuesReducer.apply(k, vs)));
         }
 
-        public ActorBehaviorBuilderKeyValue forEachQuad(QuadConsumer<ValueType1, ValueType2, ValueType3, ValueType4> handler) {
+        public ActorBehaviorBuilderKeyAggregation forEachQuad(QuadConsumer<ValueType1, ValueType2, ValueType3, ValueType4> handler) {
             return forEachKeyQuad((k,v1,v2,v3,v4) -> handler.accept(v1,v2,v3,v4));
         }
 
-        public ActorBehaviorBuilderKeyValue forEachKeyQuad(QuintConsumer<KeyType, ValueType1, ValueType2, ValueType3, ValueType4> handler) {
+        public ActorBehaviorBuilderKeyAggregation forEachKeyQuad(QuintConsumer<KeyType, ValueType1, ValueType2, ValueType3, ValueType4> handler) {
             return action(id -> builder.getMatchKeyFactory().get4(id,
                             keyComparator, extractor1, extractor2, extractor3, extractor4, handler));
         }
 
-        public ActorBehaviorBuilderKeyValue forEachKeyValue(BiConsumer<KeyType, Object> handler) {
+        public ActorBehaviorBuilderKeyAggregation forEachKeyValue(BiConsumer<KeyType, Object> handler) {
             return forEachKeyList(1, (k,vs) -> handler.accept(k, vs.get(0)));
         }
 
-        public ActorBehaviorBuilderKeyValue forEachKeyList(int requiredSize, BiConsumer<KeyType, List<Object>> handler) {
+        public ActorBehaviorBuilderKeyAggregation forEachKeyList(int requiredSize, BiConsumer<KeyType, List<Object>> handler) {
             return action(id -> builder.getMatchKeyFactory().getList(id, requiredSize, keyComparator,
                     new KeyExtractorList<>(extractor1, extractor2, extractor3, extractor4), handler));
         }
 
-        public ActorBehaviorBuilderKeyValue forEachKeyList(BiConsumer<KeyType, List<Object>> handler) {
+        public ActorBehaviorBuilderKeyAggregation forEachKeyList(BiConsumer<KeyType, List<Object>> handler) {
             return action(id -> builder.getMatchKeyFactory().getListFuture(id, keyComparator,
                     new KeyExtractorList<>(extractor1, extractor2, extractor3, extractor4), handler));
         }
@@ -352,14 +352,14 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
         protected List<KeyExtractor<KeyType,?>> extractors;
         protected List<BiFunction<KeyType, List<ValueType>, Iterable<ValueType>>> keyValuesReducers;
 
-        public RelayToCollectList(ActorBehaviorBuilderKeyValue builder,
-                               List<KeyExtractor<KeyType, ?>> extractors) {
+        public RelayToCollectList(ActorBehaviorBuilderKeyAggregation builder,
+                                  List<KeyExtractor<KeyType, ?>> extractors) {
             super(builder);
             this.extractors = new ArrayList<>(extractors);
             this.keyValuesReducers = new ArrayList<>(3);
         }
 
-        public RelayToCollectList(ActorBehaviorBuilderKeyValue builder,
+        public RelayToCollectList(ActorBehaviorBuilderKeyAggregation builder,
                                   KeyComparator<KeyType> keyComparator,
                                   BiFunction<KeyType, List<ValueType>, Iterable<ValueType>> keyValuesReducer,
                                   List<KeyExtractor<KeyType, ?>> extractors) {
@@ -369,7 +369,7 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
             keyValuesReducers.add(keyValuesReducer);
         }
 
-        public RelayToCollectList(ActorBehaviorBuilderKeyValue builder,
+        public RelayToCollectList(ActorBehaviorBuilderKeyAggregation builder,
                                   KeyComparator<KeyType> keyComparator,
                                   List<BiFunction<KeyType, List<ValueType>, Iterable<ValueType>>> keyValuesReducers,
                                   List<KeyExtractor<KeyType, ?>> extractors) {
@@ -399,21 +399,21 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
             return reduce((k,vs) -> Collections.singletonList(keyValuesReducer.apply(k, vs)));
         }
 
-        public ActorBehaviorBuilderKeyValue forEachKeyValue(BiConsumer<KeyType, ValueType> handler) {
+        public ActorBehaviorBuilderKeyAggregation forEachKeyValue(BiConsumer<KeyType, ValueType> handler) {
             return forEachKeyList(1, (k,vs) -> handler.accept(k, vs.get(0)));
         }
 
-        public ActorBehaviorBuilderKeyValue forEach(Consumer<ValueType> handler) {
+        public ActorBehaviorBuilderKeyAggregation forEach(Consumer<ValueType> handler) {
             return forEachKeyList(1, (k,vs) -> handler.accept(vs.get(0)));
         }
 
-        public ActorBehaviorBuilderKeyValue forEachKeyList(int requiredSize, BiConsumer<KeyType, List<ValueType>> handler) {
+        public ActorBehaviorBuilderKeyAggregation forEachKeyList(int requiredSize, BiConsumer<KeyType, List<ValueType>> handler) {
             return action(id -> builder.getMatchKeyFactory().getList(id, requiredSize, keyComparator,
                     new KeyExtractorList<>(extractors), handler)
                     .withKeyValuesReducers(keyValuesReducers));
         }
 
-        public ActorBehaviorBuilderKeyValue forEachKeyList(BiConsumer<KeyType, List<ValueType>> handler) {
+        public ActorBehaviorBuilderKeyAggregation forEachKeyList(BiConsumer<KeyType, List<ValueType>> handler) {
             return action(id -> builder.getMatchKeyFactory().getListFuture(id, keyComparator,
                     new KeyValuesReducerList<>(keyValuesReducers),
                     new KeyExtractorList<>(extractors), handler));
@@ -425,30 +425,30 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
     }
 
     public static class RelayToCollectListPhase<KeyType, ValueType> extends RelayToCollectList<KeyType, ValueType> {
-        public RelayToCollectListPhase(ActorBehaviorBuilderKeyValue builder, List<KeyExtractor<KeyType, ?>> keyExtractors) {
+        public RelayToCollectListPhase(ActorBehaviorBuilderKeyAggregation builder, List<KeyExtractor<KeyType, ?>> keyExtractors) {
             super(builder, keyExtractors);
         }
 
-        public RelayToCollectListPhase(ActorBehaviorBuilderKeyValue builder, KeyComparator<KeyType> keyComparator,
+        public RelayToCollectListPhase(ActorBehaviorBuilderKeyAggregation builder, KeyComparator<KeyType> keyComparator,
                                        BiFunction<KeyType, List<ValueType>, Iterable<ValueType>> keyValuesReducer,
                                        List<KeyExtractor<KeyType, ?>> keyExtractors) {
             super(builder, keyComparator, keyValuesReducer, keyExtractors);
         }
 
-        public RelayToCollectListPhase(ActorBehaviorBuilderKeyValue builder, KeyComparator<KeyType> keyComparator,
+        public RelayToCollectListPhase(ActorBehaviorBuilderKeyAggregation builder, KeyComparator<KeyType> keyComparator,
                                        List<BiFunction<KeyType, List<ValueType>, Iterable<ValueType>>> keyValuesReducers,
                                        List<KeyExtractor<KeyType, ?>> extractors) {
             super(builder, keyComparator, keyValuesReducers, extractors);
         }
 
-        public ActorBehaviorBuilderKeyValue forEachKeyList(int requiredSize, BiConsumer<KeyType, List<ValueType>> handler) {
+        public ActorBehaviorBuilderKeyAggregation forEachKeyList(int requiredSize, BiConsumer<KeyType, List<ValueType>> handler) {
             return action(id -> builder.getMatchKeyFactory().getListFuturePhase(id, requiredSize, keyComparator,
                     new KeyValuesReducerList<>(keyValuesReducers),
                     new KeyExtractorList<>(extractors),
                     handler));
         }
 
-        public ActorBehaviorBuilderKeyValue forEachKeyList(BiConsumer<KeyType, List<ValueType>> handler) {
+        public ActorBehaviorBuilderKeyAggregation forEachKeyList(BiConsumer<KeyType, List<ValueType>> handler) {
             return action(id -> builder.getMatchKeyFactory().getListFuturePhase(id, 1, keyComparator,
                     new KeyValuesReducerList<>(keyValuesReducers),
                     new KeyExtractorList<>(extractors), handler));
@@ -571,7 +571,7 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
         @Override
         public KeyType centerPoint(KeyType leftEnd, KeyType rightStart) {
             if (leftEnd instanceof Comparable<?>) {
-                return ActorBehaviorAggregation.centerPointPrimitive(leftEnd, rightStart);
+                return ActorBehaviorKeyAggregation.centerPointPrimitive(leftEnd, rightStart);
             } else {
                 return rightStart;
             }
@@ -597,41 +597,41 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
 
     public static class ActorBehaviorMatchKeyFactory {
         public <KeyType, ValueType1> ActorBehavior get1(int matchKeyEntryId, KeyHistograms.KeyComparator<KeyType> keyComparator,
-                                                  ActorBehaviorBuilderKeyValue.KeyExtractor<KeyType, ValueType1> keyExtractorFromValue1,
+                                                  ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType1> keyExtractorFromValue1,
                                                   BiConsumer<KeyType, ValueType1> handler) {
-            return new ActorBehaviorAggregation.ActorBehaviorMatchKey1<>(matchKeyEntryId, keyComparator,
+            return new ActorBehaviorKeyAggregation.ActorBehaviorMatchKey1<>(matchKeyEntryId, keyComparator,
                     keyExtractorFromValue1, handler);
         }
 
         public <KeyType, ValueType1, ValueType2> ActorBehavior get2(int matchKeyEntryId, KeyHistograms.KeyComparator<KeyType> keyComparator,
-                                                ActorBehaviorBuilderKeyValue.KeyExtractor<KeyType, ValueType1> keyExtractorFromValue1,
-                                                ActorBehaviorBuilderKeyValue.KeyExtractor<KeyType, ValueType2> keyExtractorFromValue2,
+                                                ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType1> keyExtractorFromValue1,
+                                                ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType2> keyExtractorFromValue2,
                                                 TriConsumer<KeyType, ValueType1, ValueType2> handler) {
-            return new ActorBehaviorAggregation.ActorBehaviorMatchKey2<>(matchKeyEntryId, keyComparator,
+            return new ActorBehaviorKeyAggregation.ActorBehaviorMatchKey2<>(matchKeyEntryId, keyComparator,
                     keyExtractorFromValue1, keyExtractorFromValue2, handler);
         }
 
         public <KeyType, ValueType1, ValueType2, ValueType3> ActorBehavior get3(int matchKeyEntryId, KeyHistograms.KeyComparator<KeyType> keyComparator,
-                                                ActorBehaviorBuilderKeyValue.KeyExtractor<KeyType, ValueType1> keyExtractorFromValue1,
-                                                ActorBehaviorBuilderKeyValue.KeyExtractor<KeyType, ValueType2> keyExtractorFromValue2,
-                                                ActorBehaviorBuilderKeyValue.KeyExtractor<KeyType, ValueType3> keyExtractorFromValue3,
+                                                ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType1> keyExtractorFromValue1,
+                                                ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType2> keyExtractorFromValue2,
+                                                ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType3> keyExtractorFromValue3,
                                                 QuadConsumer<KeyType, ValueType1, ValueType2, ValueType3> handler) {
-            return new ActorBehaviorAggregation.ActorBehaviorMatchKey3<>(matchKeyEntryId, keyComparator,
+            return new ActorBehaviorKeyAggregation.ActorBehaviorMatchKey3<>(matchKeyEntryId, keyComparator,
                     keyExtractorFromValue1, keyExtractorFromValue2, keyExtractorFromValue3, handler);
         }
 
         public <KeyType, ValueType1, ValueType2, ValueType3, ValueType4> ActorBehavior get4(int matchKeyEntryId, KeyHistograms.KeyComparator<KeyType> keyComparator,
-                                                ActorBehaviorBuilderKeyValue.KeyExtractor<KeyType, ValueType1> keyExtractorFromValue1,
-                                                ActorBehaviorBuilderKeyValue.KeyExtractor<KeyType, ValueType2> keyExtractorFromValue2,
-                                                ActorBehaviorBuilderKeyValue.KeyExtractor<KeyType, ValueType3> keyExtractorFromValue3,
-                                                ActorBehaviorBuilderKeyValue.KeyExtractor<KeyType, ValueType4> keyExtractorFromValue4,
+                                                ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType1> keyExtractorFromValue1,
+                                                ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType2> keyExtractorFromValue2,
+                                                ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType3> keyExtractorFromValue3,
+                                                ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType4> keyExtractorFromValue4,
                                                 QuintConsumer<KeyType, ValueType1, ValueType2, ValueType3, ValueType4> handler) {
-            return new ActorBehaviorAggregation.ActorBehaviorMatchKey4<>(matchKeyEntryId, keyComparator,
+            return new ActorBehaviorKeyAggregation.ActorBehaviorMatchKey4<>(matchKeyEntryId, keyComparator,
                     keyExtractorFromValue1, keyExtractorFromValue2, keyExtractorFromValue3, keyExtractorFromValue4, handler);
         }
 
         public <KeyType, ValueType> ActorBehaviorMatchKeyList<KeyType, ValueType> getList(int matchKeyEntryId, int threshold, KeyHistograms.KeyComparator<KeyType> keyComparator,
-                                               ActorBehaviorBuilderKeyValue.KeyExtractor<KeyType, ValueType> keyExtractorFromValue,
+                                               ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType> keyExtractorFromValue,
                                                BiConsumer<KeyType, List<ValueType>> handler) {
             return new ActorBehaviorMatchKeyList<>(matchKeyEntryId, threshold,
                     keyComparator, keyExtractorFromValue, handler);
@@ -639,7 +639,7 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
 
         public <KeyType, ValueType> ActorBehaviorMatchKeyListFuture<KeyType,ValueType> getListFuture(int matchKeyEntryId,
                                                KeyHistograms.KeyComparator<KeyType> keyComparator,
-                                               ActorBehaviorBuilderKeyValue.KeyExtractor<KeyType, ValueType> keyExtractorFromValue,
+                                               ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType> keyExtractorFromValue,
                                                BiConsumer<KeyType, List<ValueType>> handler) {
             return getListFuture(matchKeyEntryId, 1,
                     keyComparator, (k,vs) -> vs, keyExtractorFromValue, handler);
@@ -649,7 +649,7 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
         public <KeyType, ValueType> ActorBehaviorMatchKeyListFuture<KeyType, ValueType> getListFuture(int matchKeyEntryId,
                                                KeyHistograms.KeyComparator<KeyType> keyComparator,
                                                BiFunction<KeyType, List<ValueType>, Iterable<ValueType>> keyValuesReducer,
-                                               ActorBehaviorBuilderKeyValue.KeyExtractor<KeyType, ValueType> keyExtractorFromValue,
+                                               ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType> keyExtractorFromValue,
                                                BiConsumer<KeyType, List<ValueType>> handler) {
             return getListFuture(matchKeyEntryId, 1, keyComparator,
                     keyValuesReducer, keyExtractorFromValue, handler);
@@ -659,7 +659,7 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
         public <KeyType, ValueType> ActorBehaviorMatchKeyListFuture<KeyType,ValueType> getListFuture(int matchKeyEntryId, int requiredSize,
                                               KeyHistograms.KeyComparator<KeyType> keyComparator,
                                               BiFunction<KeyType, List<ValueType>, Iterable<ValueType>> keyValuesReducer,
-                                              ActorBehaviorBuilderKeyValue.KeyExtractor<KeyType, ValueType> keyExtractorFromValue,
+                                              ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType> keyExtractorFromValue,
                                               BiConsumer<KeyType, List<ValueType>> handler) {
             return new ActorBehaviorMatchKeyListFuture<>(matchKeyEntryId, requiredSize,
                     keyComparator, keyValuesReducer, keyExtractorFromValue, handler);
@@ -669,7 +669,7 @@ public class ActorBehaviorBuilderKeyValue extends ActorBehaviorBuilder {
         public <KeyType, ValueType> ActorBehaviorMatchKeyListFuturePhase<KeyType,ValueType> getListFuturePhase(int matchKeyEntryId, int requiredSize,
                                                KeyHistograms.KeyComparator<KeyType> keyComparator,
                                                BiFunction<KeyType, List<ValueType>, Iterable<ValueType>> keyValuesReducer,
-                                               ActorBehaviorBuilderKeyValue.KeyExtractor<KeyType, ValueType> keyExtractorFromValue,
+                                               ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType> keyExtractorFromValue,
                                                BiConsumer<KeyType, List<ValueType>> handler) {
             return new ActorBehaviorMatchKeyListFuturePhase<>(matchKeyEntryId, requiredSize,
                     keyComparator, keyValuesReducer, keyExtractorFromValue, handler);

@@ -194,7 +194,12 @@ public class ObjectMessageClient implements Closeable {
             try {
                 clearResult();
                 ChannelFuture f = channel.writeAndFlush(msg);
-                checkResult(f);
+                if (ActorSystemRemote.isClose(msg)) {
+                    clearResult();
+                    close();
+                } else {
+                    checkResult(f);
+                }
             } catch (Exception c) {
                 System.err.println(String.format("%s write failure: %s", this, c));
                 logWrite(retryCount, String.format("write failure %s", c));

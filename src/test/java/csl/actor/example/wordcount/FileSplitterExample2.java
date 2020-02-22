@@ -5,9 +5,9 @@ import csl.actor.ActorRef;
 import csl.actor.ActorSystem;
 import csl.actor.ActorSystemDefault;
 import csl.actor.example.LockExample;
-import csl.actor.msgassoc.ActorAggregationReplicable;
-import csl.actor.msgassoc.Config;
-import csl.actor.msgassoc.PhaseShift;
+import csl.actor.keyaggregate.ActorKeyAggregation;
+import csl.actor.keyaggregate.Config;
+import csl.actor.keyaggregate.PhaseShift;
 
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -45,7 +45,7 @@ public class FileSplitterExample2 {
         }
     }
 
-    public static class FileMapper extends ActorAggregationReplicable {
+    public static class FileMapper extends ActorKeyAggregation {
         FileSplitter splitter;
         long splitCount;
 
@@ -66,7 +66,7 @@ public class FileSplitterExample2 {
         }
 
         @Override
-        protected void initMerged(ActorAggregationReplicable m) {
+        protected void initMerged(ActorKeyAggregation m) {
             WordCount.FileMapper fm = (WordCount.FileMapper) m;
             splitCount = Math.max(splitCount, fm.splitCount);
         }

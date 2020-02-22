@@ -1,4 +1,4 @@
-package csl.actor.msgassoc;
+package csl.actor.keyaggregate;
 
 import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.KryoException;

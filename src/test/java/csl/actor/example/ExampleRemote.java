@@ -27,8 +27,8 @@ public class ExampleRemote {
             String port = args[0];
             String linkPort = args[1];
             System.err.println("started " + port + " " + linkPort + " [" + args.length + "]");
-            int p = Integer.valueOf(port);
-            int lp = Integer.valueOf(linkPort);
+            int p = Integer.parseInt(port);
+            int lp = Integer.parseInt(linkPort);
             ActorSystemRemote sys = new ActorSystemRemote();
             sys.startWithoutWait(p);
 

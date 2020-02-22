@@ -1,14 +1,13 @@
-package csl.actor.msgassoc;
+package csl.actor.keyaggregate;
 
 import com.esotericsoftware.kryo.io.Output;
-import csl.actor.msgassoc.MailboxPersistable.PersistentFileReaderSource;
+import csl.actor.keyaggregate.MailboxPersistable.PersistentFileReaderSource;
 import csl.actor.remote.KryoBuilder;
 
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.io.Serializable;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;

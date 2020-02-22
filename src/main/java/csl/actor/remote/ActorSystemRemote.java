@@ -343,6 +343,7 @@ public class ActorSystemRemote implements ActorSystem {
         public void send(Message<?> message) {
             if (message.getData() instanceof ConnectionClose) {
                 log(20, "%s close", message);
+                connection.write(new TransferredMessage(count, message));
                 close();
             } else {
                 if (mailbox.isEmpty()) {
@@ -395,7 +396,18 @@ public class ActorSystemRemote implements ActorSystem {
         }
     }
 
-    public static class ConnectionClose implements Serializable { }
+    public static class ConnectionClose implements Serializable {
+    }
+
+    public static boolean isClose(Object msg) {
+        if (msg instanceof ActorSystemRemote.TransferredMessage) {
+            msg = ((ActorSystemRemote.TransferredMessage) msg).body;
+        }
+        if (msg instanceof Message<?>) {
+            msg = ((Message<?>) msg).getData();
+        }
+        return (msg instanceof ActorSystemRemote.ConnectionClose);
+    }
 
     public static void settingsSocketChannel(SocketChannel ch) {
         SocketChannelConfig conf = ch.config();

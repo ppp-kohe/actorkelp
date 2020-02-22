@@ -1,4 +1,4 @@
-package csl.actor.msgassoc;
+package csl.actor.keyaggregate;
 
 import csl.actor.*;
 import csl.actor.CallableMessage.CallableResponseVoid;

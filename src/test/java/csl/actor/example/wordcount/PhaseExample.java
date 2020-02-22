@@ -4,8 +4,8 @@ import csl.actor.ActorBehavior;
 import csl.actor.ActorRef;
 import csl.actor.ActorSystem;
 import csl.actor.ActorSystemDefault;
-import csl.actor.msgassoc.ActorAggregationReplicable;
-import csl.actor.msgassoc.PhaseShift;
+import csl.actor.keyaggregate.ActorKeyAggregation;
+import csl.actor.keyaggregate.PhaseShift;
 
 public class PhaseExample {
     public static void main(String[] args) {
@@ -27,7 +27,7 @@ public class PhaseExample {
         new PhaseShift.PhaseTerminalActor(system, true).start("end2", b);
     }
 
-    public static class MyActor extends ActorAggregationReplicable {
+    public static class MyActor extends ActorKeyAggregation {
         ActorRef next;
         public MyActor(ActorSystem system) {
             super(system);
@@ -44,7 +44,7 @@ public class PhaseExample {
         }
     }
 
-    public static class MyActor2 extends ActorAggregationReplicable {
+    public static class MyActor2 extends ActorKeyAggregation {
         public MyActor2(ActorSystem system) {
             super(system);
         }

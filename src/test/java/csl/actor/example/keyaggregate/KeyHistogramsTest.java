@@ -1,9 +1,8 @@
-package csl.actor.example.msgassoc;
+package csl.actor.example.keyaggregate;
 
-import csl.actor.ActorSystem;
 import csl.actor.ActorSystemDefault;
 import csl.actor.example.delayedlabel.ActorToGraph;
-import csl.actor.msgassoc.KeyHistograms;
+import csl.actor.keyaggregate.KeyHistograms;
 
 import java.io.File;
 import java.util.*;

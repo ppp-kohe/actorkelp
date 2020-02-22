@@ -1,11 +1,11 @@
-package csl.actor.example.msgassoc;
+package csl.actor.example.keyaggregate;
 
 import csl.actor.*;
 import csl.actor.example.SerializeExample2;
-import csl.actor.msgassoc.Config;
-import csl.actor.msgassoc.MailboxPersistable;
-import csl.actor.msgassoc.PhaseShift;
-import csl.actor.msgassoc.ResponsiveCalls;
+import csl.actor.keyaggregate.Config;
+import csl.actor.keyaggregate.MailboxPersistable;
+import csl.actor.keyaggregate.PhaseShift;
+import csl.actor.keyaggregate.ResponsiveCalls;
 import csl.actor.remote.KryoBuilder;
 
 import java.time.Duration;

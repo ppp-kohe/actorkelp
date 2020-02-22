@@ -1,58 +1,58 @@
-package csl.actor.example.msgassoc;
+package csl.actor.example.keyaggregate;
 
 import csl.actor.Actor;
 import csl.actor.ActorBehavior;
 import csl.actor.Message;
-import csl.actor.msgassoc.ActorBehaviorAggregation;
-import csl.actor.msgassoc.ActorBehaviorBuilderKeyValue;
-import csl.actor.msgassoc.KeyHistograms;
-import csl.actor.msgassoc.MailboxAggregation;
+import csl.actor.keyaggregate.ActorBehaviorBuilderKeyAggregation;
+import csl.actor.keyaggregate.ActorBehaviorKeyAggregation;
+import csl.actor.keyaggregate.KeyHistograms;
+import csl.actor.keyaggregate.MailboxKeyAggregation;
 
 import java.util.List;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 
 public class DebugBehavior {
-    public static class DebugFactory extends ActorBehaviorBuilderKeyValue.ActorBehaviorMatchKeyFactory {
+    public static class DebugFactory extends ActorBehaviorBuilderKeyAggregation.ActorBehaviorMatchKeyFactory {
         @Override
-        public <KeyType, ValueType1> ActorBehavior get1(int matchKeyEntryId, KeyHistograms.KeyComparator<KeyType> keyComparator, ActorBehaviorBuilderKeyValue.KeyExtractor<KeyType, ValueType1> keyExtractorFromValue1, BiConsumer<KeyType, ValueType1> handler) {
+        public <KeyType, ValueType1> ActorBehavior get1(int matchKeyEntryId, KeyHistograms.KeyComparator<KeyType> keyComparator, ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType1> keyExtractorFromValue1, BiConsumer<KeyType, ValueType1> handler) {
             return new DebugMatchKey1<>(matchKeyEntryId, keyComparator, keyExtractorFromValue1, handler);
         }
 
         @Override
-        public <KeyType, ValueType1, ValueType2> ActorBehavior get2(int matchKeyEntryId, KeyHistograms.KeyComparator<KeyType> keyComparator, ActorBehaviorBuilderKeyValue.KeyExtractor<KeyType, ValueType1> keyExtractorFromValue1, ActorBehaviorBuilderKeyValue.KeyExtractor<KeyType, ValueType2> keyExtractorFromValue2, ActorBehaviorBuilderKeyValue.TriConsumer<KeyType, ValueType1, ValueType2> handler) {
+        public <KeyType, ValueType1, ValueType2> ActorBehavior get2(int matchKeyEntryId, KeyHistograms.KeyComparator<KeyType> keyComparator, ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType1> keyExtractorFromValue1, ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType2> keyExtractorFromValue2, ActorBehaviorBuilderKeyAggregation.TriConsumer<KeyType, ValueType1, ValueType2> handler) {
             return new DebugMatchKey2<>(matchKeyEntryId, keyComparator, keyExtractorFromValue1, keyExtractorFromValue2, handler);
         }
 
         @Override
-        public <KeyType, ValueType1, ValueType2, ValueType3> ActorBehavior get3(int matchKeyEntryId, KeyHistograms.KeyComparator<KeyType> keyComparator, ActorBehaviorBuilderKeyValue.KeyExtractor<KeyType, ValueType1> keyExtractorFromValue1, ActorBehaviorBuilderKeyValue.KeyExtractor<KeyType, ValueType2> keyExtractorFromValue2, ActorBehaviorBuilderKeyValue.KeyExtractor<KeyType, ValueType3> keyExtractorFromValue3, ActorBehaviorBuilderKeyValue.QuadConsumer<KeyType, ValueType1, ValueType2, ValueType3> handler) {
+        public <KeyType, ValueType1, ValueType2, ValueType3> ActorBehavior get3(int matchKeyEntryId, KeyHistograms.KeyComparator<KeyType> keyComparator, ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType1> keyExtractorFromValue1, ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType2> keyExtractorFromValue2, ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType3> keyExtractorFromValue3, ActorBehaviorBuilderKeyAggregation.QuadConsumer<KeyType, ValueType1, ValueType2, ValueType3> handler) {
             return new DebugMatchKey3<>(matchKeyEntryId, keyComparator, keyExtractorFromValue1, keyExtractorFromValue2, keyExtractorFromValue3, handler);
         }
 
         @Override
-        public <KeyType, ValueType1, ValueType2, ValueType3, ValueType4> ActorBehavior get4(int matchKeyEntryId, KeyHistograms.KeyComparator<KeyType> keyComparator, ActorBehaviorBuilderKeyValue.KeyExtractor<KeyType, ValueType1> keyExtractorFromValue1, ActorBehaviorBuilderKeyValue.KeyExtractor<KeyType, ValueType2> keyExtractorFromValue2, ActorBehaviorBuilderKeyValue.KeyExtractor<KeyType, ValueType3> keyExtractorFromValue3, ActorBehaviorBuilderKeyValue.KeyExtractor<KeyType, ValueType4> keyExtractorFromValue4, ActorBehaviorBuilderKeyValue.QuintConsumer<KeyType, ValueType1, ValueType2, ValueType3, ValueType4> handler) {
+        public <KeyType, ValueType1, ValueType2, ValueType3, ValueType4> ActorBehavior get4(int matchKeyEntryId, KeyHistograms.KeyComparator<KeyType> keyComparator, ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType1> keyExtractorFromValue1, ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType2> keyExtractorFromValue2, ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType3> keyExtractorFromValue3, ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType4> keyExtractorFromValue4, ActorBehaviorBuilderKeyAggregation.QuintConsumer<KeyType, ValueType1, ValueType2, ValueType3, ValueType4> handler) {
             return new DebugMatchKey4<>(matchKeyEntryId, keyComparator, keyExtractorFromValue1, keyExtractorFromValue2, keyExtractorFromValue3, keyExtractorFromValue4, handler);
         }
 
         @Override
-        public <KeyType, ValueType> ActorBehaviorAggregation.ActorBehaviorMatchKeyList<KeyType, ValueType> getList(int matchKeyEntryId, int threshold, KeyHistograms.KeyComparator<KeyType> keyComparator, ActorBehaviorBuilderKeyValue.KeyExtractor<KeyType, ValueType> keyExtractorFromValue, BiConsumer<KeyType, List<ValueType>> handler) {
+        public <KeyType, ValueType> ActorBehaviorKeyAggregation.ActorBehaviorMatchKeyList<KeyType, ValueType> getList(int matchKeyEntryId, int threshold, KeyHistograms.KeyComparator<KeyType> keyComparator, ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType> keyExtractorFromValue, BiConsumer<KeyType, List<ValueType>> handler) {
             return new DebugMatchKeyList<>(matchKeyEntryId, threshold, keyComparator, keyExtractorFromValue, handler);
         }
 
         @Override
-        public <KeyType, ValueType> ActorBehaviorAggregation.ActorBehaviorMatchKeyListFuture<KeyType, ValueType> getListFuture(int matchKeyEntryId, int requiredSize, KeyHistograms.KeyComparator<KeyType> keyComparator, BiFunction<KeyType, List<ValueType>, Iterable<ValueType>> keyValuesReducer, ActorBehaviorBuilderKeyValue.KeyExtractor<KeyType, ValueType> keyExtractorFromValue, BiConsumer<KeyType, List<ValueType>> handler) {
+        public <KeyType, ValueType> ActorBehaviorKeyAggregation.ActorBehaviorMatchKeyListFuture<KeyType, ValueType> getListFuture(int matchKeyEntryId, int requiredSize, KeyHistograms.KeyComparator<KeyType> keyComparator, BiFunction<KeyType, List<ValueType>, Iterable<ValueType>> keyValuesReducer, ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType> keyExtractorFromValue, BiConsumer<KeyType, List<ValueType>> handler) {
             return new DebugMatchKeyListFuture<>(matchKeyEntryId, requiredSize, keyComparator, keyValuesReducer, keyExtractorFromValue, handler);
         }
 
         @Override
-        public <KeyType, ValueType> ActorBehaviorAggregation.ActorBehaviorMatchKeyListFuturePhase<KeyType, ValueType> getListFuturePhase(int matchKeyEntryId, int requiredSize, KeyHistograms.KeyComparator<KeyType> keyComparator, BiFunction<KeyType, List<ValueType>, Iterable<ValueType>> keyValuesReducer, ActorBehaviorBuilderKeyValue.KeyExtractor<KeyType, ValueType> keyExtractorFromValue, BiConsumer<KeyType, List<ValueType>> handler) {
+        public <KeyType, ValueType> ActorBehaviorKeyAggregation.ActorBehaviorMatchKeyListFuturePhase<KeyType, ValueType> getListFuturePhase(int matchKeyEntryId, int requiredSize, KeyHistograms.KeyComparator<KeyType> keyComparator, BiFunction<KeyType, List<ValueType>, Iterable<ValueType>> keyValuesReducer, ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType> keyExtractorFromValue, BiConsumer<KeyType, List<ValueType>> handler) {
             return new DebugMatchKeyListFuturePhase<>(matchKeyEntryId, requiredSize, keyComparator, keyValuesReducer, keyExtractorFromValue, handler);
         }
     }
 
-    static class DebugMatchKey1<KeyType,ValueType1> extends ActorBehaviorAggregation.ActorBehaviorMatchKey1<KeyType,ValueType1> {
+    static class DebugMatchKey1<KeyType,ValueType1> extends ActorBehaviorKeyAggregation.ActorBehaviorMatchKey1<KeyType,ValueType1> {
         private final DebugThreadChecker checker = new DebugThreadChecker(this);
-        public DebugMatchKey1(int matchKeyEntryId, KeyHistograms.KeyComparator<KeyType> keyComparator, ActorBehaviorBuilderKeyValue.KeyExtractor<KeyType, ValueType1> keyExtractorFromValue1, BiConsumer<KeyType, ValueType1> handler) {
+        public DebugMatchKey1(int matchKeyEntryId, KeyHistograms.KeyComparator<KeyType> keyComparator, ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType1> keyExtractorFromValue1, BiConsumer<KeyType, ValueType1> handler) {
             super(matchKeyEntryId, keyComparator, keyExtractorFromValue1, handler);
         }
 
@@ -62,10 +62,10 @@ public class DebugBehavior {
         }
 
         @Override
-        public boolean processTable(MailboxAggregation m) {
+        public boolean processHistogram(MailboxKeyAggregation m) {
             boolean t = checker.before();
             try {
-                return super.processTable(m);
+                return super.processHistogram(m);
             } catch (Exception ex) {
                 checker.error(t, ex);
                 throw ex;
@@ -93,9 +93,9 @@ public class DebugBehavior {
         }
     }
 
-    static class DebugMatchKey2<KeyType,ValueType1,ValueType2> extends ActorBehaviorAggregation.ActorBehaviorMatchKey2<KeyType,ValueType1,ValueType2> {
+    static class DebugMatchKey2<KeyType,ValueType1,ValueType2> extends ActorBehaviorKeyAggregation.ActorBehaviorMatchKey2<KeyType,ValueType1,ValueType2> {
         private final DebugThreadChecker checker = new DebugThreadChecker(this);
-        public DebugMatchKey2(int matchKeyEntryId, KeyHistograms.KeyComparator<KeyType> keyComparator, ActorBehaviorBuilderKeyValue.KeyExtractor<KeyType, ValueType1> keyExtractorFromValue1, ActorBehaviorBuilderKeyValue.KeyExtractor<KeyType, ValueType2> keyExtractorFromValue2, ActorBehaviorBuilderKeyValue.TriConsumer<KeyType, ValueType1, ValueType2> handler) {
+        public DebugMatchKey2(int matchKeyEntryId, KeyHistograms.KeyComparator<KeyType> keyComparator, ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType1> keyExtractorFromValue1, ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType2> keyExtractorFromValue2, ActorBehaviorBuilderKeyAggregation.TriConsumer<KeyType, ValueType1, ValueType2> handler) {
             super(matchKeyEntryId, keyComparator, keyExtractorFromValue1, keyExtractorFromValue2, handler);
         }
 
@@ -105,10 +105,10 @@ public class DebugBehavior {
         }
 
         @Override
-        public boolean processTable(MailboxAggregation m) {
+        public boolean processHistogram(MailboxKeyAggregation m) {
             boolean t = checker.before();
             try {
-                return super.processTable(m);
+                return super.processHistogram(m);
             } catch (Exception ex) {
                 checker.error(t, ex);
                 throw ex;
@@ -135,9 +135,9 @@ public class DebugBehavior {
         }
     }
 
-    static class DebugMatchKey3<KeyType,ValueType1,ValueType2,ValueType3> extends ActorBehaviorAggregation.ActorBehaviorMatchKey3<KeyType,ValueType1,ValueType2,ValueType3> {
+    static class DebugMatchKey3<KeyType,ValueType1,ValueType2,ValueType3> extends ActorBehaviorKeyAggregation.ActorBehaviorMatchKey3<KeyType,ValueType1,ValueType2,ValueType3> {
         private final DebugThreadChecker checker = new DebugThreadChecker(this);
-        public DebugMatchKey3(int matchKeyEntryId, KeyHistograms.KeyComparator<KeyType> keyComparator, ActorBehaviorBuilderKeyValue.KeyExtractor<KeyType, ValueType1> keyExtractorFromValue1, ActorBehaviorBuilderKeyValue.KeyExtractor<KeyType, ValueType2> keyExtractorFromValue2, ActorBehaviorBuilderKeyValue.KeyExtractor<KeyType, ValueType3> keyExtractorFromValue3, ActorBehaviorBuilderKeyValue.QuadConsumer<KeyType, ValueType1, ValueType2, ValueType3> handler) {
+        public DebugMatchKey3(int matchKeyEntryId, KeyHistograms.KeyComparator<KeyType> keyComparator, ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType1> keyExtractorFromValue1, ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType2> keyExtractorFromValue2, ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType3> keyExtractorFromValue3, ActorBehaviorBuilderKeyAggregation.QuadConsumer<KeyType, ValueType1, ValueType2, ValueType3> handler) {
             super(matchKeyEntryId, keyComparator, keyExtractorFromValue1, keyExtractorFromValue2, keyExtractorFromValue3, handler);
         }
 
@@ -147,10 +147,10 @@ public class DebugBehavior {
         }
 
         @Override
-        public boolean processTable(MailboxAggregation m) {
+        public boolean processHistogram(MailboxKeyAggregation m) {
             boolean t = checker.before();
             try {
-                return super.processTable(m);
+                return super.processHistogram(m);
             } catch (Exception ex) {
                 checker.error(t, ex);
                 throw ex;
@@ -177,9 +177,9 @@ public class DebugBehavior {
         }
     }
 
-    static class DebugMatchKey4<KeyType,ValueType1,ValueType2,ValueType3,ValueType4> extends ActorBehaviorAggregation.ActorBehaviorMatchKey4<KeyType,ValueType1,ValueType2,ValueType3,ValueType4> {
+    static class DebugMatchKey4<KeyType,ValueType1,ValueType2,ValueType3,ValueType4> extends ActorBehaviorKeyAggregation.ActorBehaviorMatchKey4<KeyType,ValueType1,ValueType2,ValueType3,ValueType4> {
         private final DebugThreadChecker checker = new DebugThreadChecker(this);
-        public DebugMatchKey4(int matchKeyEntryId, KeyHistograms.KeyComparator<KeyType> keyComparator, ActorBehaviorBuilderKeyValue.KeyExtractor<KeyType, ValueType1> keyExtractorFromValue1, ActorBehaviorBuilderKeyValue.KeyExtractor<KeyType, ValueType2> keyExtractorFromValue2, ActorBehaviorBuilderKeyValue.KeyExtractor<KeyType, ValueType3> keyExtractorFromValue3, ActorBehaviorBuilderKeyValue.KeyExtractor<KeyType, ValueType4> keyExtractorFromValue4, ActorBehaviorBuilderKeyValue.QuintConsumer<KeyType, ValueType1, ValueType2, ValueType3, ValueType4> handler) {
+        public DebugMatchKey4(int matchKeyEntryId, KeyHistograms.KeyComparator<KeyType> keyComparator, ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType1> keyExtractorFromValue1, ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType2> keyExtractorFromValue2, ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType3> keyExtractorFromValue3, ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType4> keyExtractorFromValue4, ActorBehaviorBuilderKeyAggregation.QuintConsumer<KeyType, ValueType1, ValueType2, ValueType3, ValueType4> handler) {
             super(matchKeyEntryId, keyComparator, keyExtractorFromValue1, keyExtractorFromValue2, keyExtractorFromValue3, keyExtractorFromValue4, handler);
         }
 
@@ -189,10 +189,10 @@ public class DebugBehavior {
         }
 
         @Override
-        public boolean processTable(MailboxAggregation m) {
+        public boolean processHistogram(MailboxKeyAggregation m) {
             boolean t = checker.before();
             try {
-                return super.processTable(m);
+                return super.processHistogram(m);
             } catch (Exception ex) {
                 checker.error(t, ex);
                 throw ex;
@@ -219,10 +219,10 @@ public class DebugBehavior {
         }
     }
 
-    static class DebugMatchKeyList<KeyType,ValueType> extends ActorBehaviorAggregation.ActorBehaviorMatchKeyList<KeyType,ValueType> {
+    static class DebugMatchKeyList<KeyType,ValueType> extends ActorBehaviorKeyAggregation.ActorBehaviorMatchKeyList<KeyType,ValueType> {
         private final DebugThreadChecker checker = new DebugThreadChecker(this);
 
-        public DebugMatchKeyList(int matchKeyEntryId, int threshold, KeyHistograms.KeyComparator<KeyType> keyComparator, ActorBehaviorBuilderKeyValue.KeyExtractor<KeyType, ValueType> keyExtractorFromValue, BiConsumer<KeyType, List<ValueType>> handler) {
+        public DebugMatchKeyList(int matchKeyEntryId, int threshold, KeyHistograms.KeyComparator<KeyType> keyComparator, ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType> keyExtractorFromValue, BiConsumer<KeyType, List<ValueType>> handler) {
             super(matchKeyEntryId, threshold, keyComparator, keyExtractorFromValue, handler);
         }
 
@@ -232,10 +232,10 @@ public class DebugBehavior {
         }
 
         @Override
-        public boolean processTable(MailboxAggregation m) {
+        public boolean processHistogram(MailboxKeyAggregation m) {
             boolean t = checker.before();
             try {
-                return super.processTable(m);
+                return super.processHistogram(m);
             } catch (Exception ex) {
                 checker.error(t, ex);
                 throw ex;
@@ -262,10 +262,10 @@ public class DebugBehavior {
         }
     }
 
-    static class DebugMatchKeyListFuture<KeyType,ValueType> extends ActorBehaviorAggregation.ActorBehaviorMatchKeyListFuture<KeyType,ValueType> {
+    static class DebugMatchKeyListFuture<KeyType,ValueType> extends ActorBehaviorKeyAggregation.ActorBehaviorMatchKeyListFuture<KeyType,ValueType> {
         private final DebugThreadChecker checker = new DebugThreadChecker(this);
 
-        public DebugMatchKeyListFuture(int matchKeyEntryId, int requiredSize, KeyHistograms.KeyComparator<KeyType> keyComparator, BiFunction<KeyType, List<ValueType>, Iterable<ValueType>> keyValuesReducer, ActorBehaviorBuilderKeyValue.KeyExtractor<KeyType, ValueType> keyExtractorFromValue, BiConsumer<KeyType, List<ValueType>> handler) {
+        public DebugMatchKeyListFuture(int matchKeyEntryId, int requiredSize, KeyHistograms.KeyComparator<KeyType> keyComparator, BiFunction<KeyType, List<ValueType>, Iterable<ValueType>> keyValuesReducer, ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType> keyExtractorFromValue, BiConsumer<KeyType, List<ValueType>> handler) {
             super(matchKeyEntryId, requiredSize, keyComparator, keyValuesReducer, keyExtractorFromValue, handler);
         }
 
@@ -275,7 +275,7 @@ public class DebugBehavior {
         }
 
         @Override
-        public void processTraversal(Actor self, MailboxAggregation.ReducedSize reducedSize, KeyHistograms.HistogramNodeLeaf leaf) {
+        public void processTraversal(Actor self, MailboxKeyAggregation.ReducedSize reducedSize, KeyHistograms.HistogramNodeLeaf leaf) {
             boolean t = checker.before();
             try {
                 super.processTraversal(self, reducedSize, leaf);
@@ -305,9 +305,9 @@ public class DebugBehavior {
         }
     }
 
-    static class DebugMatchKeyListFuturePhase<KeyType,ValueType> extends ActorBehaviorAggregation.ActorBehaviorMatchKeyListFuturePhase<KeyType,ValueType> {
+    static class DebugMatchKeyListFuturePhase<KeyType,ValueType> extends ActorBehaviorKeyAggregation.ActorBehaviorMatchKeyListFuturePhase<KeyType,ValueType> {
         private final DebugThreadChecker checker = new DebugThreadChecker(this);
-        public DebugMatchKeyListFuturePhase(int matchKeyEntryId, int requiredSize, KeyHistograms.KeyComparator<KeyType> keyComparator, BiFunction<KeyType, List<ValueType>, Iterable<ValueType>> keyValuesReducer, ActorBehaviorBuilderKeyValue.KeyExtractor<KeyType, ValueType> keyExtractorFromValue, BiConsumer<KeyType, List<ValueType>> handler) {
+        public DebugMatchKeyListFuturePhase(int matchKeyEntryId, int requiredSize, KeyHistograms.KeyComparator<KeyType> keyComparator, BiFunction<KeyType, List<ValueType>, Iterable<ValueType>> keyValuesReducer, ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType> keyExtractorFromValue, BiConsumer<KeyType, List<ValueType>> handler) {
             super(matchKeyEntryId, requiredSize, keyComparator, keyValuesReducer, keyExtractorFromValue, handler);
         }
 
@@ -317,7 +317,7 @@ public class DebugBehavior {
         }
 
         @Override
-        public void processTraversal(Actor self, MailboxAggregation.ReducedSize reducedSize, KeyHistograms.HistogramNodeLeaf leaf) {
+        public void processTraversal(Actor self, MailboxKeyAggregation.ReducedSize reducedSize, KeyHistograms.HistogramNodeLeaf leaf) {
             boolean t = checker.before();
             try {
                 super.processTraversal(self, reducedSize, leaf);
@@ -343,7 +343,7 @@ public class DebugBehavior {
         }
 
         @Override
-        public void processPhase(Actor self, Object phaseKey, MailboxAggregation.ReducedSize reducedSize, KeyHistograms.HistogramNodeLeaf leaf) {
+        public void processPhase(Actor self, Object phaseKey, MailboxKeyAggregation.ReducedSize reducedSize, KeyHistograms.HistogramNodeLeaf leaf) {
             boolean t = checker.before();
             try {
                 super.processPhase(self, phaseKey, reducedSize, leaf);
@@ -360,7 +360,7 @@ public class DebugBehavior {
         }
     }
 
-    static class DebugNodeLeaf1 extends ActorBehaviorAggregation.HistogramNodeLeaf1 {
+    static class DebugNodeLeaf1 extends ActorBehaviorKeyAggregation.HistogramNodeLeaf1 {
         private final DebugThreadChecker checker = new DebugThreadChecker(this);
         public DebugNodeLeaf1(Object key, KeyHistograms.HistogramPutContext context, int height) {
             super(key, context, height);
@@ -393,7 +393,7 @@ public class DebugBehavior {
         }
     }
 
-    static class DebugNodeLeaf2 extends ActorBehaviorAggregation.HistogramNodeLeaf2 {
+    static class DebugNodeLeaf2 extends ActorBehaviorKeyAggregation.HistogramNodeLeaf2 {
         private final DebugThreadChecker checker = new DebugThreadChecker(this);
         public DebugNodeLeaf2(Object key, KeyHistograms.HistogramPutContext context, int height) {
             super(key, context, height);
@@ -413,7 +413,7 @@ public class DebugBehavior {
         }
 
         @Override
-        public boolean consume(KeyHistograms.HistogramTree tree, ActorBehaviorBuilderKeyValue.TriConsumer<Object, Object, Object> handler) {
+        public boolean consume(KeyHistograms.HistogramTree tree, ActorBehaviorBuilderKeyAggregation.TriConsumer<Object, Object, Object> handler) {
             boolean t = checker.before();
             try {
                 return super.consume(tree, handler);
@@ -426,7 +426,7 @@ public class DebugBehavior {
         }
     }
 
-    static class DebugNodeLeaf3 extends ActorBehaviorAggregation.HistogramNodeLeaf3 {
+    static class DebugNodeLeaf3 extends ActorBehaviorKeyAggregation.HistogramNodeLeaf3 {
         private final DebugThreadChecker checker = new DebugThreadChecker(this);
         public DebugNodeLeaf3(Object key, KeyHistograms.HistogramPutContext context, int height) {
             super(key, context, height);
@@ -445,7 +445,7 @@ public class DebugBehavior {
         }
 
         @Override
-        public boolean consume(KeyHistograms.HistogramTree tree, ActorBehaviorBuilderKeyValue.QuadConsumer<Object, Object, Object, Object> handler) {
+        public boolean consume(KeyHistograms.HistogramTree tree, ActorBehaviorBuilderKeyAggregation.QuadConsumer<Object, Object, Object, Object> handler) {
             boolean t = checker.before();
             try {
                 return super.consume(tree, handler);
@@ -458,7 +458,7 @@ public class DebugBehavior {
         }
     }
 
-    static class DebugNodeLeaf4 extends ActorBehaviorAggregation.HistogramNodeLeaf4 {
+    static class DebugNodeLeaf4 extends ActorBehaviorKeyAggregation.HistogramNodeLeaf4 {
         private final DebugThreadChecker checker = new DebugThreadChecker(this);
         public DebugNodeLeaf4(Object key, KeyHistograms.HistogramPutContext context, int height) {
             super(key, context, height);
@@ -477,7 +477,7 @@ public class DebugBehavior {
         }
 
         @Override
-        public boolean consume(KeyHistograms.HistogramTree tree, ActorBehaviorBuilderKeyValue.QuintConsumer<Object, Object, Object, Object, Object> handler) {
+        public boolean consume(KeyHistograms.HistogramTree tree, ActorBehaviorBuilderKeyAggregation.QuintConsumer<Object, Object, Object, Object, Object> handler) {
             boolean t = checker.before();
             try {
                 return super.consume(tree, handler);
@@ -490,7 +490,7 @@ public class DebugBehavior {
         }
     }
 
-    static class DebugNodeLeafList extends ActorBehaviorAggregation.HistogramNodeLeafList {
+    static class DebugNodeLeafList extends ActorBehaviorKeyAggregation.HistogramNodeLeafList {
         private final DebugThreadChecker checker = new DebugThreadChecker(this);
         public DebugNodeLeafList(Object key, KeyHistograms.HistogramPutContext context, int height) {
             super(key, context, height);
@@ -522,7 +522,7 @@ public class DebugBehavior {
         }
     }
 
-    static class DebugNodeLeafListReducible extends ActorBehaviorAggregation.HistogramNodeLeafListReducible {
+    static class DebugNodeLeafListReducible extends ActorBehaviorKeyAggregation.HistogramNodeLeafListReducible {
         private final DebugThreadChecker checker = new DebugThreadChecker(this);
         public DebugNodeLeafListReducible(Object key, KeyHistograms.HistogramPutContext context, int height) {
             super(key, context, height);
@@ -541,7 +541,7 @@ public class DebugBehavior {
         }
 
         @Override
-        public boolean consume(int requiredSize, KeyHistograms.HistogramTree tree, MailboxAggregation.ReducedSize reducedSize, BiFunction<Object, List<Object>, Iterable<Object>> keyValuesReducer, BiConsumer<Object, List<Object>> handler) {
+        public boolean consume(int requiredSize, KeyHistograms.HistogramTree tree, MailboxKeyAggregation.ReducedSize reducedSize, BiFunction<Object, List<Object>, Iterable<Object>> keyValuesReducer, BiConsumer<Object, List<Object>> handler) {
             boolean t = checker.before();
             try {
                 return super.consume(requiredSize, tree, reducedSize, keyValuesReducer, handler);
@@ -567,14 +567,14 @@ public class DebugBehavior {
         }
     }
 
-    static class DebugNodeLeafListReducibleForPhase extends ActorBehaviorAggregation.HistogramNodeLeafListReducibleForPhase {
+    static class DebugNodeLeafListReducibleForPhase extends ActorBehaviorKeyAggregation.HistogramNodeLeafListReducibleForPhase {
         private final DebugThreadChecker checker = new DebugThreadChecker(this);
         public DebugNodeLeafListReducibleForPhase(Object key, KeyHistograms.HistogramPutContext context, int height) {
             super(key, context, height);
         }
 
         @Override
-        public boolean consume(int requiredSize, KeyHistograms.HistogramTree tree, MailboxAggregation.ReducedSize reducedSize, BiFunction<Object, List<Object>, Iterable<Object>> keyValuesReducer, BiConsumer<Object, List<Object>> handler) {
+        public boolean consume(int requiredSize, KeyHistograms.HistogramTree tree, MailboxKeyAggregation.ReducedSize reducedSize, BiFunction<Object, List<Object>, Iterable<Object>> keyValuesReducer, BiConsumer<Object, List<Object>> handler) {
             boolean t = checker.before();
             try {
                 return super.consume(requiredSize, tree, reducedSize, keyValuesReducer, handler);
@@ -600,7 +600,7 @@ public class DebugBehavior {
         }
 
         @Override
-        public boolean consumePhase(int requiredSize, KeyHistograms.HistogramTree tree, MailboxAggregation.ReducedSize reducedSize, BiFunction<Object, List<Object>, Iterable<Object>> keyValuesReducer, BiConsumer<Object, List<Object>> handler) {
+        public boolean consumePhase(int requiredSize, KeyHistograms.HistogramTree tree, MailboxKeyAggregation.ReducedSize reducedSize, BiFunction<Object, List<Object>, Iterable<Object>> keyValuesReducer, BiConsumer<Object, List<Object>> handler) {
             boolean t = checker.before();
             try {
                 return super.consumePhase(requiredSize, tree, reducedSize, keyValuesReducer, handler);
