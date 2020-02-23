@@ -2,6 +2,7 @@ package csl.actor.keyaggregate;
 
 import csl.actor.ActorRef;
 import csl.actor.Message;
+import csl.actor.keyaggregate.KeyAggregationRoutingSplit.SplitOrMergeContextDefault;
 
 import java.util.*;
 
@@ -21,52 +22,50 @@ public class KeyAggregationStateRouter implements ActorKeyAggregation.State {
 
     public void split(ActorKeyAggregation self, int height) {
         this.height = height;
+        SplitOrMergeContextDefault ctx = new SplitOrMergeContextDefault("split: height=" + height, self);
         if (split == null) { //root
             if (height > 0) {
-                split = self.internalCreateSplitLeaf(self, 0, height);
+                split = self.internalCreateSplitLeaf(ctx, null, self, new KeyAggregationRoutingSplit.SplitPath(), height);
             }
         } else {
-            split = split.split(self, height);
-            mergeSingleRoot(self);
+            split = split.split(ctx, height);
+            mergeSingleRoot(ctx, self);
         }
-        if (self.logSplit()) {
-            self.printStatus("after split: height=" + height);
-        }
+        self.afterSplitOrMerge(ctx);
     }
 
     public void mergeInactive(ActorKeyAggregation self) {
+        SplitOrMergeContextDefault ctx = new SplitOrMergeContextDefault("mergeInactive", self);
         if (split != null) {
-            split = split.mergeInactive(self);
-            mergeSingleRoot(self);
+            split = split.mergeInactive(ctx);
+            mergeSingleRoot(ctx, self);
         }
         split.clearHistory();
-        if (self.logSplit()) {
-            self.printStatus("after mergeInactive");
-        }
+        self.afterSplitOrMerge(ctx);
     }
 
     public void splitOrMerge(ActorKeyAggregation self, int height) {
+        SplitOrMergeContextDefault ctx = new SplitOrMergeContextDefault("splitOrMerge: height=" + height, self);
         this.height = height;
         if (split == null) {
             if (height > 0) {
-                split = self.internalCreateSplitLeaf(self, 0, height);
+                split = self.internalCreateSplitLeaf(ctx, null, self, new KeyAggregationRoutingSplit.SplitPath(), height);
             }
         } else {
-            split = split.splitOrMerge(self, height);
-            mergeSingleRoot(self);
+            split = split.splitOrMerge(ctx, height);
+            mergeSingleRoot(ctx, self);
         }
-        if (self.logSplit()) {
-            self.printStatus("after splitOrMerge: height=" + height);
-        }
+        self.afterSplitOrMerge(ctx);
     }
 
-    protected void mergeSingleRoot(ActorKeyAggregation self) {
+    protected void mergeSingleRoot(SplitOrMergeContextDefault context, ActorKeyAggregation self) {
         if (this.height == 0 && split instanceof KeyAggregationRoutingSplit.RoutingSplitLeaf) { //merge single root to the router
             ActorRef root = ((KeyAggregationRoutingSplit.RoutingSplitLeaf) split).getActor();
             if (root instanceof ActorKeyAggregation) { //local actor
                 ActorKeyAggregation singleRoot = (ActorKeyAggregation) root;
                 if (!self.hasRemainingProcesses() && !singleRoot.hasRemainingProcesses()) {
                     self.internalMerge(singleRoot);
+                    context.merged(null, split, null);
                     split = null;
                 }
             }

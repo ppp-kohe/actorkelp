@@ -15,6 +15,10 @@ public class KeyHistograms {
         return new HistogramTree(comparator, treeLimit);
     }
 
+    public HistogramTree init(HistogramTree tree) {
+        return tree;
+    }
+
     public static class HistogramTree implements Serializable, KryoSerializable {
         protected HistogramNode root;
         protected KeyComparator<?> comparator;

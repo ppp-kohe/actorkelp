@@ -267,7 +267,9 @@ public class WordCount {
         }
 
         @Override
-        public KeyAggregationRoutingSplit internalCreateSplitNode(ActorKeyAggregation target, int depth, int height) {
+        public KeyAggregationRoutingSplit internalCreateSplitNode(KeyAggregationRoutingSplit.SplitOrMergeContext context,
+                                                                  KeyAggregationRoutingSplit old,
+                                                                  ActorKeyAggregation target, KeyAggregationRoutingSplit.SplitPath path, int height) {
             try {
                 target.getMailboxAsKeyAggregation().lockRemainingProcesses();
                 save(target.getMailboxAsKeyAggregation().getHistogram(0), "%05d-split-A.obj");
@@ -286,7 +288,7 @@ public class WordCount {
                 if (routerRef != target) {
                     target.internalCancel();
                 }
-                return internalCreateSplitNode(splitPoints, a1, a2, depth, height);
+                return internalCreateSplitNode(context, old, splitPoints, a1, a2, path, height);
             } finally {
                 target.getMailboxAsKeyAggregation().unlockRemainingProcesses(target);
             }

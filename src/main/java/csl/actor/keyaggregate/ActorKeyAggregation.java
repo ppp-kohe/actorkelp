@@ -1,6 +1,7 @@
 package csl.actor.keyaggregate;
 
 import csl.actor.*;
+import csl.actor.keyaggregate.KeyAggregationRoutingSplit.SplitPath;
 
 import java.io.PrintWriter;
 import java.io.Serializable;
@@ -435,7 +436,9 @@ public abstract class ActorKeyAggregation extends ActorDefault
 
     /////////////////////////// methods for state
 
-    public KeyAggregationRoutingSplit internalCreateSplitNode(ActorKeyAggregation target, int depth, int height) {
+    public KeyAggregationRoutingSplit internalCreateSplitNode(KeyAggregationRoutingSplit.SplitOrMergeContext context,
+                                                              KeyAggregationRoutingSplit old,
+                                                              ActorKeyAggregation target, SplitPath path, int height) {
         try {
             target.getMailboxAsKeyAggregation().lockRemainingProcesses();
 
@@ -447,43 +450,54 @@ public abstract class ActorKeyAggregation extends ActorDefault
             if (routerRef != target) {
                 target.internalCancel();
             }
-            return internalCreateSplitNode(splitPoints, a1, a2, depth, height);
+            return internalCreateSplitNode(context, old, splitPoints, a1, a2, path, height);
         } finally {
             target.getMailboxAsKeyAggregation().unlockRemainingProcesses(target);
         }
     }
 
-    public KeyAggregationRoutingSplit internalCreateSplitNode(List<Object> splitPoints, ActorKeyAggregation a1, ActorKeyAggregation a2, int depth, int height) {
-        KeyAggregationRoutingSplit s1 = internalCreateSplitLeaf(a1, depth + 1, height);
-        KeyAggregationRoutingSplit s2 = internalCreateSplitLeaf(a2, depth + 1, height);
+    public KeyAggregationRoutingSplit internalCreateSplitNode(KeyAggregationRoutingSplit.SplitOrMergeContext context,
+                                                              KeyAggregationRoutingSplit old,
+                                                              List<Object> splitPoints, ActorKeyAggregation a1, ActorKeyAggregation a2, SplitPath path, int height) {
+        KeyAggregationRoutingSplit s1 = internalCreateSplitLeaf(context, old, a1, path.add(true), height);
+        KeyAggregationRoutingSplit s2 = internalCreateSplitLeaf(context, old, a2, path.add(false), height);
 
-        return newSplitNode(splitPoints, s1, s2, depth);
+        return newSplitNode(splitPoints, s1, s2, path);
     }
 
-    public KeyAggregationRoutingSplit internalCreateSplitLeaf(ActorKeyAggregation actor, int depth, int height) {
-        if (depth >= height) {
+    public KeyAggregationRoutingSplit internalCreateSplitLeaf(KeyAggregationRoutingSplit.SplitOrMergeContext context,
+                                                              KeyAggregationRoutingSplit old,
+                                                              ActorKeyAggregation actor, SplitPath path, int height) {
+        if (path.depth() >= height) {
             ActorRef a = place(actor.getPlacement(), actor);
             if (a == this) {
                 return null;
             } else {
-                return newSplitLeaf(a, depth);
+                return newSplitLeaf(context, old, a, path);
             }
         } else {
             if (height <= 1 && actor == this) {
                 return null;
             } else {
-                return newSplitLeaf(actor, depth).split(this, height);
+                return newSplitLeaf(context, old, actor, path).split(context, height);
             }
         }
     }
 
-
-    public KeyAggregationRoutingSplit newSplitNode(List<Object> splitPoints, KeyAggregationRoutingSplit s1, KeyAggregationRoutingSplit s2, int depth) {
-        return new KeyAggregationRoutingSplit.RoutingSplitNode(splitPoints, s1, s2, depth, historyEntrySize());
+    private KeyAggregationRoutingSplit newSplitLeaf(KeyAggregationRoutingSplit.SplitOrMergeContext context,
+                                                KeyAggregationRoutingSplit old,
+                                                ActorRef actor, SplitPath path) {
+        KeyAggregationRoutingSplit s = newSplitLeaf(actor, path);
+        context.split(s, old);
+        return s;
     }
 
-    public KeyAggregationRoutingSplit.RoutingSplitLeaf newSplitLeaf(ActorRef actor, int depth) {
-        return new KeyAggregationRoutingSplit.RoutingSplitLeaf(actor, depth);
+    public KeyAggregationRoutingSplit newSplitNode(List<Object> splitPoints, KeyAggregationRoutingSplit s1, KeyAggregationRoutingSplit s2, SplitPath path) {
+        return new KeyAggregationRoutingSplit.RoutingSplitNode(splitPoints, s1, s2, path, historyEntrySize());
+    }
+
+    public KeyAggregationRoutingSplit.RoutingSplitLeaf newSplitLeaf(ActorRef actor, SplitPath path) {
+        return new KeyAggregationRoutingSplit.RoutingSplitLeaf(actor, path);
     }
 
 
@@ -612,6 +626,18 @@ public abstract class ActorKeyAggregation extends ActorDefault
             }
         });
     }
+
+    protected void afterSplitOrMerge(KeyAggregationRoutingSplit.SplitOrMergeContextDefault context) {
+        if (logSplit() && context.hasChanges()) {
+            String msg = context.getMessage();
+            if (context.isMergedToRoot() || context.isSplitFromRoot()) {
+                printStatus(msg);
+            } else {
+                printStatus(msg, context.getNewSplitsSorted());
+            }
+        }
+    }
+
 
     /////////////////////////// remote placement and serialization
 
@@ -751,6 +777,10 @@ public abstract class ActorKeyAggregation extends ActorDefault
         printStatus(config.getLogOut(), head);
     }
 
+    public void printStatus(String head, List<KeyAggregationRoutingSplit> newSplits) {
+        printStatus(config.getLogOut(), head, newSplits);
+    }
+
     public void log(String str) {
         config.log(str);
     }
@@ -764,22 +794,41 @@ public abstract class ActorKeyAggregation extends ActorDefault
     }
 
     public void printStatus(PrintWriter out, String head) {
+        println(out, toStringStatus(head));
+        if (state instanceof KeyAggregationStateRouter) {
+            KeyAggregationStateRouter sr = (KeyAggregationStateRouter) state;
+            printStatus(sr.getSplit(), out);
+        }
+    }
+
+    public void printStatus(PrintWriter out, String head, List<KeyAggregationRoutingSplit> newSplits) {
+        println(out, toStringStatus(head));
+        int i = 0;
+        for (KeyAggregationRoutingSplit s : newSplits) {
+            if (s instanceof KeyAggregationRoutingSplit.RoutingSplitLeaf) {
+                ActorRef r = ((KeyAggregationRoutingSplit.RoutingSplitLeaf) s).getActor();
+                println(out, String.format(" %d: %s %d:leaf: %s", i, s.getPath(), s.getDepth(), r));
+                ++i;
+            }
+        }
+    }
+
+    public String toStringStatus(String head) {
         String str = toString();
         if (state instanceof KeyAggregationStateRouter) {
             KeyAggregationStateRouter sr = (KeyAggregationStateRouter) state;
-            println(out, logMessage(String.format("%s router %s \n" +
+            return logMessage(String.format("%s router %s \n" +
                             "   threshold=%,d height=%,d/%,d parallelRouting=%s",
                     head,
                     str,
                     mailboxThreshold(),
                     sr.getHeight(),
                     sr.getMaxHeight(),
-                    !sr.isNonParallelRouting())));
-            printStatus(sr.getSplit(), out);
+                    !sr.isNonParallelRouting()));
         } else if (state instanceof StateUnit) {
-            println(out, logMessage(String.format("%s leaf %s", head, str)));
+            return logMessage(String.format("%s leaf %s", head, str));
         } else {
-            println(out, logMessage(String.format("%s %s %s", state, head, str)));
+            return logMessage(String.format("%s %s %s", state, head, str));
         }
     }
 

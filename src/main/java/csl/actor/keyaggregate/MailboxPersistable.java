@@ -29,7 +29,7 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
     protected volatile long previousSize;
     protected ReentrantLock persistLock;
 
-    protected PersistentCondition condition;
+    protected PersistentConditionMailbox condition;
     protected long onMemorySize;
 
     protected volatile MessagePersistent persistent;
@@ -63,7 +63,7 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
     }
 
     @FunctionalInterface
-    public interface PersistentCondition {
+    public interface PersistentConditionMailbox {
         boolean needToPersist(MailboxPersistable mailbox, long size);
 
         default boolean needToPersistInPersistLock(MailboxPersistable mailbox, long size) {
@@ -83,15 +83,15 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
         this(new MessagePersistentFile(manager), sizeLimit, onMemorySize);
     }
 
-    public MailboxPersistable(PersistentFileManager manager, PersistentCondition condition, long onMemorySize) {
+    public MailboxPersistable(PersistentFileManager manager, PersistentConditionMailbox condition, long onMemorySize) {
         this(new MessagePersistentFile(manager), condition, onMemorySize);
     }
 
     public MailboxPersistable(MessagePersistent persistent, long sizeLimit, long onMemorySize) {
-        this(persistent, new PersistentConditionSizeLimit(sizeLimit), onMemorySize);
+        this(persistent, new PersistentConditionMailboxSizeLimit(sizeLimit), onMemorySize);
     }
 
-    public MailboxPersistable(MessagePersistent persistent, PersistentCondition condition, long onMemorySize) {
+    public MailboxPersistable(MessagePersistent persistent, PersistentConditionMailbox condition, long onMemorySize) {
         this.condition = condition;
         this.onMemorySize = onMemorySize;
         this.persistent = persistent;
@@ -121,7 +121,7 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
     }
 
     /** @return implementation field getter */
-    public PersistentCondition getCondition() {
+    public PersistentConditionMailbox getCondition() {
         return condition;
     }
 
@@ -281,10 +281,10 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
         size.decrementAndGet();
     }
 
-    public static class PersistentConditionSizeLimit implements PersistentCondition {
+    public static class PersistentConditionMailboxSizeLimit implements PersistentConditionMailbox {
         protected long sizeLimit;
 
-        public PersistentConditionSizeLimit(long sizeLimit) {
+        public PersistentConditionMailboxSizeLimit(long sizeLimit) {
             this.sizeLimit = sizeLimit;
         }
 
@@ -304,13 +304,13 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
         }
     }
 
-    public static class PersistentConditionSampling implements PersistentCondition {
+    public static class PersistentConditionMailboxSampling implements PersistentConditionMailbox {
         protected long sizeLimit;
         protected AtomicLong sampleTotal = new AtomicLong();
         protected AtomicLong sampleCount = new AtomicLong();
         protected AtomicInteger sampleTiming = new AtomicInteger();
 
-        public PersistentConditionSampling(long sizeLimit) {
+        public PersistentConditionMailboxSampling(long sizeLimit) {
             this.sizeLimit = sizeLimit;
         }
 

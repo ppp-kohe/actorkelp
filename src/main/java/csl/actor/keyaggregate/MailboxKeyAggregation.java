@@ -472,7 +472,7 @@ public class MailboxKeyAggregation implements Mailbox, Cloneable {
             KeyHistograms.HistogramTree rt = entries[i].getTree();
             KeyHistograms.HistogramTree lt = rt.split();
             m1.entries[i].setTree(lt);
-            m2.entries[i].setTree(rt);
+            m2.entries[i].setTree(treeFactory.init(rt));
             entries[i] = entries[i].create();
             splitPoints.add(rt.splitPointAsRightHandSide(lt));
         }
@@ -524,7 +524,7 @@ public class MailboxKeyAggregation implements Mailbox, Cloneable {
         mailbox.getQueue().addAll(Arrays.asList(state.messages));
         int i = 0;
         for (KeyHistograms.HistogramTree t : state.histograms) {
-            entries[i].setTree(t);
+            entries[i].setTree(treeFactory.init(t));
             ++i;
         }
     }

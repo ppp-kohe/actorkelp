@@ -15,16 +15,32 @@ import java.util.Random;
 
 public class KeyHistogramsPersistable extends KeyHistograms {
     protected MailboxPersistable.PersistentFileManager persistent;
+    protected PersistentConditionHistogram condition;
     protected HistogramTreePersistableConfig config;
 
-    public KeyHistogramsPersistable(HistogramTreePersistableConfig config, MailboxPersistable.PersistentFileManager persistent) {
+    public KeyHistogramsPersistable(HistogramTreePersistableConfig config,
+                                    MailboxPersistable.PersistentFileManager persistent) {
+        this(config, persistent, new PersistentConditionHistogramSizeLimit(config));
+    }
+
+    public KeyHistogramsPersistable(HistogramTreePersistableConfig config,
+                                    MailboxPersistable.PersistentFileManager persistent,
+                                    PersistentConditionHistogram condition) {
         this.config = config;
         this.persistent = persistent;
+        this.condition = condition;
     }
 
     @Override
     public HistogramTreePersistable create(KeyComparator<?> comparator, int treeLimit) {
-        return new HistogramTreePersistable(comparator, treeLimit, config, persistent);
+        return new HistogramTreePersistable(comparator, treeLimit, config, persistent, condition);
+    }
+
+    @Override
+    public HistogramTree init(HistogramTree tree) {
+        HistogramTreePersistable p = (HistogramTreePersistable) tree;
+        p.init(persistent, condition);
+        return super.init(tree);
     }
 
     public interface HistogramTreePersistableConfig {
@@ -34,6 +50,43 @@ public class KeyHistogramsPersistable extends KeyHistograms {
         default long histogramPersistOnMemorySize() { return 100; }
         default double histogramPersistSizeRatioThreshold() { return 0.00001; }
         default long histogramPersistRandomSeed() { return 0; }
+    }
+
+    public interface PersistentConditionHistogram {
+        HistogramPersistentOperation needToPersist(HistogramTreePersistable tree, long onMemoryValues, double leafSizeNonZeroToSizeRatio);
+    }
+
+    public enum HistogramPersistentOperation {
+        LargeLeaves,
+        Tree,
+        None
+    }
+
+    public static class PersistentConditionHistogramSizeLimit implements PersistentConditionHistogram {
+        protected long sizeLimit;
+        protected double sizeRatioThreshold;
+
+        public PersistentConditionHistogramSizeLimit(long sizeLimit, double sizeRatioThreshold) {
+            this.sizeLimit = sizeLimit;
+            this.sizeRatioThreshold = sizeRatioThreshold;
+        }
+
+        public PersistentConditionHistogramSizeLimit(HistogramTreePersistableConfig config) {
+            this(config.histogramPersistSizeLimit(), config.histogramPersistSizeRatioThreshold());
+        }
+
+        @Override
+        public HistogramPersistentOperation needToPersist(HistogramTreePersistable tree, long onMemoryValues, double leafSizeNonZeroToSizeRatio) {
+            if (onMemoryValues > this.sizeLimit) {
+                if (leafSizeNonZeroToSizeRatio < sizeRatioThreshold) {
+                    return HistogramPersistentOperation.LargeLeaves;
+                } else {
+                    return HistogramPersistentOperation.Tree;
+                }
+            } else {
+                return HistogramPersistentOperation.None;
+            }
+        }
     }
 
     public static class HistogramTreePersistable extends KeyHistograms.HistogramTree implements HistogramTreePersistableConfig {
@@ -48,24 +101,38 @@ public class KeyHistogramsPersistable extends KeyHistograms {
 
         protected long persistedSize;
 
-        protected MailboxPersistable.PersistentFileManager persistent;
+        protected transient MailboxPersistable.PersistentFileManager persistent;
+        protected transient PersistentConditionHistogram condition;
 
         public HistogramTreePersistable(KeyHistograms.KeyComparator<?> comparator, int treeLimit,
                                         HistogramTreePersistableConfig config,
-                                        MailboxPersistable.PersistentFileManager persistent) {
+                                        MailboxPersistable.PersistentFileManager persistent,
+                                        PersistentConditionHistogram condition) {
             super(comparator, treeLimit);
             initConfig(config);
             this.persistent = persistent;
+            this.condition = condition;
             initHistory();
         }
 
         public HistogramTreePersistable(KeyHistograms.HistogramNode root, KeyHistograms.KeyComparator<?> comparator, int treeLimit,
                                         HistogramTreePersistableConfig config,
-                                        MailboxPersistable.PersistentFileManager persistent) {
+                                        MailboxPersistable.PersistentFileManager persistent,
+                                        PersistentConditionHistogram condition) {
             super(root, comparator, treeLimit);
             initConfig(config);
             this.persistent = persistent;
+            this.condition = condition;
             initHistory();
+        }
+
+        public void init(MailboxPersistable.PersistentFileManager persistent, PersistentConditionHistogram condition) {
+            if (this.persistent == null) {
+                this.persistent = persistent;
+            }
+            if (this.condition == null) {
+                this.condition = condition;
+            }
         }
 
         protected void initConfig(HistogramTreePersistableConfig config) {
@@ -118,7 +185,7 @@ public class KeyHistogramsPersistable extends KeyHistograms {
 
         @Override
         public HistogramTree createTree(HistogramNode root) {
-            return new HistogramTreePersistable(root, comparator, treeLimit, this, persistent);
+            return new HistogramTreePersistable(root, comparator, treeLimit, this, persistent, condition);
         }
 
         @Override
@@ -142,12 +209,12 @@ public class KeyHistogramsPersistable extends KeyHistograms {
         }
 
         protected void checkPersist() {
-            if (getTreeSize() - persistedSize > this.sizeLimit) {
-                if (leafSizeNonZeroToSizeRatio() < sizeRatioThreshold) {
-                    persistLargeLeaves();
-                } else {
-                    persistTree();
-                }
+            HistogramPersistentOperation op = condition.needToPersist(this,
+                    getTreeSize() - persistedSize, leafSizeNonZeroToSizeRatio());
+            if (op.equals(HistogramPersistentOperation.LargeLeaves)) {
+                persistLargeLeaves();
+            } else if (op.equals(HistogramPersistentOperation.Tree)) {
+                persistTree();
             }
         }
 
