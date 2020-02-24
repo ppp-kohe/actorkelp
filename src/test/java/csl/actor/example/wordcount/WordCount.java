@@ -20,7 +20,7 @@ public class WordCount {
         ActorSystemDefault system = new ActorSystemDefault();
         pool = new KryoBuilder.SerializerPoolDefault(system);
 
-        Config conf = Config.readConfig(System.getProperties());
+        Config conf = Config.readConfig(Config.class, System.getProperties());
         conf.log(conf.toString());
 
         PhaseShift.PhaseTerminalActor finisher = new PhaseShift.PhaseTerminalActor(system, true);

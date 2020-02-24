@@ -4,10 +4,7 @@ import csl.actor.ActorRef;
 import csl.actor.ActorSystem;
 import csl.actor.CallableMessage;
 import csl.actor.example.ExampleRemote;
-import csl.actor.keyaggregate.ActorKeyAggregation;
-import csl.actor.keyaggregate.ActorPlacement;
-import csl.actor.keyaggregate.Config;
-import csl.actor.keyaggregate.ResponsiveCalls;
+import csl.actor.keyaggregate.*;
 import csl.actor.remote.ActorAddress;
 import csl.actor.remote.ActorSystemRemote;
 
@@ -33,7 +30,7 @@ public class DelayedLabelRemote extends DelayedLabelAggregationReplicable {
         int serverPort = 10000;
         system.startWithoutWait(serverPort);
 
-        new ActorKeyAggregation.PlacemenActorKeyAggregation(system,
+        new ActorPlacementKeyAggregation(system,
                 new ActorPlacement.PlacementStrategyRoundRobin(0));
 
         List<Process> ps = new ArrayList<>();
@@ -83,7 +80,7 @@ public class DelayedLabelRemote extends DelayedLabelAggregationReplicable {
         @Override
         public void finish(Finish f) {
             super.finish(f);
-            ((ActorPlacement.PlacemenActor) getPlacement()).getCluster().stream()
+            ((ActorPlacement.ActorPlacementDefault) getPlacement()).getCluster().stream()
                 .map(ActorPlacement.AddressListEntry::getPlacementActor)
                 .forEach(a -> ResponsiveCalls.sendTaskConsumer(system, a, (act,sen) -> {
                     System.out.println("#remote close: " + act);
@@ -106,7 +103,7 @@ public class DelayedLabelRemote extends DelayedLabelAggregationReplicable {
             int joinPort = Integer.parseInt(args[1]);
             system.startWithoutWait(port);
 
-            ActorKeyAggregation.PlacemenActorKeyAggregation p = new ActorKeyAggregation.PlacemenActorKeyAggregation(system,
+            ActorPlacementKeyAggregation p = new ActorPlacementKeyAggregation(system,
                 new ActorPlacement.PlacementStrategyUndertaker());
 
             p.join(ActorAddress.get("localhost", joinPort));

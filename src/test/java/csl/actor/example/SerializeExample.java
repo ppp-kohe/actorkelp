@@ -2,10 +2,7 @@ package csl.actor.example;
 
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
-import csl.actor.ActorBehavior;
-import csl.actor.ActorDefault;
-import csl.actor.ActorRef;
-import csl.actor.ActorSystem;
+import csl.actor.*;
 import csl.actor.remote.*;
 
 import java.io.ByteArrayInputStream;
@@ -87,6 +84,12 @@ public class SerializeExample {
                 ActorRefRemote.get(sys, "hello-world", 33333, "hello"));
         writeRead(k, msg, (l,r) ->
             l.id == r.id && l.body.equals(r.body));
+
+        ActorSystemRemote.TransferredMessage msg2 = new ActorSystemRemote.TransferredMessage(123,
+                new Message<>(ActorRefRemote.get(sys, "hello-world", 33333, "hello"), null, "hello"));
+        writeRead(k, msg2, (l,r) ->
+                l.id == r.id && ((Message<?>)l.body).getTarget().equals(((Message<?>)r.body).getTarget())
+                        && ((Message<?>)l.body).getData().equals(((Message<?>)r.body).getData()));
     }
 
     public static class ExampleActor extends ActorDefault {

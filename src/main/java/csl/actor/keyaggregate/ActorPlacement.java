@@ -27,7 +27,7 @@ public interface ActorPlacement {
         };
     }
 
-    abstract class PlacemenActor extends ActorDefault implements ActorPlacement {
+    abstract class ActorPlacementDefault extends ActorDefault implements ActorPlacement {
         protected List<AddressListEntry> cluster = new ArrayList<>();
         protected PlacementStrategy strategy;
         protected volatile int totalThreads;
@@ -40,16 +40,18 @@ public interface ActorPlacement {
             }
         }
 
-        public PlacemenActor(ActorSystem system, String name) {
+        public ActorPlacementDefault(ActorSystem system, String name) {
             super(system, name);
             strategy = initStrategy();
             totalThreads = system.getThreads();
+            ResponsiveCalls.initCallableTarget(system);
         }
 
-        public PlacemenActor(ActorSystem system, String name, PlacementStrategy strategy) {
+        public ActorPlacementDefault(ActorSystem system, String name, PlacementStrategy strategy) {
             super(system, name);
             this.strategy = strategy;
             totalThreads = system.getThreads();
+            ResponsiveCalls.initCallableTarget(system);
         }
 
         protected abstract PlacementStrategy initStrategy();
@@ -58,11 +60,11 @@ public interface ActorPlacement {
             return new ArrayList<>(cluster);
         }
 
-        public PlacemenActor(ActorSystem system) {
+        public ActorPlacementDefault(ActorSystem system) {
             this(system, PLACEMENT_NAME);
         }
 
-        public PlacemenActor(ActorSystem system, PlacementStrategy strategy) {
+        public ActorPlacementDefault(ActorSystem system, PlacementStrategy strategy) {
             this(system, PLACEMENT_NAME, strategy);
         }
 
@@ -165,27 +167,24 @@ public interface ActorPlacement {
 
         @Override
         public ActorRef place(Actor a) {
-            Serializable s = toSerializable(a, strategy.getNextLocalNumber());
-            if (s != null) {
-                return placeRetry(s, a, 0);
-            } else {
-                return placeLocal(a);
-            }
+            long nl = strategy.getNextLocalNumber();
+            return placeRetry( a, 0, nl, null);
         }
 
-        public ActorRef placeRetry(Serializable s, Actor a, int retryCount) {
+        public ActorRef placeRetry(Actor a, int retryCount, long nextLocalNumber, Serializable previous) {
             ActorAddress.ActorAddressRemoteActor target = strategy.getNextAddress(this, a, retryCount);
             if (target == null) {
                 return placeLocal(a);
             }
             try {
                 log("%s on %s place(%d):\n   move %s to %s", this, getSystem(), retryCount, a, target);
+                previous = toSerializable(a, nextLocalNumber, previous, target);
                 return ResponsiveCalls.<ActorRef>send(getSystem(),
                         ActorRefRemote.get(getSystem(), target),
-                        new ActorCreationRequest(s)).get(10, TimeUnit.SECONDS);
+                        new ActorCreationRequest(previous)).get(10, TimeUnit.SECONDS);
             } catch (Throwable ex) {
                 if (retryCount < getClusterSize()) {
-                    return placeRetry(s, a, retryCount + 1);
+                    return placeRetry(a, retryCount + 1, nextLocalNumber, previous);
                 } else {
                     ex.printStackTrace();
                     return placeLocal(a);
@@ -211,7 +210,8 @@ public interface ActorPlacement {
             return a;
         }
 
-        public abstract Serializable toSerializable(Actor a, long num);
+        public abstract Serializable toSerializable(Actor a, long num, Serializable previous,
+                                                    ActorAddress.ActorAddressRemoteActor target);
 
         public abstract Actor fromSerializable(Serializable s, long num);
 
@@ -319,14 +319,14 @@ public interface ActorPlacement {
     }
 
     interface PlacementStrategy {
-        ActorAddress.ActorAddressRemoteActor getNextAddress(PlacemenActor pa, Actor a, int retryCount);
+        ActorAddress.ActorAddressRemoteActor getNextAddress(ActorPlacementDefault pa, Actor a, int retryCount);
         long getNextLocalNumber();
     }
 
     class PlacementStrategyUndertaker implements PlacementStrategy {
         protected AtomicLong localNum = new AtomicLong();
         @Override
-        public ActorAddress.ActorAddressRemoteActor getNextAddress(PlacemenActor pa, Actor a, int retryCount) {
+        public ActorAddress.ActorAddressRemoteActor getNextAddress(ActorPlacementDefault pa, Actor a, int retryCount) {
             return pa.getSelfAddress();
         }
 
@@ -343,7 +343,7 @@ public interface ActorPlacement {
 
         //it might re-enter the method
         @Override
-        public synchronized ActorAddress.ActorAddressRemoteActor getNextAddress(PlacemenActor pa, Actor a, int retryCount) {
+        public synchronized ActorAddress.ActorAddressRemoteActor getNextAddress(ActorPlacementDefault pa, Actor a, int retryCount) {
             boolean first = true;
             while (true) {
                 int i = clusterIndex;
@@ -408,7 +408,7 @@ public interface ActorPlacement {
         }
 
         @Override
-        public synchronized ActorAddress.ActorAddressRemoteActor getNextAddress(PlacemenActor pa, Actor a, int retryCount) {
+        public synchronized ActorAddress.ActorAddressRemoteActor getNextAddress(ActorPlacementDefault pa, Actor a, int retryCount) {
             if (retryCount > 0 && localLimit != 0) {
                 count += (localLimit - count % localLimit);
             }

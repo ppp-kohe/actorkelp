@@ -125,8 +125,8 @@ public class KeyAggregationStateRouter implements ActorKeyAggregation.State {
     }
 
     protected int getTotalThreads(ActorKeyAggregation self, ActorPlacement placement) {
-        if (placement instanceof ActorPlacement.PlacemenActor) {
-            return ((ActorPlacement.PlacemenActor) placement).getTotalThreads();
+        if (placement instanceof ActorPlacement.ActorPlacementDefault) {
+            return ((ActorPlacement.ActorPlacementDefault) placement).getTotalThreads();
         } else {
             return self.getSystem().getThreads();
         }

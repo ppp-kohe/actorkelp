@@ -660,60 +660,6 @@ public abstract class ActorKeyAggregation extends ActorDefault
         }
     }
 
-    public static class PlacemenActorKeyAggregation extends ActorPlacement.PlacemenActor {
-        public PlacemenActorKeyAggregation(ActorSystem system, String name) {
-            super(system, name);
-        }
-
-        public PlacemenActorKeyAggregation(ActorSystem system) {
-            super(system);
-        }
-
-        public PlacemenActorKeyAggregation(ActorSystem system, String name, PlacementStrategy strategy) {
-            super(system, name, strategy);
-        }
-
-        public PlacemenActorKeyAggregation(ActorSystem system, PlacementStrategy strategy) {
-            super(system, strategy);
-        }
-
-        @Override
-        protected PlacementStrategy initStrategy() {
-            return new PlacementStrategyRoundRobinThreads();
-        }
-
-        @Override
-        public Serializable toSerializable(Actor a, long num) {
-            if (a instanceof ActorKeyAggregation) {
-                return ((ActorKeyAggregation) a).toSerializable(num);
-            } else {
-                return null;
-            }
-        }
-
-        @Override
-        public Actor fromSerializable(Serializable s, long num) {
-            if (s instanceof ActorKeyAggregationSerializable) {
-                try {
-                    Actor a = ((ActorKeyAggregationSerializable) s).create(getSystem(), num);
-                    getSystem().send(new Message.MessageNone(a));
-                    return a;
-                } catch (Exception ex) {
-                    ex.printStackTrace();
-                    return null;
-                }
-            } else {
-                return null;
-            }
-        }
-
-        @Override
-        protected ActorRef placeLocal(Actor a) {
-            a.getSystem().send(new Message.MessageNone(a));
-            return a;
-        }
-    }
-
     public ActorKeyAggregationSerializable toSerializable(long num) {
         return initSerializableState(newSerializableState(), num);
     }

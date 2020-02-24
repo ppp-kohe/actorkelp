@@ -5,10 +5,7 @@ import csl.actor.ActorDefault;
 import csl.actor.ActorRef;
 import csl.actor.ActorSystem;
 import csl.actor.example.ExampleRemote;
-import csl.actor.keyaggregate.ActorKeyAggregation;
-import csl.actor.keyaggregate.ActorPlacement;
-import csl.actor.keyaggregate.Config;
-import csl.actor.keyaggregate.ResponsiveCalls;
+import csl.actor.keyaggregate.*;
 import csl.actor.remote.ActorAddress;
 import csl.actor.remote.ActorRefRemote;
 import csl.actor.remote.ActorSystemRemote;
@@ -22,7 +19,7 @@ public class ExampleActorReplicablePlacement {
         int serverPort = 10000;
         system.startWithoutWait(serverPort);
 
-        new ActorKeyAggregation.PlacemenActorKeyAggregation(system,
+        new ActorPlacementKeyAggregation(system,
                 new ActorPlacement.PlacementStrategyRoundRobin(0));
 
         ExampleRemote.setMvnClasspath();
@@ -109,7 +106,7 @@ public class ExampleActorReplicablePlacement {
 
             new RecvActor(system, "recv");
 
-            ActorKeyAggregation.PlacemenActorKeyAggregation p = new ActorKeyAggregation.PlacemenActorKeyAggregation(system,
+            ActorPlacementKeyAggregation p = new ActorPlacementKeyAggregation(system,
                     new ActorPlacement.PlacementStrategyUndertaker());
             Thread.sleep(10000);
             p.join(ActorAddress.get("localhost", joinPort));

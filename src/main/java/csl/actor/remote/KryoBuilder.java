@@ -38,6 +38,8 @@ public class KryoBuilder {
     protected ActorSystem system;
     protected Kryo kryo;
 
+    public static boolean debugLog = System.getProperty("csl.actor.debugKryo", "false").equals("true");
+
     public KryoBuilder setKryo(Kryo kryo) {
         this.kryo = kryo;
         return this;
@@ -265,6 +267,7 @@ public class KryoBuilder {
                 ActorBehaviorKeyAggregation.HistogramNodeLeafListReducibleForPhase.class,
                 KeyHistograms.HistogramNodeLeafMap.class,
                 KeyHistograms.HistogramLeafCellSerializedEnd.class,
+                csl.actor.keyaggregate.ConfigBase.class,
                 csl.actor.keyaggregate.Config.class,
                 MailboxPersistable.MessageOnStorage.class,
                 MailboxPersistable.PersistentFileEnd.class,
@@ -310,6 +313,9 @@ public class KryoBuilder {
                 return o;
             } catch (Exception ex) {
                 System.err.println(String.format("Kryo error: %s", ex));
+                if (debugLog) {
+                    ex.printStackTrace();
+                }
                 throw new RuntimeException(ex);
             }
         }
@@ -322,6 +328,9 @@ public class KryoBuilder {
                 pool.free(k);
             } catch (Exception ex) {
                 System.err.println(String.format("Kryo error: %s", ex));
+                if (debugLog) {
+                    ex.printStackTrace();
+                }
                 throw new RuntimeException(ex);
             }
         }

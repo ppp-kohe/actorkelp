@@ -2,6 +2,7 @@ package csl.actor.example.keyaggregate;
 
 import csl.actor.*;
 import csl.actor.keyaggregate.ActorPlacement;
+import csl.actor.remote.ActorAddress;
 import csl.actor.remote.ActorSystemRemote;
 
 import java.io.Serializable;
@@ -9,7 +10,7 @@ import java.time.Instant;
 
 public class ExampleRemotePlacement {
     public static void main(String[] args) throws Exception {
-        ActorPlacement.PlacemenActor.debugLog = true;
+        ActorPlacement.ActorPlacementDefault.debugLog = true;
         ActorSystemRemote.debugLog = true;
 
         //send callable
@@ -33,7 +34,7 @@ public class ExampleRemotePlacement {
         }
     }
 
-    static class MyPlacementActor extends ActorPlacement.PlacemenActor {
+    static class MyPlacementActor extends ActorPlacement.ActorPlacementDefault {
         public MyPlacementActor(ActorSystem system) {
             super(system);
         }
@@ -44,7 +45,7 @@ public class ExampleRemotePlacement {
         }
 
         @Override
-        public Serializable toSerializable(Actor a, long num) {
+        public Serializable toSerializable(Actor a, long num, Serializable previous, ActorAddress.ActorAddressRemoteActor target) {
             return a.getName();
         }
 

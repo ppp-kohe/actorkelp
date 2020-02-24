@@ -17,6 +17,15 @@ public class ActorAddress {
         return this;
     }
 
+    public static ActorAddressRemote get(String hostAndPort) {
+        String[] cols = hostAndPort.split(":");
+        if (cols.length >= 3) {
+            return get(cols[0], Integer.parseInt(cols[1]), cols[2]);
+        } else {
+            return get(cols[0], Integer.parseInt(cols[1]));
+        }
+    }
+
     public static ActorAddressRemote get(String host, int port) {
         return new ActorAddressRemote(host, port);
     }
