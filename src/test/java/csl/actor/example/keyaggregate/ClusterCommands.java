@@ -7,20 +7,41 @@ import java.lang.reflect.Field;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.*;
+import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Predicate;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 public class ClusterCommands {
+    public static void main(String[] args) {
+        ClusterCommands c = new ClusterCommands();
+        CommandBlockRoot root = c.parseConfigFile(args[0]);
+        List<ClusterDeployment.ClusterUnit> units = c.loadNamed(root);
+        root.write(System.out::println);
+
+        units.forEach(u -> {
+            u.log(u.getName() + ":");
+            u.log("    clusterConfig: " + u.getClusterConfig().toString());
+            if (u.getAppConfig() != null) {
+                u.log("    appConfig: " + u.getAppConfig().toString());
+            }
+        });
+    }
 
     public List<ClusterDeployment.ClusterUnit> loadConfigFile(String path) {
         CommandBlockRoot root = parseConfigFile(path);
-        return root.getNameToBlock().values().stream()
-            .filter(CommandBlockNamed::isClassType)
-            .map(this::load)
-            .collect(Collectors.toList());
+        return loadNamed(root);
     }
 
-    protected ClusterDeployment.ClusterUnit load(CommandBlock block) {
+    public List<ClusterDeployment.ClusterUnit> loadNamed(CommandBlockRoot root) {
+        return root.getNameToBlock().values().stream()
+                .filter(c -> !c.isClassType())
+                .map(this::load)
+                .collect(Collectors.toList());
+    }
+
+    public ClusterDeployment.ClusterUnit load(CommandBlock block) {
         ClusterDeployment.ClusterUnit unit = new ClusterDeployment.ClusterUnit();
         ClusterConfig conf = new ClusterConfig();
         unit.setClusterConfig(conf);
@@ -157,8 +178,12 @@ public class ClusterCommands {
 
         public String eatNonWhitespace() {
             StringBuilder buf = new StringBuilder();
-            while (hasNext() && !Character.isWhitespace(peek()) &&
-                    peek() != '#' || peek() != ':') {
+            while (hasNext()) {
+                char c = peek();
+                if (Character.isWhitespace(c) ||
+                    c == '#' || c == ':') {
+                    break;
+                }
                 buf.append(eat());
             }
             return buf.toString();
@@ -176,7 +201,7 @@ public class ClusterCommands {
             if (hasNext() && peek() == '"') {
                 eat();
                 StringBuilder buf = new StringBuilder();
-                while (hasNext() && peek() == '"') {
+                while (hasNext() && peek() != '"') {
                     char s = eat();
                     if (s == '\\') {
                         s = eat();
@@ -247,6 +272,52 @@ public class ClusterCommands {
         public String toString() {
             return "(" + type  + "," + data  + ")";
         }
+
+        public String toSource() {
+            if (type.equals(CommandTokenType.String)) {
+                StringBuilder buf = new StringBuilder();
+                buf.append("\"");
+                for (char c : data.toCharArray()) {
+                    if (c == '\n') {
+                        buf.append("\\").append("n");
+                    } else if (c == '\t') {
+                        buf.append("\\").append("t");
+                    } else if (c == '\f') {
+                        buf.append("\\").append("f");
+                    } else if (c == '\r') {
+                        buf.append("\\").append("r");
+                    } else if (c == '\b') {
+                        buf.append("\\").append("b");
+                    } else if (c == '\"') {
+                        buf.append("\\").append("\"");
+                    } else if (c == '\\') {
+                        buf.append("\\").append("\\");
+                    } else if (Character.isISOControl(c)) {
+                        buf.append(String.format("\\u%04x", (int) c));
+                    } else {
+                        buf.append(c);
+                    }
+                }
+                buf.append("\"");
+                return buf.toString();
+            } else {
+                return data;
+            }
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            CommandToken that = (CommandToken) o;
+            return type == that.type &&
+                    Objects.equals(data, that.data);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(type, data);
+        }
     }
 
     public enum CommandTokenType {
@@ -259,7 +330,7 @@ public class ClusterCommands {
     }
 
     public static class CommandBlockRoot extends CommandBlock {
-        protected Map<String, CommandBlockNamed> nameToBlock = new HashMap<>();
+        protected Map<String, CommandBlockNamed> nameToBlock = new LinkedHashMap<>();
         protected List<CommandBlock> blocksAll = new ArrayList<>();
 
         public Map<String, CommandBlockNamed> getNameToBlock() {
@@ -310,16 +381,15 @@ public class ClusterCommands {
                 List<CommandBlock> nextHistory = new ArrayList<>(history);
                 nextHistory.add(nextSuper);
 
-                inheritCommand(true, block, nextSuper, b -> b.getConfigLines().stream()
-                        .filter(cs -> !cs.get(0).getData().equals("extends"))
-                        .collect(Collectors.toList()));
-                inheritCommand(false, block, nextSuper, CommandBlock::getConfigLines);
+                inheritCommand(true, block, nextSuper);
+                inheritCommand(false, block, nextSuper);
 
                 inherit(block, nextSuper.getSuperBlock(), nextHistory);
             }
         }
 
-        protected void inheritCommand(boolean cluster, CommandBlock block, CommandBlock nextSuper, Function<CommandBlock,List<List<CommandToken>>> lineGetter) {
+        protected void inheritCommand(boolean cluster, CommandBlock block, CommandBlock nextSuper) {
+            Function<CommandBlock,List<List<CommandToken>>> lineGetter = cluster ? CommandBlock::getClusterLines : CommandBlock::getConfigLines;
             lineGetter.apply(nextSuper)
                     .forEach(cs -> inheritCommand(cluster,
                             lineGetter.apply(block),
@@ -328,16 +398,20 @@ public class ClusterCommands {
         }
 
         protected void inheritCommand(boolean cluster, List<List<CommandToken>> lines, List<CommandToken> existing, List<CommandToken> cs) {
-            if (existing != null) {
+            if (existing == null) {
+                if (cluster && match(cs, "extends")) {
+                    return; //skip
+                }
                 lines.add(cs);
             }
         }
 
         private List<CommandToken> findCommand(List<List<CommandToken>> csLines, List<CommandToken> cs) {
-            return csLines.stream()
+            return cs.size() > 1 ? csLines.stream()
                     .filter(ecs -> ecs.get(0).getData().equals(cs.get(0).getData()))
                     .findFirst()
-                    .orElse(null);
+                    .orElse(null) :
+                    Collections.emptyList();
         }
     }
 
@@ -379,8 +453,10 @@ public class ClusterCommands {
             if (match(tokens, CommandTokenType.Identifier)) {
                 CommandToken next = tokens.removeFirst();
                 if (next.getData().equals("class") || next.getData().equals("node")) {
-                    if (match(tokens, CommandTokenType.Identifier, CommandTokenType.Colon, CommandTokenType.LineEnd) ||
-                            match(tokens, CommandTokenType.String, CommandTokenType.Colon, CommandTokenType.LineEnd)) {
+                    if (match(tokens,
+                            EnumSet.of(CommandTokenType.Identifier, CommandTokenType.String),
+                            CommandTokenType.Colon,
+                            CommandTokenType.LineEnd)) {
                         CommandToken name = tokens.removeFirst();
                         CommandBlockNamed sub = new CommandBlockNamed(indent, next.getData().equals("class"), name, this);
                         blocks.add(sub);
@@ -393,9 +469,10 @@ public class ClusterCommands {
                     boolean cluster = isClusterCommand(next.getData());
                     commands.add(next);
                     boolean lineContinue = false;
+                    CommandToken lineSepToken = new CommandToken(CommandTokenType.Identifier, "\\");
                     while (!tokens.isEmpty() && !(match(tokens, CommandTokenType.LineEnd))) {
                         CommandToken arg = tokens.removeFirst();
-                        if (arg.getType().equals(CommandTokenType.Identifier) && arg.getData().equals("\\")) {
+                        if (arg.equals(lineSepToken)) {
                             lineContinue = true;
                             break;
 
@@ -433,11 +510,11 @@ public class ClusterCommands {
                     clusterCommands.contains(data);
         }
 
-        public boolean match(LinkedList<CommandToken> tokens, CommandTokenType... types) {
-            if (tokens.size() > types.length) {
-                for (int i = 0; i < types.length; ++i) {
+        public boolean match(List<CommandToken> tokens, Object... patterns) {
+            if (tokens.size() >= patterns.length) {
+                for (int i = 0; i < patterns.length; ++i) {
                     CommandToken t = tokens.get(i);
-                    if (!t.getType().equals(types[i])) {
+                    if (!matchToken(t, patterns[i])) {
                         return false;
                     }
                 }
@@ -447,6 +524,39 @@ public class ClusterCommands {
             }
         }
 
+        @SuppressWarnings("unchecked")
+        public boolean matchToken(CommandToken token, Object pat) {
+            if (pat instanceof CommandTokenType) {
+                return token.getType().equals(pat);
+            } else if (pat instanceof Collection<?>) {
+                return ((Collection<?>) pat).contains(token.getType());
+            } else if (pat instanceof Pattern) {
+                return ((Pattern) pat).matcher(token.getData()).matches();
+            } else if (pat instanceof String) {
+                return token.getData().equals(pat);
+            } else if (pat instanceof Predicate<?>) {
+                return ((Predicate<Object>) pat).test(token);
+            } else {
+                System.err.println("invalid pattern:" + pat);
+                return false;
+            }
+        }
+
+        public void write(Consumer<String> out) {
+            getClusterLines().forEach(ls ->
+                    writeLine(out, ls));
+            getConfigLines().forEach(ls ->
+                    writeLine(out, ls));
+            out.accept("");
+            getBlocks().forEach(b ->
+                    b.write(out));
+        }
+
+        public void writeLine(Consumer<String> out, List<CommandToken> line) {
+            out.accept(line.stream()
+                    .map(CommandToken::toSource)
+                    .collect(Collectors.joining(" ")));
+        }
     }
 
     public static class CommandBlockLineContinue extends CommandBlock {
@@ -461,9 +571,10 @@ public class ClusterCommands {
         @Override
         public CommandBlock parse(CommandToken indent, LinkedList<CommandToken> tokens) {
             boolean end = false;
+            CommandToken lineSepToken = new CommandToken(CommandTokenType.Identifier, "\\");
             while (!tokens.isEmpty() && !(match(tokens, CommandTokenType.LineEnd))) {
                 CommandToken arg = tokens.removeFirst();
-                if (arg.getType().equals(CommandTokenType.Identifier) && arg.getData().equals("\\")) {
+                if (arg.equals(lineSepToken)) {
                     end = false;
                     break;
                 }
@@ -513,12 +624,26 @@ public class ClusterCommands {
         @Override
         public CommandBlock parse(CommandToken indent, LinkedList<CommandToken> tokens) {
             int len = indentLength(indent);
-            if (this.indentLevel > len) {
+            if (this.indentLevel < len) {
                 return super.parse(indent, tokens);
             } else {
                 tokens.addFirst(indent);
                 return parent.parse(tokens);
             }
+        }
+
+        @Override
+        public void write(Consumer<String> out) {
+            out.accept((isClassType() ? "class" : "node") + " " + getName().toSource() + ":");
+            super.write(l -> out.accept("   " + l));
+        }
+
+        @Override
+        public String toString() {
+            return getClass().getSimpleName() + "(" +
+                    (isClassType() ? "class" : "node") +
+                    ", " + name +
+                    ')';
         }
     }
 }

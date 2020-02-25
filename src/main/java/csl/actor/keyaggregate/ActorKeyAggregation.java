@@ -5,8 +5,9 @@ import csl.actor.keyaggregate.KeyAggregationRoutingSplit.SplitPath;
 
 import java.io.PrintWriter;
 import java.io.Serializable;
-import java.util.*;
-import java.util.concurrent.Future;
+import java.util.List;
+import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
@@ -404,9 +405,10 @@ public abstract class ActorKeyAggregation extends ActorDefault
         return nextStage;
     }
 
-    public Future<CallableMessage.CallableResponseVoid> setNextStage(ActorRef nextStage) {
+    public CompletableFuture<CallableMessage.CallableResponseVoid> setNextStage(ActorRef nextStage) {
         return ResponsiveCalls.sendTaskConsumer(this, (a,s) -> a.nextStage = nextStage);
     }
+
 
     public int nextConsumingSize(long size) {
         int consuming = (int) Math.min(Integer.MAX_VALUE, size);
@@ -600,7 +602,18 @@ public abstract class ActorKeyAggregation extends ActorDefault
 
     /////////////////////////// split or merge APIs
 
-    public Future<CallableMessage.CallableResponseVoid> routerSplit(int height) {
+    public CompletableFuture<Integer> routerGetMaxHeight() {
+        return ResponsiveCalls.<ActorKeyAggregation, Integer>sendTask(getSystem(), router(), (a, sender) -> {
+            State state = a.getState();
+            if (state instanceof KeyAggregationStateRouter) {
+                return ((KeyAggregationStateRouter) state).getMaxHeight(a);
+            } else {
+                return 1;
+            }
+        });
+    }
+
+    public CompletableFuture<CallableMessage.CallableResponseVoid> routerSplit(int height) {
         return ResponsiveCalls.<ActorKeyAggregation>sendTaskConsumer(getSystem(), router(), (a, sender) -> {
             State state = a.state;
             if (state instanceof KeyAggregationStateRouter) {
@@ -609,7 +622,7 @@ public abstract class ActorKeyAggregation extends ActorDefault
         });
     }
 
-    public Future<CallableMessage.CallableResponseVoid> routerMergeInactive() {
+    public CompletableFuture<CallableMessage.CallableResponseVoid> routerMergeInactive() {
         return ResponsiveCalls.<ActorKeyAggregation>sendTaskConsumer(getSystem(), router(), (a, sender) -> {
             State state = a.state;
             if (state instanceof KeyAggregationStateRouter) {
@@ -618,7 +631,7 @@ public abstract class ActorKeyAggregation extends ActorDefault
         });
     }
 
-    public Future<CallableMessage.CallableResponseVoid> routerSplitOrMerge(int height) {
+    public CompletableFuture<CallableMessage.CallableResponseVoid> routerSplitOrMerge(int height) {
         return ResponsiveCalls.<ActorKeyAggregation>sendTaskConsumer(getSystem(), router(), (a, sender) -> {
             State state = a.state;
             if (state instanceof KeyAggregationStateRouter) {

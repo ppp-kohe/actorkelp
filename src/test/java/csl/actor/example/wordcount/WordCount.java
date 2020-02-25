@@ -8,6 +8,7 @@ import csl.actor.remote.KryoBuilder;
 
 import java.io.*;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -77,12 +78,19 @@ public class WordCount {
             splitCount = Math.max(splitCount, fm.splitCount);
         }
 
-        void read(FileSplitter.FileSplit s, ActorRef sender) {
+        public CompletableFuture<PhaseShift.PhaseCompleted> startReadFile(String path) {
+            tell(new FileSplitter.FileSplit(path));
+            return PhaseShift.start(path, getSystem(), this);
+        }
+
+        protected void read(FileSplitter.FileSplit s, ActorRef sender) {
             try {
                 if (s.fileLength == 0) {
                     splitter.splitIterator(s.path)
                             .forEachRemaining(this::tell);
-                    router().tell(new PhaseShift(s.path, sender));
+                    if (sender != null) {
+                        router().tell(new PhaseShift(s.path, sender));
+                    }
                 } else {
                     splitCount = Math.max(splitCount, s.splitIndex);
                     splitter.openLineIterator(s)

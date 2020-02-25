@@ -63,6 +63,14 @@ public class ClusterDeployment {
         return master;
     }
 
+    public Config getMasterAppConfig() {
+        return master.getAppConfig();
+    }
+
+    public ClusterConfig getMasterClusterConfig() {
+        return master.getClusterConfig();
+    }
+
     public ActorPlacementKeyAggregation deploy(String confFile) {
         try {
             return deploy(new ClusterCommands().loadConfigFile(confFile));
@@ -83,7 +91,7 @@ public class ClusterDeployment {
         master = units.stream()
                 .filter(u -> u.getClusterConfig().master)
                 .findFirst()
-                .orElseThrow();
+                .orElseThrow(RuntimeException::new);
         if (master == null) {
             master = master();
         }
