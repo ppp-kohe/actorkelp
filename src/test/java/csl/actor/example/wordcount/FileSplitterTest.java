@@ -1,5 +1,7 @@
 package csl.actor.example.wordcount;
 
+import csl.actor.cluster.FileSplitter;
+
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.ArrayList;
@@ -26,7 +28,7 @@ public class FileSplitterTest {
             for (Iterator<String> iter = splitter.openLineIterator(s);
                  iter.hasNext(); ) {
                 String line = iter.next();
-                data.add(new Text(s.splitIndex, n, line));
+                data.add(new Text(s.getSplitIndex(), n, line));
                 ++n;
             }
             //log("" + n);

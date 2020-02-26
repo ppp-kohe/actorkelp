@@ -1,7 +1,7 @@
 package csl.actor.example.keyaggregate;
 
 import csl.actor.*;
-import csl.actor.keyaggregate.ActorPlacement;
+import csl.actor.cluster.ActorPlacement;
 import csl.actor.remote.ActorAddress;
 import csl.actor.remote.ActorSystemRemote;
 

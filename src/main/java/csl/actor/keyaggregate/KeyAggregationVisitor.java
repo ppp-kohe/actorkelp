@@ -5,7 +5,7 @@ import csl.actor.ActorRef;
 import csl.actor.CallableMessage;
 
 @FunctionalInterface
-public interface ActorKeyAggregationVisitor<ActorType extends Actor>
+public interface KeyAggregationVisitor<ActorType extends Actor>
         extends CallableMessage.CallableMessageConsumer<ActorType>, MessageNoRouting {
     void visitActor(ActorType actor, ActorRef sender);
 
@@ -46,7 +46,7 @@ public interface ActorKeyAggregationVisitor<ActorType extends Actor>
         }
     }
 
-    static <ActorType extends ActorKeyAggregation> void tell(ActorType a, ActorKeyAggregationVisitor<ActorType> v, ActorRef sender) {
+    static <ActorType extends ActorKeyAggregation> void tell(ActorType a, KeyAggregationVisitor<ActorType> v, ActorRef sender) {
         a.tell(v, sender);
     }
 
@@ -54,7 +54,7 @@ public interface ActorKeyAggregationVisitor<ActorType extends Actor>
         a.tell(v);
     }
 
-    static <ActorType extends ActorKeyAggregation> ActorKeyAggregationVisitor<ActorType> visitor(ActorKeyAggregationVisitor<ActorType> v) {
+    static <ActorType extends ActorKeyAggregation> KeyAggregationVisitor<ActorType> visitor(KeyAggregationVisitor<ActorType> v) {
         return v;
     }
 
@@ -63,7 +63,7 @@ public interface ActorKeyAggregationVisitor<ActorType extends Actor>
     }
 
     @FunctionalInterface
-    interface VisitorNoSender<ActorType extends Actor> extends ActorKeyAggregationVisitor<ActorType> {
+    interface VisitorNoSender<ActorType extends Actor> extends KeyAggregationVisitor<ActorType> {
         @Override
         default void visitActor(ActorType actor, ActorRef sender) {
             visitActor(actor);

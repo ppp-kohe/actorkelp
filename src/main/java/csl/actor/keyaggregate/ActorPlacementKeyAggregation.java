@@ -1,26 +1,17 @@
 package csl.actor.keyaggregate;
 
-import com.esotericsoftware.kryo.Kryo;
-import com.esotericsoftware.kryo.KryoSerializable;
-import com.esotericsoftware.kryo.io.Input;
-import com.esotericsoftware.kryo.io.Output;
-import csl.actor.*;
+import csl.actor.Actor;
+import csl.actor.ActorRef;
+import csl.actor.ActorSystem;
+import csl.actor.Message;
+import csl.actor.cluster.ClusterDeployment;
+import csl.actor.cluster.ResponsiveCalls;
 import csl.actor.remote.ActorAddress;
-import csl.actor.remote.ActorRefRemote;
 
 import java.io.Serializable;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.LinkedBlockingDeque;
 
-public class ActorPlacementKeyAggregation extends ActorPlacement.ActorPlacementDefault {
-    protected Map<ActorAddress, Config> remoteConfig = new HashMap<>();
-    protected BlockingQueue<ActorAddress> completed = new LinkedBlockingDeque<>();
-    protected Set<ActorAddress> configSetSent = new HashSet<>();
+public class ActorPlacementKeyAggregation extends ClusterDeployment.ActorPlacementForCluster<Config> {
 
     public ActorPlacementKeyAggregation(ActorSystem system, String name) {
         super(system, name);
@@ -39,15 +30,6 @@ public class ActorPlacementKeyAggregation extends ActorPlacement.ActorPlacementD
     }
 
     @Override
-    protected ActorBehavior initBehavior() {
-        return behaviorBuilder()
-                .matchWithSender(AddressList.class, this::receive)
-                .matchWithSender(ActorCreationRequest.class, this::create)
-                .match(ConfigSet.class, this::receiveConfigSet)
-                .build();
-    }
-
-    @Override
     protected PlacementStrategy initStrategy() {
         return new PlacementStrategyRoundRobinThreads();
     }
@@ -61,10 +43,6 @@ public class ActorPlacementKeyAggregation extends ActorPlacement.ActorPlacementD
         } else {
             return null;
         }
-    }
-
-    public Map<ActorAddress, Config> getRemoteConfig() {
-        return remoteConfig;
     }
 
     protected ActorKeyAggregation.ActorKeyAggregationSerializable withConfig(ActorAddress target, ActorKeyAggregation.ActorKeyAggregationSerializable s) {
@@ -96,59 +74,6 @@ public class ActorPlacementKeyAggregation extends ActorPlacement.ActorPlacementD
         return a;
     }
 
-    @Override
-    protected void updateTotalThreads() {
-        super.updateTotalThreads();
-        synchronized (this) {
-            getCluster().stream()
-                    .map(AddressListEntry::getPlacementActor)
-                    .forEach(this::joined);
-        }
-    }
-
-    protected void joined(ActorAddress addr) {
-        if (!configSetSent.contains(addr)) {
-            ActorRefRemote.get(getSystem(), addr)
-                    .tell(new ConfigSet(remoteConfig), this);
-            configSetSent.add(addr);
-            completed.offer(addr);
-        }
-    }
-
-    public BlockingQueue<ActorAddress> getCompleted() {
-        return completed;
-    }
-
-    public void receiveConfigSet(ConfigSet set) {
-        remoteConfig.putAll(set.getRemoteConfig());
-    }
-
-    public static class ConfigSet implements Serializable, KryoSerializable {
-        public Map<ActorAddress, Config> remoteConfig;
-
-        public ConfigSet() {}
-
-        public ConfigSet(Map<ActorAddress, Config> remoteConfig) {
-            this.remoteConfig = remoteConfig;
-        }
-
-        public Map<ActorAddress, Config> getRemoteConfig() {
-            return remoteConfig;
-        }
-
-        @Override
-        public void write(Kryo kryo, Output output) {
-            kryo.writeClassAndObject(output, remoteConfig);
-        }
-
-        @SuppressWarnings("unchecked")
-        @Override
-        public void read(Kryo kryo, Input input) {
-            remoteConfig = (Map<ActorAddress, Config>) kryo.readClassAndObject(input);
-        }
-    }
-
-
     public CompletableFuture<?> connectAndSplitStage(ActorRef... stageActors) {
         CompletableFuture<?> f = connectStage(stageActors);
         return splitStage(f, stageActors);
@@ -178,7 +103,7 @@ public class ActorPlacementKeyAggregation extends ActorPlacement.ActorPlacementD
                     f = f.thenCompose((_v) -> task.apply(nextActor));
                 } else {
                     ActorSystem system = getSystem();
-                    f = f.thenCompose((_v) -> ResponsiveCalls.<ActorKeyAggregation>sendTaskConsumer(system, next, (a,s) -> {
+                    f = f.thenCompose((_v) -> ResponsiveCalls.<ActorKeyAggregation>sendTaskConsumer(system, next, (a, s) -> {
                         try {
                             task.apply(a).get();
                         } catch (Exception ex) {

@@ -1,4 +1,4 @@
-package csl.actor.keyaggregate;
+package csl.actor.cluster;
 
 import csl.actor.*;
 import csl.actor.remote.ActorAddress;

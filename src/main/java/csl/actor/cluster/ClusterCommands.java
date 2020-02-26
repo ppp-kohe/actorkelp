@@ -1,7 +1,4 @@
-package csl.actor.example.keyaggregate;
-
-import csl.actor.keyaggregate.Config;
-import csl.actor.keyaggregate.ConfigBase;
+package csl.actor.cluster;
 
 import java.lang.reflect.Field;
 import java.nio.file.Files;
@@ -13,38 +10,46 @@ import java.util.function.Predicate;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
-public class ClusterCommands {
-    public static void main(String[] args) {
-        ClusterCommands c = new ClusterCommands();
-        CommandBlockRoot root = c.parseConfigFile(args[0]);
-        List<ClusterDeployment.ClusterUnit> units = c.loadNamed(root);
+public class ClusterCommands<AppConfType extends ConfigBase> {
+    protected Class<AppConfType> defaultConfType;
+
+    @SuppressWarnings("unchecked")
+    public static void main(String[] args) throws Exception {
+        ClusterCommands<ConfigBase> c = new ClusterCommands<>((Class<ConfigBase>) Class.forName(args[0]));
+        CommandBlockRoot root = c.parseConfigFile(args[1]);
+        List<ClusterUnit<ConfigBase>> units = c.loadNamed(root);
         root.write(System.out::println);
 
         units.forEach(u -> {
             u.log(u.getName() + ":");
-            u.log("    clusterConfig: " + u.getClusterConfig().toString());
+            u.log("    clusterConfig: " + u.getDeploymentConfig().toString());
             if (u.getAppConfig() != null) {
                 u.log("    appConfig: " + u.getAppConfig().toString());
             }
         });
     }
 
-    public List<ClusterDeployment.ClusterUnit> loadConfigFile(String path) {
+    public ClusterCommands(Class<AppConfType> defaultConfType) {
+        this.defaultConfType = defaultConfType;
+    }
+
+    public List<ClusterUnit<AppConfType>> loadConfigFile(String path) {
         CommandBlockRoot root = parseConfigFile(path);
         return loadNamed(root);
     }
 
-    public List<ClusterDeployment.ClusterUnit> loadNamed(CommandBlockRoot root) {
+    public List<ClusterUnit<AppConfType>> loadNamed(CommandBlockRoot root) {
         return root.getNameToBlock().values().stream()
                 .filter(c -> !c.isClassType())
                 .map(this::load)
                 .collect(Collectors.toList());
     }
 
-    public ClusterDeployment.ClusterUnit load(CommandBlock block) {
-        ClusterDeployment.ClusterUnit unit = new ClusterDeployment.ClusterUnit();
-        ClusterConfig conf = new ClusterConfig();
-        unit.setClusterConfig(conf);
+    @SuppressWarnings("unchecked")
+    public ClusterUnit<AppConfType> load(CommandBlock block) {
+        ClusterUnit<AppConfType> unit = new ClusterUnit<>();
+        ConfigDeployment conf = new ConfigDeployment(defaultConfType);
+        unit.setDeploymentConfig(conf);
         try {
             if (block instanceof CommandBlockNamed) {
                 String name = ((CommandBlockNamed) block).getName().getData();
@@ -58,7 +63,7 @@ public class ClusterCommands {
 
             block.getClusterLines()
                     .forEach(cs -> set(conf, cs));
-            unit.setAppConfig((Config) Class.forName(conf.configType).getConstructor()
+            unit.setAppConfig((AppConfType) Class.forName(conf.configType).getConstructor()
                     .newInstance());
 
             block.getConfigLines()
@@ -501,7 +506,7 @@ public class ClusterCommands {
 
         public static boolean isClusterCommand(String data) {
             if (clusterCommands == null) {
-                clusterCommands = Arrays.stream(ClusterConfig.class.getFields())
+                clusterCommands = Arrays.stream(ConfigDeployment.class.getFields())
                         .filter(ConfigBase::isConfigProperty)
                         .map(Field::getName)
                         .collect(Collectors.toList());
@@ -644,6 +649,68 @@ public class ClusterCommands {
                     (isClassType() ? "class" : "node") +
                     ", " + name +
                     ')';
+        }
+    }
+
+    public static class ClusterUnit<AppConfType extends ConfigBase> {
+        protected String name;
+        protected ConfigDeployment deploymentConfig;
+        protected AppConfType appConfig;
+        protected CommandBlock block;
+
+        protected List<String> classPathList;
+
+        public void setBlock(CommandBlock block) {
+            this.block = block;
+        }
+
+        public CommandBlock getBlock() {
+            return block;
+        }
+
+        public void setName(String name) {
+            this.name = name;
+        }
+
+        public String getName() {
+            return name;
+        }
+
+        public ConfigDeployment getDeploymentConfig() {
+            return deploymentConfig;
+        }
+
+        public AppConfType getAppConfig() {
+            return appConfig;
+        }
+
+        public void setDeploymentConfig(ConfigDeployment deploymentConfig) {
+            this.deploymentConfig = deploymentConfig;
+        }
+
+        public void setAppConfig(AppConfType appConfig) {
+            this.appConfig = appConfig;
+        }
+
+        public void log(String str) {
+            if (appConfig != null) {
+                appConfig.log(str);
+            } else {
+                deploymentConfig.log(str);
+            }
+        }
+
+        public void setClassPathList(List<String> classPathList) {
+            this.classPathList = classPathList;
+        }
+
+        public List<String> getClassPathList() {
+            return classPathList;
+        }
+
+        public ClusterUnit<AppConfType> edit(Consumer<ClusterUnit<AppConfType>> f) {
+            f.accept(this);
+            return this;
         }
     }
 }

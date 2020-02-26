@@ -1,4 +1,4 @@
-package csl.actor.keyaggregate;
+package csl.actor.cluster;
 
 import csl.actor.*;
 import csl.actor.CallableMessage.CallableResponseVoid;
@@ -7,7 +7,6 @@ import csl.actor.remote.ActorRefRemote;
 
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicLong;
 
 public class ResponsiveCalls {

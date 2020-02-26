@@ -12,6 +12,7 @@ import com.esotericsoftware.kryo.serializers.JavaSerializer;
 import com.esotericsoftware.kryo.util.DefaultInstantiatorStrategy;
 import com.esotericsoftware.kryo.util.Pool;
 import csl.actor.*;
+import csl.actor.cluster.*;
 import csl.actor.keyaggregate.*;
 import org.objenesis.instantiator.basic.ObjectStreamClassInstantiator;
 import org.objenesis.strategy.StdInstantiatorStrategy;
@@ -250,7 +251,6 @@ public class KryoBuilder {
                 ActorPlacement.AddressListEntry.class,
                 ActorPlacement.ActorCreationRequest.class,
                 ActorPlacement.CallableMasterThreads.class,
-                ActorPlacementKeyAggregation.ConfigSet.class,
                 ActorPlacementKeyAggregation.Task.class,
                 ActorPlacementKeyAggregation.TaskChain.class,
                 ActorKeyAggregation.StateUnit.class,
@@ -270,7 +270,7 @@ public class KryoBuilder {
                 ActorBehaviorKeyAggregation.HistogramNodeLeafListReducibleForPhase.class,
                 KeyHistograms.HistogramNodeLeafMap.class,
                 KeyHistograms.HistogramLeafCellSerializedEnd.class,
-                csl.actor.keyaggregate.ConfigBase.class,
+                ConfigBase.class,
                 csl.actor.keyaggregate.Config.class,
                 MailboxPersistable.MessageOnStorage.class,
                 MailboxPersistable.PersistentFileEnd.class,
@@ -285,14 +285,20 @@ public class KryoBuilder {
                 KeyHistogramsPersistable.HistogramNodeLeafOnStorage.class,
                 KeyHistogramsPersistable.NodeTreeData.class,
 
-                ActorKeyAggregationVisitor.class,
-                ActorKeyAggregationVisitor.VisitorNoSender.class,
+                KeyAggregationVisitor.class,
+                KeyAggregationVisitor.VisitorNoSender.class,
                 PhaseShift.class,
                 PhaseShift.PhaseCompleted.class,
                 PhaseShift.PhaseShiftIntermediate.class,
                 PhaseShift.PhaseShiftIntermediateType.class,
                 ActorKeyAggregation.CancelChange.class,
-                ActorKeyAggregation.CanceledChangeType.class);
+                ActorKeyAggregation.CanceledChangeType.class,
+
+                ClusterDeployment.ConfigSet.class,
+                ConfigDeployment.class,
+                FileSplitter.FileSplit.class,
+                ActorPlacementKeyAggregation.Task.class,
+                ActorPlacementKeyAggregation.TaskChain.class);
     }
 
     public interface SerializerFunction {

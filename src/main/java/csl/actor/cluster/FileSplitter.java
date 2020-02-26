@@ -1,4 +1,4 @@
-package csl.actor.example.wordcount;
+package csl.actor.cluster;
 
 import java.io.IOException;
 import java.io.RandomAccessFile;
@@ -26,6 +26,14 @@ public class FileSplitter {
     public FileSplitter(long splitLength, long splits) {
         this.splitLength = splitLength;
         this.splits = splits;
+    }
+
+    public long getSplitLength() {
+        return splitLength;
+    }
+
+    public long getSplits() {
+        return splits;
     }
 
     public List<FileSplit> split(String path) throws IOException {
@@ -95,6 +103,22 @@ public class FileSplitter {
             this.splitIndex = splitIndex;
             this.splitStart = splitStart;
             this.splitLength = splitLength;
+        }
+
+        public long getSplitIndex() {
+            return splitIndex;
+        }
+
+        public long getSplitLength() {
+            return splitLength;
+        }
+
+        public long getFileLength() {
+            return fileLength;
+        }
+
+        public String getPath() {
+            return path;
         }
 
         public long splitEnd() {

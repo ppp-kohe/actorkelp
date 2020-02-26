@@ -5,7 +5,7 @@ import csl.actor.ActorSystem;
 import csl.actor.ActorSystemDefault;
 import csl.actor.keyaggregate.ActorKeyAggregation;
 import csl.actor.keyaggregate.Config;
-import csl.actor.keyaggregate.PhaseShift;
+import csl.actor.cluster.PhaseShift;
 
 import java.util.*;
 import java.util.function.BiPredicate;

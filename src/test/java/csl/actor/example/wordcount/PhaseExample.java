@@ -5,7 +5,7 @@ import csl.actor.ActorRef;
 import csl.actor.ActorSystem;
 import csl.actor.ActorSystemDefault;
 import csl.actor.keyaggregate.ActorKeyAggregation;
-import csl.actor.keyaggregate.PhaseShift;
+import csl.actor.cluster.PhaseShift;
 
 public class PhaseExample {
     public static void main(String[] args) {

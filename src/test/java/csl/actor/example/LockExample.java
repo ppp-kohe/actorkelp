@@ -4,7 +4,7 @@ import csl.actor.*;
 import csl.actor.example.keyaggregate.DebugBehavior;
 import csl.actor.keyaggregate.ActorBehaviorBuilderKeyAggregation;
 import csl.actor.keyaggregate.KeyHistograms;
-import csl.actor.keyaggregate.PhaseShift;
+import csl.actor.cluster.PhaseShift;
 
 import java.util.*;
 import java.util.concurrent.TimeUnit;

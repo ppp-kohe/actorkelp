@@ -1,6 +1,10 @@
 package csl.actor.keyaggregate;
 
 import csl.actor.*;
+import csl.actor.cluster.ActorPlacement;
+import csl.actor.cluster.MailboxPersistable;
+import csl.actor.cluster.PhaseShift;
+import csl.actor.cluster.ResponsiveCalls;
 import csl.actor.keyaggregate.KeyAggregationRoutingSplit.SplitPath;
 
 import java.io.PrintWriter;
@@ -396,8 +400,17 @@ public abstract class ActorKeyAggregation extends ActorDefault
         Object data = message.getData();
         return data instanceof MessageNoRouting ||
                 data instanceof MailboxKeyAggregation.TraversalProcess ||
+                isNoRoutingMessagePhase(message) ||
                 (data instanceof CallableMessage<?,?> &&
                         !(data instanceof MessageNoRouting.Routing));
+    }
+
+    protected boolean isNoRoutingMessagePhase(Message<?> message) {
+        Object data = message.getData();
+        return data instanceof PhaseShift ||
+                data instanceof PhaseShift.PhaseCompleted ||
+                data instanceof PhaseShift.PhaseShiftIntermediate;
+
     }
 
     @Override
@@ -406,7 +419,7 @@ public abstract class ActorKeyAggregation extends ActorDefault
     }
 
     public CompletableFuture<CallableMessage.CallableResponseVoid> setNextStage(ActorRef nextStage) {
-        return ResponsiveCalls.sendTaskConsumer(this, (a,s) -> a.nextStage = nextStage);
+        return ResponsiveCalls.sendTaskConsumer(this, (a, s) -> a.nextStage = nextStage);
     }
 
 
@@ -744,6 +757,7 @@ public abstract class ActorKeyAggregation extends ActorDefault
         config.log(str);
     }
 
+    @Override
     public void logPhase(String str) {
         config.log(config.logColorPhase, str);
     }

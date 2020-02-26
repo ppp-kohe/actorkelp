@@ -1,6 +1,7 @@
 package csl.actor.example.keyaggregate;
 
 import csl.actor.Actor;
+import csl.actor.cluster.ResponsiveCalls;
 import csl.actor.keyaggregate.*;
 
 import java.io.Serializable;

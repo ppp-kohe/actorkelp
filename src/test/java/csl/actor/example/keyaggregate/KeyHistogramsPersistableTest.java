@@ -5,7 +5,7 @@ import com.esotericsoftware.kryo.io.Output;
 import csl.actor.keyaggregate.ActorBehaviorBuilderKeyAggregation;
 import csl.actor.keyaggregate.KeyHistograms;
 import csl.actor.keyaggregate.KeyHistogramsPersistable;
-import csl.actor.keyaggregate.MailboxPersistable;
+import csl.actor.cluster.MailboxPersistable;
 import csl.actor.remote.KryoBuilder;
 
 import java.io.ByteArrayInputStream;

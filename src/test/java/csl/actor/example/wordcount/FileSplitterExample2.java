@@ -4,10 +4,11 @@ import csl.actor.ActorBehavior;
 import csl.actor.ActorRef;
 import csl.actor.ActorSystem;
 import csl.actor.ActorSystemDefault;
+import csl.actor.cluster.FileSplitter;
 import csl.actor.example.LockExample;
 import csl.actor.keyaggregate.ActorKeyAggregation;
 import csl.actor.keyaggregate.Config;
-import csl.actor.keyaggregate.PhaseShift;
+import csl.actor.cluster.PhaseShift;
 
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -67,20 +68,20 @@ public class FileSplitterExample2 {
 
         @Override
         protected void initMerged(ActorKeyAggregation m) {
-            WordCount.FileMapper fm = (WordCount.FileMapper) m;
+            csl.actor.keyaggregate.FileMapper fm = (csl.actor.keyaggregate.FileMapper) m;
             splitCount = Math.max(splitCount, fm.splitCount);
         }
 
         void read(FileSplitter.FileSplit s, ActorRef sender) {
             try {
-                if (s.fileLength == 0) {
-                    splitter.splitIterator(s.path)
+                if (s.getFileLength() == 0) {
+                    splitter.splitIterator(s.getPath())
                             .forEachRemaining(this::tell);
                     if (sender != null) {
-                        router().tell(new PhaseShift(s.path, sender));
+                        router().tell(new PhaseShift(s.getPath(), sender));
                     }
                 } else {
-                    splitCount = Math.max(splitCount, s.splitIndex);
+                    splitCount = Math.max(splitCount, s.getSplitIndex());
                     splitter.openLineIterator(s)
                             .forEachRemaining(nextStage()::tell);
                 }

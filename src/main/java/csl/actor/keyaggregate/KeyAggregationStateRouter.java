@@ -2,6 +2,8 @@ package csl.actor.keyaggregate;
 
 import csl.actor.ActorRef;
 import csl.actor.Message;
+import csl.actor.cluster.ActorPlacement;
+import csl.actor.cluster.PhaseShift;
 import csl.actor.keyaggregate.KeyAggregationRoutingSplit.SplitOrMergeContextDefault;
 
 import java.util.*;
@@ -17,7 +19,7 @@ public class KeyAggregationStateRouter implements ActorKeyAggregation.State {
     protected volatile boolean needClearHistory;
     protected volatile boolean logAfterParallelRouting;
 
-    protected Map<Object, PhaseShift.PhaseEntry> phase = new HashMap<>();
+    protected Map<Object, KeyAggregationPhaseEntry> phase = new HashMap<>();
     protected Set<ActorRef> canceled = new HashSet<>();
 
     public void split(ActorKeyAggregation self, int height) {
@@ -260,13 +262,13 @@ public class KeyAggregationStateRouter implements ActorKeyAggregation.State {
 
     protected void processMessagePhaseShift(ActorKeyAggregation self, Message<?> message, PhaseShift ps) {
         self.logPhase("#phase        start: " + ps.getKey() + " : " + self + " : target=" + ps.getTarget());
-        PhaseShift.PhaseEntry e = phase.computeIfAbsent(ps.getKey(), PhaseShift.PhaseEntry::new);
+        KeyAggregationPhaseEntry e = phase.computeIfAbsent(ps.getKey(), KeyAggregationPhaseEntry::new);
         e.setOriginAndSender(ps, message.getSender());
         e.startRouter(self); //router only delivers to canceled actors without traversal
     }
 
     protected void processMessagePhaseShiftIntermediate(ActorKeyAggregation self, Message<?> message, PhaseShift.PhaseShiftIntermediate ps) {
-        PhaseShift.PhaseEntry finish = phase.computeIfAbsent(ps.getKey(), PhaseShift.PhaseEntry::new);
+        KeyAggregationPhaseEntry finish = phase.computeIfAbsent(ps.getKey(), KeyAggregationPhaseEntry::new);
         if (ps.getActor() == self && ps.getType().equals(PhaseShift.PhaseShiftIntermediateType.PhaseIntermediateFinishLeaf)) {
             self.processPhaseEnd(ps.getKey());
         }

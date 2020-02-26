@@ -1,7 +1,7 @@
 package csl.actor.example.keyaggregate;
 
 import csl.actor.*;
-import csl.actor.keyaggregate.ResponsiveCalls;
+import csl.actor.cluster.ResponsiveCalls;
 import csl.actor.remote.ActorSystemRemote;
 
 import java.time.Instant;

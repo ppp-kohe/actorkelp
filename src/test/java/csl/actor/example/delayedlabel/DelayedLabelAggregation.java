@@ -1,6 +1,7 @@
 package csl.actor.example.delayedlabel;
 
 import csl.actor.*;
+import csl.actor.cluster.ResponsiveCalls;
 import csl.actor.keyaggregate.*;
 
 import java.io.File;

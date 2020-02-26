@@ -1,4 +1,4 @@
-package csl.actor.keyaggregate;
+package csl.actor.cluster;
 
 import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.KryoException;

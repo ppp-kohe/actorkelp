@@ -1,7 +1,8 @@
 package csl.actor.example.wordcount;
 
+import csl.actor.cluster.FileSplitter;
+
 import java.io.IOException;
-import java.io.RandomAccessFile;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
@@ -25,7 +26,7 @@ public class FileSplitterExample {
         Instant startTime = Instant.now();
         List<FileSplitter.FileSplit> sps = s.split(path);
         Instant splitTime = Instant.now();
-        System.out.println(String.format("split: %s : splits=%,d, splitLen=%,d", Duration.between(startTime, splitTime), sps.size(), sps.get(0).splitLength));
+        System.out.println(String.format("split: %s : splits=%,d, splitLen=%,d", Duration.between(startTime, splitTime), sps.size(), sps.get(0).getSplitLength()));
 
         startTime = Instant.now();
         ExecutorService service = Executors.newScheduledThreadPool(sps.size());

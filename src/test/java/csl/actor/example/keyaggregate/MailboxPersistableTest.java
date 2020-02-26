@@ -3,9 +3,9 @@ package csl.actor.example.keyaggregate;
 import csl.actor.*;
 import csl.actor.example.SerializeExample2;
 import csl.actor.keyaggregate.Config;
-import csl.actor.keyaggregate.MailboxPersistable;
-import csl.actor.keyaggregate.PhaseShift;
-import csl.actor.keyaggregate.ResponsiveCalls;
+import csl.actor.cluster.MailboxPersistable;
+import csl.actor.cluster.PhaseShift;
+import csl.actor.cluster.ResponsiveCalls;
 import csl.actor.remote.KryoBuilder;
 
 import java.time.Duration;

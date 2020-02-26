@@ -2,13 +2,14 @@ package csl.actor.example.wordcount;
 
 import com.esotericsoftware.kryo.io.Output;
 import csl.actor.*;
+import csl.actor.cluster.FileSplitter;
+import csl.actor.cluster.PhaseShift;
 import csl.actor.example.keyaggregate.DebugBehavior;
 import csl.actor.keyaggregate.*;
 import csl.actor.remote.KryoBuilder;
 
 import java.io.*;
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -50,56 +51,6 @@ public class WordCount {
 
         //system.getExecutorService().awaitTermination(1, TimeUnit.HOURS);
 
-    }
-
-    public static class FileMapper extends ActorKeyAggregation {
-        FileSplitter splitter;
-        long splitCount;
-
-        public FileMapper(ActorSystem system, String name, Config config) {
-            super(system, name, config);
-        }
-
-        public FileMapper(ActorSystem system, String name, Config config, FileSplitter splitter) {
-            this(system, name, config);
-            this.splitter = splitter;
-        }
-
-        @Override
-        protected ActorBehavior initBehavior() {
-            return behaviorBuilder()
-                    .matchWithSender(FileSplitter.FileSplit.class, this::read)
-                    .build();
-        }
-
-        @Override
-        protected void initMerged(ActorKeyAggregation m) {
-            FileMapper fm = (FileMapper) m;
-            splitCount = Math.max(splitCount, fm.splitCount);
-        }
-
-        public CompletableFuture<PhaseShift.PhaseCompleted> startReadFile(String path) {
-            tell(new FileSplitter.FileSplit(path));
-            return PhaseShift.start(path, getSystem(), this);
-        }
-
-        protected void read(FileSplitter.FileSplit s, ActorRef sender) {
-            try {
-                if (s.fileLength == 0) {
-                    splitter.splitIterator(s.path)
-                            .forEachRemaining(this::tell);
-                    if (sender != null) {
-                        router().tell(new PhaseShift(s.path, sender));
-                    }
-                } else {
-                    splitCount = Math.max(splitCount, s.splitIndex);
-                    splitter.openLineIterator(s)
-                            .forEachRemaining(nextStage()::tell);
-                }
-            } catch (Exception ex) {
-                throw new RuntimeException(ex);
-            }
-        }
     }
 
     public static class WordCountMapper extends ActorKeyAggregation {

@@ -1,17 +1,6 @@
 package csl.actor.keyaggregate;
 
-import java.io.PrintWriter;
-import java.io.Serializable;
-import java.lang.annotation.ElementType;
-import java.lang.annotation.Retention;
-import java.lang.annotation.RetentionPolicy;
-import java.lang.annotation.Target;
-import java.lang.reflect.Field;
-import java.lang.reflect.Modifier;
-import java.time.Instant;
-import java.util.*;
-import java.util.stream.Collectors;
-import java.util.stream.IntStream;
+import csl.actor.cluster.ConfigBase;
 
 public class Config extends ConfigBase {
     public static final Config CONFIG_DEFAULT = new Config();
@@ -45,6 +34,9 @@ public class Config extends ConfigBase {
     public double histogramPersistSizeRatioThreshold = 0.00001;
     public long histogramPersistRandomSeed = 0;
 
+    public boolean fileMapperSplitByCount = false;
+    public long fileMapperSplitLength = 100_000;
+    public long fileMapperSplitCount = 10;
 
     @Override
     protected int getLogColorDefault() {

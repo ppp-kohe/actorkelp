@@ -1,7 +1,8 @@
 package csl.actor.keyaggregate;
 
 import com.esotericsoftware.kryo.io.Output;
-import csl.actor.keyaggregate.MailboxPersistable.PersistentFileReaderSource;
+import csl.actor.cluster.MailboxPersistable;
+import csl.actor.cluster.MailboxPersistable.PersistentFileReaderSource;
 import csl.actor.remote.KryoBuilder;
 
 import java.io.IOException;

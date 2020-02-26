@@ -1,4 +1,4 @@
-package csl.actor.keyaggregate;
+package csl.actor.cluster;
 
 import java.io.PrintWriter;
 import java.io.Serializable;

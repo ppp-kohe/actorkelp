@@ -5,9 +5,9 @@ import csl.actor.ActorRef;
 import csl.actor.ActorSystem;
 import csl.actor.Message;
 import csl.actor.keyaggregate.ActorKeyAggregation;
-import csl.actor.keyaggregate.ActorKeyAggregationVisitor;
+import csl.actor.keyaggregate.KeyAggregationVisitor;
 import csl.actor.keyaggregate.Config;
-import csl.actor.keyaggregate.ResponsiveCalls;
+import csl.actor.cluster.ResponsiveCalls;
 
 import java.io.PrintWriter;
 import java.time.Instant;
@@ -46,7 +46,7 @@ public class DelayedLabelAggregationReplicable extends DelayedLabelManual {
             if (!printed && (numInstances * 0.9) < this.finishedInstances) {
                 ResponsiveCalls.sendTask(system, root, (a, s) -> {
                     System.err.println("print router");
-                    ActorKeyAggregationVisitor.tell((ActorKeyAggregation) a, (v, snd) -> v.printStatus(), null);
+                    KeyAggregationVisitor.tell((ActorKeyAggregation) a, (v, snd) -> v.printStatus(), null);
                     return null;
                 });
                 printed = true;

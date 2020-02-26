@@ -4,6 +4,7 @@ import csl.actor.Actor;
 import csl.actor.ActorRef;
 import csl.actor.CallableMessage;
 import csl.actor.Message;
+import csl.actor.cluster.ResponsiveCalls;
 
 import java.util.*;
 import java.util.concurrent.TimeUnit;
@@ -28,7 +29,7 @@ public interface KeyAggregationRoutingSplit {
 
     KeyAggregationRoutingSplit adjustPath(SplitPath newPath);
 
-    default <ActorType extends Actor> void accept(ActorType actor, ActorRef sender, ActorKeyAggregationVisitor<ActorType> v) {
+    default <ActorType extends Actor> void accept(ActorType actor, ActorRef sender, KeyAggregationVisitor<ActorType> v) {
         v.visitRouter(actor, sender, this);
     }
 
@@ -235,7 +236,7 @@ public interface KeyAggregationRoutingSplit {
         }
 
         @Override
-        public <ActorType extends Actor> void accept(ActorType actor, ActorRef sender, ActorKeyAggregationVisitor<ActorType> v) {
+        public <ActorType extends Actor> void accept(ActorType actor, ActorRef sender, KeyAggregationVisitor<ActorType> v) {
             v.visitRouterLeaf(actor, sender, this);
         }
     }
@@ -471,7 +472,7 @@ public interface KeyAggregationRoutingSplit {
         }
 
         @Override
-        public <ActorType extends Actor> void accept(ActorType actor, ActorRef sender, ActorKeyAggregationVisitor<ActorType> v) {
+        public <ActorType extends Actor> void accept(ActorType actor, ActorRef sender, KeyAggregationVisitor<ActorType> v) {
             v.visitRouterNode(actor, sender, this);
         }
     }
