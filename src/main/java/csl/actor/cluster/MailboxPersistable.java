@@ -651,12 +651,7 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
         if (system instanceof ActorSystemRemote) {
             serializer = ((ActorSystemRemote) system).getSerializer();
         } else {
-            serializer = new KryoBuilder.SerializerPool(new Pool<Kryo>(true, false) {
-                @Override
-                protected Kryo create() {
-                    return KryoBuilder.builder().apply(system);
-                }
-            });
+            serializer = new KryoBuilder.SerializerPoolDefault(system);
         }
         return new PersistentFileManager(path, serializer);
     }

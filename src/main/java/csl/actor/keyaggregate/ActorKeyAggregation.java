@@ -696,13 +696,25 @@ public abstract class ActorKeyAggregation extends ActorDefault
 
     protected ActorKeyAggregationSerializable initSerializableState(ActorKeyAggregationSerializable state, long num) {
         state.actorType = getClass();
-        state.name = String.format("%s#%d", getName(), num);
+        String n = getName();
+        int si = n.lastIndexOf("#");
+        if (si >= 0) {
+            n = n.substring(0, si);
+        }
+        state.name = String.format("%s#%d", n, num);
         state.config = config;
         state.router = router();
         MailboxKeyAggregation r = getMailboxAsKeyAggregation();
         r.serializeTo(state);
+        state.internalState = toSerializableInternalState();
         return state;
     }
+
+    protected Serializable toSerializableInternalState() {
+        return null;
+    }
+
+    protected void initSerializedInternalState(Serializable s) { }
 
     public static class ActorKeyAggregationSerializable implements Serializable {
         public Class<? extends ActorKeyAggregation> actorType;
@@ -711,6 +723,7 @@ public abstract class ActorKeyAggregation extends ActorDefault
         public List<KeyHistograms.HistogramTree> histograms;
         public Config config;
         public ActorRef router;
+        public Serializable internalState;
 
         public ActorKeyAggregation create(ActorSystem system, long num) throws Exception {
             return init(create(system, name(num), config(), state(router)));
@@ -730,6 +743,7 @@ public abstract class ActorKeyAggregation extends ActorDefault
 
         protected ActorKeyAggregation init(ActorKeyAggregation a) {
             a.getMailboxAsKeyAggregation().deserializeFrom(this);
+            a.initSerializedInternalState(internalState);
             return a;
         }
 

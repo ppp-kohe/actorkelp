@@ -204,6 +204,7 @@ public class ActorSystemDefault implements ActorSystem {
         }
     }
 
+    @Override
     public ScheduledExecutorService getScheduledExecutor() {
         ScheduledExecutorService se = scheduledExecutor;
         if (se == null) {
@@ -219,6 +220,11 @@ public class ActorSystemDefault implements ActorSystem {
 
     protected int getScheduledExecutorThreads() {
         return Math.max(1, getThreads() / 2);
+    }
+
+    @Override
+    public void awaitClose(long time, TimeUnit unit) throws InterruptedException {
+        executorService.awaitTermination(time, unit);
     }
 
     public static class PollTime {

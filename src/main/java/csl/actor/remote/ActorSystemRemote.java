@@ -269,6 +269,11 @@ public class ActorSystemRemote implements ActorSystem {
     }
 
     @Override
+    public void awaitClose(long time, TimeUnit unit) throws InterruptedException {
+        localSystem.awaitClose(time, unit);
+    }
+
+    @Override
     public String toString() {
         return toStringSystemName() + "@" + Integer.toHexString(System.identityHashCode(this)) +
                 "(" + localSystem + ", " + serverAddress + ")";

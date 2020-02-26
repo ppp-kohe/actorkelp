@@ -4,8 +4,7 @@ import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.KryoSerializable;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
-import csl.actor.ActorBehavior;
-import csl.actor.ActorSystem;
+import csl.actor.*;
 import csl.actor.cluster.ClusterCommands.ClusterUnit;
 import csl.actor.remote.ActorAddress;
 import csl.actor.remote.ActorRefRemote;
@@ -24,10 +23,7 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.LinkedBlockingDeque;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 import java.util.jar.JarEntry;
 import java.util.jar.JarOutputStream;
 import java.util.regex.Pattern;
@@ -137,23 +133,29 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
     public void deployNodes(List<ClusterUnit<AppConfType>> units) {
         units.stream()
                 .filter(u -> !u.getDeploymentConfig().master)
-                .forEach(u -> {
-                    nodes.add(u);
-                    system.execute(() -> deployNode(u));
-                });
+                .forEach(u ->
+                    system.execute(() -> deployNode(u)));
     }
 
     public void deployNode(ClusterUnit<AppConfType> unit) {
         try {
+            nodes.add(unit);
             unit.log(String.format("%s: deploy: %s", appName, unit.getDeploymentConfig().getAddress()));
             deployFiles(unit);
 
+            deployNodeStartProcess(unit);
+        } catch (Exception ex) {
+            throw new RuntimeException(ex);
+        }
+    }
+
+    public void deployNodeStartProcess(ClusterUnit<AppConfType> unit) {
+        try {
             String javaCmd = getCommandWithDir(unit, getJavaCommand(unit));
 
             processes.put(unit,
                     launch(unit,
                             sshCommand(unit, javaCmd)));
-
         } catch (Exception ex) {
             throw new RuntimeException(ex);
         }
@@ -484,7 +486,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
             remoteConfig.putAll((Map<ActorAddress, AppConfType>) set.getRemoteConfig());
         }
 
-        public void awaitsJoining(String appName, ClusterUnit<AppConfType> master) throws Exception {
+        public void awaitsJoining(String appName, ClusterUnit<AppConfType> master) {
             BlockingQueue<ActorAddress> completed = getCompleted();
             Set<ActorAddress> nodeAddrs = new HashSet<>(getRemoteConfig().keySet());
             nodeAddrs.remove(ActorAddress.get(master.getDeploymentConfig().getAddress()));
@@ -512,6 +514,15 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
             }
             master.log(String.format("%s launched %,d nodes", appName, getClusterSize()));
         }
+
+        public ActorRef move(Actor actor, ActorAddress address) {
+            try {
+                return place(actor, getEntry(address).getPlacementActor())
+                        .get(10, TimeUnit.SECONDS);
+            } catch (Exception ex) {
+                throw new RuntimeException(ex);
+            }
+        }
     }
 
     public static class ConfigSet implements Serializable, KryoSerializable {
@@ -537,5 +548,58 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         public void read(Kryo kryo, Input input) {
             remoteConfig = (Map<ActorAddress, ? extends ConfigBase>) kryo.readClassAndObject(input);
         }
+    }
+
+    ///////////////
+
+    public CompletableFuture<ActorRef> move(ActorRef actor, ActorAddress targetHost) {
+        return ResponsiveCalls.<ActorPlacementForCluster<AppConfType>, ActorRef>sendTask(getSystem(),
+                getMasterPlace().getPlace(actor),
+                (a, s) -> a.move(actor.asLocal(), targetHost));
+    }
+
+    public CompletableFuture<?> loadAndSendToActor(ActorRef target, String serializedMailboxPath) {
+        return ResponsiveCalls.sendTaskConsumer(getSystem(), target, (a,s) -> {
+            //temporary manager
+            MailboxPersistable.PersistentFileManager m = MailboxPersistable.createPersistentFile(serializedMailboxPath, a.getSystem());
+            MailboxPersistable.MessageOnStorage msg = new MailboxPersistable.MessageOnStorageFile(
+                    new MailboxPersistable.PersistentFileReaderSource(serializedMailboxPath, 0, m));
+            synchronized (msg) {
+                Message<?> next = msg.readNext();
+                while (next != null) {
+                    a.tell(next.getData());
+                    next = msg.readNext();
+                }
+            }
+        });
+    }
+
+    public CompletableFuture<?> shutdown(ActorAddress targetHost) {
+        return ResponsiveCalls.sendTaskConsumer(getSystem(),
+                getMasterPlace().getEntry(targetHost).getPlacementActor().ref(getSystem()),
+                (a,s) -> {
+                    new Thread() { public void run() { //the shutting down thread
+                        try {
+                            Thread.sleep(3_000);
+                        } catch (Exception ex) {
+                            throw new RuntimeException(ex);
+                        }
+                        a.getSystem().close();
+                    }}.start();
+                    try {
+                        //TODO notify leaving cluserEntry
+                        a.getSystem().awaitClose(6_000, TimeUnit.MILLISECONDS);
+                    } catch (Exception ex) {
+                        throw new RuntimeException(ex);
+                    }
+                });
+    }
+
+    public CompletableFuture<?> shutdownAll() {
+        List<CompletableFuture<?>> tasks = new ArrayList<>(masterPlace.getClusterSize());
+        for (ActorPlacement.AddressListEntry e : masterPlace.getCluster()) {
+            tasks.add(shutdown(e.getPlacementActor()));
+        }
+        return CompletableFuture.allOf(tasks.toArray(new CompletableFuture<?>[0]));
     }
 }

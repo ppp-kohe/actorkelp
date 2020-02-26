@@ -8,6 +8,7 @@ import csl.actor.remote.ActorSystemRemote;
 import java.io.Serializable;
 import java.time.Instant;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
@@ -180,7 +181,7 @@ public interface ActorPlacement {
                 log("%s on %s place(%d):\n   move %s to %s", this, getSystem(), retryCount, a, target);
                 previous = toSerializable(a, nextLocalNumber, previous, target);
                 return ResponsiveCalls.<ActorRef>send(getSystem(),
-                        ActorRefRemote.get(getSystem(), target),
+                        target.ref(getSystem()),
                         new ActorCreationRequest(previous)).get(10, TimeUnit.SECONDS);
             } catch (Throwable ex) {
                 if (retryCount < getClusterSize()) {
@@ -190,6 +191,13 @@ public interface ActorPlacement {
                     return placeLocal(a);
                 }
             }
+        }
+
+        public CompletableFuture<ActorRef> place(Actor a, ActorAddress.ActorAddressRemoteActor targetPlaceActor) {
+            Serializable data = toSerializable(a, strategy.getNextLocalNumber(), null, targetPlaceActor);
+            return ResponsiveCalls.send(getSystem(),
+                    targetPlaceActor.ref(getSystem()),
+                    new ActorCreationRequest(data));
         }
 
         public synchronized int getClusterSize() {
@@ -222,6 +230,26 @@ public interface ActorPlacement {
 
         public int getTotalThreads() {
             return totalThreads;
+        }
+
+        public AddressListEntry getEntry(ActorAddress address) {
+            ActorAddress host = address.getHostAddress();
+            return getCluster().stream()
+                    .filter(e -> e.getPlacementActor().getHostAddress().equals(host))
+                    .findFirst()
+                    .orElse(null);
+        }
+
+        public ActorRef getPlace(ActorRef actor) {
+            if (actor instanceof ActorRefRemote) {
+                ActorAddress address = ((ActorRefRemote) actor).getAddress();
+                AddressListEntry entry = getEntry(address);
+                return entry.getPlacementActor().ref(getSystem());
+            } else if (actor instanceof Actor) {
+                return this;
+            } else {
+                return this; //
+            }
         }
     }
 
