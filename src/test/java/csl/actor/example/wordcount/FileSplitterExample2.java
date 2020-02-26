@@ -1,14 +1,11 @@
 package csl.actor.example.wordcount;
 
-import csl.actor.ActorBehavior;
-import csl.actor.ActorRef;
-import csl.actor.ActorSystem;
 import csl.actor.ActorSystemDefault;
 import csl.actor.cluster.FileSplitter;
-import csl.actor.example.LockExample;
-import csl.actor.keyaggregate.ActorKeyAggregation;
-import csl.actor.keyaggregate.Config;
 import csl.actor.cluster.PhaseShift;
+import csl.actor.example.LockExample;
+import csl.actor.keyaggregate.Config;
+import csl.actor.keyaggregate.FileMapper;
 
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -46,48 +43,4 @@ public class FileSplitterExample2 {
         }
     }
 
-    public static class FileMapper extends ActorKeyAggregation {
-        FileSplitter splitter;
-        long splitCount;
-
-        public FileMapper(ActorSystem system, String name, Config config) {
-            super(system, name, config);
-        }
-
-        public FileMapper(ActorSystem system, String name, Config config, FileSplitter splitter) {
-            this(system, name, config);
-            this.splitter = splitter;
-        }
-
-        @Override
-        protected ActorBehavior initBehavior() {
-            return behaviorBuilder()
-                    .matchWithSender(FileSplitter.FileSplit.class, this::read)
-                    .build();
-        }
-
-        @Override
-        protected void initMerged(ActorKeyAggregation m) {
-            csl.actor.keyaggregate.FileMapper fm = (csl.actor.keyaggregate.FileMapper) m;
-            splitCount = Math.max(splitCount, fm.splitCount);
-        }
-
-        void read(FileSplitter.FileSplit s, ActorRef sender) {
-            try {
-                if (s.getFileLength() == 0) {
-                    splitter.splitIterator(s.getPath())
-                            .forEachRemaining(this::tell);
-                    if (sender != null) {
-                        router().tell(new PhaseShift(s.getPath(), sender));
-                    }
-                } else {
-                    splitCount = Math.max(splitCount, s.getSplitIndex());
-                    splitter.openLineIterator(s)
-                            .forEachRemaining(nextStage()::tell);
-                }
-            } catch (Exception ex) {
-                throw new RuntimeException(ex);
-            }
-        }
-    }
 }

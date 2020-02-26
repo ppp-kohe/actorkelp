@@ -63,4 +63,8 @@ public class FileMapper extends ActorKeyAggregation {
             throw new RuntimeException(ex);
         }
     }
+
+    public long getSplitCount() {
+        return splitCount;
+    }
 }
