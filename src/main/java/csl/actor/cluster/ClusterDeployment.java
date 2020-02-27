@@ -124,6 +124,9 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
 
     protected void deployMasterAfterSystemInit(List<ClusterUnit<AppConfType>> units) throws Exception {
         System.setProperty("csl.actor.logColor", Integer.toString(master.getDeploymentConfig().getLogColorDefault()));
+
+        master.getDeploymentConfig().setPathModifierWithBaseDir(system);
+
         masterPlace = createPlace(placeType, system,
                 new ActorPlacement.PlacementStrategyRoundRobin(0));
         Map<ActorAddress, AppConfType> configMap = masterPlace.getRemoteConfig();
@@ -391,6 +394,9 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
             String placeType = (args.length > 2 ? args[2] : "");
 
             ActorSystemRemote system = new ActorSystemRemote();
+
+            //the working directory is the baseDir
+            ConfigDeployment.setPathModifier(system, p -> Paths.get(".", p));
 
             system.startWithoutWait(ActorAddress.get(selfAddr));
             ActorPlacement.ActorPlacementDefault p = createPlace(placeType, system, new ActorPlacement.PlacementStrategyUndertaker());

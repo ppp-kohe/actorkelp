@@ -3,6 +3,7 @@ package csl.actor.keyaggregate;
 import csl.actor.ActorBehavior;
 import csl.actor.ActorRef;
 import csl.actor.ActorSystem;
+import csl.actor.cluster.ConfigDeployment;
 import csl.actor.cluster.FileSplitter;
 import csl.actor.cluster.PhaseShift;
 
@@ -24,8 +25,8 @@ public class FileMapper extends ActorKeyAggregation {
     public FileMapper(ActorSystem system, String name, Config config) {
         this(system, name, config,
                 config.fileMapperSplitByCount ?
-                        FileSplitter.getWithSplitCount(config.fileMapperSplitCount) :
-                        FileSplitter.getWithSplitLength(config.fileMapperSplitLength));
+                        FileSplitter.getWithSplitCount(config.fileMapperSplitCount, ConfigDeployment.getPathModifier(system)) :
+                        FileSplitter.getWithSplitLength(config.fileMapperSplitLength, ConfigDeployment.getPathModifier(system)));
     }
 
     @Override

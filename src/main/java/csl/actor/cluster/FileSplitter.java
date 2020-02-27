@@ -15,17 +15,32 @@ public class FileSplitter {
     protected long splitLength;
     protected long splits;
 
+    protected ConfigDeployment.PathModifier pathModifier;
+
     public static FileSplitter getWithSplitLength(long splitLength) {
         return new FileSplitter(splitLength, 0);
+    }
+
+    public static FileSplitter getWithSplitLength(long splitLength, ConfigDeployment.PathModifier pm) {
+        return new FileSplitter(splitLength, 0, pm);
     }
 
     public static FileSplitter getWithSplitCount(long splits) {
         return new FileSplitter(10_000_000L, splits);
     }
 
+    public static FileSplitter getWithSplitCount(long splits, ConfigDeployment.PathModifier pm) {
+        return new FileSplitter(10_000_000L, splits, pm);
+    }
+
     public FileSplitter(long splitLength, long splits) {
+        this(splitLength, splits, Paths::get);
+    }
+
+    public FileSplitter(long splitLength, long splits, ConfigDeployment.PathModifier pathModifier) {
         this.splitLength = splitLength;
         this.splits = splits;
+        this.pathModifier = pathModifier;
     }
 
     public long getSplitLength() {
@@ -34,6 +49,10 @@ public class FileSplitter {
 
     public long getSplits() {
         return splits;
+    }
+
+    public ConfigDeployment.PathModifier getPathModifier() {
+        return pathModifier;
     }
 
     public List<FileSplit> split(String path) throws IOException {
@@ -45,7 +64,7 @@ public class FileSplitter {
 
     public FileSplit getTopSplit(String path) throws IOException {
         FileSplit s = new FileSplit(path);
-        s.fileLength = Files.size(Paths.get(s.path));
+        s.fileLength = Files.size(pathModifier.get(s.path));
         s.splitLength = getSplitLength(path, s.fileLength);
         s.splitIndex = 0;
         return s;
@@ -83,7 +102,7 @@ public class FileSplitter {
     }
 
     public Iterator<String> openLineIterator(FileSplit split) throws IOException {
-        return new FileSplitLineIterator(new FileSplitReader(split));
+        return new FileSplitLineIterator(new FileSplitReader(split, pathModifier));
     }
 
     public static class FileSplit implements Serializable {
@@ -191,9 +210,11 @@ public class FileSplitter {
         protected int bufferLineStart;
         protected int newLinesBeforeLineStart;
         protected long filePosition;
+        protected ConfigDeployment.PathModifier pathModifier;
 
-        public FileSplitReader(FileSplit split) throws IOException {
+        public FileSplitReader(FileSplit split, ConfigDeployment.PathModifier pathModifier) throws IOException {
             this.split = split;
+            this.pathModifier = pathModifier;
             open();
         }
 
@@ -201,7 +222,7 @@ public class FileSplitter {
             if (file != null) {
                 close();
             }
-            RandomAccessFile f = new RandomAccessFile(split.path, "r");
+            RandomAccessFile f = new RandomAccessFile(pathModifier.get(split.path).toFile(), "r");
             if (buffer == null) {
                 buffer = ByteBuffer.allocate(4096);
             } else {

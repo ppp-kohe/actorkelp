@@ -8,6 +8,7 @@ import csl.actor.cluster.PhaseShift;
 import csl.actor.cluster.ResponsiveCalls;
 import csl.actor.remote.KryoBuilder;
 
+import java.nio.file.Paths;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
@@ -30,7 +31,7 @@ public class MailboxPersistableTest {
         try (ActorSystem system = new ActorSystemDefault()) {
             KryoBuilder.SerializerPool p = new KryoBuilder.SerializerPoolDefault(system);
             MailboxPersistable.PersistentFileManager manager = new MailboxPersistable.PersistentFileManager(
-                    "target/debug-persist", p);
+                    "target/debug-persist", p, Paths::get);
             MailboxPersistable.MessagePersistentFile mp = new MailboxPersistable.MessagePersistentFile(manager);
 
             SerializeExample2.MyActor a = new SerializeExample2.MyActor(system, "hello", Config.CONFIG_DEFAULT);
@@ -67,7 +68,7 @@ public class MailboxPersistableTest {
         try (ActorSystem system = new ActorSystemDefault()) {
             KryoBuilder.SerializerPool p = new KryoBuilder.SerializerPoolDefault(system);
             MailboxPersistable.PersistentFileManager manager = new MailboxPersistable.PersistentFileManager(
-                    "target/debug-persist", p);
+                    "target/debug-persist", p, Paths::get);
             MailboxPersistable.MessagePersistentFile mp = new MailboxPersistable.MessagePersistentFile(manager);
 
             SerializeExample2.MyActor a = new SerializeExample2.MyActor(system, "hello", Config.CONFIG_DEFAULT);

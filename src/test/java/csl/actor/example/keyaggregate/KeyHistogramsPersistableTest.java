@@ -9,6 +9,7 @@ import csl.actor.cluster.MailboxPersistable;
 import csl.actor.remote.KryoBuilder;
 
 import java.io.ByteArrayInputStream;
+import java.nio.file.Paths;
 import java.util.Objects;
 import java.util.function.BiPredicate;
 
@@ -57,7 +58,7 @@ public class KeyHistogramsPersistableTest {
     public void runPersistTree() {
         System.err.println("------------- runPersistTree");
         KeyHistogramsPersistable kh = new KeyHistogramsPersistable(new Conf(Long.MAX_VALUE), new MailboxPersistable.PersistentFileManager("target/debug-persist",
-                new KryoBuilder.SerializerPoolDefault(null)));
+                new KryoBuilder.SerializerPoolDefault(null), Paths::get));
         KeyHistogramsPersistable.HistogramTreePersistable tree = kh.create(new ActorBehaviorBuilderKeyAggregation.KeyComparatorDefault<>(), 3);
 
         KeyHistograms.HistogramPutContextMap ctx = new KeyHistograms.HistogramPutContextMap();
@@ -77,7 +78,7 @@ public class KeyHistogramsPersistableTest {
     public void runPersistLargeLeaves() {
         System.err.println("------------- runPersistLargeLeaves");
         KeyHistogramsPersistable kh = new KeyHistogramsPersistable(new Conf(Long.MAX_VALUE), new MailboxPersistable.PersistentFileManager("target/debug-persist",
-                new KryoBuilder.SerializerPoolDefault(null)));
+                new KryoBuilder.SerializerPoolDefault(null), Paths::get));
         KeyHistogramsPersistable.HistogramTreePersistable tree = kh.create(new ActorBehaviorBuilderKeyAggregation.KeyComparatorDefault<>(), 3);
 
         KeyHistograms.HistogramPutContextMap ctx = new KeyHistograms.HistogramPutContextMap();
@@ -90,7 +91,7 @@ public class KeyHistogramsPersistableTest {
     public void runAuto() {
         System.err.println("------------- runAuto");
         KeyHistogramsPersistable kh = new KeyHistogramsPersistable(new Conf(1000), new MailboxPersistable.PersistentFileManager("target/debug-persist",
-                new KryoBuilder.SerializerPoolDefault(null)));
+                new KryoBuilder.SerializerPoolDefault(null), Paths::get));
         KeyHistogramsPersistable.HistogramTreePersistable tree = kh.create(new ActorBehaviorBuilderKeyAggregation.KeyComparatorDefault<>(), 3);
 
         KeyHistograms.HistogramPutContextMap ctx = new KeyHistograms.HistogramPutContextMap();

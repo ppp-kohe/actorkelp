@@ -501,16 +501,16 @@ public class KeyHistogramsPersistable extends KeyHistograms {
         protected long pointerTarget = -1L;
         protected long positionStart;
         protected MailboxPersistable.PersistentFileManager manager;
-        protected Path path;
+        protected String path;
         protected RandomAccessFile dataStore;
         protected KryoBuilder.SerializerFunction serializer;
         protected Output out;
 
-        public TreeWriting(MailboxPersistable.PersistentFileManager manager, Path path) throws IOException {
+        public TreeWriting(MailboxPersistable.PersistentFileManager manager, String path) throws IOException {
             this.manager = manager;
             this.serializer = manager.getSerializer();
             this.path = path;
-            dataStore = new RandomAccessFile(path.toFile(), "rw");
+            dataStore = new RandomAccessFile(manager.getPath(path).toFile(), "rw");
             out = new Output(4096, Integer.MAX_VALUE);
         }
 
@@ -540,7 +540,7 @@ public class KeyHistogramsPersistable extends KeyHistograms {
             positionStart = position;
             writeLongRaw(0L); //sibling pointer
             position += 8L;
-            return new PersistentFileReaderSource(path.toString(), positionStart, manager);
+            return new PersistentFileReaderSource(path, positionStart, manager);
         }
 
         public void write(Object obj) throws IOException {
