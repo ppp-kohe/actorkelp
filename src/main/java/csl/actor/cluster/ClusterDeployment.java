@@ -123,6 +123,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
     }
 
     protected void deployMasterAfterSystemInit(List<ClusterUnit<AppConfType>> units) throws Exception {
+        System.setProperty("csl.actor.logColor", Integer.toString(master.getDeploymentConfig().getLogColorDefault()));
         masterPlace = createPlace(placeType, system,
                 new ActorPlacement.PlacementStrategyRoundRobin(0));
         Map<ActorAddress, AppConfType> configMap = masterPlace.getRemoteConfig();
@@ -575,9 +576,10 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
     }
 
     public CompletableFuture<?> shutdown(ActorAddress targetHost) {
-        return ResponsiveCalls.sendTaskConsumer(getSystem(),
+        return ResponsiveCalls.<ActorPlacement.ActorPlacementDefault>sendTaskConsumer(getSystem(),
                 getMasterPlace().getEntry(targetHost).getPlacementActor().ref(getSystem()),
                 (a,s) -> {
+                    a.close();
                     new Thread() { public void run() { //the shutting down thread
                         try {
                             Thread.sleep(3_000);
@@ -587,7 +589,6 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
                         a.getSystem().close();
                     }}.start();
                     try {
-                        //TODO notify leaving cluserEntry
                         a.getSystem().awaitClose(6_000, TimeUnit.MILLISECONDS);
                     } catch (Exception ex) {
                         throw new RuntimeException(ex);

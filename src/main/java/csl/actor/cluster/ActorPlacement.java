@@ -29,16 +29,25 @@ public interface ActorPlacement {
     }
 
     abstract class ActorPlacementDefault extends ActorDefault implements ActorPlacement {
-        protected List<AddressListEntry> cluster = new ArrayList<>();
+        protected List<AddressListEntry> cluster = new ArrayList<>(); //without self entry
         protected PlacementStrategy strategy;
         protected volatile int totalThreads;
+        protected AtomicLong createdActors = new AtomicLong();
+        protected long createdActorsNextLog = 1;
 
         public static boolean debugLog = System.getProperty("csl.actor.debug", "false").equals("true");
 
-        public static void log(String msg, Object... args) {
+        public static int logColor = Integer.parseInt(System.getProperty("csl.actor.logColor", "34"));
+
+        public static void logDebug(String msg, Object... args) {
             if (debugLog) {
                 System.err.println("\033[38;5;34m" + Instant.now() + ": " + String.format(msg, args) + "\033[0m");
             }
+        }
+
+        public void log(String msg, Object... args) {
+            System.err.println("\033[38;5;" + logColor + "m" + Instant.now() + ": " +
+                    String.format("%s on %s ", this, getSystem()) + String.format(msg, args) + "\033[0m");
         }
 
         public ActorPlacementDefault(ActorSystem system, String name) {
@@ -74,6 +83,7 @@ public interface ActorPlacement {
             return behaviorBuilder()
                     .matchWithSender(AddressList.class, this::receive)
                     .matchWithSender(ActorCreationRequest.class, this::create)
+                    .match(LeaveEntry.class, this::receiveLeave)
                     .build();
         }
 
@@ -89,6 +99,7 @@ public interface ActorPlacement {
                         .get(20, TimeUnit.SECONDS);
                 tell(new AddressList(
                             new AddressListEntry(masterActor, masterThreads)), this);
+                log("join: %s, threads: %,d", masterActor, masterThreads);
             } catch (Exception ex) {
                 throw new RuntimeException(ex);
             }
@@ -112,7 +123,7 @@ public interface ActorPlacement {
         }
 
         public void receive(AddressList list, ActorRef sender) {
-            log("%s on %s receive: \n   %s \n from %s", this, getSystem(),
+            logDebug("%s on %s receive: \n   %s \n from %s", this, getSystem(),
                     ActorPlacement.lazyToString(() ->
                             list.getCluster().stream()
                             .map(Objects::toString)
@@ -128,8 +139,10 @@ public interface ActorPlacement {
                             (self == null || !self.equals(a.getPlacementActor()))) {
                         if (index == -1) {
                             cluster.add(a);
+                            log("receive: added %,d, %s", cluster.size(), a);
                         } else {
                             cluster.set(index, a);
+                            log("receive: update %,d, %s", index, a);
                         }
                         added = true;
                     }
@@ -178,7 +191,7 @@ public interface ActorPlacement {
                 return placeLocal(a);
             }
             try {
-                log("%s on %s place(%d):\n   move %s to %s", this, getSystem(), retryCount, a, target);
+                logDebug("%s on %s place(%d):\n   move %s to %s", this, getSystem(), retryCount, a, target);
                 previous = toSerializable(a, nextLocalNumber, previous, target);
                 return ResponsiveCalls.<ActorRef>send(getSystem(),
                         target.ref(getSystem()),
@@ -212,6 +225,11 @@ public interface ActorPlacement {
                 res = new CallableMessage.CallableFailure(ex);
             }
             sender.tell(res, this);
+            long n = createdActors.incrementAndGet();
+            if (n > createdActorsNextLog) {
+                log("created: %,d, last: %s", n, res);
+                createdActorsNextLog *= 10L;
+            }
         }
 
         protected ActorRef placeLocal(Actor a) {
@@ -250,6 +268,19 @@ public interface ActorPlacement {
             } else {
                 return this; //
             }
+        }
+
+        public void close() {
+            log("close");
+            getSystem().unregister(getName());
+            LeaveEntry l = new LeaveEntry(getSelfAddress());
+            cluster.forEach(e -> e.getPlacementActor()
+                            .ref(getSystem()).tell(l, this));
+        }
+
+        public void receiveLeave(LeaveEntry l) {
+            log("receive leave: %s", l);
+            cluster.removeIf(e -> e.getPlacementActor().equals(l.getPlacementActor()));
         }
     }
 
@@ -343,6 +374,23 @@ public interface ActorPlacement {
             return getClass().getSimpleName() + "@" + Integer.toHexString(System.identityHashCode(this)) +
                     "(" + (data == null ? "null" : (data.getClass().getSimpleName() + "@" + System.identityHashCode(data))) +
                     ')';
+        }
+    }
+
+    class LeaveEntry implements Serializable {
+        protected ActorAddress.ActorAddressRemoteActor placementActor;
+
+        public LeaveEntry(ActorAddress.ActorAddressRemoteActor placementActor) {
+            this.placementActor = placementActor;
+        }
+
+        public ActorAddress.ActorAddressRemoteActor getPlacementActor() {
+            return placementActor;
+        }
+
+        @Override
+        public String toString() {
+            return getClass().getSimpleName() + "(" + placementActor + ")";
         }
     }
 

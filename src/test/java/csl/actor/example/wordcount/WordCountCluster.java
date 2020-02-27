@@ -25,6 +25,6 @@ public class WordCountCluster {
 
         fileReader.startReadFile(inputFile).get();
 
-        //TODO shutdown
+        c.shutdownAll();
     }
 }
