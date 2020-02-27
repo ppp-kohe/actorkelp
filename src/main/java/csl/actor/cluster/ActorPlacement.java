@@ -39,15 +39,12 @@ public interface ActorPlacement {
 
         public static int logColor = Integer.parseInt(System.getProperty("csl.actor.logColor", "34"));
 
+        protected ConfigBase logger = new ConfigBase();
+
         public static void logDebug(String msg, Object... args) {
             if (debugLog) {
                 System.err.println("\033[38;5;34m" + Instant.now() + ": " + String.format(msg, args) + "\033[0m");
             }
-        }
-
-        public void log(String msg, Object... args) {
-            System.err.println("\033[38;5;" + logColor + "m" + Instant.now() + ": " +
-                    String.format("%s on %s ", this, getSystem()) + String.format(msg, args) + "\033[0m");
         }
 
         public ActorPlacementDefault(ActorSystem system, String name) {
@@ -62,6 +59,18 @@ public interface ActorPlacement {
             this.strategy = strategy;
             totalThreads = system.getThreads();
             ResponsiveCalls.initCallableTarget(system);
+        }
+
+        public void log(String msg, Object... args) {
+            logger.log(logColor, String.format("%s on %s ", this, getSystem()) + String.format(msg, args));
+        }
+
+        public static void setLogColor(int logColor) {
+            ActorPlacementDefault.logColor = logColor;
+        }
+
+        public void setLogger(ConfigBase logger) {
+            this.logger = logger;
         }
 
         protected abstract PlacementStrategy initStrategy();
@@ -281,6 +290,11 @@ public interface ActorPlacement {
         public void receiveLeave(LeaveEntry l) {
             log("receive leave: %s", l);
             cluster.removeIf(e -> e.getPlacementActor().equals(l.getPlacementActor()));
+        }
+
+        @Override
+        public String toStringContents() {
+            return (Objects.equals(name, PLACEMENT_NAME) ? "" : (name + ", ")) + system;
         }
     }
 

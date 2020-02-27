@@ -112,7 +112,11 @@ public class ActorSystemRemote implements ActorSystem {
     }
 
     public void start(int port) {
-        start(ActorAddress.get("localhost", port));
+        start(ActorAddress.get("0.0.0.0", port));
+    }
+
+    public void startLocalhost(int port) {
+        start(ActorAddress.get("localhost", port)); //limited to local
     }
 
     public void start(ActorAddress.ActorAddressRemote serverAddress) {
@@ -127,8 +131,13 @@ public class ActorSystemRemote implements ActorSystem {
         }
     }
 
-    public ActorSystemRemote startWithoutWait(int port) {
+    public ActorSystemRemote startWithoutWaitLocalhost(int port) {
         startWithoutWait(ActorAddress.get("localhost", port));
+        return this;
+    }
+
+    public ActorSystemRemote startWithoutWait(int port) {
+        startWithoutWait(ActorAddress.get("0.0.0.0", port)); //limited to local
         return this;
     }
 

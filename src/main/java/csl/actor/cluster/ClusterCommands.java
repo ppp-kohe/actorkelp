@@ -66,6 +66,8 @@ public class ClusterCommands<AppConfType extends ConfigBase> {
             unit.setAppConfig((AppConfType) Class.forName(conf.configType).getConstructor()
                     .newInstance());
 
+            unit.setAppConfigLogHeader();
+
             block.getConfigLines()
                     .forEach(cs -> set(unit.getAppConfig(), cs));
         } catch (Exception e) {
@@ -73,6 +75,7 @@ public class ClusterCommands<AppConfType extends ConfigBase> {
         }
         return unit;
     }
+
 
     protected void set(ConfigBase conf, List<CommandToken> cs) {
         try {
@@ -711,6 +714,16 @@ public class ClusterCommands<AppConfType extends ConfigBase> {
         public ClusterUnit<AppConfType> edit(Consumer<ClusterUnit<AppConfType>> f) {
             f.accept(this);
             return this;
+        }
+
+
+        public void setAppConfigLogHeader() {
+            String lh = getDeploymentConfig().getLogHeader();
+            try {
+                getAppConfig().set("logHeader", lh);
+            } catch (Exception ex) {
+                //ignore
+            }
         }
     }
 }

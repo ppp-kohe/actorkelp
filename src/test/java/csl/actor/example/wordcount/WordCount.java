@@ -2,6 +2,7 @@ package csl.actor.example.wordcount;
 
 import com.esotericsoftware.kryo.io.Output;
 import csl.actor.*;
+import csl.actor.cluster.ConfigDeployment;
 import csl.actor.cluster.FileSplitter;
 import csl.actor.cluster.PhaseShift;
 import csl.actor.example.keyaggregate.DebugBehavior;
@@ -9,6 +10,8 @@ import csl.actor.keyaggregate.*;
 import csl.actor.remote.KryoBuilder;
 
 import java.io.*;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -58,6 +61,10 @@ public class WordCount {
             super(system, name, config);
         }
 
+        public WordCountMapper(ActorSystem system, String name, Config config, State state) {
+            super(system, name, config, state);
+        }
+
         @Override
         protected ActorBehavior initBehavior() {
             return behaviorBuilder()
@@ -72,8 +79,8 @@ public class WordCount {
         String dst;
         ScheduledFuture<?> flushTask;
 
-        public WordCountReducer(ActorSystem system, String name, Config config) {
-            super(system, name, config);
+        public WordCountReducer(ActorSystem system, String name, Config config, State state) {
+            super(system, name, config, state);
         }
 
         public WordCountReducer(ActorSystem system, String name, Config config, String dst) {
@@ -206,11 +213,13 @@ public class WordCount {
         void write(Count count) {
             try {
                 if (writer == null) {
-                    File dir = new File(dst);
-                    dir.mkdirs();
-                    writer = new PrintWriter(new FileWriter(new File(dir, String.format("output-%d.txt", System.identityHashCode(this))))); //TODO
+                    Path dir = ConfigDeployment.getPathModifier(getSystem()).get(dst);
+                    Files.createDirectories(dir);
+                    Path outFile = dir.resolve(String.format("output-%%i-%s.txt", Integer.toHexString(System.identityHashCode(this)))); //TODO instance ID?
+                    writer = new PrintWriter(new FileWriter(outFile.toFile()));
                     flushTask = getSystem().getScheduledExecutor().scheduleAtFixedRate(() ->
                             this.tell(CallableMessage.callableMessageConsumer((a,s) -> writer.flush())), 3, 3, TimeUnit.SECONDS);
+                    log("start writing: " + outFile);
                 }
 
                 writer.println(count);
@@ -306,12 +315,14 @@ public class WordCount {
 
 
     public static void save(Object obj, String name) {
-        File file = new File("target/debug-split", String.format(name, saveCount.incrementAndGet()));
-        file.getParentFile().mkdirs();
-        try (Output out = new Output(new FileOutputStream(file))) {
-            pool.write(out, obj);
-        } catch (Exception ex) {
-            ex.printStackTrace();
+        if (pool != null) {
+            File file = new File("target/debug-split", String.format(name, saveCount.incrementAndGet()));
+            file.getParentFile().mkdirs();
+            try (Output out = new Output(new FileOutputStream(file))) {
+                pool.write(out, obj);
+            } catch (Exception ex) {
+                ex.printStackTrace();
+            }
         }
     }
 }

@@ -6,6 +6,7 @@ import java.io.Serializable;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -198,6 +199,7 @@ public class FileSplitter {
                 }
             } catch (Exception ex) {
                 next = null;
+                throw new RuntimeException("reader=" + reader, ex);
             }
         }
     }
@@ -210,6 +212,7 @@ public class FileSplitter {
         protected int bufferLineStart;
         protected int newLinesBeforeLineStart;
         protected long filePosition;
+        protected Path actualPath;
         protected ConfigDeployment.PathModifier pathModifier;
 
         public FileSplitReader(FileSplit split, ConfigDeployment.PathModifier pathModifier) throws IOException {
@@ -218,11 +221,19 @@ public class FileSplitter {
             open();
         }
 
+        @Override
+        public String toString() {
+            return String.format("%s(over=%s, bLs=%,d, nlLs=%,d, filePos=%,d, path=%s, buf=%s",
+                    getClass().getSimpleName(), over, bufferLineStart, newLinesBeforeLineStart,
+                    filePosition, actualPath, buffer);
+        }
+
         public void open() throws IOException {
             if (file != null) {
                 close();
             }
-            RandomAccessFile f = new RandomAccessFile(pathModifier.get(split.path).toFile(), "r");
+            actualPath = pathModifier.get(split.path);
+            RandomAccessFile f = new RandomAccessFile(actualPath.toFile(), "r");
             if (buffer == null) {
                 buffer = ByteBuffer.allocate(4096);
             } else {

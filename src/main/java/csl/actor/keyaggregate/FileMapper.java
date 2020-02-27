@@ -15,6 +15,8 @@ public class FileMapper extends ActorKeyAggregation {
 
     public FileMapper(ActorSystem system, String name, Config config, State state) {
         super(system, name, config, state);
+        this.splitter = splitter(system, config);
+
     }
 
     public FileMapper(ActorSystem system, String name, Config config, FileSplitter splitter) {
@@ -23,10 +25,13 @@ public class FileMapper extends ActorKeyAggregation {
     }
 
     public FileMapper(ActorSystem system, String name, Config config) {
-        this(system, name, config,
-                config.fileMapperSplitByCount ?
-                        FileSplitter.getWithSplitCount(config.fileMapperSplitCount, ConfigDeployment.getPathModifier(system)) :
-                        FileSplitter.getWithSplitLength(config.fileMapperSplitLength, ConfigDeployment.getPathModifier(system)));
+        this(system, name, config, splitter(system, config));
+    }
+
+    public static FileSplitter splitter(ActorSystem system, Config config) {
+        return config.fileMapperSplitByCount ?
+                FileSplitter.getWithSplitCount(config.fileMapperSplitCount, ConfigDeployment.getPathModifier(system)) :
+                FileSplitter.getWithSplitLength(config.fileMapperSplitLength, ConfigDeployment.getPathModifier(system));
     }
 
     @Override
@@ -61,7 +66,7 @@ public class FileMapper extends ActorKeyAggregation {
                         .forEachRemaining(nextStage()::tell);
             }
         } catch (Exception ex) {
-            throw new RuntimeException(ex);
+            throw new RuntimeException("splitter=" + splitter + " split=" + s + " nextStage=" + nextStage, ex);
         }
     }
 

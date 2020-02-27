@@ -38,8 +38,15 @@ public class Config extends ConfigBase {
     public long fileMapperSplitLength = 100_000;
     public long fileMapperSplitCount = 10;
 
+    public String logHeader = "";
+
     @Override
     protected int getLogColorDefault() {
         return logColor;
+    }
+
+    @Override
+    public String logMessage(String msg) {
+        return super.logMessage(logHeader + msg);
     }
 }

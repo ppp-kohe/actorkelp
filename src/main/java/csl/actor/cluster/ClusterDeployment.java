@@ -10,10 +10,7 @@ import csl.actor.remote.ActorAddress;
 import csl.actor.remote.ActorRefRemote;
 import csl.actor.remote.ActorSystemRemote;
 
-import java.io.BufferedOutputStream;
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.Serializable;
+import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -115,9 +112,10 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         }
         this.appName = getAppName();
         system = new ActorSystemRemote();
+        setDefaultUncaughtHandler(master.getDeploymentConfig());
 
         deployFiles(master);
-        system.startWithoutWait(master.getDeploymentConfig().port);
+        system.startWithoutWait(ActorAddress.get(master.getDeploymentConfig().getAddress()));
 
         deployMasterAfterSystemInit(units);
     }
@@ -129,6 +127,10 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
 
         masterPlace = createPlace(placeType, system,
                 new ActorPlacement.PlacementStrategyRoundRobin(0));
+        masterPlace.setLogger(master.getDeploymentConfig());
+
+        master.log(String.format("master %s: started %s", master.getDeploymentConfig().getAddress(), masterPlace));
+
         Map<ActorAddress, AppConfType> configMap = masterPlace.getRemoteConfig();
         units.forEach(u ->
                 configMap.put(ActorAddress.get(u.getDeploymentConfig().getAddress()), u.getAppConfig()));
@@ -209,6 +211,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         unit.setDeploymentConfig(conf);
         unit.setAppConfig((AppConfType) conf.createAppConfig());
         unit.setName("localhost");
+        unit.setAppConfigLogHeader();
         return unit;
     }
 
@@ -222,6 +225,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         unit.setDeploymentConfig(conf);
         unit.setAppConfig((AppConfType) conf.createAppConfig());
         unit.setName(host + ":" + port);
+        unit.setAppConfigLogHeader();
         return unit;
     }
 
@@ -380,6 +384,16 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         pathList.add(jarPath.toString());
     }
 
+    public static void setDefaultUncaughtHandler(ConfigBase base) {
+        Thread.setDefaultUncaughtExceptionHandler((t,ex) -> {
+            StringWriter sw = new StringWriter();
+            PrintWriter w = new PrintWriter(sw);
+            ex.printStackTrace(w);
+            String data = sw.getBuffer().toString();
+            base.log(data);
+        });
+    }
+
     public static class NodeMain {
         public static void main(String[] args) throws Exception {
             new NodeMain().run(args);
@@ -387,19 +401,26 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
 
         public void run(String[] args) throws Exception {
             int n = Integer.parseInt(System.getProperty("csl.actor.logColor", "0"));
-            ConfigBase logger = new ConfigBase();
+            ConfigDeployment logger = new ConfigDeployment();
 
             String selfAddr = args[0];
             String joinAddr = args[1];
             String placeType = (args.length > 2 ? args[2] : "");
+
+            ActorAddress.ActorAddressRemote selfAddrObj = ActorAddress.get(selfAddr);
+            logger.host = selfAddrObj.getHost();
+            logger.port = selfAddrObj.getPort();
+
+            setDefaultUncaughtHandler(logger);
 
             ActorSystemRemote system = new ActorSystemRemote();
 
             //the working directory is the baseDir
             ConfigDeployment.setPathModifier(system, p -> Paths.get(".", p));
 
-            system.startWithoutWait(ActorAddress.get(selfAddr));
+            system.startWithoutWait(selfAddrObj);
             ActorPlacement.ActorPlacementDefault p = createPlace(placeType, system, new ActorPlacement.PlacementStrategyUndertaker());
+            p.setLogger(logger);
 
             logger.log(n, String.format("%s: joining to %s", p, joinAddr));
             p.join(ActorAddress.ActorAddressRemote.get(joinAddr));

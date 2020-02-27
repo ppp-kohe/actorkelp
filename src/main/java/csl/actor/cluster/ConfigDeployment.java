@@ -8,7 +8,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Map;
 import java.util.WeakHashMap;
-import java.util.function.Function;
+import java.util.regex.Pattern;
 
 public class ConfigDeployment extends ConfigBase {
     public String ssh = "ssh %s"; //host
@@ -70,10 +70,36 @@ public class ConfigDeployment extends ConfigBase {
 
     public void setPathModifierWithBaseDir(ActorSystem system) {
         String baseDir = this.baseDir;
-        setPathModifier(system, p -> Paths.get(baseDir, p));
+        String hostId = host + "-" + port;
+        setPathModifier(system, new PathModifierHost(baseDir, hostId));
     }
 
     public interface PathModifier {
         Path get(String path);
+    }
+
+    @Override
+    public String logMessage(String msg) {
+        return super.logMessage(getLogHeader() + msg);
+    }
+
+    public String getLogHeader() {
+        return "[" + host + ":" + port + "] ";
+    }
+
+    public static class PathModifierHost implements PathModifier {
+        protected String baseDir;
+        protected String id;
+
+        public PathModifierHost(String baseDir, String id) {
+            this.baseDir = baseDir;
+            this.id = id;
+        }
+
+        @Override
+        public Path get(String path) {
+            return Paths.get(baseDir,
+                    path.replaceAll(Pattern.quote("%i"), id));
+        }
     }
 }

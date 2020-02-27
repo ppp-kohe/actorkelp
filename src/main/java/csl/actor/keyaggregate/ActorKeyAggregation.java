@@ -704,6 +704,7 @@ public abstract class ActorKeyAggregation extends ActorDefault
         state.name = String.format("%s#%d", n, num);
         state.config = config;
         state.router = router();
+        state.nextStage = nextStage;
         MailboxKeyAggregation r = getMailboxAsKeyAggregation();
         r.serializeTo(state);
         state.internalState = toSerializableInternalState();
@@ -724,6 +725,7 @@ public abstract class ActorKeyAggregation extends ActorDefault
         public Config config;
         public ActorRef router;
         public Serializable internalState;
+        public ActorRef nextStage;
 
         public ActorKeyAggregation create(ActorSystem system, long num) throws Exception {
             return init(create(system, name(num), config(), state(router)));
@@ -744,6 +746,7 @@ public abstract class ActorKeyAggregation extends ActorDefault
         protected ActorKeyAggregation init(ActorKeyAggregation a) {
             a.getMailboxAsKeyAggregation().deserializeFrom(this);
             a.initSerializedInternalState(internalState);
+            a.setNextStage(nextStage);
             return a;
         }
 
