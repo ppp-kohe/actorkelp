@@ -62,7 +62,7 @@ public interface ActorPlacement {
         }
 
         public void log(String msg, Object... args) {
-            logger.log(logColor, String.format("%s on %s ", this, getSystem()) + String.format(msg, args));
+            logger.log(logColor, this + " " + String.format(msg, args));
         }
 
         public static void setLogColor(int logColor) {
@@ -202,9 +202,13 @@ public interface ActorPlacement {
             try {
                 logDebug("%s on %s place(%d):\n   move %s to %s", this, getSystem(), retryCount, a, target);
                 previous = toSerializable(a, nextLocalNumber, previous, target);
-                return ResponsiveCalls.<ActorRef>send(getSystem(),
+                ActorRef remote = ResponsiveCalls.<ActorRef>send(getSystem(),
                         target.ref(getSystem()),
                         new ActorCreationRequest(previous)).get(10, TimeUnit.SECONDS);
+                if (a.getName() != null) {
+                    system.unregister(a.getName());
+                }
+                return remote;
             } catch (Throwable ex) {
                 if (retryCount < getClusterSize()) {
                     return placeRetry(a, retryCount + 1, nextLocalNumber, previous);
@@ -541,6 +545,38 @@ public interface ActorPlacement {
         /** @return implementation field getter */
         public long getTotalCount() {
             return totalCount;
+        }
+    }
+
+
+
+    static String toOutputFileComponent(boolean preferRight, int max, String str) {
+        return toOutputFileComponentMinus(preferRight, max, str.replaceAll("\\W+", "-"));
+    }
+
+    private static String toOutputFileComponentMinus(boolean preferRight, int max, String str) {
+        if (str.length() > max) {
+            int n = (preferRight ? str.lastIndexOf("-") : str.indexOf("-"));
+            if (n >= 0 && max > 8) {
+                int nextMax = Math.max(max / 2 - 1, 8);
+                String pre = toOutputFileComponentMinus(preferRight, nextMax, str.substring(0, n));
+                String pos = toOutputFileComponentMinus(preferRight, nextMax, str.substring(n + 1));
+                if (pre.length() + pos.length() + 1 > max) {
+                    if (pre.length() + 1 + 8 <= max) {
+                        return pre + "-" + Integer.toHexString(pos.hashCode());
+                    } else if (8 + 1 + pos.length() <= max) {
+                        return Integer.toHexString(pre.hashCode()) + "-" + pos;
+                    } else {
+                        return Integer.toHexString(str.hashCode());
+                    }
+                } else {
+                    return pre + "-" + pos;
+                }
+            } else {
+                return Integer.toHexString(str.hashCode());
+            }
+        } else {
+            return str;
         }
     }
 }

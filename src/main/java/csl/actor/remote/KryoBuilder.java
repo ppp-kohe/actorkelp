@@ -292,10 +292,12 @@ public class KryoBuilder {
                 PhaseShift.PhaseCompleted.class,
                 PhaseShift.PhaseShiftIntermediate.class,
                 PhaseShift.PhaseShiftIntermediateType.class,
+                KeyAggregationPhaseEntry.VisitorIncompleteLeaf.class,
                 ActorKeyAggregation.CancelChange.class,
                 ActorKeyAggregation.CanceledChangeType.class,
 
                 ClusterDeployment.ConfigSet.class,
+                ClusterDeployment.ShutdownTask.class,
                 ConfigDeployment.class,
                 FileSplitter.FileSplit.class,
                 ActorPlacementKeyAggregation.Task.class,

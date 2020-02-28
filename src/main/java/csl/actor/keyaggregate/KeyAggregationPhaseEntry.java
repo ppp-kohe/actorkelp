@@ -26,7 +26,7 @@ public class KeyAggregationPhaseEntry {
     }
 
     public void startRouter(ActorKeyAggregation router) {
-        router.tell(new PhaseShift.PhaseShiftIntermediate(key, router,
+        router.tell(origin.createIntermediate(router,
                 PhaseShift.PhaseShiftIntermediateType.PhaseIntermediateRouterStart), router);
     }
 
@@ -68,7 +68,7 @@ public class KeyAggregationPhaseEntry {
 
     public boolean incompleteCancel(Actor router, ActorRef a) {
         if (!finished.computeIfAbsent(a, _k -> false)) {
-            a.tell(new PhaseShift.PhaseShiftIntermediate(key, a,
+            a.tell(origin.createIntermediate(a,
                     PhaseShift.PhaseShiftIntermediateType.PhaseIntermediateFinishCanceled), router);
             return true;
         } else {
@@ -86,8 +86,8 @@ public class KeyAggregationPhaseEntry {
         }
     }
 
-    protected static class VisitorIncompleteLeaf implements KeyAggregationVisitor.VisitorNoSender<Actor> {
-        protected KeyAggregationPhaseEntry entry;
+    public static class VisitorIncompleteLeaf implements KeyAggregationVisitor.VisitorNoSender<Actor> {
+        protected KeyAggregationPhaseEntry entry; //never a remote message
 
         public VisitorIncompleteLeaf(KeyAggregationPhaseEntry entry) {
             this.entry = entry;
@@ -106,7 +106,7 @@ public class KeyAggregationPhaseEntry {
 
     public void incompleteLeaf(Actor router, ActorRef a) {
         finished.put(a, false);
-        a.tell(new PhaseShift.PhaseShiftIntermediate(key, a, PhaseShift.PhaseShiftIntermediateType.PhaseIntermediateFinishLeaf), router);
+        a.tell(origin.createIntermediate(a, PhaseShift.PhaseShiftIntermediateType.PhaseIntermediateFinishLeaf), router);
     }
 
     public boolean completedCancel(ActorKeyAggregation router, ActorRef canceled) {

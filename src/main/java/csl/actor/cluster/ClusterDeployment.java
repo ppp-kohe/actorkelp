@@ -416,7 +416,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
             ActorSystemRemote system = new ActorSystemRemote();
 
             //the working directory is the baseDir
-            ConfigDeployment.setPathModifier(system, p -> Paths.get(".", p));
+            ConfigDeployment.setPathModifierWithBaseDir(system, ".", selfAddrObj.getHost(), selfAddrObj.getPort());
 
             system.startWithoutWait(selfAddrObj);
             ActorPlacement.ActorPlacementDefault p = createPlace(placeType, system, new ActorPlacement.PlacementStrategyUndertaker());
@@ -605,29 +605,54 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
     public CompletableFuture<?> shutdown(ActorAddress targetHost) {
         return ResponsiveCalls.<ActorPlacement.ActorPlacementDefault>sendTaskConsumer(getSystem(),
                 getMasterPlace().getEntry(targetHost).getPlacementActor().ref(getSystem()),
-                (a,s) -> {
-                    a.close();
-                    new Thread() { public void run() { //the shutting down thread
-                        try {
-                            Thread.sleep(3_000);
-                        } catch (Exception ex) {
-                            throw new RuntimeException(ex);
-                        }
-                        a.getSystem().close();
-                    }}.start();
-                    try {
-                        a.getSystem().awaitClose(6_000, TimeUnit.MILLISECONDS);
-                    } catch (Exception ex) {
-                        throw new RuntimeException(ex);
-                    }
-                });
+                new ShutdownTask());
     }
 
-    public CompletableFuture<?> shutdownAll() {
+    public static class ShutdownTask implements CallableMessage.CallableMessageConsumer<ActorPlacement.ActorPlacementDefault> {
+        @Override
+        public void accept(ActorPlacement.ActorPlacementDefault self, ActorRef sender) {
+            self.close();
+            new Thread() { public void run() { //the shutting down thread
+                try {
+                    Thread.sleep(3_000);
+                } catch (Exception ex) {
+                    throw new RuntimeException(ex);
+                }
+                self.getSystem().close();
+            }}.start();
+            try {
+                self.getSystem().awaitClose(6_000, TimeUnit.MILLISECONDS);
+            } catch (Exception ex) {
+                throw new RuntimeException(ex);
+            }
+        }
+    }
+
+    public CompletableFuture<?> shutdownCluster() {
         List<CompletableFuture<?>> tasks = new ArrayList<>(masterPlace.getClusterSize());
         for (ActorPlacement.AddressListEntry e : masterPlace.getCluster()) {
             tasks.add(shutdown(e.getPlacementActor()));
         }
         return CompletableFuture.allOf(tasks.toArray(new CompletableFuture<?>[0]));
+    }
+
+    public void destroyClusterProcesses() {
+        getProcesses().forEach((unit, proc) -> {
+            if (proc.isAlive()) {
+                unit.log(String.format("%s : destroy process: %s", unit, proc));
+                proc.destroy();
+            }
+        });
+    }
+
+    public void shutdownAll() {
+        getMaster().log("shutdownAll");
+        try {
+            shutdownCluster().get(3, TimeUnit.MINUTES);
+        } catch (Exception ex) {
+            //
+        }
+        destroyClusterProcesses();
+        getSystem().close();
     }
 }

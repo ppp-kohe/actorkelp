@@ -12,6 +12,7 @@ import csl.actor.remote.KryoBuilder;
 import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.*;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -213,9 +214,11 @@ public class WordCount {
         void write(Count count) {
             try {
                 if (writer == null) {
-                    Path dir = ConfigDeployment.getPathModifier(getSystem()).get(dst);
-                    Files.createDirectories(dir);
-                    Path outFile = dir.resolve(String.format("output-%%i-%s.txt", Integer.toHexString(System.identityHashCode(this)))); //TODO instance ID?
+                    String p = Paths.get(dst, "wcout-" + getOutputFileHeader() + ".txt")
+                            .toString();
+                    Path outFile = ConfigDeployment.getPathModifier(getSystem()).get(p);
+                    log("path: " + ConfigDeployment.getPathModifier(getSystem()) + ".get(" + p  +")" + "\n -> " + outFile);
+                    Files.createDirectories(outFile.getParent());
                     writer = new PrintWriter(new FileWriter(outFile.toFile()));
                     flushTask = getSystem().getScheduledExecutor().scheduleAtFixedRate(() ->
                             this.tell(CallableMessage.callableMessageConsumer((a,s) -> writer.flush())), 3, 3, TimeUnit.SECONDS);
@@ -232,6 +235,7 @@ public class WordCount {
         public void processPhaseEnd(Object phaseKey) {
             super.processPhaseEnd(phaseKey);
             printStatus("phaseEnd: " + phaseKey);
+            close();
         }
 
         @Override
@@ -283,6 +287,16 @@ public class WordCount {
                 merged.getMailboxAsKeyAggregation().unlockRemainingProcesses(merged);
                 getMailboxAsKeyAggregation().unlockRemainingProcesses(this);
             }
+        }
+
+        @Override
+        protected Serializable toSerializableInternalState() {
+            return this.dst;
+        }
+
+        @Override
+        protected void initSerializedInternalState(Serializable s) {
+            this.dst = (String) s;
         }
     }
 

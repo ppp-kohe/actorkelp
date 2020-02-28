@@ -69,8 +69,12 @@ public class ConfigDeployment extends ConfigBase {
     }
 
     public void setPathModifierWithBaseDir(ActorSystem system) {
-        String baseDir = this.baseDir;
-        String hostId = host + "-" + port;
+        setPathModifierWithBaseDir(system, this.baseDir, host, port);
+    }
+
+    public static void setPathModifierWithBaseDir(ActorSystem system, String baseDir, String host, int port) {
+        String hostId = ActorPlacement.toOutputFileComponent(false, 18, host) + "-" +
+                ActorPlacement.toOutputFileComponent(false, 8, Integer.toString(port));
         setPathModifier(system, new PathModifierHost(baseDir, hostId));
     }
 
@@ -100,6 +104,14 @@ public class ConfigDeployment extends ConfigBase {
         public Path get(String path) {
             return Paths.get(baseDir,
                     path.replaceAll(Pattern.quote("%i"), id));
+        }
+
+        @Override
+        public String toString() {
+            return getClass().getSimpleName() + "{" +
+                    "baseDir='" + baseDir + '\'' +
+                    ", id='" + id + '\'' +
+                    '}';
         }
     }
 }

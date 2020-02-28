@@ -9,7 +9,12 @@ import csl.actor.keyaggregate.KeyAggregationRoutingSplit.SplitPath;
 
 import java.io.PrintWriter;
 import java.io.Serializable;
+import java.io.StringWriter;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
@@ -484,6 +489,7 @@ public abstract class ActorKeyAggregation extends ActorDefault
                                                               KeyAggregationRoutingSplit old,
                                                               ActorKeyAggregation actor, SplitPath path, int height) {
         if (path.depth() >= height) {
+            internalCreateSplitLeafNewName(actor, path);
             ActorRef a = place(actor.getPlacement(), actor);
             if (a == this) {
                 return null;
@@ -494,8 +500,24 @@ public abstract class ActorKeyAggregation extends ActorDefault
             if (height <= 1 && actor == this) {
                 return null;
             } else {
+                internalCreateSplitLeafNewName(actor, path);
                 return newSplitLeaf(context, old, actor, path).split(context, height);
             }
+        }
+    }
+
+    public void internalCreateSplitLeafNewName(ActorKeyAggregation actor, SplitPath path) {
+        String name = actor.name;
+        if (name != null) {
+            int ni = name.lastIndexOf("#");
+            if (ni < 0) { //no postfix
+                name += "#";
+            }
+            if (path.depth() > 0) {
+                name += (path.getLast() ? "0" : "1");
+            }
+            actor.name = name;
+            actor.getSystem().register(actor);
         }
     }
 
@@ -559,10 +581,27 @@ public abstract class ActorKeyAggregation extends ActorDefault
                     new CallableToLocalSerializable())
                     .get(toLocalWaitMs(), TimeUnit.MILLISECONDS);
             return state.create(system, -1);
-        } catch (Exception ex) {
-
-            ex.printStackTrace();
+        } catch (Throwable ex) {
+            errorToLocal(ex, "toLocal", ref);
             return null;
+        }
+    }
+
+    protected static Map<String, Instant> errorRecords = new HashMap<>();
+
+    protected void errorToLocal(Throwable ex, String info, ActorRef ref) {
+        synchronized (this) {
+            Instant last = errorRecords.get(info);
+            Instant now = Instant.now();
+            if (last == null || Duration.ofSeconds(30).minus(Duration.between(last, now)).isNegative()) {
+                errorRecords.put(info, now);
+
+                StringWriter sw = new StringWriter();
+                PrintWriter w = new PrintWriter(sw);
+                ex.printStackTrace(w);
+                String data = sw.getBuffer().toString();
+                log(info + ": " + ref + ": " + data);
+            }
         }
     }
 
@@ -697,11 +736,10 @@ public abstract class ActorKeyAggregation extends ActorDefault
     protected ActorKeyAggregationSerializable initSerializableState(ActorKeyAggregationSerializable state, long num) {
         state.actorType = getClass();
         String n = getName();
-        int si = n.lastIndexOf("#");
-        if (si >= 0) {
-            n = n.substring(0, si);
+        if (n == null) {
+            n = "$" + num;
         }
-        state.name = String.format("%s#%d", n, num);
+        state.name = n;
         state.config = config;
         state.router = router();
         state.nextStage = nextStage;
@@ -716,6 +754,15 @@ public abstract class ActorKeyAggregation extends ActorDefault
     }
 
     protected void initSerializedInternalState(Serializable s) { }
+
+    public String getOutputFileHeader() {
+        String n = getName();
+        if (n == null) {
+            n = getClass().getSimpleName() + "-" + Integer.toHexString(System.identityHashCode(this));
+        }
+        return "%i-" + ActorPlacement.toOutputFileComponent(true, 30, n);
+    }
+
 
     public static class ActorKeyAggregationSerializable implements Serializable {
         public Class<? extends ActorKeyAggregation> actorType;
@@ -732,7 +779,7 @@ public abstract class ActorKeyAggregation extends ActorDefault
         }
 
         protected String name(long num) {
-            return (num < 0 ? null : String.format("%s_%d", name, num));
+            return name == null ? ("$" + num) : name;
         }
 
         protected Config config() {

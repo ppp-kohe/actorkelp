@@ -180,32 +180,47 @@ public interface KeyAggregationRoutingSplit {
             if (hasRemainingProcesses(context.router(), a1) || hasRemainingProcesses(context.router(), a2)) {
                 return null; //failure
             }
-
-            if (a1 instanceof ActorKeyAggregation) { //local
-                if (a2 instanceof ActorKeyAggregation) {
-                    ((ActorKeyAggregation) a1).internalMerge((ActorKeyAggregation) a2);
-                    return newMergedLeaf(context, a1, path, leaf);
-                } else { //remote a2
-                    ActorKeyAggregation l2 = context.router().toLocal(a2);
-                    if (l2 != null) {
-                        ((ActorKeyAggregation) a1).internalMerge(l2);
+            try {
+                if (a1 instanceof ActorKeyAggregation) { //local
+                    if (a2 instanceof ActorKeyAggregation) {
+                        ((ActorKeyAggregation) a1).internalMerge((ActorKeyAggregation) a2);
+                        return newMergedLeaf(context, a1, path, leaf);
+                    } else { //remote a2
+                        ActorKeyAggregation l2 = context.router().toLocal(a2);
+                        if (l2 != null) {
+                            ((ActorKeyAggregation) a1).internalMerge(l2);
+                        } else {
+                            return null;
+                        }
+                        return newMergedLeaf(context, a1, path, leaf);
                     }
-                    return newMergedLeaf(context, a1, path, leaf);
-                }
-            } else if (a2 instanceof ActorKeyAggregation) { //remote a1, local a2
-                ActorKeyAggregation l1 = context.router().toLocal(a1);
-                if (l1 != null) {
-                    ((ActorKeyAggregation) a2).internalMerge(l1);
-                }
-                return newMergedLeaf(context, a2, path, leaf);
-            } else { //both remote
-                a1.tell(CallableMessage.callableMessageConsumer((self, sender) -> {
-                    ActorKeyAggregation l2 = ((ActorKeyAggregation) self).toLocal(a2);
-                    if (l2 != null) {
-                        ((ActorKeyAggregation) self).internalMerge(l2);
+                } else if (a2 instanceof ActorKeyAggregation) { //remote a1, local a2
+                    ActorKeyAggregation l1 = context.router().toLocal(a1);
+                    if (l1 != null) {
+                        ((ActorKeyAggregation) a2).internalMerge(l1);
+                    } else {
+                        return null;
                     }
-                }), null);
-                return newMergedLeaf(context, a1, path, leaf);
+                    return newMergedLeaf(context, a2, path, leaf);
+                } else { //both remote
+                    Boolean b = ResponsiveCalls.sendTask(context.router().getSystem(), a1, (self, sender) -> {
+                        ActorKeyAggregation l2 = ((ActorKeyAggregation) self).toLocal(a2);
+                        if (l2 != null) {
+                            ((ActorKeyAggregation) self).internalMerge(l2);
+                            return true;
+                        } else {
+                            return false;
+                        }
+                    }).get(context.router().toLocalWaitMs() * 2L, TimeUnit.MILLISECONDS);
+                    if (b) {
+                        return newMergedLeaf(context, a1, path, leaf);
+                    } else {
+                        return null;
+                    }
+                }
+            } catch (Throwable ex) {
+                context.router().errorToLocal(ex, "merge", a1);
+                return null;
             }
         }
 
@@ -219,9 +234,9 @@ public interface KeyAggregationRoutingSplit {
             try {
                 return ResponsiveCalls.sendTask(router.getSystem(), a, (self, sender) ->
                         ((ActorKeyAggregation) self).hasRemainingProcesses())
-                        .get(1, TimeUnit.SECONDS);
+                        .get(router.toLocalWaitMs(), TimeUnit.MILLISECONDS);
             } catch (Exception ex) {
-                router.log("#hasRemainingProcesses: busy " + a + " : " + ex);
+                router.errorToLocal(ex, "hasRemainingProcess", a);
                 return true;
             }
         }

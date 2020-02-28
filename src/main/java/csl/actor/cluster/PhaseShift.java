@@ -98,6 +98,10 @@ public class PhaseShift implements CallableMessage.CallableMessageConsumer<Actor
                 "(key=" + key + ", target=" + target + ", count=" + count + ", start=" + startTime + ")";
     }
 
+    public PhaseShiftIntermediate createIntermediate(ActorRef actor, PhaseShiftIntermediateType type) {
+        return new PhaseShiftIntermediate(key, actor, type);
+    }
+
     public enum PhaseShiftIntermediateType {
         PhaseIntermediateRouterStart,
         PhaseIntermediateFinishCanceled,
@@ -284,8 +288,12 @@ public class PhaseShift implements CallableMessage.CallableMessageConsumer<Actor
         public CompletableFuture<PhaseCompleted> start(Object key, ActorRef initialTarget) {
             CompletableFuture<PhaseCompleted> c = completed.computeIfAbsent(key, PhaseTerminalEntry::new)
                     .future();
-            initialTarget.tell(new PhaseShift(key, this), this);
+            initialTarget.tell(createPhaseShift(key), this);
             return c;
+        }
+
+        protected PhaseShift createPhaseShift(Object key) {
+            return new PhaseShift(key, this);
         }
 
         public Map<Object, PhaseTerminalEntry> getCompleted() {
