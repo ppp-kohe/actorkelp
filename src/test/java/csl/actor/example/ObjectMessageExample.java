@@ -4,12 +4,15 @@ import csl.actor.remote.ActorSystemRemote;
 import csl.actor.remote.ObjectMessageClient;
 import csl.actor.remote.ObjectMessageServer;
 
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Random;
 
 public class ObjectMessageExample {
     public static void main(String[] args) throws Exception {
         ActorSystemRemote.debugLog = true;
+        ActorSystemRemote.debugLogMsg = true;
 
         new Thread() {public void run() {
             ObjectMessageServer server = new ObjectMessageServer();
@@ -33,6 +36,9 @@ public class ObjectMessageExample {
         Thread.sleep(3000);
         con.write("!!!");
         Thread.sleep(1000);
+        for (int i = 0; i < 100; ++i) {
+            con.write(new ExampleData(i, new Random().doubles(100_000).toArray()));
+        }
         System.out.println("FINISH received=" + received);
 
         con.write("close");
@@ -53,5 +59,19 @@ public class ObjectMessageExample {
         return 200;
     }
 
+    static class ExampleData implements Serializable {
+        public long n;
+        public double[] data;
+
+        public ExampleData(long n, double[] data) {
+            this.n = n;
+            this.data = data;
+        }
+
+        @Override
+        public String toString() {
+            return "(" + n + ")";
+        }
+    }
 
 }

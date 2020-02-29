@@ -14,6 +14,8 @@ import io.netty.handler.logging.LoggingHandler;
 import io.netty.util.ReferenceCountUtil;
 
 import java.io.Closeable;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.util.function.Function;
 
 public class ObjectMessageServer implements Closeable {
@@ -291,13 +293,26 @@ public class ObjectMessageServer implements Closeable {
 
         @Override
         public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
-            ActorSystemRemote.log(ActorSystemRemote.debugLogMsg, 161, "%s exceptionCaught %s", this, cause);
-            System.err.println(String.format("%s exceptionCaught %s", this, cause));
-            if (firstError && (cause.getMessage() == null || !cause.getMessage().contains("Connection reset by peer"))) {
-                cause.printStackTrace();
+            Object errorToStr = new Object() {
+                @Override
+                public String toString() {
+                    return QueueServerHandler.this.toString(cause);
+                }
+            };
+            ActorSystemRemote.log(ActorSystemRemote.debugLogMsg, 161, "%s", errorToStr);
+            if (firstError) {
+                ActorSystemRemote.log(true, 162, String.format("%s", errorToStr));
                 firstError = false;
             }
             ctx.close();
+        }
+
+        protected String toString(Throwable ex) {
+            StringWriter sw = new StringWriter();
+            PrintWriter pw = new PrintWriter(sw);
+            ex.printStackTrace(pw);
+            sw.flush();
+            return String.format("%s exceptionCaught %s: \n  %s", this, ex, sw.getBuffer().toString());
         }
 
         /** @return implementation field getter */

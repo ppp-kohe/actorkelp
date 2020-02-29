@@ -181,10 +181,10 @@ public class ObjectMessageClient implements Closeable {
         }
 
         public ObjectMessageConnection write(Object msg, int retryCount) {
-            if (channel == null || !channel.isWritable()) {
+            if (channel == null || !channel.isOpen()) {
                 try {
                     logWrite(retryCount, "before write re-open");
-                    close();
+                    //close();
                     open();
                 } catch (InterruptedException ex) {
                     throw new RuntimeException(ex);
@@ -208,7 +208,7 @@ public class ObjectMessageClient implements Closeable {
         }
 
         private void logWrite(int retryCount, String msg) {
-            if (ActorSystemRemote.debugLog) {
+            if (ActorSystemRemote.debugLogMsg) {
                 if (channel == null) {
                     ActorSystemRemote.log(ActorSystemRemote.debugLogMsg, 18, "%s %s, retry=%d, channel=null",
                             this, msg, retryCount);
