@@ -490,8 +490,10 @@ public interface ActorPlacement {
 
     class PlacementStrategyRoundRobin implements PlacementStrategy {
         protected long totalCount;
-        protected int count = 0;
         protected int localLimit;
+        protected int localCount = 0;
+        protected int clusterCount = 0;
+        protected int currentClusterCount = 0;
 
         public PlacementStrategyRoundRobin(int localLimit) {
             this.localLimit = localLimit;
@@ -503,32 +505,38 @@ public interface ActorPlacement {
 
         @Override
         public synchronized ActorAddress.ActorAddressRemoteActor getNextAddress(ActorPlacementDefault pa, Actor a, int retryCount) {
-            if (retryCount > 0 && localLimit != 0) {
-                count += (localLimit - count % localLimit);
-            }
-            if (0 <= count && count < localLimit) {
-                ++count;
+            if (localCount < localLimit) {
+                ++localCount;
                 return null; //local
             } else {
                 List<AddressListEntry> cluster = pa.getCluster();
                 if (cluster.isEmpty()) {
+                    ++localCount;
                     return null;
                 }
-                int clusterIndex = (localLimit == 0 ? (count % cluster.size()) : (count / localLimit));
-                ++count;
-                if (0 <= clusterIndex && clusterIndex < cluster.size()) {
-                    return cluster.get(clusterIndex).getPlacementActor();
-                } else {
-                    count = 0;
-                    return getNextAddress(pa, a, 0);
+                if (retryCount > 0) { //retry skips current cluster
+                    ++clusterCount;
+                    currentClusterCount = 0;
                 }
+
+                int clusterIndex = clusterCount;
+                if (clusterIndex >= cluster.size()) {
+                    clusterIndex = clusterIndex % cluster.size();
+                    clusterCount = clusterIndex;
+                }
+                if (currentClusterCount < localLimit) {
+                    ++currentClusterCount;
+                } else {
+                    ++clusterCount;
+                    currentClusterCount = 0;
+                }
+                return cluster.get(clusterIndex).getPlacementActor();
             }
         }
 
         @Override
         public synchronized long getNextLocalNumber() {
             ++totalCount;
-            ++count;
             return totalCount;
         }
 
@@ -538,13 +546,23 @@ public interface ActorPlacement {
         }
 
         /** @return implementation field getter */
-        public int getCount() {
-            return count;
+        public long getTotalCount() {
+            return totalCount;
         }
 
         /** @return implementation field getter */
-        public long getTotalCount() {
-            return totalCount;
+        public int getLocalCount() {
+            return localCount;
+        }
+
+        /** @return implementation field getter */
+        public int getClusterCount() {
+            return clusterCount;
+        }
+
+        /** @return implementation field getter */
+        public int getCurrentClusterCount() {
+            return currentClusterCount;
         }
     }
 
