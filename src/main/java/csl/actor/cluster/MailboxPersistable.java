@@ -389,7 +389,7 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
             long c = fileCount;
             ++fileCount;
             String p = Paths.get(path, String.format("%s-%05d", head, c)).toString();
-            while (Files.exists(getPath(p))) {
+            while (Files.exists(pathModifier.get(p))) {
                 p = Paths.get(path, String.format("%s-%05d", head, c)).toString();
                 ++fileCount;
                 c = fileCount;
@@ -398,7 +398,16 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
         }
 
         public Path getPath(String path) {
-            return pathModifier.get(path);
+            Path p = pathModifier.get(path);
+            Path dir = p.getParent();
+            if (dir != null && !Files.exists(dir)) {
+                try {
+                    Files.createDirectories(dir);
+                } catch (Exception ex) {
+                    throw new RuntimeException(ex);
+                }
+            }
+            return p;
         }
 
         public KryoBuilder.SerializerFunction getSerializer() {
@@ -417,12 +426,7 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
         public PersistentFileWriter(String path, PersistentFileManager manager) throws IOException  {
             this.path = path;
             this.manager = manager;
-            Path fPath = manager.getPath(path);
-            Path dir = fPath.getParent();
-            if (dir != null && !Files.exists(dir)) {
-                Files.createDirectories(dir);
-            }
-            output = new Output(Files.newOutputStream(fPath));
+            output = new Output(Files.newOutputStream(manager.getPath(path)));
             serializer = manager.getSerializer();
         }
 
