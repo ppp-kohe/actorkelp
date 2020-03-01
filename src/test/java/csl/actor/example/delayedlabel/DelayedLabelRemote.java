@@ -16,6 +16,7 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 
 public class DelayedLabelRemote extends DelayedLabelAggregationReplicable {
     public static void main(String[] args) {
@@ -23,7 +24,7 @@ public class DelayedLabelRemote extends DelayedLabelAggregationReplicable {
     }
 
     @Override
-    public void run(PrintWriter out, String src) {
+    public void run(Consumer<String> out, String src) {
         Iterator<Object> inputs = inputs(out, src);
         config.lowerBoundThresholdFactor = -1; //no Few mailbox and no merge
 
@@ -58,7 +59,7 @@ public class DelayedLabelRemote extends DelayedLabelAggregationReplicable {
     }
 
     @Override
-    public ActorRef learnerActor(ActorSystem system, PrintWriter out, ActorRef resultActor) {
+    public ActorRef learnerActor(ActorSystem system, Consumer<String> out, ActorRef resultActor) {
         LearnerActorAggregationReplicable r = new LearnerRemote(system, out, resultActor, config);
         root = r;
         ResponsiveCalls.sendTask(system, r,
@@ -71,11 +72,11 @@ public class DelayedLabelRemote extends DelayedLabelAggregationReplicable {
             super(system, name, config, result, state);
         }
 
-        public LearnerRemote(ActorSystem system, String name, PrintWriter out, ActorRef resultActor, DelayedLabelConfig config, State state) {
+        public LearnerRemote(ActorSystem system, String name, Consumer<String> out, ActorRef resultActor, DelayedLabelConfig config, State state) {
             super(system, name, out, resultActor, config, state);
         }
 
-        public LearnerRemote(ActorSystem system, PrintWriter out, ActorRef resultActor, DelayedLabelConfig config) {
+        public LearnerRemote(ActorSystem system, Consumer<String> out, ActorRef resultActor, DelayedLabelConfig config) {
             super(system, out, resultActor, config);
         }
 

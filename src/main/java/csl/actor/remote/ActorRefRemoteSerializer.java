@@ -33,7 +33,12 @@ public class ActorRefRemoteSerializer<RefType extends ActorRef> extends Serializ
 
     public ActorAddress.ActorAddressRemote getServerAddress() {
         if (remoteSystem instanceof ActorSystemRemote) {
-            return ((ActorSystemRemote) remoteSystem).getServerAddress();
+            ActorAddress.ActorAddressRemote a =((ActorSystemRemote) remoteSystem).getServerAddress();
+            if (a == null) {
+                return local;
+            } else {
+                return a;
+            }
         } else {
             return local;
         }

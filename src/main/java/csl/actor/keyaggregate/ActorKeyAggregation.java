@@ -20,6 +20,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 public abstract class ActorKeyAggregation extends ActorDefault
@@ -837,7 +838,7 @@ public abstract class ActorKeyAggregation extends ActorDefault
         return config.logMessage(str);
     }
 
-    public void printStatus(PrintWriter out, String head) {
+    public void printStatus(Consumer<String> out, String head) {
         println(out, toStringStatus(head));
         if (state instanceof KeyAggregationStateRouter) {
             KeyAggregationStateRouter sr = (KeyAggregationStateRouter) state;
@@ -845,7 +846,7 @@ public abstract class ActorKeyAggregation extends ActorDefault
         }
     }
 
-    public void printStatus(PrintWriter out, String head, List<KeyAggregationRoutingSplit> newSplits) {
+    public void printStatus(Consumer<String> out, String head, List<KeyAggregationRoutingSplit> newSplits) {
         println(out, toStringStatus(head));
         int i = 0;
         for (KeyAggregationRoutingSplit s : newSplits) {
@@ -914,7 +915,7 @@ public abstract class ActorKeyAggregation extends ActorDefault
                         .collect(Collectors.joining(", ", "[", "]")));
     }
 
-    protected void printStatus(KeyAggregationRoutingSplit s, PrintWriter out) {
+    protected void printStatus(KeyAggregationRoutingSplit s, Consumer<String> out) {
         String idt = "  ";
         if (s != null) {
             for (int i = 0; i < s.getDepth(); ++i) {
@@ -940,7 +941,7 @@ public abstract class ActorKeyAggregation extends ActorDefault
         }
     }
 
-    public void println(PrintWriter out, String line) {
+    public void println(Consumer<String> out, String line) {
         config.println(out, line);
     }
 

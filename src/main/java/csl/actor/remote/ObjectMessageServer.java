@@ -197,12 +197,18 @@ public class ObjectMessageServer implements Closeable {
     }
 
     protected void closeGroups() {
-        leaderGroup.shutdownGracefully();
-        workerGroup.shutdownGracefully();
+        if (leaderGroup != null) {
+            leaderGroup.shutdownGracefully();
+        }
+        if (workerGroup != null) {
+            workerGroup.shutdownGracefully();
+        }
     }
 
     public void close() {
-        channel.channel().close();
+        if (channel != null) {
+            channel.channel().close();
+        }
         closeGroups();
     }
 

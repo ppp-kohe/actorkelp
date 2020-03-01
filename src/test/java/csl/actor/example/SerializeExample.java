@@ -90,6 +90,16 @@ public class SerializeExample {
         writeRead(k, msg2, (l,r) ->
                 l.id == r.id && ((Message<?>)l.body).getTarget().equals(((Message<?>)r.body).getTarget())
                         && ((Message<?>)l.body).getData().equals(((Message<?>)r.body).getData()));
+
+        ////
+        Container c = new Container();
+        c.items.add(new ContElem("aaa"));
+        c.items.add(new ContElemEx("bbb"));
+        writeRead(k, c, (l, r) ->
+            l.items.size() == r.items.size() &&
+                    l.items.get(0).value.equals(r.items.get(0).value) &&
+                    l.items.get(1).value.equals(r.items.get(1).value) &&
+                    ((ContElemEx) l.items.get(1)).exValue.value.equals(((ContElemEx) r.items.get(1)).exValue.value));
     }
 
     public static class ExampleActor extends ActorDefault {
@@ -167,5 +177,25 @@ public class SerializeExample {
     public Object read(byte[] d, Function<Input, Object> gen) {
         Input input = new Input(new ByteArrayInputStream(d));
         return gen.apply(input);
+    }
+
+    public static class Container {
+        public List<ContElem> items = new ArrayList<>();
+    }
+
+    public static class ContElem {
+        public String value;
+
+        public ContElem(String value) {
+            this.value = value;
+        }
+    }
+
+    public static class ContElemEx extends ContElem {
+        public ContElem exValue;
+        public ContElemEx(String value) {
+            super(value);
+            exValue = new ContElem("<" + value + ">");
+        }
     }
 }

@@ -120,12 +120,24 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         deployMasterAfterSystemInit(units);
     }
 
+    public static void setLogFile(ConfigDeployment conf, ConfigDeployment.PathModifier pm) throws Exception {
+        if (conf.logFile) {
+            Path p = pm.get(conf.logFilePath);
+            Path parent = p.getParent();
+            if (parent != null && !Files.exists(parent)) {
+                Files.createDirectories(parent);
+            }
+            System.setErr(new LogFileWriter(System.err, p, conf.logFilePreserveColor));
+        }
+    }
+
     protected void deployMasterAfterSystemInit(List<ClusterUnit<AppConfType>> units) throws Exception {
         System.setProperty("csl.actor.logColor", Integer.toString(master.getDeploymentConfig().getLogColorDefault()));
 
         ConfigDeployment.PathModifierHost ph = master.getDeploymentConfig().setPathModifierWithBaseDir(system);
         ph.setApp(getAppName());
         System.setProperty("csl.actor.path.app", ph.getApp());
+        setLogFile(master.getDeploymentConfig(), ph);
 
         masterPlace = createPlace(placeType, system,
                 new ActorPlacement.PlacementStrategyRoundRobin(0));
@@ -196,6 +208,9 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         }
 
         return escape("-Dcsl.actor.logColor=" + unit.getAppConfig().get("logColor")) + " " +
+                escape("-Dcsl.actor.logFile=" + unit.getDeploymentConfig().logFile) + " " +
+                escape("-Dcsl.actor.logFilePath=" + unit.getDeploymentConfig().logFilePath) + " " +
+                escape("-Dcsl.actor.logFilePreserveColor=" + unit.getDeploymentConfig().logFilePreserveColor) + " " +
                 pathProps +
                 getJavaCommandOptionsClassPath(unit);
     }
@@ -420,6 +435,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         public void run(String[] args) throws Exception {
             int n = Integer.parseInt(System.getProperty("csl.actor.logColor", "0"));
             ConfigDeployment logger = new ConfigDeployment();
+            logger.read("csl.actor", System.getProperties());
 
             String selfAddr = args[0];
             String joinAddr = args[1];
@@ -438,6 +454,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
             ph.setHost(selfAddrObj.getHost(), selfAddrObj.getPort());
             String appName = System.getProperty("csl.actor.path.app", "");
             ph.setApp(appName);
+            setLogFile(logger, ph);;
 
             system.startWithoutWait(selfAddrObj);
             ActorPlacement.ActorPlacementDefault p = createPlace(placeType, system, new ActorPlacement.PlacementStrategyUndertaker());
@@ -599,6 +616,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         }
     }
 
+
     ///////////////
 
     public CompletableFuture<ActorRef> move(ActorRef actor, ActorAddress targetHost) {
@@ -675,5 +693,272 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         }
         destroyClusterProcesses();
         getSystem().close();
+    }
+
+    /////////
+
+    public static class LogFileWriter extends PrintStream {
+        protected Pattern colorEscape;
+        protected PrintWriter out;
+        protected int depth;
+
+        public LogFileWriter(OutputStream originalErr, Path path, boolean preserveColor) throws IOException {
+            super(originalErr);
+            out = new PrintWriter(Files.newBufferedWriter(path), true);
+            if (preserveColor) {
+                colorEscape = null;
+            } else {
+                colorEscape = Pattern.compile("\033\\[(38;5;\\d+?|0)m");
+            }
+        }
+
+        //overrides methods calling "write"
+        @Override
+        public void print(String s) {
+            try {
+                depth++;
+                super.print(s);
+            } finally {
+                depth--;
+            }
+            if (colorEscape != null) {
+                out.print(colorEscape.matcher(s).replaceAll(""));
+            } else {
+                out.print(s);
+            }
+        }
+
+        @Override
+        public synchronized void print(char c) {
+            try {
+                depth++;
+                super.print(c);
+            } finally {
+                depth--;
+            }
+            out.print(c);
+        }
+
+        @Override
+        public synchronized void print(boolean b) {
+            try {
+                depth++;
+                super.print(b);
+            } finally {
+                depth--;
+            }
+            out.print(b);
+        }
+
+        @Override
+        public synchronized void print(int i) {
+            try {
+                depth++;
+                super.print(i);
+            } finally {
+                depth--;
+            }
+            out.print(i);
+        }
+
+        @Override
+        public synchronized void print(long l) {
+            try {
+                depth++;
+                super.print(l);
+            } finally {
+                depth--;
+            }
+            out.print(l);
+        }
+
+        @Override
+        public synchronized void print(float f) {
+            try {
+                depth++;
+                super.print(f);
+            } finally {
+                depth--;
+            }
+            out.print(f);
+        }
+
+        @Override
+        public synchronized void print(double d) {
+            try {
+                depth++;
+                super.print(d);
+            } finally {
+                depth--;
+            }
+            out.print(d);
+        }
+
+        @Override
+        public synchronized void print(char[] s) {
+            try {
+                depth++;
+                super.print(s);
+            } finally {
+                depth--;
+            }
+            out.print(s);
+        }
+
+        @Override
+        public synchronized void print(Object obj) {
+            try {
+                depth++;
+                super.print(obj);
+            } finally {
+                depth--;
+            }
+            out.print(obj);
+        }
+
+        /// overrides methods calling print(v) + newLine()
+
+        @Override
+        public synchronized void println() {
+            try {
+                depth++;
+                super.println();
+            } finally {
+                depth--;
+            }
+            out.println();
+        }
+
+        @Override
+        public synchronized void println(boolean x) {
+            try {
+                depth++;
+                super.println(x);
+            } finally {
+                depth--;
+            }
+            out.println();
+        }
+
+        @Override
+        public synchronized void println(char x) {
+            try {
+                depth++;
+                super.println(x);
+            } finally {
+                depth--;
+            }
+            out.println();
+        }
+
+        @Override
+        public synchronized void println(int x) {
+            try {
+                depth++;
+                super.println(x);
+            } finally {
+                depth--;
+            }
+            out.println();
+        }
+
+        @Override
+        public void println(long x) {
+            try {
+                depth++;
+                super.println(x);
+            } finally {
+                depth--;
+            }
+            out.println();
+        }
+
+        @Override
+        public synchronized void println(float x) {
+            try {
+                depth++;
+                super.println(x);
+            } finally {
+                depth--;
+            }
+            out.println();
+        }
+
+        @Override
+        public synchronized void println(double x) {
+            try {
+                depth++;
+                super.println(x);
+            } finally {
+                depth--;
+            }
+            out.println();
+        }
+
+        @Override
+        public synchronized void println(char[] x) {
+            try {
+                depth++;
+                super.println(x);
+            } finally {
+                depth--;
+            }
+            out.println();
+        }
+
+        @Override
+        public synchronized void println(String x) {
+            try {
+                depth++;
+                super.println(x);
+            } finally {
+                depth--;
+            }
+            out.println();
+        }
+
+        @Override
+        public synchronized void println(Object x) {
+            try {
+                depth++;
+                super.println(x);
+            } finally {
+                depth--;
+            }
+            out.println();
+        }
+
+        ////
+
+        @Override
+        public void flush() {
+            super.flush();
+            out.flush();
+        }
+
+        @Override
+        public void close() {
+            super.close();
+            out.close();
+        }
+
+        @Override
+        public void write(int b) {
+            super.write(b);
+            if (depth == 0) {
+                out.write(b);
+            }
+        }
+
+        @Override
+        public synchronized void write(byte[] buf, int off, int len) {
+            super.write(buf, off, len);
+            if (depth == 0) {
+                for (int i = 0; i < len; ++i) {
+                    byte b = buf[off];
+                    out.write(b);
+                }
+            }
+        }
     }
 }

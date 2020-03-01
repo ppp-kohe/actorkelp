@@ -1,5 +1,7 @@
 package csl.actor.keyaggregate;
 
+import com.esotericsoftware.kryo.Kryo;
+import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 import csl.actor.cluster.MailboxPersistable;
 import csl.actor.cluster.MailboxPersistable.PersistentFileReaderSource;
@@ -167,6 +169,34 @@ public class KeyHistogramsPersistable extends KeyHistograms {
             if (h != null) {
                 h.next = top;
             }
+        }
+
+        @Override
+        public void read(Kryo kryo, Input input) {
+            super.read(kryo, input);
+            this.history = (PutIndexHistory) kryo.readClassAndObject(input);
+            this.historyEntrySize = input.readInt();
+            this.historyEntryLimit = input.readInt();
+            this.sizeLimit = input.readLong();
+            this.onMemorySize = input.readLong();
+            this.sizeRatioThreshold = input.readDouble();
+            this.randomSeed = input.readLong();
+            this.random = (Random) kryo.readClassAndObject(input);
+            this.persistedSize = input.readLong();
+        }
+
+        @Override
+        public void write(Kryo kryo, Output output) {
+            super.write(kryo, output);
+            kryo.writeClassAndObject(output, this.history);
+            output.writeInt(this.historyEntrySize);
+            output.writeInt(this.historyEntryLimit);
+            output.writeLong(this.sizeLimit);
+            output.writeLong(this.onMemorySize);
+            output.writeDouble(this.sizeRatioThreshold);
+            output.writeLong(this.randomSeed);
+            kryo.writeClassAndObject(output, this.random);
+            output.writeLong(this.persistedSize);
         }
 
         ////// config
@@ -492,6 +522,10 @@ public class KeyHistogramsPersistable extends KeyHistograms {
             return newNode;
         }
 
+        /** @return implementation field getter */
+        public PutIndexHistory getHistory() {
+            return history;
+        }
     }
 
 
@@ -659,6 +693,16 @@ public class KeyHistogramsPersistable extends KeyHistograms {
             } else {
                 return super.isEmpty();
             }
+        }
+
+        @Override
+        public void write(Kryo kryo, Output output) {
+            super.write(kryo, output);
+        }
+
+        @Override
+        public void read(Kryo kryo, Input input) {
+            super.read(kryo, input);
         }
     }
 

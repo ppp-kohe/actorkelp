@@ -54,18 +54,21 @@ public class WordCountCluster {
                 "   master true\n" +
                 String.format("   baseDir \"%s\"\n", dir) +
                 "   logColor 102\n" +
+                "   logFile true\n" +
                 "\n" +
                 "node follower1:\n" +
                 "   host \"localhost\"\n" +
                 "   port 38889\n" +
                 String.format("   baseDir \"%s\"\n", dir) +
                 "   logColor 71\n" +
+                "   logFile true\n" +
                 "\n" +
                 "node follower2:\n" +
                 "   host \"localhost\"\n" +
                 "   port 38890\n" +
                 String.format("   baseDir \"%s\"\n", dir) +
                 "   logColor 72\n" +
+                "   logFile true\n" +
                 "\n";
         Path confPath = dir.resolve("config.txt");
         Files.writeString(confPath, confData);

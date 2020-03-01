@@ -10,11 +10,12 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.time.Instant;
 import java.util.*;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 public class ConfigBase implements Serializable {
-    protected transient PrintWriter logOut;
+    protected transient Consumer<String> logOut;
 
     public static <ConfType extends ConfigBase> ConfType readConfig(Class<ConfType> type, Map<Object, Object> properties) {
         return ConfigBase.readConfig(type, "csl.actor", properties);
@@ -356,12 +357,12 @@ public class ConfigBase implements Serializable {
     }
 
     public void log(String msg) {
-        PrintWriter out = getLogOut();
+        Consumer<String> out = getLogOut();
         println(out, logMessage(msg));
     }
 
     public void log(int color, String msg) {
-        PrintWriter out = getLogOut();
+        Consumer<String> out = getLogOut();
         println(out, color, logMessage(msg));
     }
 
@@ -369,8 +370,8 @@ public class ConfigBase implements Serializable {
         return String.format("!!! [%s] %s", Instant.now(), msg);
     }
 
-    public PrintWriter getLogOut() {
-        PrintWriter out = logOut;
+    public Consumer<String> getLogOut() {
+        Consumer<String> out = logOut;
         if (out == null) {
             logOut = initLogOut();
             out = logOut;
@@ -378,16 +379,16 @@ public class ConfigBase implements Serializable {
         return out;
     }
 
-    protected PrintWriter initLogOut() {
-        return new PrintWriter(System.err, true);
+    protected Consumer<String> initLogOut() {
+        return s -> { System.err.println(s); }; //always access to err
     }
 
-    public void println(PrintWriter out, String line) {
-        out.println(toConsoleLine(line));
+    public void println(Consumer<String> out, String line) {
+        out.accept(toConsoleLine(line));
     }
 
-    public void println(PrintWriter out, int color, String line) {
-        out.println(toConsoleLine(color, line));
+    public void println(Consumer<String> out, int color, String line) {
+        out.accept(toConsoleLine(color, line));
     }
 
     public String toConsoleLine(String line) {

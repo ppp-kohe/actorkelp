@@ -29,6 +29,10 @@ public class ConfigDeployment extends ConfigBase {
     public String pathSeparator = File.pathSeparator;
     public String appNameHeader = "app";
 
+    public boolean logFile = true;
+    public String logFilePath = "%a/stderr-%h.txt";
+    public boolean logFilePreserveColor = true;
+
     public ConfigDeployment() {
     }
 
