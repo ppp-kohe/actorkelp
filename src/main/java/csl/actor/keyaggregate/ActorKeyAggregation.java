@@ -18,6 +18,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
@@ -27,6 +28,8 @@ public abstract class ActorKeyAggregation extends ActorDefault
     protected volatile ActorRef nextStage;
 
     protected volatile State state;
+
+    public static boolean logSkipTimeout = System.getProperty("csl.actor.logSkipTimeout", "true").equals("true");
 
     public ActorKeyAggregation(ActorSystem system, String name, MailboxKeyAggregation mailbox, ActorBehavior behavior, Config config, State state) {
         super(system, name, mailbox, behavior);
@@ -590,6 +593,10 @@ public abstract class ActorKeyAggregation extends ActorDefault
     protected static Map<String, Instant> errorRecords = new HashMap<>();
 
     protected void errorToLocal(Throwable ex, String info, ActorRef ref) {
+        if (logSkipTimeout && ex instanceof TimeoutException) {
+            //here, the error means failure of split or merge, and the typical reason is busyness of the target, which can be ignored
+            return;
+        }
         synchronized (this) {
             Instant last = errorRecords.get(info);
             Instant now = Instant.now();
@@ -760,7 +767,7 @@ public abstract class ActorKeyAggregation extends ActorDefault
         if (n == null) {
             n = getClass().getSimpleName() + "-" + Integer.toHexString(System.identityHashCode(this));
         }
-        return "%i-" + ActorPlacement.toOutputFileComponent(true, 30, n);
+        return "%h-" + ActorPlacement.toOutputFileComponent(true, 30, n);
     }
 
 

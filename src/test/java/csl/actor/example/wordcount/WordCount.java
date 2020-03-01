@@ -214,7 +214,7 @@ public class WordCount {
         void write(Count count) {
             try {
                 if (writer == null) {
-                    String p = Paths.get(dst, "wcout-" + getOutputFileHeader() + ".txt")
+                    String p = Paths.get(dst, "%a/wcout-" + getOutputFileHeader() + ".txt")
                             .toString();
                     Path outFile = ConfigDeployment.getPathModifier(getSystem()).get(p);
                     log("path: " + ConfigDeployment.getPathModifier(getSystem()) + ".get(" + p  +")" + "\n -> " + outFile);

@@ -123,7 +123,9 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
     protected void deployMasterAfterSystemInit(List<ClusterUnit<AppConfType>> units) throws Exception {
         System.setProperty("csl.actor.logColor", Integer.toString(master.getDeploymentConfig().getLogColorDefault()));
 
-        master.getDeploymentConfig().setPathModifierWithBaseDir(system);
+        ConfigDeployment.PathModifierHost ph = master.getDeploymentConfig().setPathModifierWithBaseDir(system);
+        ph.setApp(getAppName());
+        System.setProperty("csl.actor.path.app", ph.getApp());
 
         masterPlace = createPlace(placeType, system,
                 new ActorPlacement.PlacementStrategyRoundRobin(0));
@@ -175,19 +177,34 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
 
     protected String getJavaCommand(ClusterUnit<AppConfType> unit) throws Exception {
         return String.format(unit.getDeploymentConfig().java,
-                "-Dcsl.actor.logColor=" + unit.getAppConfig().get("logColor") + " "
-                        + getClassPathOption(unit),
+                getJavaCommandOptions(unit),
                 escape(getNodeMainType().getName()),
                 unit.getDeploymentConfig().getAddress() + " " +
-                        master.getDeploymentConfig().getAddress() + " " +
-                        escape(getPlaceType().getName()));
+                master.getDeploymentConfig().getAddress() + " " +
+                escape(getPlaceType().getName()));
+    }
+
+    protected String getJavaCommandOptions(ClusterUnit<AppConfType> unit) throws Exception {
+        ConfigDeployment.PathModifier pm = ConfigDeployment.getPathModifier(system);
+        String pathProps = "";
+        if (pm instanceof ConfigDeployment.PathModifierHost) {
+            ConfigDeployment.PathModifierHost pmh = (ConfigDeployment.PathModifierHost) pm;
+            String app = pmh.getApp();
+            if (app != null) {
+                pathProps += escape("-Dcsl.actor.path.app=" + app) + " ";
+            }
+        }
+
+        return escape("-Dcsl.actor.logColor=" + unit.getAppConfig().get("logColor")) + " " +
+                pathProps +
+                getJavaCommandOptionsClassPath(unit);
     }
 
     protected String escape(String s) {
         return "'" + s + "'";
     }
 
-    protected String getClassPathOption(ClusterUnit<AppConfType> unit) {
+    protected String getJavaCommandOptionsClassPath(ClusterUnit<AppConfType> unit) {
         String cps = "";
         if (unit.getClassPathList() != null) {
             cps = String.format("-cp '%s'", String.join(unit.getDeploymentConfig().pathSeparator, unit.getClassPathList()));
@@ -237,12 +254,13 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
     }
 
     public String getNextAppName() {
-        Instant now = Instant.now();
-        OffsetDateTime time = OffsetDateTime.ofInstant(now, ZoneOffset.UTC);
-        int milli = (time.getHour() * 60 * 60 + time.getMinute() * 60 + time.getSecond()) * 1000
-                + (time.getNano() / 1000_000);
-        return String.format("app-%s-%h",
-                time.format(DateTimeFormatter.ofPattern("uu-MM-dd")), milli);
+        String head;
+        if (master != null)  {
+            head = master.getDeploymentConfig().appNameHeader;
+        } else {
+            head = "app";
+        }
+        return ConfigDeployment.getAppName(head);
     }
 
     public List<String> sshCommand(ClusterUnit<?> unit, String appCmd) {
@@ -416,7 +434,10 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
             ActorSystemRemote system = new ActorSystemRemote();
 
             //the working directory is the baseDir
-            ConfigDeployment.setPathModifierWithBaseDir(system, ".", selfAddrObj.getHost(), selfAddrObj.getPort());
+            ConfigDeployment.PathModifierHost ph = ConfigDeployment.setPathModifierWithBaseDir(system, ".");
+            ph.setHost(selfAddrObj.getHost(), selfAddrObj.getPort());
+            String appName = System.getProperty("csl.actor.path.app", "");
+            ph.setApp(appName);
 
             system.startWithoutWait(selfAddrObj);
             ActorPlacement.ActorPlacementDefault p = createPlace(placeType, system, new ActorPlacement.PlacementStrategyUndertaker());
