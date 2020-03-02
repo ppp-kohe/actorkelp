@@ -470,7 +470,7 @@ public abstract class ActorKeyAggregation extends ActorDefault
             ActorKeyAggregation a1 = target.internalCreateClone(routerRef);
             ActorKeyAggregation a2 = target.internalCreateClone(routerRef);
             List<Object> splitPoints = target.getMailboxAsKeyAggregation()
-                    .splitMessageHistogramIntoReplicas(a1.getMailboxAsKeyAggregation(), a2.getMailboxAsKeyAggregation());
+                    .splitMessageHistogramIntoReplicas(getSystem(), a1.getMailboxAsKeyAggregation(), a2.getMailboxAsKeyAggregation());
             if (routerRef != target) {
                 target.internalCancel();
             }
@@ -799,7 +799,7 @@ public abstract class ActorKeyAggregation extends ActorDefault
         }
 
         protected ActorKeyAggregation init(ActorKeyAggregation a) {
-            a.getMailboxAsKeyAggregation().deserializeFrom(this);
+            a.getMailboxAsKeyAggregation().deserializeFrom(a.getSystem(), this);
             a.initSerializedInternalState(internalState);
             a.setNextStage(nextStage);
             return a;

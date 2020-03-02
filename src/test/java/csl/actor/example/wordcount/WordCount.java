@@ -75,6 +75,20 @@ public class WordCount {
         }
     }
 
+    public static class DebugSplitLeaf extends KeyAggregationRoutingSplit.RoutingSplitLeaf {
+        public DebugSplitLeaf(ActorRef actor, SplitPath path) {
+            super(actor, path);
+            if (actor == null) {
+                throw new RuntimeException("null actor: " + path);
+            }
+        }
+
+        @Override
+        public RoutingSplitLeaf newLeaf(ActorRef actor, SplitPath path) {
+            return new DebugSplitLeaf(actor, path);
+        }
+    }
+
     public static class WordCountReducer extends ActorKeyAggregation {
         PrintWriter writer;
         String dst;
@@ -88,8 +102,13 @@ public class WordCount {
             super(system, name, config);
             this.dst = dst;
         }
+        /*
+        @Override
+        public KeyAggregationRoutingSplit.RoutingSplitLeaf newSplitLeaf(ActorRef actor, KeyAggregationRoutingSplit.SplitPath path) {
+            return new DebugSplitLeaf(actor, path);
+        }*/
 
-//        @Override
+        //        @Override
 //        protected StateSplitRouter initStateRouter() {
 //            return new KeyHistogramSizeChecker.StateSplitRouterSizeDebug();
 //        }
@@ -97,7 +116,7 @@ public class WordCount {
         @Override
         protected ActorBehavior initBehavior() {
             return behaviorBuilder()
-                    .matchKeyFactory(new DebugBehavior.DebugFactory())
+                    //.matchKeyFactory(new DebugBehavior.DebugFactory())
                     .matchKey(Count.class, Count::getWord)
                         .fold((k,vs) -> vs.stream().reduce(new Count(k, 0), Count::add))
                         .eventually()
@@ -126,7 +145,7 @@ public class WordCount {
         volatile State state2;
 
         AtomicLong count = new AtomicLong();
-
+        /*
         @Override
         protected void processMessage(Message<?> message) {
             boolean err = false;
@@ -170,7 +189,7 @@ public class WordCount {
             thread1 = null;
             state1 = null;
             state2= null;
-        }
+        }*/
         private void printStack() {
             synchronized (System.err) {
                 System.err.println("thread1 stack: ");
@@ -237,7 +256,7 @@ public class WordCount {
             printStatus("phaseEnd: " + phaseKey);
             close();
         }
-
+        /*
         @Override
         public KeyAggregationRoutingSplit internalCreateSplitNode(KeyAggregationRoutingSplit.SplitOrMergeContext context,
                                                                   KeyAggregationRoutingSplit old,
@@ -250,7 +269,7 @@ public class WordCount {
                 ActorKeyAggregation a1 = target.internalCreateClone(routerRef);
                 ActorKeyAggregation a2 = target.internalCreateClone(routerRef);
                 List<Object> splitPoints = target.getMailboxAsKeyAggregation()
-                        .splitMessageHistogramIntoReplicas(a1.getMailboxAsKeyAggregation(), a2.getMailboxAsKeyAggregation());
+                        .splitMessageHistogramIntoReplicas(getSystem(), a1.getMailboxAsKeyAggregation(), a2.getMailboxAsKeyAggregation());
 
                 save(new Object[]{a1.getMailboxAsKeyAggregation().getHistogram(0),
                                 a2.getMailboxAsKeyAggregation().getHistogram(0)},
@@ -287,7 +306,7 @@ public class WordCount {
                 merged.getMailboxAsKeyAggregation().unlockRemainingProcesses(merged);
                 getMailboxAsKeyAggregation().unlockRemainingProcesses(this);
             }
-        }
+        }*/
 
         @Override
         protected Serializable toSerializableInternalState() {

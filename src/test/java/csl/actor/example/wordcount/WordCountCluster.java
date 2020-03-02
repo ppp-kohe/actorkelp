@@ -62,6 +62,8 @@ public class WordCountCluster {
                 String.format("   baseDir \"%s\"\n", dir) +
                 "   logColor 71\n" +
                 "   logFile true\n" +
+                "   persistMailboxPath \"%a/mbox\"\n" +
+                "   persistMailboxOnMemorySize 1_000\n" +
                 "\n" +
                 "node follower2:\n" +
                 "   host \"localhost\"\n" +
@@ -69,6 +71,8 @@ public class WordCountCluster {
                 String.format("   baseDir \"%s\"\n", dir) +
                 "   logColor 72\n" +
                 "   logFile true\n" +
+                "   persistMailboxPath \"%a/mbox\"\n" +
+                "   persistMailboxOnMemorySize 1_000\n" +
                 "\n";
         Path confPath = dir.resolve("config.txt");
         Files.writeString(confPath, confData);

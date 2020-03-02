@@ -60,11 +60,10 @@ public class ActorPlacementKeyAggregation extends ClusterDeployment.ActorPlaceme
                 getSystem().send(new Message.MessageNone(a));
                 return a;
             } catch (Exception ex) {
-                ex.printStackTrace();
-                return null;
+                throw new RuntimeException(ex);
             }
         } else {
-            return null;
+            throw new RuntimeException("failure: " + s);
         }
     }
 

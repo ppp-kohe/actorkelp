@@ -4,6 +4,7 @@ import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.KryoSerializable;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
+import csl.actor.ActorSystem;
 
 import java.io.Serializable;
 import java.util.*;
@@ -15,8 +16,8 @@ public class KeyHistograms {
         return new HistogramTree(comparator, treeLimit);
     }
 
-    public HistogramTree init(HistogramTree tree) {
-        return tree;
+    public HistogramTree init(ActorSystem system, HistogramTree tree) {
+        return tree.init(system);
     }
 
     public static class HistogramTree implements Serializable, KryoSerializable {
@@ -263,6 +264,10 @@ public class KeyHistograms {
             output.writeLong(this.leafSize);
             output.writeLong(this.leafSizeNonZero);
             output.writeInt(this.treeLimit);
+        }
+
+        public HistogramTree init(ActorSystem system) {
+            return this;
         }
     }
 
@@ -841,6 +846,10 @@ public class KeyHistograms {
 
         public abstract List<HistogramLeafList> getStructList();
         public abstract void setStructList(int i, HistogramLeafList list);
+
+        public HistogramNodeLeaf load(HistogramPutContext context) {
+            return this;
+        }
     }
 
     public static class HistogramNodeLeafMap extends HistogramNodeLeaf {
@@ -938,6 +947,15 @@ public class KeyHistograms {
                 return putPosition;
             }
         }
+
+        public Object[] take(HistogramTree tree, HistogramNodeLeaf leaf) {
+            if (putRequiredSize <= leaf.size()) {
+                HistogramNodeLeafMap m = (HistogramNodeLeafMap) leaf.load(this);
+                return m.take(putRequiredSize, tree);
+            } else {
+                return null;
+            }
+        }
     }
 
     public static class HistogramLeafList implements /*Iterable<Object>, */Serializable, KryoSerializable {
@@ -1005,7 +1023,11 @@ public class KeyHistograms {
 
         @Override
         public void write(Kryo kryo, Output output) {
-            iterator().forEachRemaining(o -> kryo.writeClassAndObject(output, o));
+            HistogramLeafCell cell = head;
+            while (cell != null) {
+                kryo.writeClassAndObject(output, cell);
+                cell = cell.next;
+            }
             kryo.writeClassAndObject(output, new HistogramLeafCellSerializedEnd());
         }
 
@@ -1013,8 +1035,8 @@ public class KeyHistograms {
         public void read(Kryo kryo, Input input) {
             Object o = kryo.readClassAndObject(input);
             HistogramLeafCell prev = null;
-            while (!(o instanceof HistogramLeafCellSerializedEnd)) {
-                HistogramLeafCell cell = new HistogramLeafCell(o);
+            while (o instanceof HistogramLeafCell) {
+                HistogramLeafCell cell = (HistogramLeafCell) o;
                 if (prev == null) {
                     prev = cell;
                     head = prev;
@@ -1030,12 +1052,22 @@ public class KeyHistograms {
 
     public static class HistogramLeafCellSerializedEnd implements Serializable {}
 
-    public static class HistogramLeafCell implements Serializable {
+    public static class HistogramLeafCell implements Serializable, KryoSerializable {
         public Object value;
         public HistogramLeafCell next;
 
         public HistogramLeafCell(Object value) {
             this.value = value;
+        }
+
+        @Override
+        public void write(Kryo kryo, Output output) {
+            kryo.writeClassAndObject(output, value);
+        }
+
+        @Override
+        public void read(Kryo kryo, Input input) {
+            value = kryo.readClassAndObject(input);
         }
     }
 }

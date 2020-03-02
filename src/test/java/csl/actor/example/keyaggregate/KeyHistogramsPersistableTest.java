@@ -9,6 +9,7 @@ import csl.actor.cluster.MailboxPersistable;
 import csl.actor.remote.KryoBuilder;
 
 import java.io.ByteArrayInputStream;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Objects;
 import java.util.function.BiPredicate;
@@ -19,6 +20,7 @@ public class KeyHistogramsPersistableTest {
         new KeyHistogramsPersistableTest().runPersistTree();
         new KeyHistogramsPersistableTest().runPersistLargeLeaves();
         new KeyHistogramsPersistableTest().runAuto();
+        new KeyHistogramsPersistableTest().runAutoSerialize();
     }
 
     private long fail;
@@ -108,15 +110,47 @@ public class KeyHistogramsPersistableTest {
         check(tree, ctx);
     }
 
+    public void runAutoSerialize() {
+        System.err.println("------------- runAutoSerialize");
+        KryoBuilder.SerializerPool sp = new KryoBuilder.SerializerPoolDefault(null);
+        KeyHistogramsPersistable kh = new KeyHistogramsPersistable(new Conf(1000), new MailboxPersistable.PersistentFileManager("target/debug-persist",
+                sp, Paths::get));
+        KeyHistogramsPersistable.HistogramTreePersistable tree = kh.create(new ActorBehaviorBuilderKeyAggregation.KeyComparatorDefault<>(), 3);
+
+        KeyHistograms.HistogramPutContextMap ctx = new KeyHistograms.HistogramPutContextMap();
+        input(tree, ctx);
+
+//        try (ActorSystemDefault sys = new ActorSystemDefault()) {
+//            ActorToGraph save = new ActorToGraph(sys, new File("target/debug-persist/tree.dot"), null)
+//                    .setSaveLeafNode(true);
+//            save.save(null, tree, 0);
+//            save.finish();
+//        }
+
+        Output out = new Output(1_000_000);
+        sp.write(out, tree);
+        long n = out.total();
+        byte[] data = out.getBuffer();
+        System.err.println(String.format("persisted: %,d bytes", n));
+        Input in = new Input(data, 0, (int) n);
+        KeyHistogramsPersistable.HistogramTreePersistable p = (KeyHistogramsPersistable.HistogramTreePersistable) sp.read(in);
+        p.init(null);
+        check(p, ctx);
+    }
+
 
     private void input(KeyHistogramsPersistable.HistogramTreePersistable tree, KeyHistograms.HistogramPutContextMap ctx) {
         ctx.putPosition = 0;
         ctx.putRequiredSize = 2;
         String key = "abcdefghik";
+        boolean consumed = false;
         for (int i = 0; i < 10_000; ++i) {
             String k = "" + key.charAt(i % key.length());
             ctx.putValue = k + (i / key.length());
             tree.put(k, ctx);
+            if (!consumed && tree.getPersistedSize() > 0) {
+                consumed = travConsume(tree, tree.getRoot(), ctx);
+            }
         }
 
         log("input j");
@@ -124,6 +158,25 @@ public class KeyHistogramsPersistableTest {
             ctx.putValue = "j" + i;
             tree.put("j", ctx);
         }
+    }
+
+    private boolean travConsume(KeyHistogramsPersistable.HistogramTreePersistable tree, KeyHistograms.HistogramNode node,
+                             KeyHistograms.HistogramPutContextMap ctx) {
+        if (node instanceof KeyHistograms.HistogramNodeTree) {
+            for (KeyHistograms.HistogramNode n : ((KeyHistograms.HistogramNodeTree) node).getChildren()) {
+                if (n.keyIn(tree.getComparator(), "a") == 0) {
+                    return travConsume(tree, n, ctx);
+                }
+            }
+            return false;
+        } else if (node instanceof KeyHistogramsPersistable.HistogramNodeLeafOnStorage) {
+            KeyHistograms.HistogramNodeLeaf l = ((KeyHistogramsPersistable.HistogramNodeLeafOnStorage) node).load(ctx);
+            if (l.size() > 3) {
+                ctx.take(tree, l);
+                return true;
+            }
+        }
+        return false;
     }
 
     private void check(KeyHistogramsPersistable.HistogramTreePersistable tree, KeyHistograms.HistogramPutContextMap ctx) {
@@ -202,6 +255,11 @@ public class KeyHistogramsPersistableTest {
         @Override
         public long histogramPersistOnMemorySize() {
             return 3;
+        }
+
+        @Override
+        public long histogramPersistRandomSeed() {
+            return 1235;
         }
     }
 }

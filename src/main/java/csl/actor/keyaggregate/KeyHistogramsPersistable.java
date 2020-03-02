@@ -3,6 +3,7 @@ package csl.actor.keyaggregate;
 import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
+import csl.actor.ActorSystem;
 import csl.actor.cluster.MailboxPersistable;
 import csl.actor.cluster.MailboxPersistable.PersistentFileReaderSource;
 import csl.actor.remote.KryoBuilder;
@@ -10,7 +11,6 @@ import csl.actor.remote.KryoBuilder;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.io.Serializable;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -40,10 +40,15 @@ public class KeyHistogramsPersistable extends KeyHistograms {
     }
 
     @Override
-    public HistogramTree init(HistogramTree tree) {
-        HistogramTreePersistable p = (HistogramTreePersistable) tree;
-        p.init(persistent, condition);
-        return super.init(tree);
+    public HistogramTree init(ActorSystem system, HistogramTree tree) {
+        if (tree instanceof HistogramTreePersistable) {
+            HistogramTreePersistable p = (HistogramTreePersistable) tree;
+            p.init(persistent, condition);
+            return p;
+        } else {
+            return new HistogramTreePersistable(tree, config, persistent, condition);
+        }
+
     }
 
     public interface HistogramTreePersistableConfig {
@@ -127,11 +132,29 @@ public class KeyHistogramsPersistable extends KeyHistograms {
             this.persistent = persistent;
             this.condition = condition;
             initHistory();
+            initPersistentToTree();
+        }
+
+
+        public HistogramTreePersistable(HistogramTree tree,
+                                        HistogramTreePersistableConfig config,
+                                        MailboxPersistable.PersistentFileManager persistent,
+                                        PersistentConditionHistogram condition) {
+            super(tree.getRoot(), tree.getComparator(), tree.getTreeLimit());
+            this.leafSize = tree.leafSize;
+            this.leafSizeNonZero = tree.leafSizeNonZero;
+            this.completed.addAll(tree.getCompleted());
+            initConfig(config);
+            this.persistent = persistent;
+            this.condition = condition;
+            initHistory();
+            initPersistentToTree();
         }
 
         public void init(MailboxPersistable.PersistentFileManager persistent, PersistentConditionHistogram condition) {
             if (this.persistent == null) {
                 this.persistent = persistent;
+                initPersistentToTree();
             }
             if (this.condition == null) {
                 this.condition = condition;
@@ -168,6 +191,31 @@ public class KeyHistogramsPersistable extends KeyHistograms {
             history = h;
             if (h != null) {
                 h.next = top;
+            }
+        }
+
+        @Override
+        public HistogramTree init(ActorSystem system) {
+            persistent = MailboxPersistable.getPersistentFile(system, () -> "");
+            initPersistentToTree();
+            return super.init(system);
+        }
+
+        protected void initPersistentToTree() {
+            if (root != null && persistent != null) {
+                initPersistentToTree(root);
+            }
+        }
+
+        protected void initPersistentToTree(HistogramNode node) { //set persistent to upper nodes
+            if (node instanceof HistogramNodeOnStorage) {
+                PersistentFileReaderSource src = ((HistogramNodeOnStorage) node).getSource();
+                if (src.getManager() == null) {
+                    src.setManager(persistent);
+                }
+            } else if (node instanceof HistogramNodeTree) {
+                ((HistogramNodeTree) node).getChildren()
+                        .forEach(this::initPersistentToTree);
             }
         }
 
@@ -240,12 +288,14 @@ public class KeyHistogramsPersistable extends KeyHistograms {
         }
 
         protected void checkPersist() {
-            HistogramPersistentOperation op = condition.needToPersist(this,
-                    getTreeSize() - persistedSize, leafSizeNonZeroToSizeRatio());
-            if (op.equals(HistogramPersistentOperation.LargeLeaves)) {
-                persistLargeLeaves();
-            } else if (op.equals(HistogramPersistentOperation.Tree)) {
-                persistTree();
+            if (condition != null) {
+                HistogramPersistentOperation op = condition.needToPersist(this,
+                        getTreeSize() - persistedSize, leafSizeNonZeroToSizeRatio());
+                if (op.equals(HistogramPersistentOperation.LargeLeaves)) {
+                    persistLargeLeaves();
+                } else if (op.equals(HistogramPersistentOperation.Tree)) {
+                    persistTree();
+                }
             }
         }
 
@@ -271,9 +321,11 @@ public class KeyHistogramsPersistable extends KeyHistograms {
 
         public void persistLargeLeaves(long keepSize) {
             if (root != null) {
-                try (MailboxPersistable.PersistentFileWriter w = getPersistentManager()
-                        .createWriter("histleaf")) {
-                    persistLargeLeaves(root, w, keepSize);
+                MailboxPersistable.PersistentFileManager m = getPersistentManager();
+                if (m != null) {
+                    try (MailboxPersistable.PersistentFileWriter w = m.createWriter("histleaf")) {
+                        persistLargeLeaves(root, w, keepSize);
+                    }
                 }
             }
         }
@@ -361,10 +413,12 @@ public class KeyHistogramsPersistable extends KeyHistograms {
 
         public void persistTree(long persistingLimit, float... distribution) {
             MailboxPersistable.PersistentFileManager m = getPersistentManager();
-            try (TreeWriting w = new TreeWriting(m, m.createPath("histtree"))) {
-                persistTreeNode(root, 0, 1f, distribution, persistingLimit, w);
-            } catch (Exception ex) {
-                throw new RuntimeException(ex);
+            if (m != null) {
+                try (TreeWriting w = new TreeWriting(m, m.createPath("histtree"))) {
+                    persistTreeNode(root, 0, 1f, distribution, persistingLimit, w);
+                } catch (Exception ex) {
+                    throw new RuntimeException(ex);
+                }
             }
         }
 
@@ -719,8 +773,10 @@ public class KeyHistogramsPersistable extends KeyHistograms {
         protected PersistentFileReaderSourceWithSize source; //offset: listPointer
         protected transient MailboxPersistable.PersistentFileReader reader;
         protected HistogramLeafCellOnStorageFile current;
-        protected Object next;
+        protected Object nextValue;
         protected boolean finish = false;
+        protected long readCount = 0;
+        protected long skipCount = 0;
 
         public HistogramLeafCellOnStorageFile(PersistentFileReaderSourceWithSize source) {
             this.value = source;
@@ -728,7 +784,7 @@ public class KeyHistogramsPersistable extends KeyHistograms {
         }
 
         public boolean hasNext() {
-            return next != null || !finish;
+            return nextValue != null || !finish;
         }
 
         @Override
@@ -739,21 +795,30 @@ public class KeyHistogramsPersistable extends KeyHistograms {
         public void reset() {
             finish = false;
             reader = null;
-            next = null;
+            nextValue = null;
         }
 
         @Override
         public Object readNext(HistogramTree tree) {
             if (finish) {
-                return next;
+                return nextValue;
             } else {
-                if (reader == null) { //first
-                    next = lookAhead(tree);
+                while (skipCount > 0) {
+                    readNextBody(tree);
+                    skipCount--;
                 }
-                Object n = next;
-                next = lookAhead(tree);
-                return n;
+                return readNextBody(tree);
             }
+        }
+
+        protected Object readNextBody(HistogramTree tree) {
+            if (reader == null) { //first
+                nextValue = lookAhead(tree);
+            }
+            Object n = nextValue;
+            nextValue = lookAhead(tree);
+            ++readCount;
+            return n;
         }
 
         public Object lookAhead(HistogramTree tree) {
@@ -767,6 +832,9 @@ public class KeyHistogramsPersistable extends KeyHistograms {
                     }
                 }
                 if (reader == null) {
+                    if (source.getManager() == null && tree instanceof HistogramTreePersistable) {
+                        source.setManager(((HistogramTreePersistable) tree).getPersistentManager());
+                    }
                     reader = source.createReader();
                 }
                 Object v = reader.next();
@@ -795,6 +863,22 @@ public class KeyHistogramsPersistable extends KeyHistograms {
         @Override
         public String toString() {
             return getClass().getSimpleName() + "(" + source + (reader == null ? "" : "," + reader) + ")";
+        }
+
+        @Override
+        public void write(Kryo kryo, Output output) {
+            super.write(kryo, output);
+            output.writeBoolean(this.finish);
+            output.writeLong(readCount);
+            kryo.writeClassAndObject(output, source);
+        }
+
+        @Override
+        public void read(Kryo kryo, Input input) {
+            super.read(kryo, input);
+            finish = input.readBoolean();
+            skipCount = input.readLong();
+            this.source = (PersistentFileReaderSourceWithSize) kryo.readClassAndObject(input);
         }
     }
 
@@ -832,6 +916,7 @@ public class KeyHistogramsPersistable extends KeyHistograms {
         HistogramNode load(HistogramPutContext context);
         NodeTreeData toData();
         PersistentFileReaderSource getSource();
+        MailboxPersistable.PersistentFileManager getFileManager();
     }
 
     public static class HistogramNodeTreeOnStorage extends HistogramNodeTree implements HistogramNodeOnStorage {
@@ -910,9 +995,20 @@ public class KeyHistogramsPersistable extends KeyHistograms {
             return this;
         }
 
+        @Override
+        public MailboxPersistable.PersistentFileManager getFileManager() {
+            MailboxPersistable.PersistentFileManager m = source.getManager();
+            if (m == null && parent instanceof HistogramNodeOnStorage) {
+                m = ((HistogramNodeOnStorage) parent).getFileManager();
+                source.setManager(m);
+            }
+            return m;
+        }
+
         protected void load() {
             if (children.isEmpty()) {
                 ArrayList<HistogramNode> cs = new ArrayList<>();
+                getFileManager(); //setup manager for reading
                 try (MailboxPersistable.PersistentFileReader r = source.createReader()) {
                     long thisSibling = r.nextLong(); //long sibling
                     NodeTreeData thisData = (NodeTreeData) r.next(); //NodeTreData
@@ -1027,7 +1123,18 @@ public class KeyHistogramsPersistable extends KeyHistograms {
         }
 
         @Override
-        public HistogramNode load(HistogramPutContext context) {
+        public MailboxPersistable.PersistentFileManager getFileManager() {
+            MailboxPersistable.PersistentFileManager m = source.getManager();
+            if (m == null && parent instanceof HistogramNodeOnStorage) {
+                m = ((HistogramNodeOnStorage) parent).getFileManager();
+                source.setManager(m);
+            }
+            return m;
+        }
+
+        @Override
+        public HistogramNodeLeaf load(HistogramPutContext context) {
+            getFileManager();
             try (MailboxPersistable.PersistentFileReader r = source.createReader()) {
                 long thisSibling = r.nextLong(); //long sibling
                 NodeTreeData thisData = (NodeTreeData) r.next(); //NodeTreeData
@@ -1070,6 +1177,11 @@ public class KeyHistogramsPersistable extends KeyHistograms {
                     }
                 }
                 leaf.setParent(getParent());
+                List<HistogramNode> ns = getParent().getChildren();
+                int idx = ns.indexOf(this);
+                if (idx >= 0) {
+                    ns.set(idx, leaf);
+                }
                 return leaf;
             } catch (Exception ex) {
                 throw new RuntimeException(ex);
