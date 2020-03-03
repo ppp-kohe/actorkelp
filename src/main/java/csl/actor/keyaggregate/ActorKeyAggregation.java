@@ -367,11 +367,15 @@ public abstract class ActorKeyAggregation extends ActorDefault
 
     @Override
     public synchronized boolean processMessageNext() { //TODO remove lock
-        if (!isRouterParallelRouting() &&
-                getMailboxAsKeyAggregation().processHistogram()) {
-            return true;
+        boolean pr = isRouterParallelRouting();
+        try {
+            if (!pr && getMailboxAsKeyAggregation().processHistogram()) {
+                return true;
+            }
+            return super.processMessageNext();
+        } catch (Throwable th) {
+            throw new RuntimeException(String.format("%s: parallelRouting=%s", this, pr), th);
         }
-        return super.processMessageNext();
     }
 
     @Override

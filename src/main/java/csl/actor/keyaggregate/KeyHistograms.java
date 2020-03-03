@@ -384,6 +384,10 @@ public class KeyHistograms {
         int height();
         HistogramNode increaseHeight(int heightDelta);
 
+        default HistogramNode load(HistogramPutContext context) {
+            return this;
+        }
+
         HistogramNode put(KeyComparator<?> comparator, Object key, HistogramPutContext context);
 
         /**
@@ -438,6 +442,10 @@ public class KeyHistograms {
             updateChildren();
         }
 
+        /**
+         * @return the list of children. the returned list is actual reference of the node.
+         *   elements in the list might not yet be loaded.
+         */
         public List<HistogramNode> getChildren() {
             return children;
         }
@@ -545,13 +553,18 @@ public class KeyHistograms {
         }
 
         protected HistogramNode putChildAt(KeyComparator<?> comparator, Object key, HistogramPutContext context, int index) {
-            return children.get(index).put(comparator, key, context);
+            HistogramNode child = children.get(index);
+            HistogramNode newChild = child.load(context);
+            if (newChild != child) {
+                children.set(index, newChild);
+            }
+            return newChild.put(comparator, key, context);
         }
 
         protected HistogramNode split() {
             int n = children.size() / 2;
             List<HistogramNode> newChildren = new ArrayList<>(children.subList(n, children.size()));
-            HistogramNode l = new HistogramNodeTree(height, new ArrayList<>(children.subList(0, n)));
+            HistogramNode l = createNodeTree(height, new ArrayList<>(children.subList(0, n)));
             this.children = newChildren;
             updateChildren();
             return l;
@@ -620,6 +633,10 @@ public class KeyHistograms {
             return new HistogramNodeTree(height, treeLimit, children);
         }
 
+        protected HistogramNodeTree createNodeTree(int height, List<HistogramNode> children) {
+            return new HistogramNodeTree(height, children);
+        }
+
         protected void updateChildren() {
             long size = 0;
             for (HistogramNode n : children) {
@@ -652,7 +669,7 @@ public class KeyHistograms {
                     this.children = rights;
                     updateChildren();
                     if (!lefts.isEmpty()) {
-                        return new HistogramNodeTree(height, lefts);
+                        return createNodeTree(height, lefts);
                     } else {
                         return null;
                     }

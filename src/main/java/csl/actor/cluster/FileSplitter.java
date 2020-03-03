@@ -65,7 +65,7 @@ public class FileSplitter {
 
     public FileSplit getTopSplit(String path) throws IOException {
         FileSplit s = new FileSplit(path);
-        s.fileLength = Files.size(pathModifier.get(s.path));
+        s.fileLength = Files.size(pathModifier.getExpanded(s.path));
         s.splitLength = getSplitLength(path, s.fileLength);
         s.splitIndex = 0;
         return s;
@@ -232,7 +232,7 @@ public class FileSplitter {
             if (file != null) {
                 close();
             }
-            actualPath = pathModifier.get(split.path);
+            actualPath = pathModifier.getExpanded(split.path);
             RandomAccessFile f = new RandomAccessFile(actualPath.toFile(), "r");
             if (buffer == null) {
                 buffer = ByteBuffer.allocate(4096);

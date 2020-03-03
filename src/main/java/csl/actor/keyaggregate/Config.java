@@ -7,7 +7,7 @@ public class Config extends ConfigBase {
 
     public int mailboxThreshold = 1000;
     public int mailboxTreeSize = 32;
-    public float lowerBoundThresholdFactor = 0.1f;
+    public float lowerBoundThresholdFactor = 0.001f;
     public int minSizeOfEachMailboxSplit = 10;
     public float maxParallelRoutingThresholdFactor = 5.0f;
     public int historyEntrySize = 10;

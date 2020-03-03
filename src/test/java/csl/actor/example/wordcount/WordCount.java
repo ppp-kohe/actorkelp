@@ -235,7 +235,7 @@ public class WordCount {
                 if (writer == null) {
                     String p = Paths.get(dst, "%a/wcout-" + getOutputFileHeader() + ".txt")
                             .toString();
-                    Path outFile = ConfigDeployment.getPathModifier(getSystem()).get(p);
+                    Path outFile = ConfigDeployment.getPathModifier(getSystem()).getExpanded(p);
                     log("path: " + ConfigDeployment.getPathModifier(getSystem()) + ".get(" + p  +")" + "\n -> " + outFile);
                     Files.createDirectories(outFile.getParent());
                     writer = new PrintWriter(new FileWriter(outFile.toFile()));

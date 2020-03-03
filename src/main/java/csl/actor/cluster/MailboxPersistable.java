@@ -1,10 +1,8 @@
 package csl.actor.cluster;
 
-import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.KryoException;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
-import com.esotericsoftware.kryo.util.Pool;
 import csl.actor.*;
 import csl.actor.remote.ActorSystemRemote;
 import csl.actor.remote.KryoBuilder;
@@ -394,11 +392,11 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
                 ++fileCount;
                 c = fileCount;
             }
-            return p;
+            return pathModifier.expandPath(p);
         }
 
-        public Path getPath(String path) {
-            Path p = pathModifier.get(path);
+        public Path getPath(String pathExpanded) {
+            Path p = pathModifier.get(pathExpanded);
             Path dir = p.getParent();
             if (dir != null && !Files.exists(dir)) {
                 try {
@@ -418,15 +416,15 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
     public static class PersistentFileEnd implements Serializable {}
 
     public static class PersistentFileWriter implements AutoCloseable {
-        protected String path;
+        protected String pathExpanded;
         protected PersistentFileManager manager;
         protected Output output;
         protected KryoBuilder.SerializerFunction serializer;
 
-        public PersistentFileWriter(String path, PersistentFileManager manager) throws IOException  {
-            this.path = path;
+        public PersistentFileWriter(String pathExpanded, PersistentFileManager manager) throws IOException  {
+            this.pathExpanded = pathExpanded;
             this.manager = manager;
-            output = new Output(Files.newOutputStream(manager.getPath(path)));
+            output = new Output(Files.newOutputStream(manager.getPath(pathExpanded)));
             serializer = manager.getSerializer();
         }
 
@@ -439,7 +437,7 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
         }
 
         public PersistentFileReaderSource createReaderSourceFromCurrentPosition() {
-            return new PersistentFileReaderSource(path, position(), manager);
+            return new PersistentFileReaderSource(pathExpanded, position(), manager);
         }
 
         @Override
@@ -450,12 +448,12 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
     }
 
     public static class PersistentFileReaderSource implements Serializable {
-        protected String path;
+        protected String pathExpanded;
         protected long offset;
         protected transient PersistentFileManager manager;
 
-        public PersistentFileReaderSource(String path, long offset, PersistentFileManager manager) {
-            this.path = path;
+        public PersistentFileReaderSource(String pathExpanded, long offset, PersistentFileManager manager) {
+            this.pathExpanded = pathExpanded;
             this.offset = offset;
             this.manager = manager;
         }
@@ -470,24 +468,24 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
 
         public PersistentFileReader createReader() {
             try {
-                return new PersistentFileReader(path, offset, manager);
+                return new PersistentFileReader(pathExpanded, offset, manager);
             } catch (IOException ex) {
                 throw new RuntimeException(ex);
             }
         }
 
         public PersistentFileReaderSource newSource(long offset) {
-            return new PersistentFileReaderSource(path, offset, manager);
+            return new PersistentFileReaderSource(pathExpanded, offset, manager);
         }
 
         @Override
         public String toString() {
-            return String.format("source(path=%s,offset=%,d)", path, offset);
+            return String.format("source(path=%s,offset=%,d)", pathExpanded, offset);
         }
     }
 
     public static class PersistentFileReader implements AutoCloseable {
-        protected String path;
+        protected String pathExpanded;
         protected PersistentFileManager manager;
         protected KryoBuilder.SerializerFunction serializer;
         protected Input input;
@@ -496,11 +494,11 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
         protected InputStream inputStream;
         protected int bufferSize = 4096;
 
-        public PersistentFileReader(String path, long offset, PersistentFileManager manager) throws IOException {
-            this.path = path;
+        public PersistentFileReader(String pathExpanded, long offset, PersistentFileManager manager) throws IOException {
+            this.pathExpanded = pathExpanded;
             this.manager = manager;
             this.serializer = manager.getSerializer();
-            inputStream = new FileInputStream(manager.getPath(path).toFile()); //Files.newInputStream(path).skip(n) is slow
+            inputStream = new FileInputStream(manager.getPath(pathExpanded).toFile()); //Files.newInputStream(path).skip(n) is slow
             this.offset = offset;
             inputStream.skip(offset);
             this.position = offset;
@@ -537,7 +535,7 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
 
         @Override
         public String toString() {
-            return String.format("reader(path=%s,offset=%,d,pos=%,d)", path, offset, position());
+            return String.format("reader(path=%s,offset=%,d,pos=%,d)", pathExpanded, offset, position());
         }
     }
 

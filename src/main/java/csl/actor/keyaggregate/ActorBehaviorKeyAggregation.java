@@ -938,11 +938,7 @@ public class ActorBehaviorKeyAggregation {
             List<Object> vs = new ArrayList<>(consuming);
             try {
                 for (int i = 0; i < consuming; ++i) {
-                    Object v = values.poll(tree);
-                    if (v == null) {
-                        break;
-                    }
-                    vs.add(v);
+                    vs.add(values.poll(tree));
                 }
             } catch (Exception ex) {
                 throw new RuntimeException(String.format("size=%,d, consuming=%,d actual=%,d required=%,d", size(), consuming, vs.size(), requiredSize), ex);

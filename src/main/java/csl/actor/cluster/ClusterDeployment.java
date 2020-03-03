@@ -15,10 +15,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.attribute.FileTime;
-import java.time.Instant;
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
-import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.jar.JarEntry;
@@ -122,7 +118,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
 
     public static void setLogFile(ConfigDeployment conf, ConfigDeployment.PathModifier pm) throws Exception {
         if (conf.logFile) {
-            Path p = pm.get(conf.logFilePath);
+            Path p = pm.getExpanded(conf.logFilePath);
             Path parent = p.getParent();
             if (parent != null && !Files.exists(parent)) {
                 Files.createDirectories(parent);
@@ -628,6 +624,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
     public CompletableFuture<?> loadAndSendToActor(ActorRef target, String serializedMailboxPath) {
         return ResponsiveCalls.sendTaskConsumer(getSystem(), target, (a,s) -> {
             //temporary manager
+            //TODO the serializedMailbxPath is expanded ?
             MailboxPersistable.PersistentFileManager m = MailboxPersistable.createPersistentFile(serializedMailboxPath, a.getSystem());
             MailboxPersistable.MessageOnStorage msg = new MailboxPersistable.MessageOnStorageFile(
                     new MailboxPersistable.PersistentFileReaderSource(serializedMailboxPath, 0, m));

@@ -1,7 +1,6 @@
 package csl.actor.keyaggregate;
 
 import csl.actor.*;
-import csl.actor.cluster.MailboxPersistable;
 
 import java.time.Duration;
 import java.time.Instant;

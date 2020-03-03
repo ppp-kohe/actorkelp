@@ -91,6 +91,14 @@ public class ConfigDeployment extends ConfigBase {
 
     public interface PathModifier {
         Path get(String path);
+
+        default Path getExpanded(String path) {
+            return get(expandPath(path));
+        }
+
+        default String expandPath(String path) {
+            return path;
+        }
     }
 
     @Override
@@ -173,9 +181,13 @@ public class ConfigDeployment extends ConfigBase {
 
         @Override
         public Path get(String path) {
-            return Paths.get(baseDir,
-                    path.replaceAll(Pattern.quote("%h"), host)
-                        .replaceAll(Pattern.quote("%a"), app));
+            return Paths.get(baseDir, expandPath(path));
+        }
+
+        @Override
+        public String expandPath(String path) {
+            return path.replaceAll(Pattern.quote("%h"), host)
+                       .replaceAll(Pattern.quote("%a"), app);
         }
 
         @Override
