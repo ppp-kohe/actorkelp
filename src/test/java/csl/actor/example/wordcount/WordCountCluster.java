@@ -1,10 +1,7 @@
 package csl.actor.example.wordcount;
 
-import csl.actor.Actor;
-import csl.actor.ActorRef;
 import csl.actor.ActorSystem;
 import csl.actor.cluster.FileSplitter;
-import csl.actor.cluster.PhaseShift;
 import csl.actor.keyaggregate.ActorPlacementKeyAggregation;
 import csl.actor.keyaggregate.ClusterKeyAggregation;
 import csl.actor.keyaggregate.Config;
@@ -13,7 +10,6 @@ import csl.actor.keyaggregate.FileMapper;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.function.BiConsumer;
 
 public class WordCountCluster {
     public static void main(String[] args) throws Exception {
@@ -62,7 +58,7 @@ public class WordCountCluster {
                 String.format("   baseDir \"%s\"\n", dir) +
                 "   logColor 71\n" +
                 "   logFile true\n" +
-                "   persistMailboxPath \"%a/mbox\"\n" +
+                //"   persistMailboxPath \"%a/mbox-%h\"\n" +
                 "   persistMailboxOnMemorySize 1_000\n" +
                 "\n" +
                 "node follower2:\n" +
@@ -71,7 +67,7 @@ public class WordCountCluster {
                 String.format("   baseDir \"%s\"\n", dir) +
                 "   logColor 72\n" +
                 "   logFile true\n" +
-                "   persistMailboxPath \"%a/mbox\"\n" +
+                //"   persistMailboxPath \"%a/mbox-%h\"\n" +
                 "   persistMailboxOnMemorySize 1_000\n" +
                 "\n";
         Path confPath = dir.resolve("config.txt");

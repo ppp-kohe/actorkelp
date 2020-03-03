@@ -1,6 +1,7 @@
 package csl.actor.keyaggregate;
 
 import csl.actor.*;
+import csl.actor.cluster.MailboxPersistable;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -465,14 +466,14 @@ public class MailboxKeyAggregation implements Mailbox, Cloneable {
         return false;
     }
 
-    public List<Object> splitMessageHistogramIntoReplicas(ActorSystem system, MailboxKeyAggregation m1, MailboxKeyAggregation m2) {
+    public List<Object> splitMessageHistogramIntoReplicas(MailboxKeyAggregation m1, MailboxKeyAggregation m2) {
         int size = entries.length;
         List<Object> splitPoints = new ArrayList<>(size);
         for (int i = 0; i < size; ++i) {
             KeyHistograms.HistogramTree rt = entries[i].getTree();
             KeyHistograms.HistogramTree lt = rt.split();
             m1.entries[i].setTree(lt);
-            m2.entries[i].setTree(treeFactory.init(system, rt));
+            m2.entries[i].setTree(treeFactory.init(rt));
             entries[i] = entries[i].create();
             splitPoints.add(rt.splitPointAsRightHandSide(lt));
         }
@@ -520,11 +521,11 @@ public class MailboxKeyAggregation implements Mailbox, Cloneable {
                 .collect(Collectors.toList());
     }
 
-    public void deserializeFrom(ActorSystem system, ActorKeyAggregation.ActorKeyAggregationSerializable state) {
+    public void deserializeFrom(ActorKeyAggregation.ActorKeyAggregationSerializable state) {
         mailbox.getQueue().addAll(Arrays.asList(state.messages));
         int i = 0;
         for (KeyHistograms.HistogramTree t : state.histograms) {
-            entries[i].setTree(treeFactory.init(system, t));
+            entries[i].setTree(treeFactory.init(t));
             ++i;
         }
     }

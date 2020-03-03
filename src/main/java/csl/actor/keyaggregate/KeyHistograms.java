@@ -4,20 +4,33 @@ import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.KryoSerializable;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
-import csl.actor.ActorSystem;
+import csl.actor.cluster.MailboxPersistable;
 
 import java.io.Serializable;
 import java.util.*;
 
 public class KeyHistograms {
-    public static final KeyHistograms DEFAULT = new KeyHistograms();
+    protected MailboxPersistable.PersistentFileManager persistent;
 
-    public HistogramTree create(KeyComparator<?> comparator, int treeLimit) {
-        return new HistogramTree(comparator, treeLimit);
+    public KeyHistograms(MailboxPersistable.PersistentFileManager persistent) {
+        this.persistent = persistent;
     }
 
-    public HistogramTree init(ActorSystem system, HistogramTree tree) {
-        return tree.init(system);
+    public KeyHistograms() {
+        this(MailboxPersistable.getPersistentFile(null, () -> ""));
+    }
+
+    /** @return implementation field getter */
+    public MailboxPersistable.PersistentFileManager getPersistent() {
+        return persistent;
+    }
+
+    public HistogramTree create(KeyComparator<?> comparator, int treeLimit) {
+        return new HistogramTree(comparator, treeLimit, persistent);
+    }
+
+    public HistogramTree init(HistogramTree tree) {
+        return tree.init(persistent);
     }
 
     public static class HistogramTree implements Serializable, KryoSerializable {
@@ -30,18 +43,26 @@ public class KeyHistograms {
         protected long leafSize;
         protected long leafSizeNonZero;
 
+        protected transient MailboxPersistable.PersistentFileManager persistent;
+
         public HistogramTree(KeyComparator<?> comparator) {
-            this(null, comparator, 32);
+            this(comparator, 32);
         }
 
         public HistogramTree(KeyComparator<?> comparator, int treeLimit) {
-            this(null, comparator, treeLimit);
+            this(comparator, treeLimit, MailboxPersistable.getPersistentFile(null, () -> ""));
         }
 
-        public HistogramTree(HistogramNode root, KeyComparator<?> comparator, int treeLimit) {
+        public HistogramTree(KeyComparator<?> comparator, int treeLimit, MailboxPersistable.PersistentFileManager persistent) {
+            this(null, comparator, treeLimit, persistent);
+        }
+
+        public HistogramTree(HistogramNode root, KeyComparator<?> comparator, int treeLimit,
+                             MailboxPersistable.PersistentFileManager persistent) {
             this.root = root;
             this.comparator = comparator;
             this.treeLimit = treeLimit;
+            init(persistent);
         }
 
         public HistogramTree() {}
@@ -93,7 +114,7 @@ public class KeyHistograms {
         }
 
         public HistogramTree createTree(HistogramNode root) {
-            return new HistogramTree(root, comparator, treeLimit);
+            return new HistogramTree(root, comparator, treeLimit, persistent);
         }
 
         @SuppressWarnings("unchecked")
@@ -266,8 +287,18 @@ public class KeyHistograms {
             output.writeInt(this.treeLimit);
         }
 
-        public HistogramTree init(ActorSystem system) {
+        public HistogramTree init(MailboxPersistable.PersistentFileManager persistent) {
+            if (this.persistent == null) {
+                this.persistent = persistent;
+                if (root != null) {
+                    root.initPersistent(persistent);
+                }
+            }
             return this;
+        }
+
+        public MailboxPersistable.PersistentFileManager getPersistent() {
+            return persistent;
         }
     }
 
@@ -376,6 +407,7 @@ public class KeyHistograms {
 
         boolean prune(HistogramTree tree, boolean countUpLeafSize);
 
+        void initPersistent(MailboxPersistable.PersistentFileManager persistent);
     }
 
     @SuppressWarnings("unchecked")
@@ -714,6 +746,12 @@ public class KeyHistograms {
             }
             return null;
         }
+
+        @Override
+        public void initPersistent(MailboxPersistable.PersistentFileManager persistent) {
+            children.forEach(h ->
+                    h.initPersistent(persistent));
+        }
     }
 
 
@@ -850,6 +888,9 @@ public class KeyHistograms {
         public HistogramNodeLeaf load(HistogramPutContext context) {
             return this;
         }
+
+        @Override
+        public void initPersistent(MailboxPersistable.PersistentFileManager persistent) { }
     }
 
     public static class HistogramNodeLeafMap extends HistogramNodeLeaf {
@@ -1068,6 +1109,10 @@ public class KeyHistograms {
         @Override
         public void read(Kryo kryo, Input input) {
             value = kryo.readClassAndObject(input);
+        }
+
+        public long valueCount() {
+            return 1;
         }
     }
 }

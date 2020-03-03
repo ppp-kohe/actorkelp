@@ -1,6 +1,7 @@
 package csl.actor.example;
 
 import csl.actor.*;
+import csl.actor.cluster.MailboxPersistable;
 import csl.actor.keyaggregate.*;
 import csl.actor.remote.ActorAddress;
 import csl.actor.remote.KryoBuilder;
@@ -100,7 +101,8 @@ public class SerializeExample2 extends SerializeExample{
 
     private void runHistogramTree() {
         KeyHistograms.HistogramTree tree = new KeyHistograms.HistogramTree(null,
-                new ActorBehaviorBuilderKeyAggregation.KeyComparatorDefault<>(), 10);
+                new ActorBehaviorBuilderKeyAggregation.KeyComparatorDefault<>(), 10,
+                MailboxPersistable.getPersistentFile(null, () -> ""));
 
         List<Object> os = values();
         int i = 0;
@@ -228,7 +230,7 @@ public class SerializeExample2 extends SerializeExample{
         ActorKeyAggregation.ActorKeyAggregationSerializable s = a.toSerializable(123);
         writeRead(p, s, false, (pre,post) ->
                 check("post.name", MyActor.class, post.actorType) &&
-                check("post.name", "hello#123", post.name) &&
+                check("post.name", "hello", post.name) &&
                 check("post.size", 1, post.histograms.size()) &&
                 check("post.mailbox.data", Arrays.asList("msg1", "msg2", "msg3"),
                         Arrays.stream(post.messages).map(Message::getData).collect(Collectors.toList())) &&

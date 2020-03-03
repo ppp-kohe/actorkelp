@@ -189,7 +189,7 @@ public abstract class ActorKeyAggregation extends ActorDefault
     }
 
     protected MailboxDefault initMailboxDefault(MailboxPersistable.PersistentFileManager m) {
-        if (m != null) {
+        if (initPersistentEnabled()) {
             return new MailboxPersistable(m,
                     persistMailboxSizeLimit(), persistMailboxOnMemorySize());
         } else {
@@ -198,20 +198,24 @@ public abstract class ActorKeyAggregation extends ActorDefault
     }
 
     protected KeyHistograms initTreeFactory(MailboxPersistable.PersistentFileManager m) {
-        if (m != null) {
+        if (initPersistentEnabled()) {
             return new KeyHistogramsPersistable(this, m);
         } else {
-            return KeyHistograms.DEFAULT;
+            return new KeyHistograms(m);
         }
     }
 
     protected MailboxPersistable.PersistentFileManager getPersistentFile() {
         String path = persistMailboxPath();
-        if (!path.isEmpty()) {
-            return MailboxPersistable.getPersistentFile(system, ()->path);
+        if (initPersistentEnabled()) {
+            return MailboxPersistable.getPersistentFile(system, () -> path);
         } else {
-            return null;
+            return MailboxPersistable.getPersistentFile(system, () -> "");
         }
+    }
+
+    protected boolean initPersistentEnabled() {
+        return !persistMailboxPath().isEmpty();
     }
 
     protected Mailbox initMailboxForClone() {
@@ -362,8 +366,9 @@ public abstract class ActorKeyAggregation extends ActorDefault
     /////////////////////////// process
 
     @Override
-    public boolean processMessageNext() {
-        if (getMailboxAsKeyAggregation().processHistogram()) {
+    public synchronized boolean processMessageNext() { //TODO remove lock
+        if (!isRouterParallelRouting() &&
+                getMailboxAsKeyAggregation().processHistogram()) {
             return true;
         }
         return super.processMessageNext();
@@ -470,7 +475,7 @@ public abstract class ActorKeyAggregation extends ActorDefault
             ActorKeyAggregation a1 = target.internalCreateClone(routerRef);
             ActorKeyAggregation a2 = target.internalCreateClone(routerRef);
             List<Object> splitPoints = target.getMailboxAsKeyAggregation()
-                    .splitMessageHistogramIntoReplicas(getSystem(), a1.getMailboxAsKeyAggregation(), a2.getMailboxAsKeyAggregation());
+                    .splitMessageHistogramIntoReplicas(a1.getMailboxAsKeyAggregation(), a2.getMailboxAsKeyAggregation());
             if (routerRef != target) {
                 target.internalCancel();
             }
@@ -799,7 +804,7 @@ public abstract class ActorKeyAggregation extends ActorDefault
         }
 
         protected ActorKeyAggregation init(ActorKeyAggregation a) {
-            a.getMailboxAsKeyAggregation().deserializeFrom(a.getSystem(), this);
+            a.getMailboxAsKeyAggregation().deserializeFrom(this);
             a.initSerializedInternalState(internalState);
             a.setNextStage(nextStage);
             return a;

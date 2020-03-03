@@ -134,7 +134,7 @@ public class KeyHistogramsPersistableTest {
         System.err.println(String.format("persisted: %,d bytes", n));
         Input in = new Input(data, 0, (int) n);
         KeyHistogramsPersistable.HistogramTreePersistable p = (KeyHistogramsPersistable.HistogramTreePersistable) sp.read(in);
-        p.init(null);
+        p.init(kh.getPersistent());
         check(p, ctx);
     }
 
@@ -181,7 +181,7 @@ public class KeyHistogramsPersistableTest {
 
     private void check(KeyHistogramsPersistable.HistogramTreePersistable tree, KeyHistograms.HistogramPutContextMap ctx) {
         //loading
-        log(String.format("persisted: %,d", tree.getPersistedSize()));
+        log(String.format("persisted: %,d / %,d", tree.getPersistedSize(), tree.getTreeSize()));
         load(tree, tree.getRoot(), ctx);
         check("persisted after read", tree.getPersistedSize(), 0L, Objects::equals);
         check("size after read", tree.getTreeSize(), 0L, Objects::equals);
