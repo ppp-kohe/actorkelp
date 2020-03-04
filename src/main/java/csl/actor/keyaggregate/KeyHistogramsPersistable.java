@@ -62,10 +62,28 @@ public class KeyHistogramsPersistable extends KeyHistograms {
         HistogramPersistentOperation needToPersist(HistogramTreePersistable tree, long onMemoryValues, double leafSizeNonZeroToSizeRatio);
     }
 
-    public enum HistogramPersistentOperation {
+    public interface HistogramPersistentOperation { }
+
+    public enum HistogramPersistentOperationType implements HistogramPersistentOperation {
         LargeLeaves,
-        Tree,
         None
+    }
+
+    public static class HistogramPersistentOperationTree implements HistogramPersistentOperation {
+        protected long sizeLimit;
+
+        public HistogramPersistentOperationTree(long sizeLimit) {
+            this.sizeLimit = sizeLimit;
+        }
+
+        public long getSizeLimit() {
+            return sizeLimit;
+        }
+
+        @Override
+        public String toString() {
+            return "Tree(" + sizeLimit + ")";
+        }
     }
 
     public static class PersistentConditionHistogramSizeLimit implements PersistentConditionHistogram {
@@ -85,12 +103,51 @@ public class KeyHistogramsPersistable extends KeyHistograms {
         public HistogramPersistentOperation needToPersist(HistogramTreePersistable tree, long onMemoryValues, double leafSizeNonZeroToSizeRatio) {
             if (onMemoryValues > this.sizeLimit) {
                 if (leafSizeNonZeroToSizeRatio < sizeRatioThreshold) {
-                    return HistogramPersistentOperation.LargeLeaves;
+                    return HistogramPersistentOperationType.LargeLeaves;
                 } else {
-                    return HistogramPersistentOperation.Tree;
+                    return new HistogramPersistentOperationTree(sizeLimit);
                 }
             } else {
-                return HistogramPersistentOperation.None;
+                return HistogramPersistentOperationType.None;
+            }
+        }
+    }
+
+    public static class PersistentConditionHistogramSampling implements PersistentConditionHistogram {
+        protected MailboxPersistable mailbox;
+        protected MailboxPersistable.PersistentConditionMailboxSampling mailboxSampling;
+        protected long sizeLimit;
+        protected double sizeRatioThreshold;
+
+        public PersistentConditionHistogramSampling(long sizeLimit, double sizeRationThreshold) {
+            this(sizeLimit, sizeRationThreshold, null);
+        }
+
+        public PersistentConditionHistogramSampling(long sizeLimit, double sizeRationThreshold, MailboxPersistable mailbox) {
+            this.sizeLimit = sizeLimit;
+            this.sizeRatioThreshold = sizeRationThreshold;
+            this.mailbox = mailbox;
+            if (mailbox != null &&
+                    mailbox.getPersistent() instanceof MailboxPersistable.PersistentConditionMailboxSampling) {
+                mailboxSampling = (MailboxPersistable.PersistentConditionMailboxSampling) mailbox.getPersistent();
+            } else {
+                mailboxSampling = new MailboxPersistable.PersistentConditionMailboxSampling(sizeLimit);
+            }
+        }
+
+        @Override
+        public HistogramPersistentOperation needToPersist(HistogramTreePersistable tree, long onMemoryValues, double leafSizeNonZeroToSizeRatio) {
+            if (onMemoryValues > sizeLimit) {
+                long sample = mailboxSampling.currentSampleWithUpdating(mailbox);
+                long available = mailboxSampling.runtimeAvailableBytes();
+                long leafSize = tree.getLeafSizeNonZero() * 96L;
+                if ((onMemoryValues + sizeLimit) * sample + leafSize> available) {
+                    return new HistogramPersistentOperationTree(Math.min(Math.max(sizeLimit, (available - leafSize) / sample), onMemoryValues));
+                } else {
+                    return HistogramPersistentOperationType.None;
+                }
+            } else {
+                return HistogramPersistentOperationType.None;
             }
         }
     }
@@ -240,7 +297,7 @@ public class KeyHistogramsPersistable extends KeyHistograms {
         public void put(Object key, KeyHistograms.HistogramPutContext context) {
             super.put(key, context);
             updateHistory(context);
-            checkPersist();
+            persistIfNeeded();
         }
 
         protected void updateHistory(HistogramPutContext context) {
@@ -251,15 +308,43 @@ public class KeyHistogramsPersistable extends KeyHistograms {
             }
         }
 
-        protected void checkPersist() {
-            if (condition != null) {
-                HistogramPersistentOperation op = condition.needToPersist(this,
-                        getTreeSize() - persistedSize, leafSizeNonZeroToSizeRatio());
-                if (op.equals(HistogramPersistentOperation.LargeLeaves)) {
-                    persistLargeLeaves();
-                } else if (op.equals(HistogramPersistentOperation.Tree)) {
-                    persistTree();
-                }
+        public HistogramPersistentOperation checkPersist() {
+            return checkPersist(getTreeSizeOnMemory());
+        }
+
+        @Override
+        public long getTreeSizeForReduceCheck() {
+            return getTreeSizeOnMemory();
+        }
+
+        public long getTreeSizeOnMemory() {
+            return getTreeSize() - persistedSize;
+        }
+
+        public HistogramPersistentOperation checkPersist(long onMemoryValues) {
+            if (condition == null) {
+                return new PersistentConditionHistogramSizeLimit(sizeLimit, leafSizeNonZeroToSizeRatio())
+                        .needToPersist(this, onMemoryValues, leafSizeNonZeroToSizeRatio());
+            } else {
+                return condition.needToPersist(this, onMemoryValues, leafSizeNonZeroToSizeRatio());
+            }
+        }
+
+        protected void persistIfNeeded() {
+            persist(checkPersist());
+        }
+
+        @Override
+        public boolean needToReduce() {
+            KeyHistogramsPersistable.HistogramPersistentOperation op = checkPersist(getTreeSizeOnMemory() + 10L);
+            return (!op.equals(KeyHistogramsPersistable.HistogramPersistentOperationType.None));
+        }
+
+        public void persist(HistogramPersistentOperation op) {
+            if (op.equals(HistogramPersistentOperationType.LargeLeaves)) {
+                persistLargeLeaves();
+            } else if (op instanceof HistogramPersistentOperationTree) {
+                persistTree(((HistogramPersistentOperationTree) op).getSizeLimit());
             }
         }
 
@@ -397,9 +482,9 @@ public class KeyHistogramsPersistable extends KeyHistograms {
             persistedSize--;
         }
 
-        public void persistTree() {
+        public void persistTree(long sizeLimit) {
             float[] ms = toPersistTreeDist(this.history.totalMean());
-            persistTree(getTreeSize() - persistedSize - sizeLimit, ms);
+            persistTree(getTreeSizeOnMemory() - sizeLimit, ms);
         }
 
         private float[] toPersistTreeDist(float[] ms) {
@@ -411,12 +496,16 @@ public class KeyHistogramsPersistable extends KeyHistograms {
 
         public void persistTree(long persistingLimit, float... distribution) {
             MailboxPersistable.PersistentFileManager m = getPersistent();
-            if (m != null) {
+            if (m != null) { //it does not checks persistingLimit>0, persistTreeNode might save some sub-trees even under the condition
                 try (TreeWriting w = new TreeWriting(m, m.createPath("histtree"))) {
-                    if (DEBUG) {
-                        System.err.println(String.format("KeyHistogramsPersistable.persistTree: %s", w.getPathExpanded()));
-                    }
+                    long prevPersisted = persistedSize;
                     persistTreeNode(root, 0, 1f, distribution, persistingLimit, w);
+                    if (DEBUG) {
+                        System.err.println(String.format("KeyHistogramsPersistable.persistTree: %s, " +
+                                        "persistedSize=(%,d -> %,d (%+,d)), size=%,d, lSNZtoSize=%4.3f",
+                                w.getPathExpanded(), prevPersisted, persistedSize, (persistedSize - prevPersisted), getTreeSize(),
+                                leafSizeNonZeroToSizeRatio()));
+                    }
                 } catch (Exception ex) {
                     throw new RuntimeException(ex);
                 }

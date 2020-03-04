@@ -1,6 +1,7 @@
 package csl.actor.example.wordcount;
 
 import csl.actor.ActorSystem;
+import csl.actor.cluster.ConfigDeployment;
 import csl.actor.cluster.FileSplitter;
 import csl.actor.keyaggregate.ActorPlacementKeyAggregation;
 import csl.actor.keyaggregate.ClusterKeyAggregation;
@@ -29,11 +30,12 @@ public class WordCountCluster {
         Config conf = c.getMaster().getAppConfig();
         ActorSystem system = c.getSystem();
 
-        FileMapper fileReader = new FileMapper(system, "fileReader", conf, FileSplitter.getWithSplitCount(10));
+        FileMapper fileReader = new FileMapper(system, "fileReader", conf,
+                FileSplitter.getWithSplitCount(10, ConfigDeployment.getPathModifier(system)));
         WordCount.WordCountMapper mapper = new WordCount.WordCountMapper(system, "mapper", conf);
         WordCount.WordCountReducer reducer = new WordCount.WordCountReducer(system, "reducer", conf, ".");
 
-        place.connectAndSplitStage(fileReader, mapper, reducer).get();
+        place.connectStage(fileReader, mapper, reducer).get();
 
         fileReader.startReadFile(inputFile).get();
 
@@ -59,7 +61,7 @@ public class WordCountCluster {
                 String.format("   baseDir \"%s\"\n", dir) +
                 "   logColor 71\n" +
                 "   logFile true\n" +
-                "   persistMailboxPath \"%a/mbox-%h\"\n" +
+                "   persist true\n" +
                 "   persistMailboxOnMemorySize 1_000\n" +
                 "   lowerBoundThresholdFactor 0\n" +
                 "\n" +
@@ -69,7 +71,7 @@ public class WordCountCluster {
                 String.format("   baseDir \"%s\"\n", dir) +
                 "   logColor 72\n" +
                 "   logFile true\n" +
-                "   persistMailboxPath \"%a/mbox-%h\"\n" +
+                "   persist true\n" +
                 "   persistMailboxOnMemorySize 1_000\n" +
                 "   lowerBoundThresholdFactor 0\n" +
                 "\n";

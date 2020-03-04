@@ -315,20 +315,31 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
         @Override
         public boolean needToPersist(MailboxPersistable mailbox, long size) {
             if (size > sizeLimit) {
-                long currentSample;
-                Message<?> msg;
-                if (sampleTiming.getAndIncrement() % 100 == 0 &&
-                        !((msg = mailbox.getQueue().peek()) instanceof MessageOnStorage)) {
-                    currentSample = updateCurrentSample(mailbox, msg);
-                } else {
-                    currentSample = currentSample();
-                }
-                long totalSize = size * currentSample;
-                Runtime rt = Runtime.getRuntime();
-                long available = rt.maxMemory() - rt.totalMemory();
-                return totalSize + sizeLimit * currentSample > available;
+                long currentSample = currentSampleWithUpdating(mailbox);
+                return needToPersistRuntime(size, sizeLimit, currentSample);
             }
             return false;
+        }
+
+        public long currentSampleWithUpdating(MailboxPersistable mailbox) {
+            Message<?> msg;
+            if (mailbox != null &&
+                    sampleTiming.getAndIncrement() % 100 == 0 &&
+                    !((msg = mailbox.getQueue().peek()) instanceof MessageOnStorage) &&
+                    msg != null && msg.getData() instanceof Serializable) {
+                return updateCurrentSample(mailbox, msg);
+            } else {
+                return currentSample();
+            }
+        }
+
+        public boolean needToPersistRuntime(long size, long sizeLimit, long currentSample) {
+            return (size + sizeLimit) * currentSample > runtimeAvailableBytes();
+        }
+
+        public long runtimeAvailableBytes() {
+            Runtime rt = Runtime.getRuntime();
+            return rt.maxMemory() - rt.totalMemory();
         }
 
         public long updateCurrentSample(MailboxPersistable mailbox, Message<?> msg) {
@@ -354,7 +365,7 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
             if (count == 0) {
                 return 100;
             } else {
-                return sampleTotal.get() / sampleCount.get();
+                return Math.max(16, sampleTotal.get() / sampleCount.get());
             }
         }
     }

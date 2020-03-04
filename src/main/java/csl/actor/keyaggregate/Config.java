@@ -21,7 +21,9 @@ public class Config extends ConfigBase {
     public int logColor = 33;
     public int logColorPhase = 27;
     public long traverseDelayTimeMs = 300;
-    public String persistMailboxPath = "";
+    public boolean persist = false;
+    public String persistMailboxPath = "%a/persist-%h";
+    public boolean persistRuntimeCondition = true;
     public long persistMailboxSizeLimit = Integer.MAX_VALUE / 64;
     public long persistMailboxOnMemorySize = 100_000L;
     public int reduceRuntimeCheckingThreshold = 100_000;
@@ -29,7 +31,7 @@ public class Config extends ConfigBase {
 
     public int histogramPersistHistoryEntrySize = 10;
     public int histogramPersistHistoryEntryLimit = 100;
-    public long histogramPersistSizeLimit = 1000;
+    public long histogramPersistSizeLimit = 100_000;
     public long histogramPersistOnMemorySize = 100;
     public double histogramPersistSizeRatioThreshold = 0.00001;
     public long histogramPersistRandomSeed = 0;

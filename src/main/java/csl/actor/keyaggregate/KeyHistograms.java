@@ -209,6 +209,10 @@ public class KeyHistograms {
             return root == null ? 0 : root.size();
         }
 
+        public long getTreeSizeForReduceCheck() {
+            return getTreeSize();
+        }
+
         public int getTreeHeight() {
             return root == null ? 0 : root.height();
         }
@@ -299,6 +303,10 @@ public class KeyHistograms {
 
         public MailboxPersistable.PersistentFileManager getPersistent() {
             return persistent;
+        }
+
+        public boolean needToReduce() {
+            return true;
         }
     }
 

@@ -96,6 +96,14 @@ public abstract class ActorKeyAggregation extends ActorDefault
         return config.persistMailboxPath;
     }
 
+    protected boolean persistRuntimeCondition() {
+        return config.persistRuntimeCondition;
+    }
+
+    protected boolean persist() {
+        return config.persist;
+    }
+
     protected long persistMailboxSizeLimit() {
         return config.persistMailboxSizeLimit;
     }
@@ -183,23 +191,40 @@ public abstract class ActorKeyAggregation extends ActorDefault
     @Override
     protected Mailbox initMailbox() {
         MailboxPersistable.PersistentFileManager m = getPersistentFile();
+        MailboxDefault mailbox = initMailboxDefault(m);
         return new MailboxKeyAggregation(mailboxThreshold(), mailboxTreeSize(),
-                initMailboxDefault(m),
-                initTreeFactory(m));
+                mailbox, initTreeFactory(mailbox, m));
     }
 
     protected MailboxDefault initMailboxDefault(MailboxPersistable.PersistentFileManager m) {
         if (initPersistentEnabled()) {
-            return new MailboxPersistable(m,
-                    persistMailboxSizeLimit(), persistMailboxOnMemorySize());
+            MailboxPersistable.PersistentConditionMailbox condMailbox;
+            if (persistRuntimeCondition()) {
+                condMailbox = new MailboxPersistable.PersistentConditionMailboxSampling(persistMailboxSizeLimit());
+            } else {
+                condMailbox = new MailboxPersistable.PersistentConditionMailboxSizeLimit(persistMailboxSizeLimit());
+            }
+            return new MailboxPersistable(m, condMailbox, persistMailboxOnMemorySize());
         } else {
             return new MailboxDefault();
         }
     }
 
-    protected KeyHistograms initTreeFactory(MailboxPersistable.PersistentFileManager m) {
+    protected KeyHistograms initTreeFactory(MailboxDefault mailbox, MailboxPersistable.PersistentFileManager m) {
         if (initPersistentEnabled()) {
-            return new KeyHistogramsPersistable(this, m);
+            KeyHistogramsPersistable.PersistentConditionHistogram condHist;
+            if (persistRuntimeCondition()) {
+                if (mailbox instanceof MailboxPersistable) {
+                    condHist = new KeyHistogramsPersistable.PersistentConditionHistogramSampling(
+                            histogramPersistSizeLimit(), histogramPersistSizeRatioThreshold(), (MailboxPersistable) mailbox);
+                } else {
+                    condHist = new KeyHistogramsPersistable.PersistentConditionHistogramSampling(
+                            histogramPersistSizeLimit(), histogramPersistSizeRatioThreshold());
+                }
+            } else {
+                condHist = new KeyHistogramsPersistable.PersistentConditionHistogramSizeLimit(this);
+            }
+            return new KeyHistogramsPersistable(this, m, condHist);
         } else {
             return new KeyHistograms(m);
         }
@@ -207,15 +232,11 @@ public abstract class ActorKeyAggregation extends ActorDefault
 
     protected MailboxPersistable.PersistentFileManager getPersistentFile() {
         String path = persistMailboxPath();
-        if (initPersistentEnabled()) {
-            return MailboxPersistable.getPersistentFile(system, () -> path);
-        } else {
-            return MailboxPersistable.getPersistentFile(system, () -> "");
-        }
+        return MailboxPersistable.getPersistentFile(system, () -> path);
     }
 
     protected boolean initPersistentEnabled() {
-        return !persistMailboxPath().isEmpty();
+        return persist();
     }
 
     protected Mailbox initMailboxForClone() {
@@ -366,7 +387,7 @@ public abstract class ActorKeyAggregation extends ActorDefault
     /////////////////////////// process
 
     @Override
-    public synchronized boolean processMessageNext() { //TODO remove lock
+    public boolean processMessageNext() {
         boolean pr = isRouterParallelRouting();
         try {
             if (!pr && getMailboxAsKeyAggregation().processHistogram()) {
@@ -400,7 +421,7 @@ public abstract class ActorKeyAggregation extends ActorDefault
             getMailboxAsKeyAggregation()
                     .processTraversal(this,
                             ((MailboxKeyAggregation.TraversalProcess) data).entryId,
-                            this::nextConsumingSize);
+                            reducedSize());
         } else {
             super.processMessage(message);
         }
@@ -440,19 +461,23 @@ public abstract class ActorKeyAggregation extends ActorDefault
         return ResponsiveCalls.sendTaskConsumer(this, (a, s) -> a.nextStage = nextStage);
     }
 
-
-    public int nextConsumingSize(long size) {
-        int consuming = (int) Math.min(Integer.MAX_VALUE, size);
-        int rrt = reduceRuntimeCheckingThreshold();
-        if (consuming > rrt) { //refer free memory size
-            Runtime rt = Runtime.getRuntime();
-            consuming = (int) Math.min(consuming,
-                    Math.max(rrt, (rt.maxMemory() - rt.totalMemory()) * reduceRuntimeRemainingBytesToSizeRatio()));
-            if (config.logSplit) {
-                config.log(String.format("%s reduceSize: %,d -> %,d", this, size, consuming));
+    public MailboxKeyAggregation.ReducedSize reducedSize() {
+        return new MailboxKeyAggregation.ReducedSizeDefault(reduceRuntimeCheckingThreshold(), reduceRuntimeRemainingBytesToSizeRatio()) {
+            @Override
+            protected void logReducedSize(long size, long availableOnMemoryMessages, int consuming) {
+                if (config.logSplit) {
+                    config.log(String.format("%s reduceSize: %,d -> %,d", this, size, consuming));
+                }
             }
-        }
-        return consuming;
+
+            @Override
+            protected void logNeedToReduce(long size, long availableOnMemoryMessages) {
+                if (config.logSplit) {
+                    config.log(String.format("%s needToReduce: %,d > %,d & %,d", this, size, reduceRuntimeCheckingThreshold,
+                            availableOnMemoryMessages));
+                }
+            }
+        };
     }
 
 
@@ -464,7 +489,7 @@ public abstract class ActorKeyAggregation extends ActorDefault
 
     public void processPhaseEnd(Object phaseKey) {
         getMailboxAsKeyAggregation()
-                .processPhase(this, phaseKey, this::nextConsumingSize);
+                .processPhase(this, phaseKey, reducedSize());
     }
 
     /////////////////////////// methods for state

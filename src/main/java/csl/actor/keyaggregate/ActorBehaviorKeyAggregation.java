@@ -843,9 +843,10 @@ public class ActorBehaviorKeyAggregation {
             } else {
                 return false;
             }
+            MailboxKeyAggregation mailbox = (MailboxKeyAggregation) self.getMailbox();
+            mailbox.processPersistableTraversalBeforePut(self, matchKeyEntryId);
             put(self, key, true, value);
-            ((MailboxKeyAggregation) self.getMailbox())
-                    .updateScheduledTraversalProcess(self, this.matchKeyEntryId);
+            mailbox.updateScheduledTraversalProcess(self, this.matchKeyEntryId);
             return true;
         }
 
@@ -883,16 +884,16 @@ public class ActorBehaviorKeyAggregation {
         @SuppressWarnings({"unchecked", "rawtypes"})
         @Override
         public void processTraversal(Actor self, MailboxKeyAggregation.ReducedSize reducedSize, KeyHistograms.HistogramNodeLeaf leaf) {
-            HistogramNodeLeafListReducible list = completedLeaf(HistogramNodeLeafListReducible.class, leaf);
+            HistogramNodeLeafListReducible list = completedLeaf(putRequiredSize, HistogramNodeLeafListReducible.class, leaf);
             if (list != null && list.consume(putRequiredSize, putTree, reducedSize, (BiFunction) keyValuesReducer, (BiConsumer) handler)) {
                 self.tell(new MailboxKeyAggregation.TraversalProcess(matchKeyEntryId), self);
             }
         }
 
         @SuppressWarnings("unchecked")
-        public <LeafType extends KeyHistograms.HistogramNodeLeaf> LeafType completedLeaf(Class<LeafType> type,
+        public <LeafType extends KeyHistograms.HistogramNodeLeaf> LeafType completedLeaf(int requiredSize, Class<LeafType> type,
                                                                                          KeyHistograms.HistogramNodeLeaf l) {
-            if (putRequiredSize < l.size()) {
+            if (l.size() >= requiredSize) {
                 if (!type.isInstance(l)) {
                     return (LeafType) l.load(this);
                 } else {
@@ -992,11 +993,9 @@ public class ActorBehaviorKeyAggregation {
         @SuppressWarnings({"unchecked", "rawtypes"})
         @Override
         public void processTraversal(Actor self, MailboxKeyAggregation.ReducedSize reducedSize, KeyHistograms.HistogramNodeLeaf leaf) {
-            HistogramNodeLeafListReducible list = completedLeaf(HistogramNodeLeafListReducible.class, leaf);
-            if (list != null && list.consume(putRequiredSize, putTree, reducedSize, (BiFunction) keyValuesReducer, (BiConsumer) handler)) {
-                if (list.size() > putRequiredSize) { //reducible
-                    self.tell(new MailboxKeyAggregation.TraversalProcess(matchKeyEntryId), self);
-                }
+            HistogramNodeLeafListReducible list = completedLeaf(putRequiredSize + 1, HistogramNodeLeafListReducible.class, leaf);
+            if (list != null && list.consume(putRequiredSize + 1, putTree, reducedSize, (BiFunction) keyValuesReducer, (BiConsumer) handler)) {
+                self.tell(new MailboxKeyAggregation.TraversalProcess(matchKeyEntryId), self);
             }
         }
 
@@ -1010,7 +1009,7 @@ public class ActorBehaviorKeyAggregation {
         @Override
         public void processPhase(Actor self, Object phaseKey, MailboxKeyAggregation.ReducedSize reducedSize, KeyHistograms.HistogramNodeLeaf leaf) {
             long prevSize = leaf.size();
-            HistogramNodeLeafListReducibleForPhase list = completedLeaf(HistogramNodeLeafListReducibleForPhase.class, leaf);
+            HistogramNodeLeafListReducibleForPhase list = completedLeaf(putRequiredSize, HistogramNodeLeafListReducibleForPhase.class, leaf);
             if (list != null) {
                 while (list.consumePhase(putRequiredSize, putTree, reducedSize, (BiFunction) keyValuesReducer, (BiConsumer) handler)) {
                     if (prevSize <= leaf.size()) { //no consumption

@@ -134,6 +134,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         ph.setApp(getAppName());
         System.setProperty("csl.actor.path.app", ph.getApp());
         setLogFile(master.getDeploymentConfig(), ph);
+        master.log(String.format("master %s: path %s", master.getDeploymentConfig().getAddress(), ph));
 
         masterPlace = createPlace(placeType, system,
                 new ActorPlacement.PlacementStrategyRoundRobin(0));
@@ -446,11 +447,14 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
             ActorSystemRemote system = new ActorSystemRemote();
 
             //the working directory is the baseDir
-            ConfigDeployment.PathModifierHost ph = ConfigDeployment.setPathModifierWithBaseDir(system, ".");
+            ConfigDeployment.PathModifierHost ph = ConfigDeployment.setPathModifierWithBaseDir(system,
+                    Paths.get(".").toAbsolutePath().normalize().toString());
             ph.setHost(selfAddrObj.getHost(), selfAddrObj.getPort());
             String appName = System.getProperty("csl.actor.path.app", "");
             ph.setApp(appName);
-            setLogFile(logger, ph);;
+            setLogFile(logger, ph);
+
+            logger.log(String.format("%s: path %s", selfAddrObj, ph));
 
             system.startWithoutWait(selfAddrObj);
             ActorPlacement.ActorPlacementDefault p = createPlace(placeType, system, new ActorPlacement.PlacementStrategyUndertaker());

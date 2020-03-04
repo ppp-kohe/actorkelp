@@ -74,7 +74,7 @@ public class KeyHistogramsPersistableTest {
 //        }
 
 
-        tree.persistTree();
+        tree.persistTree(tree.getTreeSize());
         check(tree, ctx);
     }
     public void runPersistLargeLeaves() {

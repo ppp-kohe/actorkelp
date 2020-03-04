@@ -44,6 +44,10 @@ public class MailboxKeyAggregation implements Mailbox, Cloneable {
         this.treeFactory = treeFactory;
     }
 
+    public KeyHistograms getTreeFactory() {
+        return treeFactory;
+    }
+
     public void setThreshold(int threshold) {
         this.threshold = threshold;
     }
@@ -205,6 +209,7 @@ public class MailboxKeyAggregation implements Mailbox, Cloneable {
         protected volatile ScheduledFuture<?> scheduledProcess;
         protected Instant nextSchedule = Instant.now();
         protected Instant scheduleBackup = Instant.now();
+        protected Instant lastTraversal = Instant.now();
         protected volatile boolean remainingProcessesLock;
 
         public HistogramEntry(int entryId, HistogramProcessor p, KeyHistograms.HistogramTree tree) {
@@ -235,6 +240,7 @@ public class MailboxKeyAggregation implements Mailbox, Cloneable {
 
         public void processTraversal(Actor self, ReducedSize reducedSize) {
             if (processor.needToProcessTraversal(self, tree)) {
+                lastTraversal = Instant.now();
                 processTraversal(self, reducedSize, tree.getRoot());
             }
         }
@@ -261,11 +267,16 @@ public class MailboxKeyAggregation implements Mailbox, Cloneable {
             return processor;
         }
 
-        public synchronized void updateScheduledTraversalProcess(Actor self) {
-            long time = 300;
+        public long traversalDelayTimeMs(Actor self) {
             if (self instanceof ActorKeyAggregation) {
-                time = ((ActorKeyAggregation) self).traverseDelayTimeMs();
+                return ((ActorKeyAggregation) self).traverseDelayTimeMs();
+            } else {
+                return 300;
             }
+        }
+
+        public synchronized void updateScheduledTraversalProcess(Actor self) {
+            long time = traversalDelayTimeMs(self);
             ScheduledFuture<?> p = scheduledProcess;
             Instant nextTime = Instant.now().plusMillis(time);
             if (remainingProcessesLock) { //forever
@@ -350,10 +361,78 @@ public class MailboxKeyAggregation implements Mailbox, Cloneable {
                 }
             }
         }
+
+        public void processPersistableTraversalBeforePut(Actor self) {
+            ReducedSize rs;
+            if (self instanceof ActorKeyAggregation) {
+                rs = ((ActorKeyAggregation) self).reducedSize();
+            } else {
+                rs = new ReducedSizeDefault();
+            }
+            processPersistableTraversalBeforePut(self, rs);
+        }
+
+        public void processPersistableTraversalBeforePut(Actor self, ReducedSize reducedSize) {
+            if (!remainingProcessesLock &&
+                    Duration.ofMillis(traversalDelayTimeMs(self)).compareTo(Duration.between(Instant.now(), lastTraversal)) < 0 &&
+                    (reducedSize.needToReduce(tree.getTreeSizeForReduceCheck()) ||
+                     tree.needToReduce())) {
+                processTraversal(self, reducedSize);
+            }
+        }
     }
 
     public interface ReducedSize {
+        boolean needToReduce(long size);
         int nextReducedSize(long size);
+    }
+
+    public static class ReducedSizeDefault implements ReducedSize {
+        protected int reduceRuntimeCheckingThreshold;
+        protected double reduceRuntimeRemainingBytesToSizeRatio;
+
+        public ReducedSizeDefault() {
+            this(100_000, 0.003);
+        }
+
+        public ReducedSizeDefault(int reduceRuntimeCheckingThreshold, double reduceRuntimeRemainingBytesToSizeRatio) {
+            this.reduceRuntimeCheckingThreshold = reduceRuntimeCheckingThreshold;
+            this.reduceRuntimeRemainingBytesToSizeRatio = reduceRuntimeRemainingBytesToSizeRatio;
+        }
+
+        @Override
+        public int nextReducedSize(long size) {
+            int consuming = (int) Math.min(Integer.MAX_VALUE, size);
+            int rrt = reduceRuntimeCheckingThreshold;
+            if (consuming > rrt) { //refer free memory size
+                long aom = availableOnMemoryMessages();
+                consuming = (int) Math.min(consuming, Math.max(rrt, aom));
+
+                logReducedSize(size, aom, consuming);
+            }
+            return consuming;
+        }
+
+        protected void logReducedSize(long size, long availableOnMemoryMessages, int consuming) { }
+
+        public long availableOnMemoryMessages() {
+            Runtime rt = Runtime.getRuntime();
+            return (long) ((rt.maxMemory() - rt.totalMemory()) * reduceRuntimeRemainingBytesToSizeRatio);
+        }
+
+        @Override
+        public boolean needToReduce(long size) {
+            int rrt = reduceRuntimeCheckingThreshold;
+            long aom = -1;
+            boolean r = size > rrt &&
+                    size > (aom = availableOnMemoryMessages());
+            if (r) {
+                logNeedToReduce(size, aom);
+            }
+            return r;
+        }
+
+        protected void logNeedToReduce(long size, long availableOnMemoryMessages) { }
     }
 
     public static class TraversalProcess {
@@ -447,6 +526,10 @@ public class MailboxKeyAggregation implements Mailbox, Cloneable {
 
     public void processTraversal(Actor self, int entryId, ReducedSize reducedSize) {
         entries[entryId].processTraversal(self, reducedSize);
+    }
+
+    public void processPersistableTraversalBeforePut(Actor self, int entryId) {
+        entries[entryId].processPersistableTraversalBeforePut(self);
     }
 
     public void processPhase(Actor self, Object phaseKey, ReducedSize reducedSize) {

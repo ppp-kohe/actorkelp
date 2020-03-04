@@ -181,7 +181,7 @@ public class ConfigDeployment extends ConfigBase {
 
         @Override
         public Path get(String path) {
-            return Paths.get(baseDir, expandPath(path));
+            return Paths.get(baseDir, expandPath(path)).normalize();
         }
 
         @Override
