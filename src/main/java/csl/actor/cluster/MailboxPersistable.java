@@ -313,6 +313,8 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
         protected AtomicLong sampleTotal = new AtomicLong();
         protected AtomicLong sampleCount = new AtomicLong();
         protected AtomicInteger sampleTiming = new AtomicInteger();
+        protected SampleTiming logTimingUpdate = new SampleTiming();
+        protected SampleTiming logTimingNeedToPersist = new SampleTiming();
         protected ActorSystem.SystemLogger logger;
 
         public PersistentConditionMailboxSampling(long sizeLimit, ActorSystem.SystemLogger logger) {
@@ -340,7 +342,7 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
         public long currentSampleWithUpdating(MailboxPersistable mailbox) {
             Message<?> msg;
             if (mailbox != null &&
-                    sampleTiming.getAndIncrement() % 100 == 0 &&
+                    sampleTiming.getAndIncrement() % 1_000 == 0 &&
                     !((msg = mailbox.getQueue().peek()) instanceof MessageOnStorage) &&
                     msg != null && msg.getData() instanceof Serializable) {
                 return updateCurrentSample(mailbox, msg);
@@ -350,13 +352,14 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
         }
 
         public boolean needToPersistRuntime(long size, long sizeLimit, long currentSample) {
-            boolean log = (sampleTiming.get() % 10_000) == 0;
+            boolean log = logTimingNeedToPersist.next();
             long free =  runtimeAvailableBytes();
             long estimated = (size + sizeLimit) * currentSample;
             boolean res = estimated > free;
-            if (log) {
-                logger.log(logPersist, logColorPersist, "needToPersistRuntime size=%,d sizeLimit=%,d sample=%,d estimated=%,d free=%,d -> %s",
-                        size, sizeLimit, currentSample, estimated, free, res);
+            if (log || res) {
+                logger.log(logPersist, logColorPersist,
+                        "Mailbox needToPersist: size=%,d sizeLimit=%,d sample=%,d estimated=%,d free=%,d (%3.1f%%) -> %s",
+                        size, sizeLimit, currentSample, estimated, free, (estimated / (double) free) * 100.0, res);
             }
             return res;
         }
@@ -367,23 +370,23 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
         }
 
         public long updateCurrentSample(MailboxPersistable mailbox, Message<?> msg) {
-            long t = sampleTiming.get();
-            if (t >= 1000_000) {
+            int t = sampleTiming.get();
+            if (t >= 1000_000_000) {
                 sampleTiming.set(0);
             }
-
+            boolean log = logTimingUpdate.next();
             try (Output output = new Output(4096)) { //a lengthy message causes a buffer overflow error
                 mailbox.getPersistent().getSerializer().write(output, msg);
                 output.flush();
                 long sampleSize = output.total();
                 long v = sampleTotal.addAndGet(sampleSize) / sampleCount.incrementAndGet();
-                if ((t % 100) == 0) {
+                if (log) {
                     logger.log(logPersist, logColorPersist, "updateCurrentSample timing=%,d lastSample=[%,d] <%s> total=%,d count=%,d -> %,d",
                             t, sampleSize, logger.toStringLimit(msg), sampleTotal.get(), sampleCount.get(), v);
                 }
                 return v;
             } catch (Exception ex) {
-                if ((t % 100) == 0) {
+                if (log) {
                     logger.log(logPersist, logColorPersist, "updateCurrentSample timing=%,d lastSample=<%s> total=%,d count=%,d error:%s",
                             t, logger.toStringLimit(msg), sampleTotal.get(), sampleCount.get(), ex);
                 }
@@ -402,6 +405,52 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
                 return 100;
             } else {
                 return Math.max(16, sampleTotal.get() / sampleCount.get());
+            }
+        }
+    }
+
+    public static class SampleTiming {
+        protected AtomicInteger count = new AtomicInteger();
+        protected AtomicInteger next = new AtomicInteger();
+
+        protected int firstShift; //0 -> 2^firstShift -> 2^(firstShift+2) -> ...
+        protected int maxShift;
+        protected int resetShift; //0 -> ... -> 2^maxShift -> 2^resetShift
+
+        public SampleTiming() {
+            this(14, 30, 21);
+        }
+        public SampleTiming(int firstShift, int maxShift, int resetShift) {
+            this.firstShift = Math.min(30, firstShift);
+            this.maxShift = Math.min(30, maxShift);
+            this.resetShift = Math.min(30, resetShift);
+        }
+
+        public boolean check() {
+            return count.get() >= next.get();
+        }
+
+        public boolean next() {
+            int max = 1 << maxShift;
+            int t = count.getAndIncrement();
+            if (t > max) {
+                count.set(0);
+            }
+
+            int nt = next.get();
+            if (t >= nt) {
+                int next = nt <= 0 ? (1 << firstShift) : (nt << 2);
+                while (next > 0 && next < Math.min(max, t)) {
+                    next <<= 2;
+                }
+                if (next < 0 || next >= max) {
+                    this.next.set(1 << resetShift);
+                } else {
+                    this.next.set(next);
+                }
+                return true;
+            } else {
+                return false;
             }
         }
     }

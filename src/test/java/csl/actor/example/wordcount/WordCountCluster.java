@@ -58,6 +58,7 @@ public class WordCountCluster {
                 "node follower1:\n" +
                 "   host \"localhost\"\n" +
                 "   port 38889\n" +
+                "   java \"java -Xmx512m %s %s %s\"\n" +
                 String.format("   baseDir \"%s\"\n", dir) +
                 "   logColor 71\n" +
                 "   logFile true\n" +
@@ -68,6 +69,7 @@ public class WordCountCluster {
                 "node follower2:\n" +
                 "   host \"localhost\"\n" +
                 "   port 38890\n" +
+                "   java \"java -Xmx512m %s %s %s\"\n" +
                 String.format("   baseDir \"%s\"\n", dir) +
                 "   logColor 72\n" +
                 "   logFile true\n" +
