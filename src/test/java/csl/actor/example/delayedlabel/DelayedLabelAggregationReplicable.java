@@ -20,13 +20,13 @@ public class DelayedLabelAggregationReplicable extends DelayedLabelManual {
     }
 
     @Override
-    public ActorRef learnerActor(ActorSystem system, Consumer<String> out, ActorRef resultActor) {
+    public ActorRef learnerActor(ActorSystem system, ActorSystem.SystemLogger out, ActorRef resultActor) {
         root = new LearnerActorAggregationReplicable(system, out, resultActor, config);
         return root;
     }
 
     @Override
-    public ResultActor resultActor(ActorSystem system, Consumer<String> out, Instant startTime) {
+    public ResultActor resultActor(ActorSystem system, ActorSystem.SystemLogger out, Instant startTime) {
         return new ResultActorAggregationReplicable(system, out, startTime, config.instances);
     }
 
@@ -34,7 +34,7 @@ public class DelayedLabelAggregationReplicable extends DelayedLabelManual {
 
     static class ResultActorAggregationReplicable extends ResultActor {
         boolean printed;
-        public ResultActorAggregationReplicable(ActorSystem system, Consumer<String> out, Instant startTime, int numInstances) {
+        public ResultActorAggregationReplicable(ActorSystem system, ActorSystem.SystemLogger out, Instant startTime, int numInstances) {
             super(system, out, startTime, numInstances);
         }
 
@@ -69,17 +69,17 @@ public class DelayedLabelAggregationReplicable extends DelayedLabelManual {
 
         public LearnerActorAggregationReplicable(ActorSystem system, String name, Config config, ActorRef result, State state) {
             super(system, name, config, state);
-            support = new DelayedLabelAggregation.LearnerAggregationSupport(this, config.getLogOut(), result,
+            support = new DelayedLabelAggregation.LearnerAggregationSupport(this, config.getLogger(), result,
                     ((DelayedLabelConfig) config).instances);
         }
 
-        public LearnerActorAggregationReplicable(ActorSystem system, String name, Consumer<String> out, ActorRef resultActor,
+        public LearnerActorAggregationReplicable(ActorSystem system, String name, ActorSystem.SystemLogger out, ActorRef resultActor,
                                                  DelayedLabelConfig config, State state) {
             super(system, name, config, state);
             support = new DelayedLabelAggregation.LearnerAggregationSupport(this, out, resultActor, config.instances);
         }
 
-        public LearnerActorAggregationReplicable(ActorSystem system, Consumer<String> out, ActorRef resultActor,
+        public LearnerActorAggregationReplicable(ActorSystem system, ActorSystem.SystemLogger out, ActorRef resultActor,
                                                  DelayedLabelConfig config) {
             this(system, "learner", out, resultActor, config, null);
             state = initStateRouter();

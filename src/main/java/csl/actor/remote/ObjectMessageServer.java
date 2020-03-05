@@ -1,6 +1,8 @@
 package csl.actor.remote;
 
 import com.esotericsoftware.kryo.io.Input;
+import csl.actor.ActorSystem;
+import csl.actor.ActorSystemDefault;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufInputStream;
@@ -14,8 +16,6 @@ import io.netty.handler.logging.LoggingHandler;
 import io.netty.util.ReferenceCountUtil;
 
 import java.io.Closeable;
-import java.io.PrintWriter;
-import java.io.StringWriter;
 import java.util.function.Function;
 
 public class ObjectMessageServer implements Closeable {
@@ -41,7 +41,18 @@ public class ObjectMessageServer implements Closeable {
 
     protected Function<Object, Integer> receiver;
 
+    protected ActorSystem.SystemLogger logger;
+
     public static boolean debugTraceLog = System.getProperty("csl.actor.trace.server", "false").equals("true");
+    public static int debugLogServerColor = ActorSystem.systemPropertyColor("csl.actor.server.color", 161);
+
+    public ObjectMessageServer(ActorSystem.SystemLogger logger) {
+        this.logger = logger;
+    }
+
+    public ObjectMessageServer() {
+        this(new ActorSystemDefault.SystemLoggerErr());
+    }
 
     public ObjectMessageServer setLeaderThreads(int leaderThreads) {
         this.leaderThreads = leaderThreads;
@@ -123,12 +134,16 @@ public class ObjectMessageServer implements Closeable {
         return channel;
     }
 
+    public ActorSystem.SystemLogger getLogger() {
+        return logger;
+    }
+
     public static KryoBuilder.SerializerPool defaultSerializer = new KryoBuilder.SerializerPoolDefault();
 
     protected void initSerializer() {
         if (serializer == null) {
             serializer = defaultSerializer;
-            ActorSystemRemote.log(ActorSystemRemote.debugLog, 161, "%s use default serializer", this);
+            logger.log(ActorSystemRemote.debugLog, debugLogServerColor, "%s use default serializer", this);
         }
     }
 
@@ -235,8 +250,9 @@ public class ObjectMessageServer implements Closeable {
 
         @Override
         protected void initChannel(SocketChannel socketChannel) throws Exception {
-            QueueServerHandler handler = new QueueServerHandler(owner.getSerializer(), owner.getReceiver());
-            ActorSystemRemote.log(ActorSystemRemote.debugLog, 161, "%s local:%s, remote:%s, handler:%s", this, socketChannel.localAddress(), socketChannel.remoteAddress(), handler);
+            QueueServerHandler handler = new QueueServerHandler(owner.getLogger(), owner.getSerializer(), owner.getReceiver());
+            owner.getLogger().log(ActorSystemRemote.debugLog, debugLogServerColor,
+                    "%s local:%s, remote:%s, handler:%s", this, socketChannel.localAddress(), socketChannel.remoteAddress(), handler);
             ActorSystemRemote.settingsSocketChannel(socketChannel);
 
             //length[4] + contents[length]
@@ -262,11 +278,13 @@ public class ObjectMessageServer implements Closeable {
     }
 
     public static class QueueServerHandler extends ChannelInboundHandlerAdapter {
+        protected ActorSystem.SystemLogger logger;
         protected KryoBuilder.SerializerFunction serializer;
         protected Function<Object,Integer> receiver;
         protected volatile boolean firstError = true;
 
-        public QueueServerHandler(KryoBuilder.SerializerFunction serializer, Function<Object, Integer> receiver) {
+        public QueueServerHandler(ActorSystem.SystemLogger logger, KryoBuilder.SerializerFunction serializer, Function<Object, Integer> receiver) {
+            this.logger = logger;
             this.serializer = serializer;
             this.receiver = receiver;
         }
@@ -276,7 +294,7 @@ public class ObjectMessageServer implements Closeable {
             if (msg instanceof ByteBuf) {
                 ByteBuf buf = (ByteBuf) msg;
                 int length = buf.readInt();
-                ActorSystemRemote.log(ActorSystemRemote.debugLogMsg, 161, "%s bytes %,d  len %,d, serializer=%s", this, buf.readableBytes(), length, serializer);
+                logger.log(ActorSystemRemote.debugLogMsg, debugLogServerColor, "%s bytes %,d  len %,d, serializer=%s", this, buf.readableBytes(), length, serializer);
                 Input input = new Input(new ByteBufInputStream(buf, length));
                 Object value = serializer.read(input);
                 ReferenceCountUtil.release(buf);
@@ -291,34 +309,21 @@ public class ObjectMessageServer implements Closeable {
                 if (ActorSystemRemote.CLOSE_EACH_WRITE) {
                     ctx.close();
                 }
-                ActorSystemRemote.log(ActorSystemRemote.debugLogMsg, 161, "%s read finish: %d", this, r);
+                logger.log(ActorSystemRemote.debugLogMsg, debugLogServerColor, "%s read finish: %d", this, r);
             } else {
-                ActorSystemRemote.log(ActorSystemRemote.debugLogMsg, 161, "%s ignore %s", this, msg);
+                logger.log(ActorSystemRemote.debugLogMsg, debugLogServerColor, "%s ignore %s", this, msg);
             }
         }
 
         @Override
         public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
-            Object errorToStr = new Object() {
-                @Override
-                public String toString() {
-                    return QueueServerHandler.this.toString(cause);
-                }
-            };
-            ActorSystemRemote.log(ActorSystemRemote.debugLogMsg, 161, "%s", errorToStr);
             if (firstError) {
-                ActorSystemRemote.log(true, 162, String.format("%s", errorToStr));
+                logger.log(true, debugLogServerColor, cause, "%s exceptionCaught", this);
                 firstError = false;
+            } else {
+                logger.log(ActorSystemRemote.debugLogMsg, debugLogServerColor, cause, "%s exceptionCaught", this);
             }
             ctx.close();
-        }
-
-        protected String toString(Throwable ex) {
-            StringWriter sw = new StringWriter();
-            PrintWriter pw = new PrintWriter(sw);
-            ex.printStackTrace(pw);
-            sw.flush();
-            return String.format("%s exceptionCaught %s: \n  %s", this, ex, sw.getBuffer().toString());
         }
 
         /** @return implementation field getter */

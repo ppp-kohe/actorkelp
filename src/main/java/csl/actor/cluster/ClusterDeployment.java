@@ -99,6 +99,16 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
 
 
     public void deployMaster(List<ClusterUnit<AppConfType>> units) throws Exception {
+        deployMasterInitMaster(units);
+        deployMasterInitAppName();
+        deployMasterInitSystem();
+        deployMasterInitUncaughtHandler();
+        deployFiles(master);
+        deployMasterStartSystem();
+        deployMasterAfterSystemInit(units);
+    }
+
+    protected void deployMasterInitMaster(List<ClusterUnit<AppConfType>> units) {
         master = units.stream()
                 .filter(u -> u.getDeploymentConfig().master)
                 .findFirst()
@@ -106,14 +116,45 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         if (master == null) {
             master = master();
         }
+    }
+
+    protected void deployMasterInitAppName() {
         this.appName = getAppName();
+    }
+
+    protected void deployMasterInitSystem() {
         system = new ActorSystemRemote();
+        system.getLocalSystem().setLogger(new ConfigBase.SystemLoggerHeader(system.getLogger(), master.getAppConfig()));
+    }
+
+    protected void deployMasterInitUncaughtHandler() {
         setDefaultUncaughtHandler(master.getDeploymentConfig());
+    }
 
-        deployFiles(master);
+    protected void deployMasterStartSystem() {
         system.startWithoutWait(ActorAddress.get(master.getDeploymentConfig().getAddress()));
+    }
 
-        deployMasterAfterSystemInit(units);
+    protected void deployMasterAfterSystemInit(List<ClusterUnit<AppConfType>> units) throws Exception {
+        deployMasterAfterSystemInitLogColor();
+        deployMasterAfterSystemInitPath();
+        master.log("master %s: path %s", master.getDeploymentConfig().getAddress(), ConfigDeployment.getPathModifier(system));
+
+        deployMasterAfterSystemInitPlace();
+        master.log("master %s: started %s", master.getDeploymentConfig().getAddress(), masterPlace);
+
+        deployMasterAfterSystemInitSendConfigToUnits(units);
+    }
+
+    protected void deployMasterAfterSystemInitLogColor() {
+        System.setProperty("csl.actor.logColor", Integer.toString(master.getDeploymentConfig().getLogColorDefault()));
+    }
+
+    protected void deployMasterAfterSystemInitPath() throws Exception {
+        ConfigDeployment.PathModifierHost ph = master.getDeploymentConfig().setPathModifierWithBaseDir(system);
+        ph.setApp(getAppName());
+        System.setProperty("csl.actor.path.app", ph.getApp());
+        setLogFile(master.getDeploymentConfig(), ph);
     }
 
     public static void setLogFile(ConfigDeployment conf, ConfigDeployment.PathModifier pm) throws Exception {
@@ -127,21 +168,13 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         }
     }
 
-    protected void deployMasterAfterSystemInit(List<ClusterUnit<AppConfType>> units) throws Exception {
-        System.setProperty("csl.actor.logColor", Integer.toString(master.getDeploymentConfig().getLogColorDefault()));
-
-        ConfigDeployment.PathModifierHost ph = master.getDeploymentConfig().setPathModifierWithBaseDir(system);
-        ph.setApp(getAppName());
-        System.setProperty("csl.actor.path.app", ph.getApp());
-        setLogFile(master.getDeploymentConfig(), ph);
-        master.log(String.format("master %s: path %s", master.getDeploymentConfig().getAddress(), ph));
-
+    protected void deployMasterAfterSystemInitPlace() throws Exception {
         masterPlace = createPlace(placeType, system,
                 new ActorPlacement.PlacementStrategyRoundRobin(0));
         masterPlace.setLogger(master.getDeploymentConfig());
+    }
 
-        master.log(String.format("master %s: started %s", master.getDeploymentConfig().getAddress(), masterPlace));
-
+    protected void deployMasterAfterSystemInitSendConfigToUnits(List<ClusterUnit<AppConfType>> units) {
         Map<ActorAddress, AppConfType> configMap = masterPlace.getRemoteConfig();
         units.forEach(u ->
                 configMap.put(ActorAddress.get(u.getDeploymentConfig().getAddress()), u.getAppConfig()));
@@ -157,7 +190,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
     public void deployNode(ClusterUnit<AppConfType> unit) {
         try {
             nodes.add(unit);
-            unit.log(String.format("%s: deploy: %s", appName, unit.getDeploymentConfig().getAddress()));
+            unit.log("%s: deploy: %s", appName, unit.getDeploymentConfig().getAddress());
             deployFiles(unit);
 
             deployNodeStartProcess(unit);
@@ -298,7 +331,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
 
     public Process launch(ClusterUnit<?> unit, List<String> cmd) {
         try {
-            unit.log(String.format("%s: command: %s : %s", getAppName(), unit.getDeploymentConfig().getAddress(), cmd));
+            unit.log("%s: command: %s : %s", getAppName(), unit.getDeploymentConfig().getAddress(), cmd);
             ProcessBuilder builder = new ProcessBuilder().command(cmd);
             builder.redirectOutput(ProcessBuilder.Redirect.INHERIT)
                     .redirectError(ProcessBuilder.Redirect.INHERIT);
@@ -399,7 +432,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         int count = pathList.size();
         String fileName = filePath.getFileName().toString();
         Path jarPath = jarDir.resolve(fileName);
-        unit.log(String.format("%s deployFiles: %s\n      %s\n  ->  %s", getAppName(), header, filePath, jarPath));
+        unit.log("%s deployFiles: %s\n      %s\n  ->  %s", getAppName(), header, filePath, jarPath);
         if (pathList.contains(jarPath.toString())) {
             int i = fileName.lastIndexOf(".");
             if (i > 0) {
@@ -416,11 +449,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
 
     public static void setDefaultUncaughtHandler(ConfigBase base) {
         Thread.setDefaultUncaughtExceptionHandler((t,ex) -> {
-            StringWriter sw = new StringWriter();
-            PrintWriter w = new PrintWriter(sw);
-            ex.printStackTrace(w);
-            String data = sw.getBuffer().toString();
-            base.log(data);
+            base.log(ex, "uncaught: %s", t);
         });
     }
 
@@ -429,39 +458,73 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
             new NodeMain().run(args);
         }
 
+        protected int logColor = ActorSystem.systemPropertyColor("csl.actor.logColor", 0);
+        protected ConfigDeployment logger;
+        protected ActorAddress.ActorAddressRemote selfAddress;
+        protected ActorSystemRemote system;
+        protected ActorPlacement.ActorPlacementDefault place;
+
         public void run(String[] args) throws Exception {
-            int n = Integer.parseInt(System.getProperty("csl.actor.logColor", "0"));
-            ConfigDeployment logger = new ConfigDeployment();
-            logger.read("csl.actor", System.getProperties());
+            initLogger();
 
             String selfAddr = args[0];
             String joinAddr = args[1];
             String placeType = (args.length > 2 ? args[2] : "");
 
+            selfAddress = initSelfAddress(selfAddr);
+            system = initSystem();
+
+            initPath();
+            logger.log(logColor, "%s: path %s", selfAddress, ConfigDeployment.getPathModifier(system));
+
+            startSystem();
+            place = initPlace(placeType);
+
+            logger.log(logColor, "%s: joining to %s", place, joinAddr);
+            join(joinAddr);
+        }
+
+        protected void initLogger() {
+            logger = new ConfigDeployment();
+            logger.read("csl.actor", System.getProperties());
+            setDefaultUncaughtHandler(logger);
+        }
+
+        protected ActorAddress.ActorAddressRemote initSelfAddress(String selfAddr) {
             ActorAddress.ActorAddressRemote selfAddrObj = ActorAddress.get(selfAddr);
             logger.host = selfAddrObj.getHost();
             logger.port = selfAddrObj.getPort();
+            return selfAddrObj;
+        }
 
-            setDefaultUncaughtHandler(logger);
-
+        protected ActorSystemRemote initSystem() {
             ActorSystemRemote system = new ActorSystemRemote();
+            system.getLocalSystem().setLogger(new ConfigBase.SystemLoggerHeader(system.getLogger(), logger));
+            return system;
+        }
 
+        protected void initPath() throws Exception {
             //the working directory is the baseDir
             ConfigDeployment.PathModifierHost ph = ConfigDeployment.setPathModifierWithBaseDir(system,
                     Paths.get(".").toAbsolutePath().normalize().toString());
-            ph.setHost(selfAddrObj.getHost(), selfAddrObj.getPort());
+            ph.setHost(selfAddress.getHost(), selfAddress.getPort());
             String appName = System.getProperty("csl.actor.path.app", "");
             ph.setApp(appName);
             setLogFile(logger, ph);
+        }
 
-            logger.log(String.format("%s: path %s", selfAddrObj, ph));
+        protected void startSystem() {
+            system.startWithoutWait(selfAddress);
+        }
 
-            system.startWithoutWait(selfAddrObj);
+        protected ActorPlacement.ActorPlacementDefault initPlace(String placeType) throws Exception {
             ActorPlacement.ActorPlacementDefault p = createPlace(placeType, system, new ActorPlacement.PlacementStrategyUndertaker());
             p.setLogger(logger);
+            return p;
+        }
 
-            logger.log(n, String.format("%s: joining to %s", p, joinAddr));
-            p.join(ActorAddress.ActorAddressRemote.get(joinAddr));
+        protected void join(String joinAddr) {
+            place.join(ActorAddress.ActorAddressRemote.get(joinAddr));
         }
 
         @SuppressWarnings("unchecked")
@@ -564,9 +627,9 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
                     if (joinedAddr != null) {
                         ActorAddress joinedHost = joinedAddr.getHostAddress();
                         nodeAddrs.remove(joinedHost);
-                        master.log(String.format("%s: joined: %s  remaining=%,d", joinedHost, appName, nodeAddrs.size()));
+                        master.log("%s: joined: %s  remaining=%,d", joinedHost, appName, nodeAddrs.size());
                     } else {
-                        master.log(String.format("%s: waiting join: limit=%,d remaining=%,d", appName, limit, nodeAddrs.size()));
+                        master.log("%s: waiting join: limit=%,d remaining=%,d", appName, limit, nodeAddrs.size());
                         if (nodeAddrs.size() <= 5) {
                             master.log("  remaining nodes: " + nodeAddrs);
                         }
@@ -574,11 +637,11 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
                     }
                 } catch (Exception ex) {
                     //
-                    master.log(String.format("%s %s", appName, ex));
+                    master.log("%s %s", appName, ex);
                     break;
                 }
             }
-            master.log(String.format("%s launched %,d nodes", appName, getClusterSize()));
+            master.log("%s launched %,d nodes", appName, getClusterSize());
         }
 
         public ActorRef move(Actor actor, ActorAddress address) {
@@ -679,7 +742,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
     public void destroyClusterProcesses() {
         getProcesses().forEach((unit, proc) -> {
             if (proc.isAlive()) {
-                unit.log(String.format("%s : destroy process: %s", unit, proc));
+                unit.log("%s : destroy process: %s", unit, proc);
                 proc.destroy();
             }
         });

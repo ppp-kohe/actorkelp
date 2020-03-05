@@ -1,15 +1,10 @@
 package csl.actor.keyaggregate;
 
 import csl.actor.*;
-import csl.actor.cluster.ActorPlacement;
-import csl.actor.cluster.MailboxPersistable;
-import csl.actor.cluster.PhaseShift;
-import csl.actor.cluster.ResponsiveCalls;
+import csl.actor.cluster.*;
 import csl.actor.keyaggregate.KeyAggregationRoutingSplit.SplitPath;
 
-import java.io.PrintWriter;
 import java.io.Serializable;
-import java.io.StringWriter;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.HashMap;
@@ -20,7 +15,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 public abstract class ActorKeyAggregation extends ActorDefault
@@ -200,7 +194,7 @@ public abstract class ActorKeyAggregation extends ActorDefault
         if (initPersistentEnabled()) {
             MailboxPersistable.PersistentConditionMailbox condMailbox;
             if (persistRuntimeCondition()) {
-                condMailbox = new MailboxPersistable.PersistentConditionMailboxSampling(persistMailboxSizeLimit());
+                condMailbox = new MailboxPersistable.PersistentConditionMailboxSampling(persistMailboxSizeLimit(), m.getLogger());
             } else {
                 condMailbox = new MailboxPersistable.PersistentConditionMailboxSizeLimit(persistMailboxSizeLimit());
             }
@@ -216,10 +210,10 @@ public abstract class ActorKeyAggregation extends ActorDefault
             if (persistRuntimeCondition()) {
                 if (mailbox instanceof MailboxPersistable) {
                     condHist = new KeyHistogramsPersistable.PersistentConditionHistogramSampling(
-                            histogramPersistSizeLimit(), histogramPersistSizeRatioThreshold(), (MailboxPersistable) mailbox);
+                            histogramPersistSizeLimit(), histogramPersistSizeRatioThreshold(), (MailboxPersistable) mailbox, m.getLogger());
                 } else {
                     condHist = new KeyHistogramsPersistable.PersistentConditionHistogramSampling(
-                            histogramPersistSizeLimit(), histogramPersistSizeRatioThreshold());
+                            histogramPersistSizeLimit(), histogramPersistSizeRatioThreshold(), m.getLogger());
                 }
             } else {
                 condHist = new KeyHistogramsPersistable.PersistentConditionHistogramSizeLimit(this);
@@ -390,7 +384,7 @@ public abstract class ActorKeyAggregation extends ActorDefault
     public boolean processMessageNext() {
         boolean pr = isRouterParallelRouting();
         try {
-            if (!pr && getMailboxAsKeyAggregation().processHistogram()) {
+            if (!pr && getMailboxAsKeyAggregation().processHistogram(this)) {
                 return true;
             }
             return super.processMessageNext();
@@ -466,15 +460,15 @@ public abstract class ActorKeyAggregation extends ActorDefault
             @Override
             protected void logReducedSize(long size, long availableOnMemoryMessages, int consuming) {
                 if (config.logSplit) {
-                    config.log(String.format("%s reduceSize: %,d -> %,d", this, size, consuming));
+                    config.log("%s reduceSize: %,d -> %,d", this, size, consuming);
                 }
             }
 
             @Override
             protected void logNeedToReduce(long size, long availableOnMemoryMessages) {
                 if (config.logSplit) {
-                    config.log(String.format("%s needToReduce: %,d > %,d & %,d", this, size, reduceRuntimeCheckingThreshold,
-                            availableOnMemoryMessages));
+                    config.log("%s needToReduce: %,d > %,d & %,d", this, size, reduceRuntimeCheckingThreshold,
+                            availableOnMemoryMessages);
                 }
             }
         };
@@ -637,12 +631,7 @@ public abstract class ActorKeyAggregation extends ActorDefault
             Instant now = Instant.now();
             if (last == null || Duration.ofSeconds(30).minus(Duration.between(last, now)).isNegative()) {
                 errorRecords.put(info, now);
-
-                StringWriter sw = new StringWriter();
-                PrintWriter w = new PrintWriter(sw);
-                ex.printStackTrace(w);
-                String data = sw.getBuffer().toString();
-                log(info + ": " + ref + ": " + data);
+                config.log(ex, "%s: %s", info, ref);
             }
         }
     }
@@ -852,62 +841,78 @@ public abstract class ActorKeyAggregation extends ActorDefault
     }
 
     public void printStatus(String head) {
-        printStatus(config.getLogOut(), head);
+        printStatus(config.getLogger(), head);
     }
 
     public void printStatus(String head, List<KeyAggregationRoutingSplit> newSplits) {
-        printStatus(config.getLogOut(), head, newSplits);
+        printStatus(config.getLogger(), head, newSplits);
     }
 
     public void log(String str) {
-        config.log(str);
+        config.log("%s", str);
+    }
+
+    public void log(String str, Object... args) {
+        config.log(str, args);
+    }
+
+    public void log(Throwable ex, String str) {
+        config.log(ex, "%s", str);
+    }
+
+    public void log(Throwable ex, String str, Object... args) {
+        config.log(ex, str, args);
     }
 
     @Override
-    public void logPhase(String str) {
-        config.log(config.logColorPhase, str);
+    public void logPhase(String str, Object... args) {
+        config.log(config.logColorPhase, str, args);
     }
 
-    public String logMessage(String str) {
-        return config.logMessage(str);
+    public ConfigBase.FormatAndArgs logMessage(String str, Object... args) {
+        return config.logMessage(str, args);
     }
 
-    public void printStatus(Consumer<String> out, String head) {
-        println(out, toStringStatus(head));
+    public void printStatus(ActorSystem.SystemLogger out, String head) {
+        ConfigBase.FormatAndArgs fa = toStringStatus(head);
+        int color = config.getLogColorDefault();
+        out.log(true, color, fa.format, fa.args);
         if (state instanceof KeyAggregationStateRouter) {
             KeyAggregationStateRouter sr = (KeyAggregationStateRouter) state;
             printStatus(sr.getSplit(), out);
         }
     }
 
-    public void printStatus(Consumer<String> out, String head, List<KeyAggregationRoutingSplit> newSplits) {
-        println(out, toStringStatus(head));
+    public void printStatus(ActorSystem.SystemLogger out, String head, List<KeyAggregationRoutingSplit> newSplits) {
+        ConfigBase.FormatAndArgs fa = toStringStatus(head);
+        int color = config.getLogColorDefault();
+        out.log(true, color, fa.format, fa.args);
         int i = 0;
         for (KeyAggregationRoutingSplit s : newSplits) {
             if (s instanceof KeyAggregationRoutingSplit.RoutingSplitLeaf) {
                 ActorRef r = ((KeyAggregationRoutingSplit.RoutingSplitLeaf) s).getActor();
-                println(out, String.format(" %d: %s %d:leaf: %s", i, s.getPath(), s.getDepth(), r));
+                out.log(true, color, " %d: %s %d:leaf: %s", i, s.getPath(), s.getDepth(), r);
                 ++i;
             }
         }
     }
 
-    public String toStringStatus(String head) {
+    public ConfigBase.FormatAndArgs toStringStatus(String head) {
         String str = toString();
         if (state instanceof KeyAggregationStateRouter) {
             KeyAggregationStateRouter sr = (KeyAggregationStateRouter) state;
-            return logMessage(String.format("%s router %s \n" +
+            return logMessage("%s router %s \n" +
                             "   threshold=%,d height=%,d/%,d parallelRouting=%s",
                     head,
                     str,
                     mailboxThreshold(),
                     sr.getHeight(),
                     sr.getMaxHeight(),
-                    !sr.isNonParallelRouting()));
+                    !sr.isNonParallelRouting());
         } else if (state instanceof StateUnit) {
-            return logMessage(String.format("%s leaf %s", head, str));
+            return logMessage("%s leaf %s", head, str);
         } else {
-            return logMessage(String.format("%s %s %s", state, head, str));
+            return logMessage("%s %s %s", state, head, str);
         }
     }
 
@@ -949,34 +954,32 @@ public abstract class ActorKeyAggregation extends ActorDefault
                         .collect(Collectors.joining(", ", "[", "]")));
     }
 
-    protected void printStatus(KeyAggregationRoutingSplit s, Consumer<String> out) {
+    protected void printStatus(KeyAggregationRoutingSplit s, ActorSystem.SystemLogger out) {
         String idt = "  ";
         if (s != null) {
             for (int i = 0; i < s.getDepth(); ++i) {
                 idt += "  ";
             }
         }
+        int color = config.getLogColorDefault();
         if (s == null) {
-            println(out, String.format("%s null", idt));
+            out.log(true, color, "%s null", idt);
         } else if (s instanceof KeyAggregationRoutingSplit.RoutingSplitNode) {
             KeyAggregationRoutingSplit.RoutingSplitNode sn = (KeyAggregationRoutingSplit.RoutingSplitNode) s;
-            println(out, String.format("%s %d:node: %s history=%s", idt, sn.getDepth(), sn.getSplitPoints().stream()
+            out.log(true, color, "%s %d:node: %s proced=%,d history=%s", idt, sn.getDepth(), sn.getSplitPoints().stream()
                 .map(Objects::toString)
                 .map(l -> l.length() > 100 ? l.substring(0, 100) + "..." : l)
                 .collect(Collectors.joining(", ", "[", "]")),
+                sn.getProcessCount(),
                 sn.getHistory().toList().stream()
                     .map(h -> String.format("(%,d:%,d)", h.left.get(), h.right.get()))
-                    .collect(Collectors.joining(", ", "{", "}"))));
+                    .collect(Collectors.joining(", ", "{", "}")));
             printStatus(sn.getLeft(), out);
             printStatus(sn.getRight(), out);
         } else if (s instanceof KeyAggregationRoutingSplit.RoutingSplitLeaf) {
             ActorRef r = ((KeyAggregationRoutingSplit.RoutingSplitLeaf) s).getActor();
-            println(out, String.format("%s %d:leaf: %s", idt, s.getDepth(), r));
+            out.log(true, color, "%s %d:leaf: proced=%,d %s", idt, s.getDepth(), s.getProcessCount(), r);
         }
-    }
-
-    public void println(Consumer<String> out, String line) {
-        config.println(out, line);
     }
 
 }

@@ -16,20 +16,20 @@ public class DelayedLabelAggregation extends DelayedLabelManual {
     }
 
     @Override
-    public ActorRef learnerActor(ActorSystem system, Consumer<String> out, ActorRef resultActor) {
+    public ActorRef learnerActor(ActorSystem system, ActorSystem.SystemLogger out, ActorRef resultActor) {
         return new LernerActorAggregation(system, out, resultActor, config.instances);
     }
 
     public static class LernerActorAggregation extends ActorKeyAggregation {
         LearnerAggregationSupport support;
 
-        public LernerActorAggregation(ActorSystem system, String name, Consumer<String> out, ActorRef resultActor, int numInstances) {
+        public LernerActorAggregation(ActorSystem system, String name, ActorSystem.SystemLogger out, ActorRef resultActor, int numInstances) {
             super(system, name);
             support = new LearnerAggregationSupport(this, out, resultActor, numInstances);
             setAsUnit();
         }
 
-        public LernerActorAggregation(ActorSystem system, Consumer<String> out, ActorRef resultActor, int numInstances) {
+        public LernerActorAggregation(ActorSystem system, ActorSystem.SystemLogger out, ActorRef resultActor, int numInstances) {
             super(system);
             support = new LearnerAggregationSupport(this, out, resultActor, numInstances);
             setAsUnit();
@@ -64,7 +64,7 @@ public class DelayedLabelAggregation extends DelayedLabelManual {
         public LearnerModel model;
         public int numInstances;
         public boolean debug = System.getProperty("debug", "").equals("true");
-        public Consumer<String> out;
+        public ActorSystem.SystemLogger out;
 
         public long count = 0;
         public static AtomicLong pruneCount = new AtomicLong();
@@ -72,7 +72,7 @@ public class DelayedLabelAggregation extends DelayedLabelManual {
         public ActorKeyAggregation self;
         public ActorKeyAggregation root;
 
-        public LearnerAggregationSupport(ActorKeyAggregation self, Consumer<String> out, ActorRef resultActor, int numInstances) {
+        public LearnerAggregationSupport(ActorKeyAggregation self, ActorSystem.SystemLogger out, ActorRef resultActor, int numInstances) {
             this.self = self;
             this.root = self;
             model = new LearnerModel(resultActor);
@@ -111,7 +111,7 @@ public class DelayedLabelAggregation extends DelayedLabelManual {
             }
             String sn = self.getClass().getSimpleName();
             File file = new File(dir, String.format("delayed-%s-%s.dot", sn, count));
-            ResponsiveCalls.sendTask(self.getSystem(), root, (self, ref) -> {
+            ResponsiveCalls.sendTaskConsumer(self.getSystem(), root, (self, ref) -> {
                 if (new ActorToGraph(self.getSystem(), file, self).save(self).finish()) {
                     if (finish) {
                         System.exit(0);
@@ -123,15 +123,14 @@ public class DelayedLabelAggregation extends DelayedLabelManual {
                         });
                     }
                 }
-                return null;
-            }, (t) -> {});
+            });
         }
 
         public void finish(Finish f) {
             KeyHistograms.HistogramTree tree = self.getMailboxAsKeyAggregation().getHistogram(0);
-            out.accept(String.format("#prune-count: %,d : leaf=%,d, non-zero-leaf=%,d : %04f",
+            out.log(String.format("#prune-count: %,d : leaf=%,d, non-zero-leaf=%,d : %04f",
                     pruneCount.get(), tree.getLeafSize(), tree.getLeafSizeNonZero(), tree.getLeafSizeNonZeroRate()));
-            out.accept(String.format("#debug-free-memory: %,d bytes",
+            out.log(String.format("#debug-free-memory: %,d bytes",
                     Runtime.getRuntime().freeMemory()));
             save("finish-" + f.numInstances, true);
         }

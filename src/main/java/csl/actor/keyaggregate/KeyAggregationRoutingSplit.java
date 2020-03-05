@@ -2,13 +2,13 @@ package csl.actor.keyaggregate;
 
 import csl.actor.Actor;
 import csl.actor.ActorRef;
-import csl.actor.CallableMessage;
 import csl.actor.Message;
 import csl.actor.cluster.ResponsiveCalls;
 
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 public interface KeyAggregationRoutingSplit {
     void process(ActorKeyAggregation router, KeyAggregationStateRouter stateRouter,
@@ -16,6 +16,8 @@ public interface KeyAggregationRoutingSplit {
     int getDepth();
 
     default void clearHistory() {}
+
+    long getProcessCount();
 
     default boolean isHistoryExceeded(int limit) {
         return false;
@@ -115,6 +117,7 @@ public interface KeyAggregationRoutingSplit {
     class RoutingSplitLeaf implements KeyAggregationRoutingSplit {
         protected ActorRef actor;
         protected SplitPath path;
+        protected AtomicLong processCount = new AtomicLong();
 
         public RoutingSplitLeaf(ActorRef actor, SplitPath path) {
             this.actor = actor;
@@ -124,6 +127,7 @@ public interface KeyAggregationRoutingSplit {
         @Override
         public void process(ActorKeyAggregation router, KeyAggregationStateRouter stateRouter,
                             Object key, MailboxKeyAggregation.HistogramSelection selection, Message<?> message) {
+            processCount.incrementAndGet();
             actor.tell(message.getData(), message.getSender());
         }
 
@@ -148,6 +152,11 @@ public interface KeyAggregationRoutingSplit {
 
         public ActorRef getActor() {
             return actor;
+        }
+
+        @Override
+        public long getProcessCount() {
+            return processCount.get();
         }
 
         @Override
@@ -262,6 +271,7 @@ public interface KeyAggregationRoutingSplit {
         protected KeyAggregationRoutingSplit right;
         protected SplitPath path;
         protected RoutingHistory history;
+        protected AtomicLong processCount = new AtomicLong();
 
         public RoutingSplitNode(List<Object> splitPoints, KeyAggregationRoutingSplit left, KeyAggregationRoutingSplit right, SplitPath path, int historyEntrySize) {
             this.splitPoints = splitPoints;
@@ -312,6 +322,7 @@ public interface KeyAggregationRoutingSplit {
             if (history.total() > router.historyEntryLimit()) {
                 history = history.next.clear();
             }
+            processCount.incrementAndGet();
         }
 
         protected boolean select(ActorKeyAggregation self, KeyAggregationStateRouter router,
@@ -363,6 +374,11 @@ public interface KeyAggregationRoutingSplit {
 
         public RoutingHistory getHistory() {
             return history;
+        }
+
+        @Override
+        public long getProcessCount() {
+            return processCount.get();
         }
 
         public RoutingHistory initRoutingHistory(int n) {

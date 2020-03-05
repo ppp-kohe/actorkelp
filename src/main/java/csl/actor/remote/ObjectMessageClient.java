@@ -1,6 +1,8 @@
 package csl.actor.remote;
 
 import com.esotericsoftware.kryo.io.Output;
+import csl.actor.ActorSystem;
+import csl.actor.ActorSystemDefault;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufOutputStream;
@@ -30,7 +32,18 @@ public class ObjectMessageClient implements Closeable {
     protected int port = 38888;
     protected boolean started;
 
+    protected ActorSystem.SystemLogger logger;
+
     public static boolean debugTraceLog = System.getProperty("csl.actor.trace.client", "false").equals("true");
+    public static int debugLogClientColor = ActorSystem.systemPropertyColor("csl.actor.client.color", 18);
+
+    public ObjectMessageClient(ActorSystem.SystemLogger logger) {
+        this.logger = logger;
+    }
+
+    public ObjectMessageClient() {
+        this(new ActorSystemDefault.SystemLoggerErr());
+    }
 
     public ObjectMessageClient setSerializer(KryoBuilder.SerializerFunction serializer) {
         this.serializer = serializer;
@@ -77,6 +90,10 @@ public class ObjectMessageClient implements Closeable {
         return port;
     }
 
+    public ActorSystem.SystemLogger getLogger() {
+        return logger;
+    }
+
     public ObjectMessageClient start() {
         initSerializer();
         initGroup();
@@ -88,7 +105,7 @@ public class ObjectMessageClient implements Closeable {
     protected void initSerializer() {
         if (serializer == null) {
             serializer = ObjectMessageServer.defaultSerializer;
-            ActorSystemRemote.log(ActorSystemRemote.debugLog, 18, "%s use default serializer", this);
+            getLogger().log(ActorSystemRemote.debugLog, debugLogClientColor, "%s use default serializer", this);
         }
     }
 
@@ -118,7 +135,7 @@ public class ObjectMessageClient implements Closeable {
     public ObjectMessageConnection connect() {
         synchronized (this) {
             if (!isStarted()) {
-                ActorSystemRemote.log(ActorSystemRemote.debugLog, 18, "%s connect start", this);
+                getLogger().log(ActorSystemRemote.debugLog, debugLogClientColor, "%s connect start", this);
                 start();
             }
         }
@@ -167,7 +184,7 @@ public class ObjectMessageClient implements Closeable {
         }
 
         public ObjectMessageConnection open() throws InterruptedException {
-            ActorSystemRemote.log(ActorSystemRemote.debugLog, 18, "%s open", this);
+            client.getLogger().log(ActorSystemRemote.debugLog, debugLogClientColor, "%s open", this);
             channel = client.getBootstrap()
                     .handler(new ClientInitializer(client, this))
                     .connect(host, port)
@@ -196,7 +213,7 @@ public class ObjectMessageClient implements Closeable {
                 ChannelFuture f = channel.writeAndFlush(msg);
                 checkResult(f);
             } catch (Exception c) {
-                System.err.println(String.format("%s write failure: %s", this, c));
+                client.getLogger().log(true, debugLogClientColor, "%s write failure: %s", this, c);
                 logWrite(retryCount, String.format("write failure %s", c));
                 if (retryCount < 10) {
                     return write(msg, retryCount + 1);
@@ -210,10 +227,10 @@ public class ObjectMessageClient implements Closeable {
         private void logWrite(int retryCount, String msg) {
             if (ActorSystemRemote.debugLogMsg) {
                 if (channel == null) {
-                    ActorSystemRemote.log(ActorSystemRemote.debugLogMsg, 18, "%s %s, retry=%d, channel=null",
+                    client.getLogger().log(ActorSystemRemote.debugLogMsg, debugLogClientColor, "%s %s, retry=%d, channel=null",
                             this, msg, retryCount);
                 } else {
-                    ActorSystemRemote.log(ActorSystemRemote.debugLogMsg, 18, "%s %s, retry=%d, open=%s, active=%s, writable=%s",
+                    client.getLogger().log(ActorSystemRemote.debugLogMsg, debugLogClientColor, "%s %s, retry=%d, open=%s, active=%s, writable=%s",
                             this, msg, retryCount,
                             channel.isOpen(), channel.isActive(),
                             channel.isWritable());
@@ -222,7 +239,7 @@ public class ObjectMessageClient implements Closeable {
         }
 
         public void setResult(int result) {
-            ActorSystemRemote.log(ActorSystemRemote.debugLogMsg, 18, "%s result-code %d", this, result);
+            client.getLogger().log(ActorSystemRemote.debugLogMsg, debugLogClientColor, "%s result-code %d", this, result);
 
         }
 
@@ -239,7 +256,7 @@ public class ObjectMessageClient implements Closeable {
                             lastSize.decrementAndGet();
                         }
                     } else if (!f.await(10_000)) {
-                        System.err.println(String.format("%s timeout", this));
+                        client.getLogger().log(true, debugLogClientColor, "%s timeout", this);
                         throw new RuntimeException(String.format("%s timeout", this));
                     } else {
                         if (last.remove(f)) {
@@ -253,7 +270,7 @@ public class ObjectMessageClient implements Closeable {
         protected void checkResult(ChannelFuture f) throws Exception {
             last.add(f);
             f.addListener(sf -> {
-                ActorSystemRemote.log(ActorSystemRemote.debugLogMsg, 18, "%s finish write", this);
+                client.getLogger().log(ActorSystemRemote.debugLogMsg, debugLogClientColor, "%s finish write", this);
                 if (last.remove(f)) {
                     lastSize.decrementAndGet();
                 }
@@ -262,7 +279,7 @@ public class ObjectMessageClient implements Closeable {
 
         public void close() {
             if (channel != null && channel.isOpen()) {
-                ActorSystemRemote.log(ActorSystemRemote.debugLog, 18, "%s close", this);
+                client.getLogger().log(ActorSystemRemote.debugLog, debugLogClientColor, "%s close", this);
                 channel.close();
                 channel = null;
             }
@@ -319,8 +336,8 @@ public class ObjectMessageClient implements Closeable {
                 pipeline.addLast(new LoggingHandler(ObjectMessageClient.class, LogLevel.INFO));
             }
             pipeline.addLast(new LengthFieldPrepender(4, false),
-                            new QueueClientHandler(owner.getSerializer()),
-                            new ResponseHandler(connection::setResult));
+                            new QueueClientHandler(owner.getLogger(), owner.getSerializer()),
+                            new ResponseHandler(owner.getLogger(), connection::setResult));
         }
 
         /** @return implementation field getter */
@@ -330,10 +347,12 @@ public class ObjectMessageClient implements Closeable {
     }
 
     public static class QueueClientHandler extends MessageToByteEncoder<Object> {
+        protected ActorSystem.SystemLogger logger;
         protected KryoBuilder.SerializerFunction serializer;
         protected boolean firstError;
 
-        public QueueClientHandler(KryoBuilder.SerializerFunction serializer) {
+        public QueueClientHandler(ActorSystem.SystemLogger logger, KryoBuilder.SerializerFunction serializer) {
+            this.logger = logger;
             this.serializer = serializer;
         }
 
@@ -345,7 +364,7 @@ public class ObjectMessageClient implements Closeable {
                 output.flush();
             } catch (Exception ex) {
                 if (firstError) {
-                    ex.printStackTrace();
+                    logger.log(true, debugLogClientColor, ex, "encode: %s", logger.toStringLimit(msg));
                     firstError = false;
                 }
                 throw ex;
@@ -359,10 +378,12 @@ public class ObjectMessageClient implements Closeable {
     }
 
     public static class ResponseHandler extends ChannelInboundHandlerAdapter {
+        protected ActorSystem.SystemLogger logger;
         protected Consumer<Integer> resultHandler;
         protected boolean firstError = true;
 
-        public ResponseHandler(Consumer<Integer> resultHandler) {
+        public ResponseHandler(ActorSystem.SystemLogger logger, Consumer<Integer> resultHandler) {
+            this.logger = logger;
             this.resultHandler = resultHandler;
         }
 
@@ -379,16 +400,17 @@ public class ObjectMessageClient implements Closeable {
                     ReferenceCountUtil.release(buf);
                 }
             } else {
-                System.err.println("? " + msg);
+                logger.log(true, debugLogClientColor, "? %s", logger.toStringLimit(msg));
             }
         }
 
         @Override
         public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
-            System.err.println("response-handler exception: " + cause);
             if (firstError) {
-                cause.printStackTrace();
+                logger.log(true, debugLogClientColor, cause, "response-handler exception");
                 firstError = false;
+            } else {
+                logger.log(true, debugLogClientColor, "response-handler exception: %s", cause);
             }
             super.exceptionCaught(ctx, cause);
         }

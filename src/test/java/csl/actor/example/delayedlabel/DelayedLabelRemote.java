@@ -24,11 +24,12 @@ public class DelayedLabelRemote extends DelayedLabelAggregationReplicable {
     }
 
     @Override
-    public void run(Consumer<String> out, String src) {
+    public void run(String src) {
+        ActorSystemRemote system = new ActorSystemRemote();
+        ActorSystem.SystemLogger out = system.getLogger();
         Iterator<Object> inputs = inputs(out, src);
         config.lowerBoundThresholdFactor = -1; //no Few mailbox and no merge
 
-        ActorSystemRemote system = new ActorSystemRemote();
         ResponsiveCalls.initCallableTarget(system);
         int serverPort = 10000;
         system.startWithoutWait(serverPort);
@@ -59,7 +60,7 @@ public class DelayedLabelRemote extends DelayedLabelAggregationReplicable {
     }
 
     @Override
-    public ActorRef learnerActor(ActorSystem system, Consumer<String> out, ActorRef resultActor) {
+    public ActorRef learnerActor(ActorSystem system, ActorSystem.SystemLogger out, ActorRef resultActor) {
         LearnerActorAggregationReplicable r = new LearnerRemote(system, out, resultActor, config);
         root = r;
         ResponsiveCalls.sendTask(system, r,
@@ -72,11 +73,11 @@ public class DelayedLabelRemote extends DelayedLabelAggregationReplicable {
             super(system, name, config, result, state);
         }
 
-        public LearnerRemote(ActorSystem system, String name, Consumer<String> out, ActorRef resultActor, DelayedLabelConfig config, State state) {
+        public LearnerRemote(ActorSystem system, String name, ActorSystem.SystemLogger out, ActorRef resultActor, DelayedLabelConfig config, State state) {
             super(system, name, out, resultActor, config, state);
         }
 
-        public LearnerRemote(ActorSystem system, Consumer<String> out, ActorRef resultActor, DelayedLabelConfig config) {
+        public LearnerRemote(ActorSystem system, ActorSystem.SystemLogger out, ActorRef resultActor, DelayedLabelConfig config) {
             super(system, out, resultActor, config);
         }
 

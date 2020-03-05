@@ -1,15 +1,12 @@
 package csl.actor.remote;
 
 import com.esotericsoftware.kryo.Kryo;
-import com.esotericsoftware.kryo.io.ByteBufferOutput;
-import com.esotericsoftware.kryo.util.Pool;
 import csl.actor.*;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.SocketChannelConfig;
 
 import java.io.Serializable;
-import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -30,15 +27,17 @@ public class ActorSystemRemote implements ActorSystem {
     protected MessageDeliveringActor deliverer;
     protected Map<Object, ConnectionActor> connectionMap;
 
-    protected Pool<Kryo> serializerPool;
     protected Function<ActorSystem, Kryo> kryoFactory;
     protected KryoBuilder.SerializerFunction serializer;
     protected volatile boolean closeAfterOtherConnectionsClosed;
 
     public static boolean debugLog = System.getProperty("csl.actor.debug", "false").equals("true");
-    public static int debugLogColor = Integer.parseInt(System.getProperty("csl.actor.debug.color", "124"));
+    public static int debugLogColor = ActorSystem.systemPropertyColor("csl.actor.debug.color", 124);
 
     public static boolean debugLogMsg = System.getProperty("csl.actor.debugMsg", "false").equals("true");
+    public static int debugLogMsgColorSend = ActorSystem.systemPropertyColor("csl.actor.debugMsg.color.send", 19);
+    public static int debugLogMsgColorConnect = ActorSystem.systemPropertyColor("csl.actor.debugMsg.color.connect", 20);
+    public static int debugLogMsgColorDeliver = ActorSystem.systemPropertyColor("csl.actor.debugMsg.color.deliver", 163);
 
     public ActorSystemRemote() {
         this(new ActorSystemDefaultForRemote(), KryoBuilder.builder());
@@ -61,13 +60,7 @@ public class ActorSystemRemote implements ActorSystem {
     }
 
     protected void initSerializer() {
-        serializerPool = new Pool<Kryo>(true, false) {
-            @Override
-            protected Kryo create() {
-                return createSerializer();
-            }
-        };
-        serializer = new KryoBuilder.SerializerPool(serializerPool);
+        serializer = new KryoBuilder.SerializerPoolDefault(this);
     }
 
     public Kryo createSerializer() {
@@ -75,11 +68,11 @@ public class ActorSystemRemote implements ActorSystem {
     }
 
     protected void initServerAndClient() {
-        log("initServerAndClient: %s", this);
+        logDebug("initServerAndClient: %s", this);
         deliverer = new MessageDeliveringActor(this);
-        server = new ObjectMessageServer();
+        server = new ObjectMessageServer(getLogger());
         server.setReceiver(this::receive);
-        client = new ObjectMessageClient();
+        client = new ObjectMessageClient(getLogger());
         if (this.localSystem instanceof ActorSystemDefaultForRemote) {
             ActorSystemDefaultForRemote r = (ActorSystemDefaultForRemote) localSystem;
             server.setLeaderThreads(r.getServerLeaderThreads());
@@ -94,11 +87,6 @@ public class ActorSystemRemote implements ActorSystem {
     /** @return implementation field getter */
     public ActorSystemDefault getLocalSystem() {
         return localSystem;
-    }
-
-    /** @return implementation field getter */
-    public Pool<Kryo> getSerializerPool() {
-        return serializerPool;
     }
 
     /** @return implementation field getter */
@@ -144,7 +132,7 @@ public class ActorSystemRemote implements ActorSystem {
     public void startWithoutWait(ActorAddress.ActorAddressRemote serverAddress) {
         setServerAddress(serverAddress);
         try {
-            log("startWithoutWait: %s", this);
+            logDebug("startWithoutWait: %s", this);
             server.setHost(serverAddress.getHost())
                     .setPort(serverAddress.getPort());
             server.startWithoutWait();
@@ -171,7 +159,7 @@ public class ActorSystemRemote implements ActorSystem {
         ActorRef target = message.getTarget();
         if (target instanceof ActorRefRemote) {
             ActorAddress addr = ((ActorRefRemote) target).getAddress().getHostAddress();
-            log(debugLogMsg, 19, "%s: client tell to remote %s", this, addr);
+            getLogger().log(debugLogMsg, debugLogMsgColorSend, "%s: client tell to remote %s", this, addr);
             ConnectionActor a = connectionMap.computeIfAbsent(addr.getKey(), k -> createConnection(addr));
             if (a != null) {
                 a.tell(message);
@@ -188,7 +176,7 @@ public class ActorSystemRemote implements ActorSystem {
             try {
                 return new ConnectionActor(localSystem, this, (ActorAddress.ActorAddressRemote) addr);
             } catch (InterruptedException ex) {
-                ex.printStackTrace();
+                getLogger().log(true, debugLogColor, ex, "createConnection: %s", addr);
                 return null;
             }
         } else {
@@ -196,24 +184,9 @@ public class ActorSystemRemote implements ActorSystem {
         }
     }
 
-    public static void log(String msg, Object... args) {
-        log(debugLog, debugLogColor, msg, args);
-    }
 
-    public static void log(boolean flag, int n, String msg, Object... args) {
-        if (flag) {
-            System.err.println("\033[38;5;" + n + "m" + String.format(msg, args) + "\033[0m");
-        }
-    }
-
-
-    public ByteBuffer serialize(Message<?> message) {
-        ByteBufferOutput output = new ByteBufferOutput();
-        Kryo k = serializerPool.obtain();
-        k.writeClassAndObject(output, message);
-        serializerPool.free(k);
-        output.close();
-        return output.getByteBuffer();
+    public void logDebug(String msg, Object... args) {
+        getLogger().log(debugLog, debugLogColor, msg, args);
     }
 
     public KryoBuilder.SerializerFunction getSerializer() {
@@ -267,7 +240,7 @@ public class ActorSystemRemote implements ActorSystem {
     @Override
     public void close() {
         try {
-            log("%s: close, connections=%,d", this, connectionMap.size());
+            logDebug("%s: close, connections=%,d", this, connectionMap.size());
             server.close();
             new ArrayList<>(connectionMap.values())
                     .forEach(ConnectionActor::notifyAndClose);
@@ -309,7 +282,7 @@ public class ActorSystemRemote implements ActorSystem {
             try {
                 service.awaitTermination(3_000, TimeUnit.MILLISECONDS);
             } catch (Exception ex) {
-                log("%s: awaiting termination: %s", this, ex);
+                logDebug("%s: awaiting termination: %s", this, ex);
             }
             close();
         }
@@ -323,6 +296,11 @@ public class ActorSystemRemote implements ActorSystem {
     @Override
     public ScheduledExecutorService getScheduledExecutor() {
         return localSystem.getScheduledExecutor();
+    }
+
+    @Override
+    public SystemLogger getLogger() {
+        return localSystem.getLogger();
     }
 
     /**
@@ -370,7 +348,7 @@ public class ActorSystemRemote implements ActorSystem {
                     .setHost(address.getHost())
                     .setPort(address.getPort())
                     .open();
-            log(debugLog, 20, "%s connection: %s", this, connection);
+            remoteSystem.logDebug("%s connection: %s", this, connection);
         }
 
         @Override
@@ -380,12 +358,12 @@ public class ActorSystemRemote implements ActorSystem {
 
         public void send(Message<?> message) {
             if (message.getData() instanceof ConnectionCloseNotice) {
-                log(debugLogMsg, 20, "%s close", message);
+                logMsg("%s close", message);
                 connection.write(new TransferredMessage(count, message));
                 close();
             } else {
                 if (mailbox.isEmpty()) {
-                    log(debugLogMsg, 20, "%s write %s", this, message);
+                    logMsg("%s write %s", this, message);
                     connection.write(new TransferredMessage(count, message));
                 } else {
                     int maxBundle = 30;
@@ -401,15 +379,19 @@ public class ActorSystemRemote implements ActorSystem {
                             break;
                         }
                     }
-                    log(debugLogMsg, 20, "%s write %,d messages: %s,...", this, messageBundle.size(), message);
+                    logMsg("%s write %,d messages: %s,...", this, messageBundle.size(), message);
                     connection.write(new TransferredMessage(count, messageBundle));
                 }
             }
             ++count;
         }
 
+        protected void logMsg(String fmt, Object... args) {
+            remoteSystem.getLogger().log(debugLogMsg, debugLogMsgColorConnect, fmt, args);
+        }
+
         public void notifyAndClose() {
-            log(debugLog, 20, "%s %s notifyAncClose -> %s", remoteSystem, this, address);
+            remoteSystem.logDebug("%s %s notifyAncClose -> %s", remoteSystem, this, address);
             tell(new Message<Object>(
                     ActorRefRemote.get(remoteSystem, address.getActor(NAME_CONNECTION_ACTOR)),
                     this,
@@ -417,7 +399,7 @@ public class ActorSystemRemote implements ActorSystem {
             try {
                 Thread.sleep(3_000);
             } catch (Exception ex) {
-                ex.printStackTrace();
+                remoteSystem.getLogger().log(debugLog, debugLogColor, ex, "notifyAndClose wait");
             }
             close();
         }
@@ -482,7 +464,7 @@ public class ActorSystemRemote implements ActorSystem {
         public void receive(ConnectionCloseNotice notice) {
             ActorSystemRemote remote = getSystem();
             ConnectionActor a = remote.getConnectionMap().get(notice.getAddress());
-            log("receive: %s -> close %s", notice, a);
+            remote.logDebug("receive: %s -> close %s", notice, a);
             if (a != null) {
                 a.close();
             }
@@ -519,11 +501,11 @@ public class ActorSystemRemote implements ActorSystem {
             }
             if (msg instanceof List<?>) { //message bundle
                 List<?> msgs = (List<?>) msg;
-                log(debugLogMsg, 163, "%s receive-remote: messages %,d", this, msgs.size());
+                logMsg("%s receive-remote: messages %,d", this, msgs.size());
                 int i = 0;
                 for (Object elem : msgs) {
                     Message<?> msgElem = (Message<?>) elem;
-                    log(debugLogMsg, 163, "%s receive-remote: [%,d] %s", this, i, msgElem);
+                    logMsg("%s receive-remote: [%,d] %s", this, i, msgElem);
                     remote.getLocalSystem().send(new Message<>(
                             remote.localize(msgElem.getTarget()),
                             msgElem.getSender(),
@@ -532,14 +514,18 @@ public class ActorSystemRemote implements ActorSystem {
                 }
             } else if (msg instanceof Message<?>) {
                 Message<?> m = (Message<?>)  msg;
-                log(debugLogMsg, 163, "%s receive-remote: %s", this, m);
+                logMsg("%s receive-remote: %s", this, m);
                 remote.getLocalSystem().send(new Message<>(
                         remote.localize(m.getTarget()),
                         m.getSender(),
                         m.getData()));
             } else {
-                log(debugLogMsg, 163, "%s receive unintended object: %s", this, msg);
+                logMsg("%s receive unintended object: %s", this, msg);
             }
+        }
+
+        protected void logMsg(String fmt, Object... args) {
+            remote.getLogger().log(debugLogMsg, debugLogMsgColorDeliver, fmt, args);
         }
 
         @Override

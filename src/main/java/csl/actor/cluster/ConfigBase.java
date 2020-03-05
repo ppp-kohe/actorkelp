@@ -1,6 +1,8 @@
 package csl.actor.cluster;
 
-import java.io.PrintWriter;
+import csl.actor.ActorSystem;
+import csl.actor.ActorSystemDefault;
+
 import java.io.Serializable;
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
@@ -10,12 +12,11 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.time.Instant;
 import java.util.*;
-import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 public class ConfigBase implements Serializable {
-    protected transient Consumer<String> logOut;
+    protected transient ActorSystem.SystemLogger logger;
 
     public static <ConfType extends ConfigBase> ConfType readConfig(Class<ConfType> type, Map<Object, Object> properties) {
         return ConfigBase.readConfig(type, "csl.actor", properties);
@@ -66,12 +67,12 @@ public class ConfigBase implements Serializable {
             try {
                 readProperty(f, v);
             } catch (Exception ex) {
-                log(String.format("#failed config property: name=%s, requiredType=%s, valueType=%s, value=%s : %s",
+                log("#failed config property: name=%s, requiredType=%s, valueType=%s, value=%s : %s",
                         propName,
                         type.getSimpleName(),
                         v.getClass().getSimpleName(),
                         v,
-                        ex));
+                        ex);
             }
         }
     }
@@ -256,7 +257,7 @@ public class ConfigBase implements Serializable {
     }
 
     public void showHelp() {
-        println(getLogOut(), helpString());
+        log("%s", helpString());
     }
 
     public String helpString() {
@@ -356,54 +357,104 @@ public class ConfigBase implements Serializable {
         String help() default "";
     }
 
-    public void log(String msg) {
-        Consumer<String> out = getLogOut();
-        println(out, logMessage(msg));
+    public void log(String msg, Object... args) {
+        log(getLogColorDefault(), msg, args);
     }
 
-    public void log(int color, String msg) {
-        Consumer<String> out = getLogOut();
-        println(out, color, logMessage(msg));
+    public void log(Throwable ex, String msg, Object... args) {
+        log(getLogColorDefault(), ex, msg, args);
     }
 
-    public String logMessage(String msg) {
-        return String.format("!!! [%s] %s", Instant.now(), msg);
+    public void log(int color, Throwable ex, String msg, Object... args) {
+        FormatAndArgs fa = logMessage(msg, args);
+        getLogger().log(true, color, ex, fa.format, fa.args);
     }
 
-    public Consumer<String> getLogOut() {
-        Consumer<String> out = logOut;
+    public void log(int color, String msg, Object... args) {
+        FormatAndArgs fa = logMessage(msg, args);
+        getLogger().log(true, color, fa.format, fa.args);
+    }
+
+    public FormatAndArgs logMessage(String msg, Object... args) {
+        return logMessageHeader().append(new FormatAndArgs(msg, args));
+    }
+
+    public static class FormatAndArgs {
+        public String format;
+        public Object[] args;
+
+        public FormatAndArgs(String format, Object... args) {
+            this.format = format;
+            this.args = args;
+        }
+
+        public FormatAndArgs append(FormatAndArgs fa) {
+            Object[] ns = new Object[args.length + fa.args.length];
+            System.arraycopy(args, 0, ns, 0, args.length);
+            System.arraycopy(fa.args, 0, ns, args.length, fa.args.length);
+            return new FormatAndArgs(format + fa.format, ns);
+        }
+
+        public String format() {
+            return String.format(format, args);
+        }
+    }
+
+    protected FormatAndArgs logMessageHeader() {
+        return new FormatAndArgs("!!! [%s] ", Instant.now());
+    }
+
+    public ActorSystem.SystemLogger getLogger() {
+        ActorSystem.SystemLogger out = logger;
         if (out == null) {
-            logOut = initLogOut();
-            out = logOut;
+            logger = initLogger();
+            out = logger;
         }
         return out;
     }
 
-    protected Consumer<String> initLogOut() {
-        return s -> { System.err.println(s); }; //always access to err
+    public void setLogger(ActorSystem.SystemLogger logger) {
+        this.logger = logger;
     }
 
-    public void println(Consumer<String> out, String line) {
-        out.accept(toConsoleLine(line));
-    }
-
-    public void println(Consumer<String> out, int color, String line) {
-        out.accept(toConsoleLine(color, line));
-    }
-
-    public String toConsoleLine(String line) {
-        return toConsoleLine(getLogColorDefault(), line);
+    protected ActorSystem.SystemLogger initLogger() {
+        return new ActorSystemDefault.SystemLoggerErr();
     }
 
     protected int getLogColorDefault() {
         return 33;
     }
 
-    public String toConsoleLine(int color, String line) {
-        if (color > -1) {
-            return String.format("\033[38;5;%dm%s\033[0m", color, line);
-        } else {
-            return line;
+    public static class SystemLoggerHeader implements ActorSystem.SystemLogger {
+        protected ActorSystem.SystemLogger logger;
+        protected ConfigBase config;
+
+        public SystemLoggerHeader(ActorSystem.SystemLogger logger, ConfigBase config) {
+            this.logger = logger;
+            this.config = config;
+        }
+
+        @Override
+        public void log(String fmt, Object... args) {
+            log(true, config.getLogColorDefault(), fmt, args);
+        }
+
+        @Override
+        public void log(boolean flag, int color, String fmt, Object... args) {
+            FormatAndArgs fa = config.logMessage(fmt, args);
+            logger.log(flag, color, fa.format, fa.args);
+        }
+
+        @Override
+        public void log(boolean flag, int color, Throwable ex, String fmt, Object... args) {
+            FormatAndArgs fa = config.logMessage(fmt, args);
+            logger.log(flag, color, ex, fa.format, fa.args);
+        }
+
+        @Override
+        public ActorSystem.SystemLogToStringLimit toStringLimit(Object o) {
+            return logger.toStringLimit(o);
         }
     }
+
 }

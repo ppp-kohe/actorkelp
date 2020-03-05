@@ -40,6 +40,7 @@ public class KryoBuilder {
     protected Kryo kryo;
 
     public static boolean debugLog = System.getProperty("csl.actor.debugKryo", "false").equals("true");
+    public static int debugLogColor = ActorSystem.systemPropertyColor("csl.actor.debugKryo.color", 100);
 
     public KryoBuilder setKryo(Kryo kryo) {
         this.kryo = kryo;
@@ -311,6 +312,7 @@ public class KryoBuilder {
 
     public static class SerializerPool implements SerializerFunction {
         protected Pool<Kryo> pool;
+        protected ActorSystem.SystemLogger logger;
 
         public SerializerPool(Pool<Kryo> pool) {
             this.pool = pool;
@@ -324,10 +326,7 @@ public class KryoBuilder {
                 pool.free(k);
                 return o;
             } catch (Exception ex) {
-                System.err.println(String.format("Kryo error: %s", ex));
-                if (debugLog) {
-                    ex.printStackTrace();
-                }
+                log(ex, "Kryo error: read");
                 throw new RuntimeException(ex);
             }
         }
@@ -339,11 +338,23 @@ public class KryoBuilder {
                 k.writeClassAndObject(out, o);
                 pool.free(k);
             } catch (Exception ex) {
-                System.err.println(String.format("Kryo error: %s", ex));
-                if (debugLog) {
-                    ex.printStackTrace();
-                }
+                log(ex, "Kryo error: write %s", getLogger().toStringLimit(o));
                 throw new RuntimeException(ex);
+            }
+        }
+
+        public ActorSystem.SystemLogger getLogger() {
+            if (logger == null) {
+                logger = new ActorSystemDefault.SystemLoggerErr();
+            }
+            return logger;
+        }
+
+        protected void log(Throwable ex, String fmt, Object... args) {
+            if (debugLog) {
+                getLogger().log(true, debugLogColor, ex, fmt, args);
+            } else {
+                getLogger().log(true, debugLogColor, fmt, args);
             }
         }
     }
@@ -354,12 +365,19 @@ public class KryoBuilder {
         }
 
         public SerializerPoolDefault(ActorSystem system) {
-            super(new Pool<Kryo>(true, false, 8) {
+            super(new Pool<>(true, false, 8) {
                 @Override
                 protected Kryo create() {
-                    return KryoBuilder.builder().apply(system); //TODO null system
+                    if (system instanceof ActorSystemRemote) {
+                        return ((ActorSystemRemote) system).createSerializer();
+                    } else {
+                        return KryoBuilder.builder().apply(system); //TODO null system
+                    }
                 }
             });
+            if (system != null) {
+                logger = system.getLogger();
+            }
         }
     }
 }

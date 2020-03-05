@@ -1,12 +1,13 @@
 package csl.actor;
 
+import java.io.PrintWriter;
 import java.io.Serializable;
+import java.io.StringWriter;
 import java.util.Map;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class ActorSystemDefault implements ActorSystem {
-    protected PollTime time;
     protected boolean shutdown;
     protected int threads;
     protected ExecutorService executorService;
@@ -14,6 +15,7 @@ public class ActorSystemDefault implements ActorSystem {
     protected AtomicInteger processingCount;
     protected int throughput;
     protected Map<String, Actor> namedActorMap;
+    protected SystemLogger logger;
 
     public ActorSystemDefault() {
         initSystem();
@@ -28,10 +30,6 @@ public class ActorSystemDefault implements ActorSystem {
         return throughput;
     }
 
-    public PollTime getTime() {
-        return time;
-    }
-
     @Override
     public String toString() {
         return toStringSystemName() + "@" + Integer.toHexString(System.identityHashCode(this));
@@ -43,18 +41,18 @@ public class ActorSystemDefault implements ActorSystem {
 
     protected void initSystem() {
         shutdown = false;
+        initLogger();
         initThroughput();
-        initSystemTime();
         initSystemThreads();
         initSystemExecutorService();
         initSystemProcessingCount();
         initNamedActorMap();
     }
+    protected void initLogger() {
+        this.logger = new SystemLoggerErr();
+    }
     protected void initThroughput() {
         this.throughput = 5;
-    }
-    protected void initSystemTime() {
-        time = new PollTime(1, TimeUnit.SECONDS);
     }
     protected void initSystemThreads() {
         threads = Runtime.getRuntime().availableProcessors();
@@ -71,6 +69,15 @@ public class ActorSystemDefault implements ActorSystem {
     }
 
     @Override
+    public SystemLogger getLogger() {
+        return logger;
+    }
+
+    public void setLogger(SystemLogger logger) {
+        this.logger = logger;
+    }
+
+    @Override
     public void send(Message<?> message) {
         Actor targetActor = resolveActor(message.getTarget());
         if (targetActor != null) {
@@ -84,7 +91,7 @@ public class ActorSystemDefault implements ActorSystem {
         if (message.getSender() != null) {
             message.getSender().tell(toDeadLetter(message));
         } else {
-            System.err.println("DEAD-LETTER " + message);
+            getLogger().log("DEAD-LETTER %s", message);
         }
     }
 
@@ -133,7 +140,7 @@ public class ActorSystemDefault implements ActorSystem {
 
     protected void processMessageRejected(Actor actor) {
         if (!actor.isEmptyMailbox()) {
-            System.err.println(String.format("remaining-messages for actor after shut-down: %s", actor));
+            getLogger().log("remaining-messages for actor after shut-down: %s", actor);
         }
     }
 
@@ -167,7 +174,7 @@ public class ActorSystemDefault implements ActorSystem {
 
     public Actor resolveActorLocalNamed(ActorRefLocalNamed ref) {
         if (ref instanceof ActorRefLocalNamed.ActorRefLocalNamedNoName) {
-            System.err.println(String.format("resolveActorLocalNamed error: %s", ref));
+            getLogger().log("resolveActorLocalNamed error: %s", ref);
             return null;
         } else {
             return namedActorMap.get(ref.getName());
@@ -227,29 +234,6 @@ public class ActorSystemDefault implements ActorSystem {
         executorService.awaitTermination(time, unit);
     }
 
-    public static class PollTime {
-        protected long value;
-        protected TimeUnit unit;
-
-        public PollTime(long value, TimeUnit unit) {
-            this.value = value;
-            this.unit = unit;
-        }
-
-        public long getValue() {
-            return value;
-        }
-
-        public TimeUnit getUnit() {
-            return unit;
-        }
-
-        @Override
-        public String toString() {
-            return "time(" + value + ", " + unit + ")";
-        }
-    }
-
     public static class DeadLetter implements Serializable {
         protected Message<?> message;
 
@@ -265,5 +249,35 @@ public class ActorSystemDefault implements ActorSystem {
         public String toString() {
             return getClass().getSimpleName() + '(' + message + ')';
         }
+    }
+
+    public static class SystemLoggerErr implements SystemLogger {
+        @Override
+        public void log(boolean flag, int color, String fmt, Object... args) {
+            if (flag) {
+                System.err.println(toColorLine(color, String.format(fmt, args)));
+            }
+        }
+
+        public String toColorLine(int color, String line) {
+            if (color >= 0) {
+                return String.format("\033[38;5;%dm%s\033[0m", color, line);
+            } else {
+                return line;
+            }
+        }
+
+        @Override
+        public void log(boolean flag, int color, Throwable ex, String fmt, Object... args) {
+            if (flag) {
+                StringWriter sw = new StringWriter();
+                PrintWriter w = new PrintWriter(sw);
+                ex.printStackTrace(w);
+                w.close();
+                String line = sw.getBuffer().toString();
+                log(true, color, "%s %s", String.format(fmt, args), line);
+            }
+        }
+
     }
 }

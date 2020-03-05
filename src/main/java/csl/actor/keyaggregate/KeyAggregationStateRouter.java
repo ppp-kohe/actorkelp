@@ -261,7 +261,7 @@ public class KeyAggregationStateRouter implements ActorKeyAggregation.State {
     }
 
     protected void processMessagePhaseShift(ActorKeyAggregation self, Message<?> message, PhaseShift ps) {
-        self.logPhase("#phase        start: " + ps.getKey() + " : " + self + " : target=" + ps.getTarget());
+        self.logPhase("#phase        start: %s : %s : target=%s", ps.getKey(), self, ps.getTarget());
         KeyAggregationPhaseEntry e = phase.computeIfAbsent(ps.getKey(), KeyAggregationPhaseEntry::new);
         e.setOriginAndSender(ps, message.getSender());
         e.startRouter(self); //router only delivers to canceled actors without traversal

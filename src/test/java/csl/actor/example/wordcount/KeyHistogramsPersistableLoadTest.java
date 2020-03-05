@@ -1,5 +1,6 @@
 package csl.actor.example.wordcount;
 
+import csl.actor.ActorSystemDefault;
 import csl.actor.cluster.ConfigDeployment;
 import csl.actor.cluster.MailboxPersistable;
 import csl.actor.keyaggregate.*;
@@ -31,7 +32,7 @@ public class KeyHistogramsPersistableLoadTest {
     class TestFileManager extends MailboxPersistable.PersistentFileManager {
 
         public TestFileManager(String path, KryoBuilder.SerializerFunction serializer, ConfigDeployment.PathModifier pathModifier) {
-            super(path, serializer, pathModifier);
+            super(path, serializer, pathModifier, new ActorSystemDefault.SystemLoggerErr());
         }
 
         @Override

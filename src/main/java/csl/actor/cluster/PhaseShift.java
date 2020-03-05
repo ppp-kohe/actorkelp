@@ -64,6 +64,7 @@ public class PhaseShift implements CallableMessage.CallableMessageConsumer<Actor
         try {
             Thread.sleep(10);
         } catch (InterruptedException ie) {
+            //ignore
         }
         ++count;
         actor.tell(this, sender);
@@ -76,15 +77,15 @@ public class PhaseShift implements CallableMessage.CallableMessageConsumer<Actor
     public void completed(Actor router, ActorRef sender) {
         count = 0;
         PhaseCompleted c = createCompleted(router);
-        log(router, "#phase    completed: " + key + " "  + c.getElapsedTime() + " : " + router);
+        log(router, "#phase    completed: %s %s : %s", key, c.getElapsedTime(), router);
         router.tell(c, router);
     }
 
-    public void log(Actor router, String str) {
+    public void log(Actor router, String str, Object... args) {
         if (router instanceof StageSupported) {
-            ((StageSupported) router).logPhase(str);
+            ((StageSupported) router).logPhase(str, args);
         } else {
-            System.err.println(str);
+            router.getSystem().getLogger().log(str, args);
         }
     }
 
@@ -110,7 +111,7 @@ public class PhaseShift implements CallableMessage.CallableMessageConsumer<Actor
 
     public interface StageSupported {
         ActorRef nextStage();
-        void logPhase(String str);
+        void logPhase(String str, Object... args);
     }
 
     public static class PhaseShiftIntermediate implements CallableMessageConsumer<Actor> {
@@ -164,6 +165,7 @@ public class PhaseShift implements CallableMessage.CallableMessageConsumer<Actor
             try {
                 Thread.sleep(10);
             } catch (InterruptedException ie) {
+                //ignore
             }
             ++count;
             actor.tell(this, sender);
@@ -214,21 +216,23 @@ public class PhaseShift implements CallableMessage.CallableMessageConsumer<Actor
         }
 
         public void redirectTo(ActorRef nextRouter) {
-            log("#phase   redirectTo: " + key + " " + getElapsedTime() + " : " + actor + " -> " + nextRouter);
+            log("#phase   redirectTo: %s %s : %s -> %s", key, getElapsedTime(), actor, nextRouter);
             nextRouter.tell(origin);
         }
 
 
-        public void log(String str) {
+        public void log(String str, Object... args) {
             if (actor instanceof StageSupported) {
-                ((StageSupported) actor).logPhase(str);
+                ((StageSupported) actor).logPhase(str, args);
+            } else if (actor instanceof Actor) {
+                ((Actor) actor).getSystem().getLogger().log(str, args);
             } else {
-                System.err.println(str);
+                new ActorSystemDefault.SystemLoggerErr().log(str, args);
             }
         }
 
         public void sendToTarget() {
-            log("#phase sendToTarget: " + key + " " + getElapsedTime() + " : " + actor + " -> " + origin.getTarget());
+            log("#phase sendToTarget: %s %s : %s -> %s", key, getElapsedTime(), actor, origin.getTarget());
             if (origin.getTarget() != null) {
                 origin.getTarget().tell(this);
             }
@@ -275,7 +279,7 @@ public class PhaseShift implements CallableMessage.CallableMessageConsumer<Actor
         public void completed(PhaseCompleted c) {
             PhaseTerminalEntry e = completed.computeIfAbsent(c.getKey(), PhaseTerminalEntry::new);
             int n = e.getNextCount();
-            c.log("#phase       finish: " + c.getKey() + " " + c.getElapsedTime() + " : " + c.getTime() + " count=" + n);
+            c.log("#phase       finish: %s %s : %s count=%,d", c.getKey(), c.getElapsedTime(), c.getTime(), n);
             e.complete(c);
             if (handler != null) {
                 handler.accept(getSystem(), c);

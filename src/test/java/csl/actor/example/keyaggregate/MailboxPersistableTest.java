@@ -31,7 +31,7 @@ public class MailboxPersistableTest {
         try (ActorSystem system = new ActorSystemDefault()) {
             KryoBuilder.SerializerPool p = new KryoBuilder.SerializerPoolDefault(system);
             MailboxPersistable.PersistentFileManager manager = new MailboxPersistable.PersistentFileManager(
-                    "target/debug-persist", p, Paths::get);
+                    "target/debug-persist", p, Paths::get, system.getLogger());
             MailboxPersistable.MessagePersistentFile mp = new MailboxPersistable.MessagePersistentFile(manager);
 
             SerializeExample2.MyActor a = new SerializeExample2.MyActor(system, "hello", Config.CONFIG_DEFAULT);
@@ -68,7 +68,7 @@ public class MailboxPersistableTest {
         try (ActorSystem system = new ActorSystemDefault()) {
             KryoBuilder.SerializerPool p = new KryoBuilder.SerializerPoolDefault(system);
             MailboxPersistable.PersistentFileManager manager = new MailboxPersistable.PersistentFileManager(
-                    "target/debug-persist", p, Paths::get);
+                    "target/debug-persist", p, Paths::get, system.getLogger());
             MailboxPersistable.MessagePersistentFile mp = new MailboxPersistable.MessagePersistentFile(manager);
 
             SerializeExample2.MyActor a = new SerializeExample2.MyActor(system, "hello", Config.CONFIG_DEFAULT);

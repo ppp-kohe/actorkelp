@@ -24,7 +24,7 @@ public class Config extends ConfigBase {
     public boolean persist = false;
     public String persistMailboxPath = "%a/persist-%h";
     public boolean persistRuntimeCondition = true;
-    public long persistMailboxSizeLimit = Integer.MAX_VALUE / 64;
+    public long persistMailboxSizeLimit = Integer.MAX_VALUE / 512;
     public long persistMailboxOnMemorySize = 100_000L;
     public int reduceRuntimeCheckingThreshold = 100_000;
     public double reduceRuntimeRemainingBytesToSizeRatio = 0.003;
@@ -48,7 +48,11 @@ public class Config extends ConfigBase {
     }
 
     @Override
-    public String logMessage(String msg) {
-        return super.logMessage(logHeader + msg);
+    protected FormatAndArgs logMessageHeader() {
+        if (logHeader.isEmpty()) {
+            return super.logMessageHeader();
+        } else {
+            return super.logMessageHeader().append(new FormatAndArgs("%s ", logHeader));
+        }
     }
 }

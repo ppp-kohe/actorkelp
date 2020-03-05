@@ -62,10 +62,10 @@ public class DebugBehavior {
         }
 
         @Override
-        public boolean processHistogram(MailboxKeyAggregation m) {
+        public boolean processHistogram(Actor self, MailboxKeyAggregation m) {
             boolean t = checker.before();
             try {
-                return super.processHistogram(m);
+                return super.processHistogram(self, m);
             } catch (Exception ex) {
                 checker.error(t, ex);
                 throw ex;
@@ -105,10 +105,10 @@ public class DebugBehavior {
         }
 
         @Override
-        public boolean processHistogram(MailboxKeyAggregation m) {
+        public boolean processHistogram(Actor self, MailboxKeyAggregation m) {
             boolean t = checker.before();
             try {
-                return super.processHistogram(m);
+                return super.processHistogram(self, m);
             } catch (Exception ex) {
                 checker.error(t, ex);
                 throw ex;
@@ -147,10 +147,10 @@ public class DebugBehavior {
         }
 
         @Override
-        public boolean processHistogram(MailboxKeyAggregation m) {
+        public boolean processHistogram(Actor self, MailboxKeyAggregation m) {
             boolean t = checker.before();
             try {
-                return super.processHistogram(m);
+                return super.processHistogram(self, m);
             } catch (Exception ex) {
                 checker.error(t, ex);
                 throw ex;
@@ -189,10 +189,10 @@ public class DebugBehavior {
         }
 
         @Override
-        public boolean processHistogram(MailboxKeyAggregation m) {
+        public boolean processHistogram(Actor self, MailboxKeyAggregation m) {
             boolean t = checker.before();
             try {
-                return super.processHistogram(m);
+                return super.processHistogram(self, m);
             } catch (Exception ex) {
                 checker.error(t, ex);
                 throw ex;
@@ -232,10 +232,10 @@ public class DebugBehavior {
         }
 
         @Override
-        public boolean processHistogram(MailboxKeyAggregation m) {
+        public boolean processHistogram(Actor self, MailboxKeyAggregation m) {
             boolean t = checker.before();
             try {
-                return super.processHistogram(m);
+                return super.processHistogram(self, m);
             } catch (Exception ex) {
                 checker.error(t, ex);
                 throw ex;

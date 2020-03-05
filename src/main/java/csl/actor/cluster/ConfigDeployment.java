@@ -102,12 +102,12 @@ public class ConfigDeployment extends ConfigBase {
     }
 
     @Override
-    public String logMessage(String msg) {
-        return super.logMessage(getLogHeader() + msg);
+    protected FormatAndArgs logMessageHeader() {
+        return super.logMessageHeader().append(logMessageHeaderHostPort());
     }
 
-    public String getLogHeader() {
-        return "[" + host + ":" + port + "] ";
+    public FormatAndArgs logMessageHeaderHostPort() {
+        return new FormatAndArgs("[%s:%d] ", host, port);
     }
 
     public static PathModifierHost createDefaultPathModifier(ActorSystem system) {

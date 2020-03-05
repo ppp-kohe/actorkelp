@@ -32,9 +32,14 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
 
     protected volatile MessagePersistent persistent;
 
+    public static boolean logPersist = System.getProperty("csl.actor.persist.log", "true").equals("true");
+    public static boolean logDebugPersist = System.getProperty("csl.actor.persist.debug", "false").equals("true");
+    public static int logColorPersist = ActorSystem.systemPropertyColor("csl.actor.persist.color", 68);
+
     public interface MessagePersistent {
         MessagePersistentWriter get();
         KryoBuilder.SerializerFunction getSerializer();
+        ActorSystem.SystemLogger getLogger();
     }
 
     public interface MessagePersistentWriter extends AutoCloseable {
@@ -187,7 +192,7 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
             }
             boolean top = true;
             long polled = 0;
-            MessageOnStorage reader;
+            MessageOnStorage reader = null;
             try (MessagePersistentWriter ms = persistent.get()) {
                 reader = ms.reader();
                 if (reader != null) {
@@ -216,9 +221,10 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
                     oldQueue.poll();
                     ++polled;
                 }
-            } catch (Exception ex) {
-                ex.printStackTrace(); //TODO retry?
+            } catch (Exception ex) { //retry?
+                persistent.getLogger().log(true, logColorPersist, ex, "mailbox persist: polled=%,d", polled);
             }
+            persistent.getLogger().log(logDebugPersist, logColorPersist, "mailbox persisted: %s sizeDelta=%,d", reader, (-polled + offered));
             size.addAndGet(-polled + offered);
         }
     }
@@ -307,9 +313,19 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
         protected AtomicLong sampleTotal = new AtomicLong();
         protected AtomicLong sampleCount = new AtomicLong();
         protected AtomicInteger sampleTiming = new AtomicInteger();
+        protected ActorSystem.SystemLogger logger;
 
-        public PersistentConditionMailboxSampling(long sizeLimit) {
+        public PersistentConditionMailboxSampling(long sizeLimit, ActorSystem.SystemLogger logger) {
             this.sizeLimit = sizeLimit;
+            this.logger = logger;
+        }
+
+        public ActorSystem.SystemLogger getLogger() {
+            return logger;
+        }
+
+        public int getSampleTiming() {
+            return sampleTiming.get();
         }
 
         @Override
@@ -334,7 +350,15 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
         }
 
         public boolean needToPersistRuntime(long size, long sizeLimit, long currentSample) {
-            return (size + sizeLimit) * currentSample > runtimeAvailableBytes();
+            boolean log = (sampleTiming.get() % 10_000) == 0;
+            long free =  runtimeAvailableBytes();
+            long estimated = (size + sizeLimit) * currentSample;
+            boolean res = estimated > free;
+            if (log) {
+                logger.log(logPersist, logColorPersist, "needToPersistRuntime size=%,d sizeLimit=%,d sample=%,d estimated=%,d free=%,d -> %s",
+                        size, sizeLimit, currentSample, estimated, free, res);
+            }
+            return res;
         }
 
         public long runtimeAvailableBytes() {
@@ -343,13 +367,21 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
         }
 
         public long updateCurrentSample(MailboxPersistable mailbox, Message<?> msg) {
-            long sampleSize;
+            long t = sampleTiming.get();
+            if (t >= 1000_000) {
+                sampleTiming.set(0);
+            }
+
             try (Output output = new Output(4096)) { //a lengthy message causes a buffer overflow error
                 mailbox.getPersistent().getSerializer().write(output, msg);
                 output.flush();
-                sampleSize = output.total();
-                sampleTiming.set(0);
-                return sampleTotal.addAndGet(sampleSize) / sampleCount.incrementAndGet();
+                long sampleSize = output.total();
+                long v = sampleTotal.addAndGet(sampleSize) / sampleCount.incrementAndGet();
+                if ((t % 10_000) == 0) {
+                    logger.log(logPersist, logColorPersist, "updateCurrentSample timing=%,d lastSample=[%,d] <%s> total=%,d count=%,d -> %,d",
+                            t, logger.toStringLimit(msg), sampleTotal.get(), sampleCount.get(), v);
+                }
+                return v;
             } catch (Exception ex) {
                 if (ex instanceof KryoException && ex.getMessage().contains("overflow")) {
                     return sampleTotal.addAndGet(4096) / sampleCount.incrementAndGet();
@@ -376,19 +408,23 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
         protected String path;
         protected long fileCount;
         protected ConfigDeployment.PathModifier pathModifier;
+        protected ActorSystem.SystemLogger logger;
 
         protected KryoBuilder.SerializerFunction serializer;
 
         public PersistentFileManager(String path, KryoBuilder.SerializerFunction serializer,
-                                     ConfigDeployment.PathModifier pathModifier) {
+                                     ConfigDeployment.PathModifier pathModifier, ActorSystem.SystemLogger logger) {
             this.path = path;
             this.serializer = serializer;
             this.pathModifier = pathModifier;
+            this.logger = logger;
         }
 
         public synchronized PersistentFileWriter createWriter(String head) {
             try {
-                return new PersistentFileWriter(createPath(head), this);
+                String path = createPath(head);
+                logger.log(logPersist, logColorPersist, "createWriter: %s", path);
+                return new PersistentFileWriter(path, this);
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }
@@ -408,6 +444,7 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
 
         public Path getPath(String pathExpanded) {
             Path p = pathModifier.get(pathExpanded);
+            logger.log(logDebugPersist, logColorPersist, "getPath: %s -> %s", pathExpanded, p);
             Path dir = p.getParent();
             if (dir != null && !Files.exists(dir)) {
                 try {
@@ -421,6 +458,10 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
 
         public KryoBuilder.SerializerFunction getSerializer() {
             return serializer;
+        }
+
+        public ActorSystem.SystemLogger getLogger() {
+            return logger;
         }
     }
 
@@ -444,7 +485,12 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
         }
 
         public void write(Object obj) {
-            serializer.write(output, obj);
+            try {
+                serializer.write(output, obj);
+            } catch (Exception ex) {
+                throw new RuntimeException(String.format("write: path=%s obj=%s",
+                        pathExpanded, manager.getLogger().toStringLimit(obj)), ex);
+            }
         }
 
         public PersistentFileReaderSource createReaderSourceFromCurrentPosition() {
@@ -455,6 +501,11 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
         public void close() {
             write(new PersistentFileEnd());
             output.close();
+        }
+
+        @Override
+        public String toString() {
+            return String.format("writer(path=%s, pos=%,d)", pathExpanded, position());
         }
     }
 
@@ -479,9 +530,10 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
 
         public PersistentFileReader createReader() {
             try {
+                manager.getLogger().log(logDebugPersist, logColorPersist, "open: %s", this);
                 return new PersistentFileReader(pathExpanded, offset, manager);
             } catch (IOException ex) {
-                throw new RuntimeException(ex);
+                throw new RuntimeException("createReader: " + toString(), ex);
             }
         }
 
@@ -548,6 +600,10 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
         public String toString() {
             return String.format("reader(path=%s,offset=%,d,pos=%,d)", pathExpanded, offset, position());
         }
+
+        public PersistentFileManager getManager() {
+            return manager;
+        }
     }
 
     ////// MessagePersistentFile
@@ -572,6 +628,11 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
         public KryoBuilder.SerializerFunction getSerializer() {
             return manager.getSerializer();
         }
+
+        @Override
+        public ActorSystem.SystemLogger getLogger() {
+            return manager.getLogger();
+        }
     }
 
     public static class MessagePersistentFileWriter implements MessagePersistentWriter {
@@ -583,11 +644,7 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
 
         @Override
         public void save(Message<?> msg) {
-            try {
-                writer.write(msg);
-            } catch (Exception ex) {
-                throw new RuntimeException(ex);
-            }
+            writer.write(msg);
         }
 
         @Override
@@ -631,6 +688,7 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
                 }
                 Object o = reader.next();
                 if (o instanceof PersistentFileEnd) {
+                    reader.getManager().getLogger().log(logDebugPersist, logColorPersist, "readNext finish: %s", reader);
                     reader.close();
                     reader = null;
                     return null;
@@ -647,7 +705,7 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
                     }
                 }
             } catch (Exception ex) {
-                throw new RuntimeException(ex);
+                throw new RuntimeException(String.format("readNext: %s", source), ex);
             }
         }
 
@@ -674,7 +732,8 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
         } else {
             serializer = new KryoBuilder.SerializerPoolDefault(system);
         }
-        return new PersistentFileManager(path, serializer, ConfigDeployment.getPathModifier(system));
+        return new PersistentFileManager(path, serializer, ConfigDeployment.getPathModifier(system),
+                system == null ? new ActorSystemDefault.SystemLoggerErr() : system.getLogger());
     }
 
 }

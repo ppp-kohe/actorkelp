@@ -173,9 +173,9 @@ public class ResponsiveCalls {
 
     @FunctionalInterface
     public interface ResponsiveCompletable<T> {
-        void complete(T t);
-        default void completeExceptionally(Throwable ex) {
-            ex.printStackTrace();
+        void complete(Actor a, T t, ActorRef sender);
+        default void completeExceptionally(Actor a, Throwable ex, ActorRef sender) {
+            a.getSystem().getLogger().log(true, -1, ex, "completeExceptionally %s", this);
         }
     }
 
@@ -191,12 +191,12 @@ public class ResponsiveCalls {
         }
 
         @Override
-        public void complete(T t) {
+        public void complete(Actor a, T t, ActorRef sender) {
             future.complete(t);
         }
 
         @Override
-        public void completeExceptionally(Throwable ex) {
+        public void completeExceptionally(Actor a, Throwable ex, ActorRef sender) {
             future.completeExceptionally(ex);
         }
 
@@ -225,7 +225,7 @@ public class ResponsiveCalls {
         @Override
         protected ActorBehavior initBehavior() {
             return behaviorBuilder()
-                    .match(ActorSystemDefault.DeadLetter.class, this::fail)
+                    .matchWithSender(ActorSystemDefault.DeadLetter.class, this::fail)
                     .matchAny(this::receive)
                     .build();
         }
@@ -234,18 +234,18 @@ public class ResponsiveCalls {
         public void receive(Object v, ActorRef sender) {
             getSystem().unregister(getName());
             if (v instanceof CallableMessage.CallableFailure) {
-                resultHolder.completeExceptionally(((CallableMessage.CallableFailure) v).getError());
+                resultHolder.completeExceptionally(this, ((CallableMessage.CallableFailure) v).getError(), sender);
             } else {
                 try {
-                    resultHolder.complete((T) v);
+                    resultHolder.complete(this, (T) v, sender);
                 } catch (Throwable ce) {
-                    resultHolder.completeExceptionally(ce);
+                    resultHolder.completeExceptionally(this, ce, sender);
                 }
             }
         }
 
-        public void fail(ActorSystemDefault.DeadLetter l) {
-            resultHolder.completeExceptionally(new DeadLetterException(l));
+        public void fail(ActorSystemDefault.DeadLetter l, ActorRef sender) {
+            resultHolder.completeExceptionally(this, new DeadLetterException(l), sender);
         }
 
         public ResponsiveCompletable<T> getResultHolder() {

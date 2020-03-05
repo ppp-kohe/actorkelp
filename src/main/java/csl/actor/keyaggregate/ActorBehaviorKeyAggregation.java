@@ -137,7 +137,7 @@ public class ActorBehaviorKeyAggregation {
 
         @SuppressWarnings("unchecked")
         @Override
-        public boolean processHistogram(MailboxKeyAggregation m) {
+        public boolean processHistogram(Actor self, MailboxKeyAggregation m) {
             KeyHistograms.HistogramTree tree = m.getHistogram(matchKeyEntryId);
             HistogramNodeLeaf1 next = ((HistogramNodeLeaf1) tree.takeCompleted());
             if (next != null) {
@@ -268,7 +268,7 @@ public class ActorBehaviorKeyAggregation {
 
         @SuppressWarnings("unchecked")
         @Override
-        public boolean processHistogram(MailboxKeyAggregation m) {
+        public boolean processHistogram(Actor self, MailboxKeyAggregation m) {
             KeyHistograms.HistogramTree tree = m.getHistogram(matchKeyEntryId);
             HistogramNodeLeaf2 next = ((HistogramNodeLeaf2) tree.takeCompleted());
             if (next != null) {
@@ -410,7 +410,7 @@ public class ActorBehaviorKeyAggregation {
 
         @SuppressWarnings("unchecked")
         @Override
-        public boolean processHistogram(MailboxKeyAggregation m) {
+        public boolean processHistogram(Actor self, MailboxKeyAggregation m) {
             KeyHistograms.HistogramTree tree = m.getHistogram(matchKeyEntryId);
             HistogramNodeLeaf3 next = ((HistogramNodeLeaf3) tree.takeCompleted());
             if (next != null) {
@@ -568,7 +568,7 @@ public class ActorBehaviorKeyAggregation {
 
         @SuppressWarnings("unchecked")
         @Override
-        public boolean processHistogram(MailboxKeyAggregation m) {
+        public boolean processHistogram(Actor self, MailboxKeyAggregation m) {
             KeyHistograms.HistogramTree tree = m.getHistogram(matchKeyEntryId);
             HistogramNodeLeaf4 next = ((HistogramNodeLeaf4) tree.takeCompleted());
             if (next != null) {
@@ -721,7 +721,7 @@ public class ActorBehaviorKeyAggregation {
 
         @SuppressWarnings({"unchecked", "rawtypes"})
         @Override
-        public boolean processHistogram(MailboxKeyAggregation m) {
+        public boolean processHistogram(Actor self, MailboxKeyAggregation m) {
             KeyHistograms.HistogramTree tree = m.getHistogram(matchKeyEntryId);
             HistogramNodeLeafList next = (HistogramNodeLeafList) tree.takeCompleted();
             if (next != null) {
@@ -856,7 +856,7 @@ public class ActorBehaviorKeyAggregation {
         }
 
         @Override
-        public boolean processHistogram(MailboxKeyAggregation m) {
+        public boolean processHistogram(Actor self, MailboxKeyAggregation m) {
             return false; //instead, consuming is done by TraversalProcess
         }
 

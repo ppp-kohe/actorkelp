@@ -186,7 +186,7 @@ public class MailboxKeyAggregation implements Mailbox, Cloneable {
 
     public interface HistogramProcessor extends ActorBehavior {
         KeyHistograms.KeyComparator<?> getKeyComparator();
-        boolean processHistogram(MailboxKeyAggregation m);
+        boolean processHistogram(Actor self, MailboxKeyAggregation m);
         Object selectFromValue(Object value);
         Object extractKeyFromValue(Object value, Object position);
 
@@ -230,11 +230,11 @@ public class MailboxKeyAggregation implements Mailbox, Cloneable {
             this.tree = tree;
         }
 
-        public boolean processHistogram(MailboxKeyAggregation m) {
+        public boolean processHistogram(Actor self, MailboxKeyAggregation m) {
             if (remainingProcessesLock) {
                 return false;
             } else {
-                return processor.processHistogram(m);
+                return processor.processHistogram(self, m);
             }
         }
 
@@ -457,9 +457,9 @@ public class MailboxKeyAggregation implements Mailbox, Cloneable {
         return treeSize;
     }
 
-    public boolean processHistogram() {
+    public boolean processHistogram(Actor self) {
         for (HistogramEntry e : entries) {
-            if (e.processHistogram(this)) {
+            if (e.processHistogram(self, this)) {
                 return true;
             }
         }

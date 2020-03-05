@@ -71,7 +71,7 @@ public class ClusterCommands<AppConfType extends ConfigBase> {
             block.getConfigLines()
                     .forEach(cs -> set(unit.getAppConfig(), cs));
         } catch (Exception e) {
-            conf.log("appConfig error: " + conf.configType + " : " + e);
+            conf.log(e, "appConfig error: %s : %s", conf.configType);
         }
         return unit;
     }
@@ -545,8 +545,7 @@ public class ClusterCommands<AppConfType extends ConfigBase> {
             } else if (pat instanceof Predicate<?>) {
                 return ((Predicate<Object>) pat).test(token);
             } else {
-                System.err.println("invalid pattern:" + pat);
-                return false;
+                throw new RuntimeException(String.format("invalid pattern: %s", pat));
             }
         }
 
@@ -695,11 +694,11 @@ public class ClusterCommands<AppConfType extends ConfigBase> {
             this.appConfig = appConfig;
         }
 
-        public void log(String str) {
+        public void log(String str, Object... args) {
             if (appConfig != null) {
-                appConfig.log(str);
+                appConfig.log(str, args);
             } else {
-                deploymentConfig.log(str);
+                deploymentConfig.log(str, args);
             }
         }
 
@@ -718,8 +717,8 @@ public class ClusterCommands<AppConfType extends ConfigBase> {
 
 
         public void setAppConfigLogHeader() {
-            String lh = getDeploymentConfig().getLogHeader();
             try {
+                String lh = getDeploymentConfig().logMessageHeaderHostPort().format();
                 getAppConfig().set("logHeader", lh);
             } catch (Exception ex) {
                 //ignore

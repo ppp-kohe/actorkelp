@@ -51,7 +51,7 @@ public class KeyAggregationPhaseEntry {
         } else if (ps.getType().equals(PhaseShift.PhaseShiftIntermediateType.PhaseIntermediateFinishLeaf)) {
             return completed(self, ps.getActor());
         } else { //error
-            self.logPhase("??? " + self + " : " + ps);
+            self.logPhase("??? %s : %s", self, ps);
             return false;
         }
     }
@@ -137,7 +137,7 @@ public class KeyAggregationPhaseEntry {
         int all = finished.size();
 
         float okp = (float) ok / (float) all * 100f;
-        router.logPhase("#phase intermediate: " + origin.getKey() + " : " + msg + String.format(" %3.1f%%", okp));
+        router.logPhase("#phase intermediate: %s : %s %3.1f%%", origin.getKey(), msg, okp);
         return ok >= all;
     }
 

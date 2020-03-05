@@ -1,6 +1,8 @@
 package csl.actor;
 
+import java.io.PrintWriter;
 import java.io.Serializable;
+import java.io.StringWriter;
 
 @FunctionalInterface
 public interface CallableMessage<ActorType extends Actor,RetType> extends Serializable {
@@ -9,18 +11,28 @@ public interface CallableMessage<ActorType extends Actor,RetType> extends Serial
 
     class CallableFailure implements Serializable {
         protected Throwable error;
+        protected String trace;
 
         public CallableFailure(Throwable error) {
             this.error = error;
+            StringWriter sw = new StringWriter();
+            PrintWriter pw = new PrintWriter(sw);
+            error.printStackTrace(pw);
+            pw.close();
+            trace = sw.getBuffer().toString();
         }
 
         public Throwable getError() {
             return error;
         }
 
+        public String getTrace() {
+            return trace;
+        }
+
         @Override
         public String toString() {
-            return "failure(" + error + ")";
+            return "failure(" + trace + ")";
         }
     }
 

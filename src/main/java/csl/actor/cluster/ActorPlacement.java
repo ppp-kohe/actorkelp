@@ -6,7 +6,6 @@ import csl.actor.remote.ActorRefRemote;
 import csl.actor.remote.ActorSystemRemote;
 
 import java.io.Serializable;
-import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
@@ -37,20 +36,25 @@ public interface ActorPlacement {
 
         public static boolean debugLog = System.getProperty("csl.actor.debug", "false").equals("true");
 
-        public static int logColor = Integer.parseInt(System.getProperty("csl.actor.logColor", "34"));
+        public static int logColor = ActorSystem.systemPropertyColor("csl.actor.logColor", 34);
 
         protected ConfigBase logger = new ConfigBase();
 
-        public static void logDebug(String msg, Object... args) {
+        public void logDebug(String fmt, Object... args) {
             if (debugLog) {
-                System.err.println("\033[38;5;34m" + Instant.now() + ": " + String.format(msg, args) + "\033[0m");
+                logger.log(logColor, fmt, args);
             }
+        }
+
+        public void log(String msg, Object... args) {
+            logger.log(logColor, "%s %s", this, ActorPlacement.lazyToString(() -> String.format(msg, args)));
         }
 
         public ActorPlacementDefault(ActorSystem system, String name) {
             super(system, name);
             strategy = initStrategy();
             totalThreads = system.getThreads();
+            logger.setLogger(system.getLogger());
             ResponsiveCalls.initCallableTarget(system);
         }
 
@@ -58,11 +62,8 @@ public interface ActorPlacement {
             super(system, name);
             this.strategy = strategy;
             totalThreads = system.getThreads();
+            logger.setLogger(system.getLogger());
             ResponsiveCalls.initCallableTarget(system);
-        }
-
-        public void log(String msg, Object... args) {
-            logger.log(logColor, this + " " + String.format(msg, args));
         }
 
         public static void setLogColor(int logColor) {
@@ -213,7 +214,7 @@ public interface ActorPlacement {
                 if (retryCount < getClusterSize()) {
                     return placeRetry(a, retryCount + 1, nextLocalNumber, previous);
                 } else {
-                    ex.printStackTrace();
+                    logger.log(logColor, ex, "placeRetry: %s retryCount=%,d nextLocalNum=%,d", a, retryCount, nextLocalNumber);
                     return placeLocal(a);
                 }
             }

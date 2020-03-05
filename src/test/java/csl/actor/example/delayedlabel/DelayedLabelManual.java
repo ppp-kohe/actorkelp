@@ -59,7 +59,7 @@ public class DelayedLabelManual {
 
         config.log(config.toString());
 
-        run(System.out::println, file);
+        run(file);
     }
 
     public int readHead(String file) {
@@ -70,12 +70,13 @@ public class DelayedLabelManual {
         }
     }
 
-    public void run(Consumer<String> out, String src) {
+    public void run(String src) {
+        ActorSystem system = new ActorSystemDefault();
+        ActorSystem.SystemLogger out = system.getLogger();
         Iterator<Object> inputs = inputs(out, src);
 
         Instant startTime = Instant.now();
 
-        ActorSystem system = new ActorSystemDefault();
         ResultActor resultActor = resultActor(system, out, startTime);
         ActorRef learnerActor = learnerActor(system, out, resultActor);
         resultActor.setLearner(learnerActor);
@@ -85,12 +86,12 @@ public class DelayedLabelManual {
         }
     }
 
-    public Iterator<Object> inputs(Consumer<String> out, String src) {
+    public Iterator<Object> inputs(ActorSystem.SystemLogger out, String src) {
         int numInstances = config.instances;
         if (src == null) {
             Instant startGenTime = Instant.now();
             List<Object> inputs = generateInput(12345L, config.classes, config.vectorLength, numInstances, config.delay);
-            out.accept(String.format("#generateInput: %,d %s", numInstances, Duration.between(startGenTime, Instant.now())));
+            out.log(String.format("#generateInput: %,d %s", numInstances, Duration.between(startGenTime, Instant.now())));
             return inputs.iterator();
         } else {
             Instant startGenTime = Instant.now();
@@ -98,7 +99,7 @@ public class DelayedLabelManual {
             for (Iterator<Object> i = readInputs(src); i.hasNext(); ) {
                 buf.add(i.next());
             }
-            out.accept(String.format("#readInput: %,d %s %s", numInstances, Duration.between(startGenTime, Instant.now()), src));
+            out.log(String.format("#readInput: %,d %s %s", numInstances, Duration.between(startGenTime, Instant.now()), src));
             return buf.iterator();
         }
     }
@@ -147,11 +148,11 @@ public class DelayedLabelManual {
         }
     }
 
-    public ActorRef learnerActor(ActorSystem system, Consumer<String> out, ActorRef resultActor) {
+    public ActorRef learnerActor(ActorSystem system, ActorSystem.SystemLogger out, ActorRef resultActor) {
         return new LearnerActor(system, resultActor);
     }
 
-    public ResultActor resultActor(ActorSystem system, Consumer<String> out, Instant startTime) {
+    public ResultActor resultActor(ActorSystem system, ActorSystem.SystemLogger out, Instant startTime) {
         return new ResultActor(system, out, startTime, config.instances);
     }
 
@@ -159,13 +160,13 @@ public class DelayedLabelManual {
         Instant startTime;
         long numInstances;
         long finishedInstances;
-        Consumer<String> out;
+        ActorSystem.SystemLogger out;
         Instant lastTime;
         ScheduledExecutorService exe;
         ActorRef learner;
         ScheduledFuture<?> checker;
 
-        public ResultActor(ActorSystem system, Consumer<String> out, Instant startTime, int numInstances) {
+        public ResultActor(ActorSystem system, ActorSystem.SystemLogger out, Instant startTime, int numInstances) {
             super(system, "resultActor");
             this.startTime = startTime;
             this.numInstances = numInstances;
@@ -178,7 +179,7 @@ public class DelayedLabelManual {
         void check() {
             Duration d = Duration.between(lastTime, Instant.now());
             if (!d.minusSeconds(10).isNegative()) {
-                out.accept(String.format("#not yet finished: %,d %s since-start:%s",
+                out.log(String.format("#not yet finished: %,d %s since-start:%s",
                         finishedInstances, d, Duration.between(startTime, Instant.now())));
                 learner.tell(new Finish(finishedInstances), this);
                 checker.cancel(false);
@@ -202,7 +203,7 @@ public class DelayedLabelManual {
             lastTime = Instant.now();
             if (numInstances <= finishedInstances) {
                 Duration d = Duration.between(startTime, Instant.now());
-                out.accept(String.format("#finish: %,d %s", finishedInstances, d));
+                out.log(String.format("#finish: %,d %s", finishedInstances, d));
                 learner.tell(new Finish(finishedInstances), this);
                 checker.cancel(true);
                 exe.shutdown();
