@@ -377,12 +377,16 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
                 output.flush();
                 long sampleSize = output.total();
                 long v = sampleTotal.addAndGet(sampleSize) / sampleCount.incrementAndGet();
-                if ((t % 10_000) == 0) {
+                if ((t % 100) == 0) {
                     logger.log(logPersist, logColorPersist, "updateCurrentSample timing=%,d lastSample=[%,d] <%s> total=%,d count=%,d -> %,d",
-                            t, logger.toStringLimit(msg), sampleTotal.get(), sampleCount.get(), v);
+                            t, sampleSize, logger.toStringLimit(msg), sampleTotal.get(), sampleCount.get(), v);
                 }
                 return v;
             } catch (Exception ex) {
+                if ((t % 100) == 0) {
+                    logger.log(logPersist, logColorPersist, "updateCurrentSample timing=%,d lastSample=<%s> total=%,d count=%,d error:%s",
+                            t, logger.toStringLimit(msg), sampleTotal.get(), sampleCount.get(), ex);
+                }
                 if (ex instanceof KryoException && ex.getMessage().contains("overflow")) {
                     return sampleTotal.addAndGet(4096) / sampleCount.incrementAndGet();
                 } else {
