@@ -12,6 +12,7 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.time.Instant;
 import java.util.*;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -422,7 +423,7 @@ public class ConfigBase implements Serializable {
     }
 
     protected int getLogColorDefault() {
-        return 33;
+        return 17;
     }
 
     public static class SystemLoggerHeader implements ActorSystem.SystemLogger {
@@ -457,4 +458,12 @@ public class ConfigBase implements Serializable {
         }
     }
 
+    public static Object lazyToString(Supplier<String> s) {
+        return new Object() {
+            @Override
+            public String toString() {
+                return s.get();
+            }
+        };
+    }
 }

@@ -34,7 +34,7 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
 
     public static boolean logPersist = System.getProperty("csl.actor.persist.log", "true").equals("true");
     public static boolean logDebugPersist = System.getProperty("csl.actor.persist.debug", "false").equals("true");
-    public static int logColorPersist = ActorSystem.systemPropertyColor("csl.actor.persist.color", 68);
+    public static int logColorPersist = ActorSystem.systemPropertyColor("csl.actor.persist.color", 94);
 
     public interface MessagePersistent {
         MessagePersistentWriter get();
@@ -359,7 +359,7 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
             if (log || res) {
                 logger.log(logPersist, logColorPersist,
                         "Mailbox needToPersist: size=%,d sizeLimit=%,d sample=%,d estimated=%,d free=%,d (%3.1f%%) -> %s",
-                        size, sizeLimit, currentSample, estimated, free, (estimated / (double) free) * 100.0, res);
+                        size, sizeLimit, currentSample, estimated, free, free == 0 ? Double.POSITIVE_INFINITY : ((estimated / (double) free) * 100.0), res);
             }
             return res;
         }
@@ -516,12 +516,17 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
         public ActorSystem.SystemLogger getLogger() {
             return logger;
         }
+
+        public void openForWrite(Path path) { }
+
+        public void close(Path path) { }
     }
 
     public static class PersistentFileEnd implements Serializable {}
 
     public static class PersistentFileWriter implements AutoCloseable {
         protected String pathExpanded;
+        protected Path filePath;
         protected PersistentFileManager manager;
         protected Output output;
         protected KryoBuilder.SerializerFunction serializer;
@@ -529,7 +534,10 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
         public PersistentFileWriter(String pathExpanded, PersistentFileManager manager) throws IOException  {
             this.pathExpanded = pathExpanded;
             this.manager = manager;
-            output = new Output(Files.newOutputStream(manager.getPath(pathExpanded)));
+            Path p = manager.getPath(pathExpanded);
+            manager.openForWrite(p);
+            this.filePath = p;
+            output = new Output(Files.newOutputStream(p));
             serializer = manager.getSerializer();
         }
 
@@ -554,6 +562,7 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
         public void close() {
             write(new PersistentFileEnd());
             output.close();
+            manager.close(filePath);
         }
 
         @Override
@@ -779,14 +788,21 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
     }
 
     public static PersistentFileManager createPersistentFile(String path, ActorSystem system) {
-        KryoBuilder.SerializerFunction serializer;
-        if (system instanceof ActorSystemRemote) {
-            serializer = ((ActorSystemRemote) system).getSerializer();
+        if (system instanceof PersistentFileManagerFactory) {
+            return ((PersistentFileManagerFactory) system).createFileManager(path);
         } else {
-            serializer = new KryoBuilder.SerializerPoolDefault(system);
+            KryoBuilder.SerializerFunction serializer;
+            if (system instanceof ActorSystemRemote) {
+                serializer = ((ActorSystemRemote) system).getSerializer();
+            } else {
+                serializer = new KryoBuilder.SerializerPoolDefault(system);
+            }
+            return new PersistentFileManager(path, serializer, ConfigDeployment.getPathModifier(system),
+                    system == null ? new ActorSystemDefault.SystemLoggerErr() : system.getLogger());
         }
-        return new PersistentFileManager(path, serializer, ConfigDeployment.getPathModifier(system),
-                system == null ? new ActorSystemDefault.SystemLoggerErr() : system.getLogger());
     }
 
+    public interface PersistentFileManagerFactory {
+        PersistentFileManager createFileManager(String path);
+    }
 }

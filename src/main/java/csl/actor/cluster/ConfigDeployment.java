@@ -103,11 +103,11 @@ public class ConfigDeployment extends ConfigBase {
 
     @Override
     protected FormatAndArgs logMessageHeader() {
-        return super.logMessageHeader().append(logMessageHeaderHostPort());
+        return super.logMessageHeader().append(logMessageHeaderHostPort()).append(new FormatAndArgs(" "));
     }
 
     public FormatAndArgs logMessageHeaderHostPort() {
-        return new FormatAndArgs("[%s:%d] ", host, port);
+        return new FormatAndArgs("[%s:%d]", host, port);
     }
 
     public static PathModifierHost createDefaultPathModifier(ActorSystem system) {

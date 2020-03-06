@@ -4,6 +4,7 @@ import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 import csl.actor.ActorSystem;
+import csl.actor.cluster.ConfigBase;
 import csl.actor.cluster.MailboxPersistable;
 import csl.actor.cluster.MailboxPersistable.PersistentFileReaderSource;
 import csl.actor.remote.KryoBuilder;
@@ -11,6 +12,7 @@ import csl.actor.remote.KryoBuilder;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.io.Serializable;
+import java.nio.file.Path;
 import java.util.*;
 
 public class KeyHistogramsPersistable extends KeyHistograms {
@@ -18,7 +20,7 @@ public class KeyHistogramsPersistable extends KeyHistograms {
     protected HistogramTreePersistableConfig config;
 
 
-    public static int logPersistColor = ActorSystem.systemPropertyColor("csl.actor.histogram.color", 69);
+    public static int logPersistColor = ActorSystem.systemPropertyColor("csl.actor.histogram.color", 106);
 
     public KeyHistogramsPersistable(HistogramTreePersistableConfig config,
                                     MailboxPersistable.PersistentFileManager persistent) {
@@ -150,17 +152,20 @@ public class KeyHistogramsPersistable extends KeyHistograms {
                 long leafSize = tree.getLeafSizeNonZero() * 96L;
                 long estimated = (onMemoryValues + sizeLimit) * sample + leafSize;
                 boolean res = estimated > available;
+                long limit = 0;
+                if (res) {
+                    limit = Math.min(Math.max(sizeLimit, (available - leafSize) / sample), onMemoryValues);
+                }
                 if (log || res) {
                     mailboxSampling.getLogger().log(MailboxPersistable.logPersist, logPersistColor,
                             "Histogram(%h) %s: needToPersist: size=%,d sizeLimit=%,d leafNZ=%,d(%3.2f) sample=%,d estimated=%,d free=%,d (%3.1f%%) -> %s%s",
                             System.identityHashCode(tree), callerInfo,
                             onMemoryValues, sizeLimit, tree.getLeafSizeNonZero(), tree.getLeafSizeNonZeroRate(), sample,
-                            estimated, available, (estimated / (double) available) * 100.0, res,
-                            (res ? String.format(" limitRaw:%,d", (available - leafSize) / sample) : ""));
+                            estimated, available, available == 0 ? Double.POSITIVE_INFINITY : ((estimated / (double) available) * 100.0), res,
+                            (res ? String.format(" limit:%,d", limit) : ""));
                 }
                 if (res) {
-                    return new HistogramPersistentOperationTree(
-                            Math.min(Math.max(sizeLimit, (available - leafSize) / sample), onMemoryValues));
+                    return new HistogramPersistentOperationTree(limit);
                 } else {
                     return HistogramPersistentOperationType.None;
                 }
@@ -532,22 +537,19 @@ public class KeyHistogramsPersistable extends KeyHistograms {
         }
 
         private Object formatDist(float[] dist) {
-            return new Object() {
-                @Override
-                public String toString() {
-                    StringBuilder buf = new StringBuilder();
-                    buf.append("dist=[");
-                    for (int i = 0, len = dist.length; i < len; ++i) {
-                        if (i != 0) {
-                            buf.append(" ");
-                        }
-                        buf.append(String.format("%1.1f:", ((float) i) / (float) len))
-                            .append(String.format("%1.2f", dist[i]));
+            return ConfigBase.lazyToString(() -> {
+                StringBuilder buf = new StringBuilder();
+                buf.append("dist=[");
+                for (int i = 0, len = dist.length; i < len; ++i) {
+                    if (i != 0) {
+                        buf.append(" ");
                     }
-                    buf.append("]");
-                    return buf.toString();
+                    buf.append(String.format("%1.1f:", ((float) i) / (float) len))
+                        .append(String.format("%1.2f", dist[i]));
                 }
-            };
+                buf.append("]");
+                return buf.toString();
+            });
         }
 
         protected void logPersistedTreeBefore(long persistingLimit, Object obj) {
@@ -720,11 +722,15 @@ public class KeyHistogramsPersistable extends KeyHistograms {
         protected RandomAccessFile dataStore;
         protected KryoBuilder.SerializerFunction serializer;
         protected Output out;
+        protected Path filePath;
 
         public TreeWriting(MailboxPersistable.PersistentFileManager manager, String pathExpanded) throws IOException {
             this.manager = manager;
             this.serializer = manager.getSerializer();
             this.pathExpanded = pathExpanded;
+            Path p = manager.getPath(pathExpanded);
+            filePath = p;
+            manager.openForWrite(p);
             dataStore = new RandomAccessFile(manager.getPath(pathExpanded).toFile(), "rw");
             out = new Output(4096, Integer.MAX_VALUE);
         }
@@ -741,6 +747,7 @@ public class KeyHistogramsPersistable extends KeyHistograms {
         public void close() throws IOException {
             if (parent == null) {
                 dataStore.close();
+                manager.close(filePath);
             } else {
                 parent.position = position;
             }

@@ -58,7 +58,8 @@ public class ActorSystemDefault implements ActorSystem {
         threads = Runtime.getRuntime().availableProcessors();
     }
     protected void initSystemExecutorService() {
-        executorService = Executors.newFixedThreadPool(threads);
+        executorService = new ThreadPoolExecutor(threads, Integer.MAX_VALUE, 60L, TimeUnit.SECONDS,
+                new SynchronousQueue<>());
     }
     protected void initSystemProcessingCount() {
         processingCount = new AtomicInteger();

@@ -35,9 +35,9 @@ public class ActorSystemRemote implements ActorSystem {
     public static int debugLogColor = ActorSystem.systemPropertyColor("csl.actor.debug.color", 124);
 
     public static boolean debugLogMsg = System.getProperty("csl.actor.debugMsg", "false").equals("true");
-    public static int debugLogMsgColorSend = ActorSystem.systemPropertyColor("csl.actor.debugMsg.color.send", 19);
-    public static int debugLogMsgColorConnect = ActorSystem.systemPropertyColor("csl.actor.debugMsg.color.connect", 20);
-    public static int debugLogMsgColorDeliver = ActorSystem.systemPropertyColor("csl.actor.debugMsg.color.deliver", 163);
+    public static int debugLogMsgColorSend = ActorSystem.systemPropertyColor("csl.actor.debugMsg.color.send", 126);
+    public static int debugLogMsgColorConnect = ActorSystem.systemPropertyColor("csl.actor.debugMsg.color.connect", 161);
+    public static int debugLogMsgColorDeliver = ActorSystem.systemPropertyColor("csl.actor.debugMsg.color.deliver", 160);
 
     public ActorSystemRemote() {
         this(new ActorSystemDefaultForRemote(), KryoBuilder.builder());
@@ -69,10 +69,10 @@ public class ActorSystemRemote implements ActorSystem {
 
     protected void initServerAndClient() {
         logDebug("initServerAndClient: %s", this);
-        deliverer = new MessageDeliveringActor(this);
-        server = new ObjectMessageServer(getLogger());
+        deliverer = initMessageDeliveringActor();
+        server = initObjectMessageServer();
         server.setReceiver(this::receive);
-        client = new ObjectMessageClient(getLogger());
+        client = initObjectMessageClient();
         if (this.localSystem instanceof ActorSystemDefaultForRemote) {
             ActorSystemDefaultForRemote r = (ActorSystemDefaultForRemote) localSystem;
             server.setLeaderThreads(r.getServerLeaderThreads());
@@ -81,7 +81,23 @@ public class ActorSystemRemote implements ActorSystem {
         }
         server.setSerializer(getSerializer());
         client.setSerializer(getSerializer());
-        new ConnectionCloseActor(this); //register the actor for handling closing connections
+        initConnectionCloseActor(); //register the actor for handling closing connections
+    }
+
+    protected MessageDeliveringActor initMessageDeliveringActor() {
+        return new MessageDeliveringActor(this);
+    }
+
+    protected ObjectMessageServer initObjectMessageServer() {
+        return new ObjectMessageServer(getLogger());
+    }
+
+    protected ObjectMessageClient initObjectMessageClient() {
+        return new ObjectMessageClient(getLogger());
+    }
+
+    protected ConnectionCloseActor initConnectionCloseActor() {
+        return new ConnectionCloseActor(this);
     }
 
     /** @return implementation field getter */
@@ -332,6 +348,19 @@ public class ActorSystemRemote implements ActorSystem {
         }
     }
 
+    public boolean isSpecialMessage(Message<?> message) {
+        if (message != null) {
+            Object data = message.getData();
+            return data instanceof ConnectionCloseNotice ||
+                    data instanceof CallableMessage ||
+                    data instanceof CallableMessage.CallableFailure ||
+                    data instanceof CallableMessage.CallableResponse<?> ||
+                    data instanceof CallableMessage.CallableResponseVoid;
+        } else {
+            return false;
+        }
+    }
+
     public static class ConnectionActor extends Actor {
         protected ActorSystemRemote remoteSystem;
         protected ActorAddress address;
@@ -357,14 +386,13 @@ public class ActorSystemRemote implements ActorSystem {
         }
 
         public void send(Message<?> message) {
-            if (message.getData() instanceof ConnectionCloseNotice) {
-                logMsg("%s close", message);
-                connection.write(new TransferredMessage(count, message));
-                close();
+            if (remoteSystem.isSpecialMessage(message)) {
+                writeSpecial(message);
             } else {
                 if (mailbox.isEmpty()) {
                     logMsg("%s write %s", this, message);
                     connection.write(new TransferredMessage(count, message));
+                    ++count;
                 } else {
                     int maxBundle = 30;
                     List<Object> messageBundle = new ArrayList<>(maxBundle);
@@ -372,18 +400,39 @@ public class ActorSystemRemote implements ActorSystem {
                     int i = 1;
                     while (i < maxBundle) {
                         Message<?> msg = mailbox.poll();
-                        if (msg != null) {
+                        if (remoteSystem.isSpecialMessage(msg)) {
+                            write(messageBundle);
+                            messageBundle.clear();
+
+                            writeSpecial(msg);
+                            break;
+                        } else if (msg != null) {
                             messageBundle.add((Message<?>) msg.getData()); //the data of the msg is a Message for remote actor
                             ++i;
                         } else {
                             break;
                         }
                     }
-                    logMsg("%s write %,d messages: %s,...", this, messageBundle.size(), message);
-                    connection.write(new TransferredMessage(count, messageBundle));
+                    write(messageBundle);
                 }
             }
+        }
+
+        private void write(List<Object> messageBundle) {
+            if (!messageBundle.isEmpty()) {
+                logMsg("%s write %,d messages: %s,...", this, messageBundle.size(), messageBundle.get(0));
+                connection.write(new TransferredMessage(count, messageBundle));
+                ++count;
+            }
+        }
+
+        protected void writeSpecial(Message<?> message) {
+            logMsg("%s special", message);
+            connection.write(new TransferredMessage(count, message));
             ++count;
+            if (message.getData() instanceof ConnectionCloseNotice) {
+                close();
+            }
         }
 
         protected void logMsg(String fmt, Object... args) {

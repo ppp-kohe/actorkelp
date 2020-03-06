@@ -18,7 +18,7 @@ public class Config extends ConfigBase {
     public float pruneLessThanNonZeroLeafRate = 0.2f;
     public long toLocalWaitMs = 20_000;
     public boolean logSplit = true;
-    public int logColor = 33;
+    public int logColor = 17;
     public int logColorPhase = 27;
     public long traverseDelayTimeMs = 300;
     public boolean persist = false;

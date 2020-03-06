@@ -237,6 +237,9 @@ public class ResponsiveCalls {
                 resultHolder.completeExceptionally(this, ((CallableMessage.CallableFailure) v).getError(), sender);
             } else {
                 try {
+                    if (v instanceof CallableMessage.CallableResponse<?>) {
+                        v = ((CallableMessage.CallableResponse<?>) v).getValue();
+                    }
                     resultHolder.complete(this, (T) v, sender);
                 } catch (Throwable ce) {
                     resultHolder.completeExceptionally(this, ce, sender);

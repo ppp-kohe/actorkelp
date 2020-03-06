@@ -234,6 +234,8 @@ public class KryoBuilder {
                 ActorSystemDefault.DeadLetter.class,
                 CallableMessage.class,
                 CallableMessage.CallableFailure.class,
+                CallableMessage.CallableResponse.class,
+                CallableMessage.CallableResponseVoid.class,
                 Message.MessageNone.class,
                 ActorSystemRemote.ConnectionCloseNotice.class,
                 ActorSystemRemote.TransferredMessage.class,
@@ -300,9 +302,7 @@ public class KryoBuilder {
                 ClusterDeployment.ConfigSet.class,
                 ClusterDeployment.ShutdownTask.class,
                 ConfigDeployment.class,
-                FileSplitter.FileSplit.class,
-                ActorPlacementKeyAggregation.Task.class,
-                ActorPlacementKeyAggregation.TaskChain.class);
+                FileSplitter.FileSplit.class);
     }
 
     public interface SerializerFunction {

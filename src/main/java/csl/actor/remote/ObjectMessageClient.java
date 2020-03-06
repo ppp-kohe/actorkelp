@@ -35,7 +35,7 @@ public class ObjectMessageClient implements Closeable {
     protected ActorSystem.SystemLogger logger;
 
     public static boolean debugTraceLog = System.getProperty("csl.actor.trace.client", "false").equals("true");
-    public static int debugLogClientColor = ActorSystem.systemPropertyColor("csl.actor.client.color", 18);
+    public static int debugLogClientColor = ActorSystem.systemPropertyColor("csl.actor.client.color", 125);
 
     public ObjectMessageClient(ActorSystem.SystemLogger logger) {
         this.logger = logger;
@@ -139,9 +139,13 @@ public class ObjectMessageClient implements Closeable {
                 start();
             }
         }
-        return new ObjectMessageConnection(this)
+        return initConnection()
                 .setHost(host)
                 .setPort(port);
+    }
+
+    protected ObjectMessageConnection initConnection() {
+        return new ObjectMessageConnection(this);
     }
 
     public Bootstrap getBootstrap() {
@@ -213,7 +217,7 @@ public class ObjectMessageClient implements Closeable {
                 ChannelFuture f = channel.writeAndFlush(msg);
                 checkResult(f);
             } catch (Exception c) {
-                client.getLogger().log(true, debugLogClientColor, "%s write failure: %s", this, c);
+                client.getLogger().log(true, debugLogClientColor, "%s write failure: %s %s", this, c, Thread.currentThread());
                 logWrite(retryCount, String.format("write failure %s", c));
                 if (retryCount < 10) {
                     return write(msg, retryCount + 1);
@@ -256,7 +260,6 @@ public class ObjectMessageClient implements Closeable {
                             lastSize.decrementAndGet();
                         }
                     } else if (!f.await(10_000)) {
-                        client.getLogger().log(true, debugLogClientColor, "%s timeout", this);
                         throw new RuntimeException(String.format("%s timeout", this));
                     } else {
                         if (last.remove(f)) {

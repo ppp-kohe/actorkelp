@@ -409,6 +409,10 @@ public abstract class ActorKeyAggregation extends ActorDefault
     }
 
     public void processMessageBehavior(Message<?> message) {
+        if (getSystem() instanceof ActorSystemCluster) {
+            ((ActorSystemCluster) getSystem()).awaits(message,
+                    ConfigBase.lazyToString(() -> "processMessageBehavior: " + this));
+        }
         processPrune();
         Object data = message.getData();
         if (data instanceof MailboxKeyAggregation.TraversalProcess) {

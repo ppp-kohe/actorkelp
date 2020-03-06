@@ -123,7 +123,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
     }
 
     protected void deployMasterInitSystem() {
-        system = new ActorSystemRemote();
+        system = new ActorSystemCluster();
         system.getLocalSystem().setLogger(new ConfigBase.SystemLoggerHeader(system.getLogger(), master.getAppConfig()));
     }
 
@@ -498,7 +498,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         }
 
         protected ActorSystemRemote initSystem() {
-            ActorSystemRemote system = new ActorSystemRemote();
+            ActorSystemRemote system = new ActorSystemCluster();
             system.getLocalSystem().setLogger(new ConfigBase.SystemLoggerHeader(system.getLogger(), logger));
             return system;
         }

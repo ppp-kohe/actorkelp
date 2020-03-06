@@ -3,6 +3,7 @@ package csl.actor;
 import java.io.PrintWriter;
 import java.io.Serializable;
 import java.io.StringWriter;
+import java.util.Objects;
 
 @FunctionalInterface
 public interface CallableMessage<ActorType extends Actor,RetType> extends Serializable {
@@ -54,7 +55,7 @@ public interface CallableMessage<ActorType extends Actor,RetType> extends Serial
         }
     }
 
-    class CallableResponseVoid {
+    class CallableResponseVoid implements Serializable {
         @Override
         public String toString() {
             return "void";
@@ -63,4 +64,20 @@ public interface CallableMessage<ActorType extends Actor,RetType> extends Serial
 
     CallableResponseVoid Void = new CallableResponseVoid();
 
+    class CallableResponse<V> implements Serializable {
+        protected V value;
+
+        public CallableResponse(V value) {
+            this.value = value;
+        }
+
+        public V getValue() {
+            return value;
+        }
+
+        @Override
+        public String toString() {
+            return "res(" + value + ")";
+        }
+    }
 }

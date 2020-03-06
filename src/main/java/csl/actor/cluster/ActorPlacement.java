@@ -10,22 +10,12 @@ import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 public interface ActorPlacement {
     String PLACEMENT_NAME = ActorPlacement.class.getName() + ".placement";
 
     ActorRef place(Actor a);
-
-    static Object lazyToString(Supplier<String> s) {
-        return new Object() {
-            @Override
-            public String toString() {
-                return s.get();
-            }
-        };
-    }
 
     abstract class ActorPlacementDefault extends ActorDefault implements ActorPlacement {
         protected List<AddressListEntry> cluster = new ArrayList<>(); //without self entry
@@ -36,7 +26,7 @@ public interface ActorPlacement {
 
         public static boolean debugLog = System.getProperty("csl.actor.debug", "false").equals("true");
 
-        public static int logColor = ActorSystem.systemPropertyColor("csl.actor.logColor", 34);
+        public static int logColor = ActorSystem.systemPropertyColor("csl.actor.logColor", 33);
 
         protected ConfigBase logger = new ConfigBase();
 
@@ -47,7 +37,7 @@ public interface ActorPlacement {
         }
 
         public void log(String msg, Object... args) {
-            logger.log(logColor, "%s %s", this, ActorPlacement.lazyToString(() -> String.format(msg, args)));
+            logger.log(logColor, "%s %s", this, ConfigBase.lazyToString(() -> String.format(msg, args)));
         }
 
         public ActorPlacementDefault(ActorSystem system, String name) {
@@ -134,7 +124,7 @@ public interface ActorPlacement {
 
         public void receive(AddressList list, ActorRef sender) {
             logDebug("%s on %s receive: \n   %s \n from %s", this, getSystem(),
-                    ActorPlacement.lazyToString(() ->
+                    ConfigBase.lazyToString(() ->
                             list.getCluster().stream()
                             .map(Objects::toString)
                             .collect(Collectors.joining("\n   "))), sender);

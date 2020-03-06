@@ -57,8 +57,8 @@ public interface ActorSystem extends Executor, AutoCloseable {
         @Override
         public String toString() {
             String s = Objects.toString(o);
-            if (s.length() > 256) {
-                return s.substring(0, 253) + String.format("...[%,d]", s.length());
+            if (s.length() > 128) {
+                return s.substring(0, 120) + String.format("...[%,d]", s.length());
             } else {
                 return s;
             }

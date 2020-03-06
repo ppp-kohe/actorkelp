@@ -44,7 +44,7 @@ public class ObjectMessageServer implements Closeable {
     protected ActorSystem.SystemLogger logger;
 
     public static boolean debugTraceLog = System.getProperty("csl.actor.trace.server", "false").equals("true");
-    public static int debugLogServerColor = ActorSystem.systemPropertyColor("csl.actor.server.color", 161);
+    public static int debugLogServerColor = ActorSystem.systemPropertyColor("csl.actor.server.color", 162);
 
     public ObjectMessageServer(ActorSystem.SystemLogger logger) {
         this.logger = logger;

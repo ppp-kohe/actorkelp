@@ -1,6 +1,7 @@
 package csl.actor;
 
 import java.io.Serializable;
+import java.util.function.Function;
 
 public class Message<DataType> implements Serializable {
 
@@ -29,6 +30,10 @@ public class Message<DataType> implements Serializable {
     @Override
     public String toString() {
         return getClass().getSimpleName() + "(" + data + " : " + target + " <- " + sender + ")";
+    }
+
+    public String toString(Function<Object,Object> dataToStr) {
+        return getClass().getSimpleName() + "(" + dataToStr.apply(data) + " : " + target + " <- " + sender + ")";
     }
 
     /**
