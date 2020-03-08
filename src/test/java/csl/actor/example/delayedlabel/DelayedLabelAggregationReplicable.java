@@ -45,7 +45,7 @@ public class DelayedLabelAggregationReplicable extends DelayedLabelManual {
                 root.support.process();
             }
             if (!printed && (numInstances * 0.9) < this.finishedInstances) {
-                ResponsiveCalls.sendTask(system, root, (a, s) -> {
+                ResponsiveCalls.sendTask(system, root, (a) -> {
                     System.err.println("print router");
                     KeyAggregationVisitor.tell((ActorKeyAggregation) a, (v, snd) -> v.printStatus(), null);
                     return null;

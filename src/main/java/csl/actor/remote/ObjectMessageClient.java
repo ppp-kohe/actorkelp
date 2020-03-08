@@ -19,6 +19,7 @@ import io.netty.util.ReferenceCountUtil;
 import java.io.Closeable;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 
 public class ObjectMessageClient implements Closeable {
@@ -173,6 +174,10 @@ public class ObjectMessageClient implements Closeable {
         protected ConcurrentLinkedQueue<ChannelFuture> last = new ConcurrentLinkedQueue<>();
         protected AtomicInteger lastSize = new AtomicInteger();
 
+        protected AtomicLong recordSendBytes = new AtomicLong();
+        protected AtomicLong recordSendErrors = new AtomicLong();
+        protected AtomicLong recordSendCount = new AtomicLong();
+
         public ObjectMessageConnection(ObjectMessageClient client) {
             this.client = client;
         }
@@ -313,6 +318,28 @@ public class ObjectMessageClient implements Closeable {
             return getClass().getSimpleName() + "@" +
                     Integer.toHexString(System.identityHashCode(this)) + "(" + host + ':' + port + ")";
         }
+
+        public void recordSendBytes(long n) {
+            recordSendBytes.addAndGet(n);
+            recordSendCount.incrementAndGet();
+        }
+
+        public long getRecordSendBytes() {
+            return recordSendBytes.get();
+        }
+
+        public void recordSendError(Throwable e) {
+            recordSendErrors.incrementAndGet();
+            recordSendCount.incrementAndGet();
+        }
+
+        public long getRecordSendErrors() {
+            return recordSendErrors.get();
+        }
+
+        public long getRecordSendCount() {
+            return recordSendCount.get();
+        }
     }
 
     public static class ClientInitializer extends ChannelInitializer<SocketChannel> {
@@ -339,7 +366,7 @@ public class ObjectMessageClient implements Closeable {
                 pipeline.addLast(new LoggingHandler(ObjectMessageClient.class, LogLevel.INFO));
             }
             pipeline.addLast(new LengthFieldPrepender(4, false),
-                            new QueueClientHandler(owner.getLogger(), owner.getSerializer()),
+                            new QueueClientHandler(connection, owner.getLogger(), owner.getSerializer()),
                             new ResponseHandler(owner.getLogger(), connection::setResult));
         }
 
@@ -350,11 +377,13 @@ public class ObjectMessageClient implements Closeable {
     }
 
     public static class QueueClientHandler extends MessageToByteEncoder<Object> {
+        protected ObjectMessageConnection owner;
         protected ActorSystem.SystemLogger logger;
         protected KryoBuilder.SerializerFunction serializer;
         protected boolean firstError;
 
-        public QueueClientHandler(ActorSystem.SystemLogger logger, KryoBuilder.SerializerFunction serializer) {
+        public QueueClientHandler(ObjectMessageConnection owner, ActorSystem.SystemLogger logger, KryoBuilder.SerializerFunction serializer) {
+            this.owner = owner;
             this.logger = logger;
             this.serializer = serializer;
         }
@@ -365,10 +394,17 @@ public class ObjectMessageClient implements Closeable {
                 Output output = new Output(new ByteBufOutputStream(out));
                 serializer.write(output, msg);
                 output.flush();
+                if (owner != null) {
+                    long n = output.total();
+                    owner.recordSendBytes(n);
+                }
             } catch (Exception ex) {
                 if (firstError) {
                     logger.log(true, debugLogClientColor, ex, "encode: %s", logger.toStringLimit(msg));
                     firstError = false;
+                }
+                if (owner != null) {
+                    owner.recordSendError(ex);
                 }
                 throw ex;
             }

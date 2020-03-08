@@ -7,7 +7,11 @@ import java.util.Objects;
 
 @FunctionalInterface
 public interface CallableMessage<ActorType extends Actor,RetType> extends Serializable {
-    RetType call(ActorType self, ActorRef sender);
+    default RetType call(ActorType self, ActorRef sender) {
+        return call(self);
+    }
+
+    RetType call(ActorType self);
 
 
     class CallableFailure implements Serializable {
@@ -46,11 +50,20 @@ public interface CallableMessage<ActorType extends Actor,RetType> extends Serial
     }
 
     interface CallableMessageConsumer<ActorType extends Actor> extends CallableMessage<ActorType,CallableResponseVoid> {
-        void accept(ActorType self, ActorRef sender);
+        default void accept(ActorType self, ActorRef sender) {
+            accept(self);
+        }
+
+        void accept(ActorType self);
 
         @Override
         default CallableResponseVoid call(ActorType self, ActorRef sender) {
             accept(self, sender);
+            return Void;
+        }
+
+        default CallableResponseVoid call(ActorType self) {
+            accept(self);
             return Void;
         }
     }

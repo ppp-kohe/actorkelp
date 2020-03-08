@@ -10,13 +10,24 @@ import csl.actor.remote.ActorAddress;
 import csl.actor.remote.ActorRefRemote;
 import csl.actor.remote.ActorSystemRemote;
 
-import java.io.*;
+import java.io.BufferedOutputStream;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.Serializable;
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
+import java.net.ServerSocket;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.attribute.FileTime;
+import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.jar.JarEntry;
 import java.util.jar.JarOutputStream;
 import java.util.regex.Pattern;
@@ -36,27 +47,42 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
 
     protected PlaceType masterPlace;
 
+    protected ActorRef attachedPlace;
+
+    protected ClusterHttp http;
+
+    @Retention(RetentionPolicy.RUNTIME)
+    @Target(ElementType.METHOD)
+    public @interface PropertyInterface {
+        String value() default "";
+    }
+
     public ClusterDeployment(Class<AppConfType> defaultConfType, Class<PlaceType> placeType) {
         this.defaultConfType = defaultConfType;
         this.placeType = placeType;
     }
 
+    @PropertyInterface("cluster-default-conf-type")
     public Class<AppConfType> getDefaultConfType() {
         return defaultConfType;
     }
 
+    @PropertyInterface("cluster-node-main-type")
     public Class<?> getNodeMainType() {
         return NodeMain.class;
     }
 
+    @PropertyInterface("cluster-placement-type")
     public Class<PlaceType> getPlaceType() {
         return placeType;
     }
 
+    @PropertyInterface("cluster-master")
     public ClusterUnit<AppConfType> getMaster() {
         return master;
     }
 
+    @PropertyInterface("cluster-nodes")
     public List<ClusterUnit<AppConfType>> getNodes() {
         return nodes;
     }
@@ -144,6 +170,8 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         master.log("master %s: started %s", master.getDeploymentConfig().getAddress(), masterPlace);
 
         deployMasterAfterSystemInitSendConfigToUnits(units);
+
+        deployMasterAfterSystemInitHttp();
     }
 
     protected void deployMasterAfterSystemInitLogColor() {
@@ -171,6 +199,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
     protected void deployMasterAfterSystemInitPlace() throws Exception {
         masterPlace = createPlace(placeType, system,
                 new ActorPlacement.PlacementStrategyRoundRobin(0));
+        masterPlace.setDeployment(this);
         masterPlace.setLogger(master.getDeploymentConfig());
     }
 
@@ -178,6 +207,18 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         Map<ActorAddress, AppConfType> configMap = masterPlace.getRemoteConfig();
         units.forEach(u ->
                 configMap.put(ActorAddress.get(u.getDeploymentConfig().getAddress()), u.getAppConfig()));
+    }
+
+    protected void deployMasterAfterSystemInitHttp() {
+        int port = master.getDeploymentConfig().httpPort;
+        if (port > 0) {
+            http = new ClusterHttp(this);
+            String host = master.getDeploymentConfig().httpHost;
+            if (host.isEmpty()) {
+                host = master.getDeploymentConfig().host;
+            }
+            http.start(host, port);
+        }
     }
 
     public void deployNodes(List<ClusterUnit<AppConfType>> units) {
@@ -291,6 +332,8 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         return unit;
     }
 
+
+    @PropertyInterface("cluster-app-name")
     public String getAppName() {
         if (appName == null) {
             appName = getNextAppName();
@@ -547,6 +590,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         protected Map<ActorAddress, AppConfType> remoteConfig = new HashMap<>();
         protected BlockingQueue<ActorAddress> completed = new LinkedBlockingDeque<>();
         protected Set<ActorAddress> configSetSent = new HashSet<>();
+        protected ClusterDeployment<AppConfType, ?> deployment;
 
         public ActorPlacementForCluster(ActorSystem system, String name) {
             super(system, name);
@@ -558,6 +602,14 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
 
         public ActorPlacementForCluster(ActorSystem system) {
             super(system);
+        }
+
+        public void setDeployment(ClusterDeployment<AppConfType, ?> deployment) {
+            this.deployment = deployment;
+        }
+
+        public ClusterDeployment<AppConfType, ?> getDeployment() {
+            return deployment;
         }
 
         /**
@@ -682,14 +734,33 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
 
     ///////////////
 
-    public CompletableFuture<ActorRef> move(ActorRef actor, ActorAddress targetHost) {
-        return ResponsiveCalls.<ActorPlacementForCluster<AppConfType>, ActorRef>sendTask(getSystem(),
-                getMasterPlace().getPlace(actor),
-                (a, s) -> a.move(actor.asLocal(), targetHost));
+    public ActorRef getPlace(ActorRef actor) {
+        if (actor instanceof ActorRefRemote) {
+            ActorAddress address = ((ActorRefRemote) actor).getAddress();
+            ActorPlacement.AddressListEntry entry = placeGet(p -> p.getEntry(address));
+            return entry.getPlacementActor().ref(getSystem());
+        } else if (actor instanceof Actor) {
+            try {
+                //temporary place
+                return createPlace(placeType, system, new ActorPlacement.PlacementStrategyRoundRobin(0));
+            } catch (Exception ex) {
+                throw new RuntimeException(ex);
+            }
+        } else {
+            return getPlace();
+        }
     }
 
+    @PropertyInterface("placement-move")
+    public CompletableFuture<ActorRef> move(ActorRef actor, ActorAddress targetHost) {
+        return ResponsiveCalls.<ActorPlacementForCluster<AppConfType>, ActorRef>sendTask(getSystem(),
+                getPlace(actor),
+                (a) -> a.move(actor.asLocal(), targetHost));
+    }
+
+    @PropertyInterface("actor-load-and-send")
     public CompletableFuture<?> loadAndSendToActor(ActorRef target, String serializedMailboxPath) {
-        return ResponsiveCalls.sendTaskConsumer(getSystem(), target, (a,s) -> {
+        return ResponsiveCalls.sendTaskConsumer(getSystem(), target, (a) -> {
             //temporary manager
             //TODO the serializedMailbxPath is expanded ?
             MailboxPersistable.PersistentFileManager m = MailboxPersistable.createPersistentFile(serializedMailboxPath, a.getSystem());
@@ -705,15 +776,16 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         });
     }
 
+    @PropertyInterface("placement-shutdown")
     public CompletableFuture<?> shutdown(ActorAddress targetHost) {
         return ResponsiveCalls.<ActorPlacement.ActorPlacementDefault>sendTaskConsumer(getSystem(),
-                getMasterPlace().getEntry(targetHost).getPlacementActor().ref(getSystem()),
+                placeGet(p -> p.getEntry(targetHost)).getPlacementActor().ref(getSystem()),
                 new ShutdownTask());
     }
 
     public static class ShutdownTask implements CallableMessage.CallableMessageConsumer<ActorPlacement.ActorPlacementDefault> {
         @Override
-        public void accept(ActorPlacement.ActorPlacementDefault self, ActorRef sender) {
+        public void accept(ActorPlacement.ActorPlacementDefault self) {
             self.close();
             new Thread() { public void run() { //the shutting down thread
                 try {
@@ -748,6 +820,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         });
     }
 
+    @PropertyInterface("cluster-shutdown-all")
     public void shutdownAll() {
         getMaster().log("shutdownAll");
         try {
@@ -761,268 +834,282 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
 
     /////////
 
-    public static class LogFileWriter extends PrintStream {
-        protected Pattern colorEscape;
-        protected PrintWriter out;
-        protected int depth;
-
-        public LogFileWriter(OutputStream originalErr, Path path, boolean preserveColor) throws IOException {
-            super(originalErr);
-            out = new PrintWriter(Files.newBufferedWriter(path), true);
-            if (preserveColor) {
-                colorEscape = null;
-            } else {
-                colorEscape = Pattern.compile("\033\\[(38;5;\\d+?|0)m");
-            }
-        }
-
-        //overrides methods calling "write"
-        @Override
-        public void print(String s) {
-            try {
-                depth++;
-                super.print(s);
-            } finally {
-                depth--;
-            }
-            if (colorEscape != null) {
-                out.print(colorEscape.matcher(s).replaceAll(""));
-            } else {
-                out.print(s);
-            }
-        }
-
-        @Override
-        public synchronized void print(char c) {
-            try {
-                depth++;
-                super.print(c);
-            } finally {
-                depth--;
-            }
-            out.print(c);
-        }
-
-        @Override
-        public synchronized void print(boolean b) {
-            try {
-                depth++;
-                super.print(b);
-            } finally {
-                depth--;
-            }
-            out.print(b);
-        }
-
-        @Override
-        public synchronized void print(int i) {
-            try {
-                depth++;
-                super.print(i);
-            } finally {
-                depth--;
-            }
-            out.print(i);
-        }
-
-        @Override
-        public synchronized void print(long l) {
-            try {
-                depth++;
-                super.print(l);
-            } finally {
-                depth--;
-            }
-            out.print(l);
-        }
-
-        @Override
-        public synchronized void print(float f) {
-            try {
-                depth++;
-                super.print(f);
-            } finally {
-                depth--;
-            }
-            out.print(f);
-        }
-
-        @Override
-        public synchronized void print(double d) {
-            try {
-                depth++;
-                super.print(d);
-            } finally {
-                depth--;
-            }
-            out.print(d);
-        }
-
-        @Override
-        public synchronized void print(char[] s) {
-            try {
-                depth++;
-                super.print(s);
-            } finally {
-                depth--;
-            }
-            out.print(s);
-        }
-
-        @Override
-        public synchronized void print(Object obj) {
-            try {
-                depth++;
-                super.print(obj);
-            } finally {
-                depth--;
-            }
-            out.print(obj);
-        }
-
-        /// overrides methods calling print(v) + newLine()
-
-        @Override
-        public synchronized void println() {
-            try {
-                depth++;
-                super.println();
-            } finally {
-                depth--;
-            }
-            out.println();
-        }
-
-        @Override
-        public synchronized void println(boolean x) {
-            try {
-                depth++;
-                super.println(x);
-            } finally {
-                depth--;
-            }
-            out.println();
-        }
-
-        @Override
-        public synchronized void println(char x) {
-            try {
-                depth++;
-                super.println(x);
-            } finally {
-                depth--;
-            }
-            out.println();
-        }
-
-        @Override
-        public synchronized void println(int x) {
-            try {
-                depth++;
-                super.println(x);
-            } finally {
-                depth--;
-            }
-            out.println();
-        }
-
-        @Override
-        public void println(long x) {
-            try {
-                depth++;
-                super.println(x);
-            } finally {
-                depth--;
-            }
-            out.println();
-        }
-
-        @Override
-        public synchronized void println(float x) {
-            try {
-                depth++;
-                super.println(x);
-            } finally {
-                depth--;
-            }
-            out.println();
-        }
-
-        @Override
-        public synchronized void println(double x) {
-            try {
-                depth++;
-                super.println(x);
-            } finally {
-                depth--;
-            }
-            out.println();
-        }
-
-        @Override
-        public synchronized void println(char[] x) {
-            try {
-                depth++;
-                super.println(x);
-            } finally {
-                depth--;
-            }
-            out.println();
-        }
-
-        @Override
-        public synchronized void println(String x) {
-            try {
-                depth++;
-                super.println(x);
-            } finally {
-                depth--;
-            }
-            out.println();
-        }
-
-        @Override
-        public synchronized void println(Object x) {
-            try {
-                depth++;
-                super.println(x);
-            } finally {
-                depth--;
-            }
-            out.println();
-        }
-
-        ////
-
-        @Override
-        public void flush() {
-            super.flush();
-            out.flush();
-        }
-
-        @Override
-        public void close() {
-            super.close();
-            out.close();
-        }
-
-        @Override
-        public void write(int b) {
-            super.write(b);
-            if (depth == 0) {
-                out.write(b);
-            }
-        }
-
-        @Override
-        public synchronized void write(byte[] buf, int off, int len) {
-            super.write(buf, off, len);
-            if (depth == 0) {
-                for (int i = 0; i < len; ++i) {
-                    byte b = buf[off];
-                    out.write(b);
-                }
-            }
+    @PropertyInterface("placement")
+    public ActorRef getPlace() {
+        if (masterPlace != null) {
+            return getMasterPlace();
+        } else {
+            return attachedPlace;
         }
     }
+
+    @PropertyInterface("placement-config-master")
+    public AppConfType getMasterConfig() {
+        if (master != null) {
+            return master.getAppConfig();
+        } else {
+            return placeGet(p -> p.getRemoteConfig().get(p.getSelfAddress().getHostAddress()));
+        }
+    }
+
+    public ActorRef getAttachedPlace() {
+        return attachedPlace;
+    }
+
+    public void attach(String hostAndPort) {
+        attach(ActorAddress.get(hostAndPort));
+    }
+
+    public void attach(String host, int port) {
+        attach(ActorAddress.get(host, port));
+    }
+
+    public void attach(ActorAddress.ActorAddressRemote addr) {
+        if (system == null) {
+            attachInitSystem();
+        }
+        try {
+            attachInitPlaceRef(addr);
+
+            CompletableFuture.allOf(
+                    attachInitRun(a -> a.getDeployment().getAppName(), r -> this.appName = r),
+                    attachInitRun(a -> a.getDeployment().getMaster(), r -> master = r),
+                    attachInitRun(a -> a.getDeployment().getNodes(), r -> nodes = r)
+                ).get(30, TimeUnit.SECONDS);
+
+        } catch (Exception ex) {
+            throw new RuntimeException(ex);
+        }
+    }
+
+    protected void attachInitSystem() {
+        system = new ActorSystemCluster();
+        int port;
+        try (ServerSocket sock = new ServerSocket(0)) { //obtain a dynamic port
+            port = sock.getLocalPort();
+        } catch (Exception ex) {
+            throw new RuntimeException(ex);
+        }
+        system.startWithoutWait(port);
+    }
+
+    protected void attachInitPlaceRef(ActorAddress.ActorAddressRemote addr) {
+        ActorAddress.ActorAddressRemoteActor place = addr.getActor(ActorPlacement.PLACEMENT_NAME);
+        attachedPlace = place.ref(system);
+    }
+
+    protected <T> CompletableFuture<?> attachInitRun(CallableMessage<PlaceType, T> getter,
+                                                     Consumer<T> setter) {
+        return ResponsiveCalls.sendTask(getSystem(), getPlace(),
+                getter).thenAccept(setter);
+    }
+
+    public <T> T placeGet(CallableMessage<PlaceType, T> getter) {
+        try {
+            return ResponsiveCalls.sendTask(getSystem(), getPlace(), getter)
+                    .get(10, TimeUnit.SECONDS);
+        } catch (Exception ex) {
+            throw new RuntimeException(ex);
+        }
+    }
+
+    public <T> T placeGet(ActorAddress.ActorAddressRemote host, CallableMessage<PlaceType, T> getter) {
+        try {
+            return ResponsiveCalls.sendTask(getSystem(),
+                    this.<ActorAddress.ActorAddressRemoteActor>placeGet(mp -> mp.getEntry(host).getPlacementActor()),
+                    getter)
+                    .get(10, TimeUnit.SECONDS);
+        } catch (Exception ex) {
+            throw new RuntimeException(ex);
+        }
+    }
+
+    //////
+
+    @PropertyInterface("system-throughput")
+    public int getAttachedSystemThroughput() {
+        return placeGet(p -> ((ActorSystemRemote) p.getSystem()).getLocalSystem().getThroughput());
+    }
+
+    @PropertyInterface("system")
+    public String getAttachedSystemToString() {
+        return placeGet(p -> p.getSystem().toString());
+    }
+
+    @PropertyInterface("system-actors")
+    public Map<String, ActorRef> getAttachedSystemNamedActorMap() {
+        return placeGet(p -> toRefMap(((ActorSystemRemote) p.getSystem()).getLocalSystem().getNamedActorMap()));
+    }
+
+    @PropertyInterface("system-process-count")
+    public int getAttachedSystemProcessingCount() {
+        return placeGet(p -> ((ActorSystemRemote) p.getSystem()).getLocalSystem().getProcessingCount().get());
+    }
+
+    @PropertyInterface("system-connections")
+    public Map<ActorAddress, NetworkStats> getAttachedSystemRemoteConnectionMap() {
+        return placeGet(p -> ((ActorSystemRemote) p.getSystem()).getConnectionMap().entrySet().stream()
+                .collect(Collectors.toMap(Map.Entry::getKey, e -> new NetworkStats().send(e.getValue()))));
+    }
+
+    @PropertyInterface("system-server-receive")
+    public NetworkStats getAttachedSystemRemoteServerReceive() {
+        return placeGet(p -> new NetworkStats().receive((ActorSystemRemote) p.getSystem()));
+    }
+
+    @PropertyInterface("placement-total-threads")
+    public int getAttachedPlacementTotalThreads() {
+        return placeGet(ActorPlacement.ActorPlacementDefault::getTotalThreads);
+    }
+
+    @PropertyInterface("placement-clusters")
+    public List<ActorPlacement.AddressListEntry> getAttachedPlacementCluster() {
+        return placeGet(ActorPlacement.ActorPlacementDefault::getCluster);
+    }
+
+    @PropertyInterface("placement-clusters-with-self")
+    public List<ActorPlacement.AddressListEntry> getAttachedPlacementClusterWithSelf() {
+        return placeGet(ActorPlacement.ActorPlacementDefault::getClusterWithSelf);
+    }
+
+    @PropertyInterface("placement-strategy")
+    public String getAttachedPlacementStrategyToString() {
+        return placeGet(p -> p.getStrategy().toString());
+    }
+
+    @PropertyInterface("placement-created-actors")
+    public long getAttachedPlacementCreatedActors() {
+        return placeGet(ActorPlacement.ActorPlacementDefault::getCreatedActors);
+    }
+
+    @PropertyInterface("placement-remote-config")
+    public Map<ActorAddress, ? extends ConfigBase> getAttachedPlacementForClusterRemoteConfig() {
+        return placeGet(ActorPlacementForCluster::getRemoteConfig);
+    }
+
+    public static Map<String, ActorRef> toRefMap(Map<String, Actor> map) {
+        return map.entrySet()
+                .stream()
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+    }
+
+    public static class NetworkStats implements Serializable, ClusterHttp.ToJson {
+        public ActorAddress address;
+        public long count;
+        public long messages;
+        public Duration time;
+        public long bytes;
+        public long errors;
+
+        public NetworkStats() { }
+
+        public NetworkStats send(ActorSystemRemote.ConnectionActor a) {
+            address = a.getAddress();
+            count = a.getConnection().getRecordSendCount();
+            messages = a.getRecordSendMessages();
+            time = a.getRecordSendMessageTime();
+            errors = a.getConnection().getRecordSendErrors();
+            bytes = a.getConnection().getRecordSendBytes();
+            return this;
+        }
+
+        public NetworkStats receive(ActorSystemRemote system) {
+            address = system.getServerAddress();
+            count = system.getServer().getRecordReceiveCount();
+            messages = system.getDeliverer().getReceiveMessages();
+            time = system.getServer().getRecordReceiveTime();
+            errors = system.getServer().getRecordReceiveErrors();
+            bytes = system.getServer().getRecordReceiveBytes();
+            return this;
+        }
+
+        @Override
+        public String toString() {
+            return "{" +
+                    "address=" + address +
+                    ", count=" + count +
+                    ", messages=" + messages +
+                    ", time=" + time +
+                    ", bytes=" + bytes +
+                    ", errors=" + errors +
+                    '}';
+        }
+
+        @Override
+        public Map<String, Object> toJson(Function<Object, Object> valueConveter) {
+            Map<String,Object> json = new LinkedHashMap<>();
+            json.put("address", toStringOrNull(address));
+            json.put("count", count);
+            json.put("messages", messages);
+            json.put("time", toStringOrNull(time));
+            json.put("bytes", bytes);
+            json.put("errors", errors);
+            return json;
+        }
+    }
+
+    ///////
+
+    @PropertyInterface("system-throughput")
+    public int getAttachedSystemThroughput(ActorAddress.ActorAddressRemote host) {
+        return placeGet(host, p -> ((ActorSystemRemote) p.getSystem()).getLocalSystem().getThroughput());
+    }
+
+    @PropertyInterface("system")
+    public String getAttachedSystemToString(ActorAddress.ActorAddressRemote host) {
+        return placeGet(host, p -> p.getSystem().toString());
+    }
+
+    @PropertyInterface("system-actors")
+    public Map<String, ActorRef> getAttachedSystemNamedActorMap(ActorAddress.ActorAddressRemote host) {
+        return placeGet(host, p -> toRefMap(((ActorSystemRemote) p.getSystem()).getLocalSystem().getNamedActorMap()));
+    }
+
+    @PropertyInterface("system-process-count")
+    public int getAttachedSystemProcessingCount(ActorAddress.ActorAddressRemote host) {
+        return placeGet(host, p -> ((ActorSystemRemote) p.getSystem()).getLocalSystem().getProcessingCount().get());
+    }
+
+    @PropertyInterface("system-connections")
+    public Map<ActorAddress, NetworkStats> getAttachedSystemRemoteConnectionMap(ActorAddress.ActorAddressRemote host) {
+        return placeGet(host, p -> ((ActorSystemRemote) p.getSystem()).getConnectionMap().entrySet().stream()
+                .collect(Collectors.toMap(Map.Entry::getKey, e -> new NetworkStats().send(e.getValue()))));
+    }
+
+    @PropertyInterface("system-server-receive")
+    public NetworkStats getAttachedSystemRemoteServerReceive(ActorAddress.ActorAddressRemote host) {
+        return placeGet(host, p -> new NetworkStats().receive((ActorSystemRemote) p.getSystem()));
+    }
+
+    @PropertyInterface("placement-total-threads")
+    public int getAttachedPlacementTotalThreads(ActorAddress.ActorAddressRemote host) {
+        return placeGet(host, ActorPlacement.ActorPlacementDefault::getTotalThreads);
+    }
+
+    @PropertyInterface("placement-clusters")
+    public List<ActorPlacement.AddressListEntry> getAttachedPlacementCluster(ActorAddress.ActorAddressRemote host) {
+        return placeGet(host, ActorPlacement.ActorPlacementDefault::getCluster);
+    }
+
+    @PropertyInterface("placement-clusters-with-self")
+    public List<ActorPlacement.AddressListEntry> getAttachedPlacementClusterWithSelf(ActorAddress.ActorAddressRemote host) {
+        return placeGet(host, ActorPlacement.ActorPlacementDefault::getClusterWithSelf);
+    }
+
+    @PropertyInterface("placement-strategy")
+    public String getAttachedPlacementStrategyToString(ActorAddress.ActorAddressRemote host) {
+        return placeGet(host, p -> p.getStrategy().toString());
+    }
+
+    @PropertyInterface("placement-created-actors")
+    public long getAttachedPlacementCreatedActors(ActorAddress.ActorAddressRemote host) {
+        return placeGet(host, ActorPlacement.ActorPlacementDefault::getCreatedActors);
+    }
+
+    @PropertyInterface("placement-remote-config")
+    public Map<ActorAddress, ? extends ConfigBase> getAttachedPlacementForClusterRemoteConfig(ActorAddress.ActorAddressRemote host) {
+        return placeGet(host, ActorPlacementForCluster::getRemoteConfig);
+    }
+
+
 }

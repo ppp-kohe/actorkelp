@@ -57,7 +57,7 @@ public class DelayedLabelManual {
             }
         }
 
-        config.log(config.toString());
+        config.log("%s", config.toString());
 
         run(file);
     }

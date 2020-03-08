@@ -21,7 +21,7 @@ public class ConfigDeployment extends ConfigBase {
     public String java = "java %s %s %s"; //option mainClass args
     public String host = "localhost";
     public int port = 38888;
-    public String configType;
+    public String configType = "csl.actor.keyaggregate.Config";
     public String baseDir = "target/debug";
     public boolean master = false;
     public boolean sharedDeploy = true;
@@ -32,6 +32,9 @@ public class ConfigDeployment extends ConfigBase {
     public boolean logFile = true;
     public String logFilePath = "%a/stderr-%h.txt";
     public boolean logFilePreserveColor = true;
+
+    public String httpHost = ""; //use host
+    public int httpPort = 48888;
 
     public ConfigDeployment() {
     }

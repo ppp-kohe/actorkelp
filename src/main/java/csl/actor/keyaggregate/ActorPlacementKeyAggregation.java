@@ -102,7 +102,7 @@ public class ActorPlacementKeyAggregation extends ClusterDeployment.ActorPlaceme
                     f = f.thenCompose((_v) -> task.apply(nextActor));
                 } else {
                     ActorSystem system = getSystem();
-                    f = f.thenCompose((_v) -> ResponsiveCalls.<ActorKeyAggregation>sendTaskConsumer(system, next, (a, s) -> {
+                    f = f.thenCompose((_v) -> ResponsiveCalls.<ActorKeyAggregation>sendTaskConsumer(system, next, (a) -> {
                         try {
                             task.apply(a).get();
                         } catch (Exception ex) {
@@ -131,10 +131,10 @@ public class ActorPlacementKeyAggregation extends ClusterDeployment.ActorPlaceme
                     ActorSystem system = getSystem();
                     ActorRef prevActor = prev;
                     if (f != null) {
-                        f = f.thenCompose((_v) -> ResponsiveCalls.sendTask(system, prevActor, (a,s) ->
+                        f = f.thenCompose((_v) -> ResponsiveCalls.sendTask(system, prevActor, (a) ->
                                 task.apply((ActorKeyAggregation) a, next)));
                     } else {
-                        f = ResponsiveCalls.sendTask(system, prevActor, (a,s) ->
+                        f = ResponsiveCalls.sendTask(system, prevActor, (a) ->
                                 task.apply((ActorKeyAggregation) a, next));
                     }
                 }

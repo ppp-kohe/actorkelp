@@ -44,6 +44,10 @@ public class MailboxKeyAggregation implements Mailbox, Cloneable {
         this.treeFactory = treeFactory;
     }
 
+    public MailboxDefault getMailbox() {
+        return mailbox;
+    }
+
     public KeyHistograms getTreeFactory() {
         return treeFactory;
     }
@@ -220,6 +224,22 @@ public class MailboxKeyAggregation implements Mailbox, Cloneable {
 
         public HistogramEntry create() {
             return new HistogramEntry(entryId, processor, tree.createTree(null));
+        }
+
+        public int getEntryId() {
+            return entryId;
+        }
+
+        public Instant getNextSchedule() {
+            return nextSchedule;
+        }
+
+        public Instant getLastTraversal() {
+            return lastTraversal;
+        }
+
+        public Instant getScheduleBackup() {
+            return scheduleBackup;
         }
 
         public KeyHistograms.HistogramTree getTree() {

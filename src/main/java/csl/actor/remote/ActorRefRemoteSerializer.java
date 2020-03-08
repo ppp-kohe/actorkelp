@@ -18,6 +18,12 @@ public class ActorRefRemoteSerializer<RefType extends ActorRef> extends Serializ
 
     @Override
     public void write(Kryo kryo, Output output, RefType actorRef) {
+        kryo.writeClassAndObject(output, getAddress(actorRef));
+    }
+
+    static ActorAddress.ActorAddressRemote local = ActorAddress.get("localhost", -1);
+
+    public ActorAddress getAddress(RefType actorRef) {
         ActorAddress addr = null;
         if (actorRef instanceof ActorRefRemote) {
             addr = ((ActorRefRemote) actorRef).getAddress();
@@ -26,10 +32,8 @@ public class ActorRefRemoteSerializer<RefType extends ActorRef> extends Serializ
         } else if (actorRef instanceof Actor) {
             addr = getServerAddress().getActor((Actor) actorRef);
         }
-        kryo.writeClassAndObject(output, addr);
+        return addr;
     }
-
-    static ActorAddress.ActorAddressRemote local = ActorAddress.get("localhost", -1);
 
     public ActorAddress.ActorAddressRemote getServerAddress() {
         if (remoteSystem instanceof ActorSystemRemote) {

@@ -7,6 +7,7 @@ import csl.actor.cluster.PhaseShift;
 import csl.actor.keyaggregate.KeyAggregationRoutingSplit.SplitOrMergeContextDefault;
 
 import java.util.*;
+import java.util.concurrent.atomic.AtomicLong;
 
 public class KeyAggregationStateRouter implements ActorKeyAggregation.State {
     protected volatile KeyAggregationRoutingSplit split;
@@ -21,6 +22,8 @@ public class KeyAggregationStateRouter implements ActorKeyAggregation.State {
 
     protected Map<Object, KeyAggregationPhaseEntry> phase = new HashMap<>();
     protected Set<ActorRef> canceled = new HashSet<>();
+
+    protected AtomicLong processCount = new AtomicLong();
 
     public void split(ActorKeyAggregation self, int height) {
         this.height = height;
@@ -210,6 +213,7 @@ public class KeyAggregationStateRouter implements ActorKeyAggregation.State {
             if (fromParallelRouting) {
                 self.getSystem().send(message);
             } else {
+                processCount.incrementAndGet();
                 self.processMessageBehavior(message);
             }
         } else {
@@ -221,6 +225,11 @@ public class KeyAggregationStateRouter implements ActorKeyAggregation.State {
 
     public Random getRandom() {
         return random;
+    }
+
+    @Override
+    public long getProcessCount() {
+        return processCount.get();
     }
 
     /** @return implementation field getter */

@@ -7,15 +7,13 @@ import csl.actor.ActorSystem;
 import java.io.Serializable;
 import java.util.Objects;
 
-public class ActorAddress {
+public abstract class ActorAddress {
 
     public Object getKey() {
         return this;
     }
 
-    public ActorAddress getHostAddress() {
-        return this;
-    }
+    public abstract ActorAddressRemote getHostAddress();
 
     public static ActorAddressRemote get(String hostAndPort) {
         String[] cols = hostAndPort.split(":");
@@ -38,9 +36,7 @@ public class ActorAddress {
         return new ActorRefLocalNamed.ActorRefLocalNamedNoName(system, this);
     }
 
-    public ActorAddress getActor(String name) {
-        return this;
-    }
+    public abstract ActorAddressRemoteActor getActor(String name);
 
     public static class ActorAddressRemote extends ActorAddress implements Serializable {
         protected String host;
@@ -68,6 +64,11 @@ public class ActorAddress {
             ActorAddressRemote that = (ActorAddressRemote) o;
             return port == that.port &&
                     Objects.equals(host, that.host);
+        }
+
+        @Override
+        public ActorAddressRemote getHostAddress() {
+            return this;
         }
 
         @Override
@@ -141,7 +142,7 @@ public class ActorAddress {
         }
 
         @Override
-        public ActorAddress getHostAddress() {
+        public ActorAddressRemote getHostAddress() {
             return new ActorAddressRemote(host, port);
         }
 

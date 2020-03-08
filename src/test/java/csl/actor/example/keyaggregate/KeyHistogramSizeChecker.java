@@ -37,7 +37,7 @@ public class KeyHistogramSizeChecker {
             try {
                 return ResponsiveCalls.sendTask(self.getSystem(),
                         ((KeyAggregationRoutingSplit.RoutingSplitLeaf) sp).getActor(),
-                        (a, s) -> checkSize(a, path)).get(10, TimeUnit.SECONDS);
+                        (a) -> checkSize(a, path)).get(10, TimeUnit.SECONDS);
             } catch (Exception ex) {
                 return new KeyHistogramSizeChecker.SizeInfo(path + "<ERROR:" + ex + ">");
             }

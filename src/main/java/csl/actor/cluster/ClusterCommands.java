@@ -1,5 +1,6 @@
 package csl.actor.cluster;
 
+import java.io.Serializable;
 import java.lang.reflect.Field;
 import java.nio.file.Files;
 import java.nio.file.Paths;
@@ -259,7 +260,7 @@ public class ClusterCommands<AppConfType extends ConfigBase> {
         }
     }
 
-    public static class CommandToken {
+    public static class CommandToken implements Serializable {
         protected CommandTokenType type;
         protected String data;
 
@@ -423,7 +424,7 @@ public class ClusterCommands<AppConfType extends ConfigBase> {
         }
     }
 
-    public static class CommandBlock {
+    public static class CommandBlock  implements Serializable {
         protected List<List<CommandToken>> clusterLines = new ArrayList<>();
         protected List<List<CommandToken>> configLines = new ArrayList<>();
         protected List<CommandBlock> blocks = new ArrayList<>();
@@ -654,7 +655,7 @@ public class ClusterCommands<AppConfType extends ConfigBase> {
         }
     }
 
-    public static class ClusterUnit<AppConfType extends ConfigBase> {
+    public static class ClusterUnit<AppConfType extends ConfigBase> implements Serializable, ClusterHttp.ToJson {
         protected String name;
         protected ConfigDeployment deploymentConfig;
         protected AppConfType appConfig;
@@ -723,6 +724,23 @@ public class ClusterCommands<AppConfType extends ConfigBase> {
             } catch (Exception ex) {
                 //ignore
             }
+        }
+
+        @Override
+        public Map<String, Object> toJson(Function<Object, Object> valueConveter) {
+            Map<String,Object> json = new LinkedHashMap<>();
+            json.put("name", name);
+            json.put("deploymentConfig", deploymentConfig == null ? null : deploymentConfig.toJson());
+            json.put("appConfig", appConfig == null ? null : appConfig.toJson());
+            json.put("classPathList", classPathList == null ? null : new ArrayList<>(classPathList));
+            Object blk = null;
+            if (block != null) {
+                StringBuilder buf = new StringBuilder();
+                block.write(s -> buf.append(s).append("\n"));
+                blk = buf.toString();
+            }
+            json.put("block", blk);
+            return json;
         }
     }
 }

@@ -7,10 +7,7 @@ import csl.actor.keyaggregate.KeyAggregationRoutingSplit.SplitPath;
 import java.io.Serializable;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -292,12 +289,14 @@ public abstract class ActorKeyAggregation extends ActorDefault
     }
 
     public interface State {
+        long getProcessCount();
         void processMessage(ActorKeyAggregation self, Message<?> message);
         boolean processMessagePhase(ActorKeyAggregation self, Message<?> message);
     }
 
     public static class StateUnit implements State, Serializable {
         protected ActorRef router;
+        protected long processCount;
 
         public StateUnit(ActorRef router) {
             this.router = router;
@@ -308,7 +307,13 @@ public abstract class ActorKeyAggregation extends ActorDefault
         }
 
         @Override
+        public long getProcessCount() {
+            return processCount;
+        }
+
+        @Override
         public void processMessage(ActorKeyAggregation self, Message<?> message) {
+            processCount++;
             self.processMessageBehavior(message);
         }
 
@@ -345,9 +350,11 @@ public abstract class ActorKeyAggregation extends ActorDefault
 
     public static class StateCanceled implements State {
         protected ActorRef router;
+        protected long processCount;
 
-        public StateCanceled(ActorRef router) {
+        public StateCanceled(ActorRef router, long processCount) {
             this.router = router;
+            this.processCount = processCount;
         }
 
         public ActorRef getRouter() {
@@ -355,7 +362,13 @@ public abstract class ActorKeyAggregation extends ActorDefault
         }
 
         @Override
+        public long getProcessCount() {
+            return processCount;
+        }
+
+        @Override
         public void processMessage(ActorKeyAggregation self, Message<?> message) {
+            processCount++;
             router.tell(message.getData(), message.getSender());
         }
 
@@ -456,7 +469,7 @@ public abstract class ActorKeyAggregation extends ActorDefault
     }
 
     public CompletableFuture<CallableMessage.CallableResponseVoid> setNextStage(ActorRef nextStage) {
-        return ResponsiveCalls.sendTaskConsumer(this, (a, s) -> a.nextStage = nextStage);
+        return ResponsiveCalls.sendTaskConsumer(this, (a) -> a.nextStage = nextStage);
     }
 
     public MailboxKeyAggregation.ReducedSize reducedSize() {
@@ -642,7 +655,7 @@ public abstract class ActorKeyAggregation extends ActorDefault
 
     public static class CallableToLocalSerializable implements CallableMessage<ActorKeyAggregation, ActorKeyAggregationSerializable> {
         @Override
-        public ActorKeyAggregationSerializable call(ActorKeyAggregation self, ActorRef sender) {
+        public ActorKeyAggregationSerializable call(ActorKeyAggregation self) {
             self.getMailboxAsKeyAggregation().lockRemainingProcesses();
             try {
                 return self.toSerializable(-1);
@@ -655,7 +668,7 @@ public abstract class ActorKeyAggregation extends ActorDefault
     }
 
     public void internalCancel() { //remaining messages are processed by the canceled state
-        state = new StateCanceled(router());
+        state = new StateCanceled(router(), state == null ? 0 : state.getProcessCount());
         router().tell(new CancelChange(this, CanceledChangeType.CancelAdded));
     }
 
@@ -690,7 +703,7 @@ public abstract class ActorKeyAggregation extends ActorDefault
     /////////////////////////// split or merge APIs
 
     public CompletableFuture<Integer> routerGetMaxHeight() {
-        return ResponsiveCalls.<ActorKeyAggregation, Integer>sendTask(getSystem(), router(), (a, sender) -> {
+        return ResponsiveCalls.<ActorKeyAggregation, Integer>sendTask(getSystem(), router(), (a) -> {
             State state = a.getState();
             if (state instanceof KeyAggregationStateRouter) {
                 return ((KeyAggregationStateRouter) state).getMaxHeight(a);
@@ -701,7 +714,7 @@ public abstract class ActorKeyAggregation extends ActorDefault
     }
 
     public CompletableFuture<CallableMessage.CallableResponseVoid> routerSplit(int height) {
-        return ResponsiveCalls.<ActorKeyAggregation>sendTaskConsumer(getSystem(), router(), (a, sender) -> {
+        return ResponsiveCalls.<ActorKeyAggregation>sendTaskConsumer(getSystem(), router(), (a) -> {
             State state = a.state;
             if (state instanceof KeyAggregationStateRouter) {
                 ((KeyAggregationStateRouter) state).split(a, height);
@@ -710,7 +723,7 @@ public abstract class ActorKeyAggregation extends ActorDefault
     }
 
     public CompletableFuture<CallableMessage.CallableResponseVoid> routerMergeInactive() {
-        return ResponsiveCalls.<ActorKeyAggregation>sendTaskConsumer(getSystem(), router(), (a, sender) -> {
+        return ResponsiveCalls.<ActorKeyAggregation>sendTaskConsumer(getSystem(), router(), (a) -> {
             State state = a.state;
             if (state instanceof KeyAggregationStateRouter) {
                 ((KeyAggregationStateRouter) state).mergeInactive(a);
@@ -719,7 +732,7 @@ public abstract class ActorKeyAggregation extends ActorDefault
     }
 
     public CompletableFuture<CallableMessage.CallableResponseVoid> routerSplitOrMerge(int height) {
-        return ResponsiveCalls.<ActorKeyAggregation>sendTaskConsumer(getSystem(), router(), (a, sender) -> {
+        return ResponsiveCalls.<ActorKeyAggregation>sendTaskConsumer(getSystem(), router(), (a) -> {
             State state = a.state;
             if (state instanceof KeyAggregationStateRouter) {
                 ((KeyAggregationStateRouter) state).splitOrMerge(a, height);
@@ -970,7 +983,7 @@ public abstract class ActorKeyAggregation extends ActorDefault
             out.log(true, color, "%s null", idt);
         } else if (s instanceof KeyAggregationRoutingSplit.RoutingSplitNode) {
             KeyAggregationRoutingSplit.RoutingSplitNode sn = (KeyAggregationRoutingSplit.RoutingSplitNode) s;
-            out.log(true, color, "%s %d:node: %s proced=%,d history=%s", idt, sn.getDepth(), sn.getSplitPoints().stream()
+            out.log(true, color, "%s %d:node: %s proced=%,d history=%s", idt, sn.getDepth(), Arrays.stream(sn.getSplitPoints())
                 .map(Objects::toString)
                 .map(l -> l.length() > 100 ? l.substring(0, 100) + "..." : l)
                 .collect(Collectors.joining(", ", "[", "]")),

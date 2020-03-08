@@ -198,7 +198,7 @@ public class ActorSystemCluster extends ActorSystemRemote implements MailboxPers
             updateStatus(addr, start, future, p);
             p.getCluster()
                     .forEach(a -> ResponsiveCalls.sendTaskConsumer(system, a.getPlacementActor(),
-                            (ap,s) -> updateStatus(addr, start, future, ap)));
+                            (ap) -> updateStatus(addr, start, future, ap)));
 
         }
 

@@ -7,6 +7,8 @@ import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.SocketChannelConfig;
 
 import java.io.Serializable;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -25,7 +27,7 @@ public class ActorSystemRemote implements ActorSystem {
     protected ObjectMessageClient client;
 
     protected MessageDeliveringActor deliverer;
-    protected Map<Object, ConnectionActor> connectionMap;
+    protected Map<ActorAddress, ConnectionActor> connectionMap;
 
     protected Function<ActorSystem, Kryo> kryoFactory;
     protected KryoBuilder.SerializerFunction serializer;
@@ -111,7 +113,7 @@ public class ActorSystemRemote implements ActorSystem {
     }
 
     /** @return implementation field getter */
-    public Map<Object, ConnectionActor> getConnectionMap() {
+    public Map<ActorAddress, ConnectionActor> getConnectionMap() {
         return connectionMap;
     }
 
@@ -175,12 +177,17 @@ public class ActorSystemRemote implements ActorSystem {
         ActorRef target = message.getTarget();
         if (target instanceof ActorRefRemote) {
             ActorAddress addr = ((ActorRefRemote) target).getAddress().getHostAddress();
-            getLogger().log(debugLogMsg, debugLogMsgColorSend, "%s: client tell to remote %s", this, addr);
-            ConnectionActor a = connectionMap.computeIfAbsent(addr.getKey(), k -> createConnection(addr));
-            if (a != null) {
-                a.tell(message);
+            ActorAddress local = getServerAddress();
+            if (local != null && local.equals(addr)) { //localhost
+                localSystem.send(new Message<>(localize(target), message.getSender(), message.getData()));
             } else {
-                localSystem.sendDeadLetter(message);
+                getLogger().log(debugLogMsg, debugLogMsgColorSend, "%s: client tell to remote %s", this, addr);
+                ConnectionActor a = connectionMap.computeIfAbsent(addr, k -> createConnection(addr));
+                if (a != null) {
+                    a.tell(message);
+                } else {
+                    localSystem.sendDeadLetter(message);
+                }
             }
         } else {
             localSystem.send(message);
@@ -282,7 +289,7 @@ public class ActorSystemRemote implements ActorSystem {
     }
 
     public void connectionClosed(ConnectionActor ca) {
-        connectionMap.remove(ca.getAddress().getKey(), ca);
+        connectionMap.remove(ca.getAddress(), ca);
         checkClose();
     }
 
@@ -317,6 +324,10 @@ public class ActorSystemRemote implements ActorSystem {
     @Override
     public SystemLogger getLogger() {
         return localSystem.getLogger();
+    }
+
+    public MessageDeliveringActor getDeliverer() {
+        return deliverer;
     }
 
     /**
@@ -368,6 +379,9 @@ public class ActorSystemRemote implements ActorSystem {
 
         protected int count;
 
+        protected long recordSendMessages;
+        protected Duration recordSendMessageTime;
+
         public ConnectionActor(ActorSystem system, ActorSystemRemote remoteSystem, ActorAddress.ActorAddressRemote address)
             throws InterruptedException {
             super(system);
@@ -386,35 +400,41 @@ public class ActorSystemRemote implements ActorSystem {
         }
 
         public void send(Message<?> message) {
-            if (remoteSystem.isSpecialMessage(message)) {
-                writeSpecial(message);
-            } else {
-                if (mailbox.isEmpty()) {
-                    logMsg("%s write %s", this, message);
-                    connection.write(new TransferredMessage(count, message));
-                    ++count;
+            Instant start = Instant.now();
+            try {
+                if (remoteSystem.isSpecialMessage(message)) {
+                    writeSpecial(message);
                 } else {
-                    int maxBundle = 30;
-                    List<Object> messageBundle = new ArrayList<>(maxBundle);
-                    messageBundle.add(message);
-                    int i = 1;
-                    while (i < maxBundle) {
-                        Message<?> msg = mailbox.poll();
-                        if (remoteSystem.isSpecialMessage(msg)) {
-                            write(messageBundle);
-                            messageBundle.clear();
+                    if (mailbox.isEmpty()) {
+                        logMsg("%s write %s", this, message);
+                        connection.write(new TransferredMessage(count, message));
+                        ++count;
+                        ++recordSendMessages;
+                    } else {
+                        int maxBundle = 30;
+                        List<Object> messageBundle = new ArrayList<>(maxBundle);
+                        messageBundle.add(message);
+                        int i = 1;
+                        while (i < maxBundle) {
+                            Message<?> msg = mailbox.poll();
+                            if (remoteSystem.isSpecialMessage(msg)) {
+                                write(messageBundle);
+                                messageBundle.clear();
 
-                            writeSpecial(msg);
-                            break;
-                        } else if (msg != null) {
-                            messageBundle.add((Message<?>) msg.getData()); //the data of the msg is a Message for remote actor
-                            ++i;
-                        } else {
-                            break;
+                                writeSpecial(msg);
+                                break;
+                            } else if (msg != null) {
+                                messageBundle.add((Message<?>) msg.getData()); //the data of the msg is a Message for remote actor
+                                ++i;
+                            } else {
+                                break;
+                            }
                         }
+                        write(messageBundle);
                     }
-                    write(messageBundle);
                 }
+            } finally {
+                recordSendMessageTime = Duration.between(start, Instant.now());
             }
         }
 
@@ -423,6 +443,7 @@ public class ActorSystemRemote implements ActorSystem {
                 logMsg("%s write %,d messages: %s,...", this, messageBundle.size(), messageBundle.get(0));
                 connection.write(new TransferredMessage(count, messageBundle));
                 ++count;
+                recordSendMessages += messageBundle.size();
             }
         }
 
@@ -430,6 +451,7 @@ public class ActorSystemRemote implements ActorSystem {
             logMsg("%s special", message);
             connection.write(new TransferredMessage(count, message));
             ++count;
+            ++recordSendMessages;
             if (message.getData() instanceof ConnectionCloseNotice) {
                 close();
             }
@@ -462,12 +484,23 @@ public class ActorSystemRemote implements ActorSystem {
             return address;
         }
 
+        public int getCount() {
+            return count;
+        }
+
+        public long getRecordSendMessages() {
+            return recordSendMessages;
+        }
+
+        public Duration getRecordSendMessageTime() {
+            return recordSendMessageTime;
+        }
+
         /** @return implementation field getter */
         public ActorSystemRemote getRemoteSystem() {
             return remoteSystem;
         }
 
-        /** @return implementation field getter */
         public ObjectMessageClient.ObjectMessageConnection getConnection() {
             return connection;
         }
@@ -536,6 +569,7 @@ public class ActorSystemRemote implements ActorSystem {
 
     public static class MessageDeliveringActor extends Actor {
         protected ActorSystemRemote remote;
+        protected long receiveMessages;
 
         public MessageDeliveringActor(ActorSystemRemote system) {
             super(system, MessageDeliveringActor.class.getName());
@@ -560,6 +594,7 @@ public class ActorSystemRemote implements ActorSystem {
                             msgElem.getSender(),
                             msgElem.getData()));
                     ++i;
+                    ++receiveMessages;
                 }
             } else if (msg instanceof Message<?>) {
                 Message<?> m = (Message<?>)  msg;
@@ -568,6 +603,7 @@ public class ActorSystemRemote implements ActorSystem {
                         remote.localize(m.getTarget()),
                         m.getSender(),
                         m.getData()));
+                ++receiveMessages;
             } else {
                 logMsg("%s receive unintended object: %s", this, msg);
             }
@@ -581,6 +617,10 @@ public class ActorSystemRemote implements ActorSystem {
         public String toString() {
             return getClass().getSimpleName() + "@" + Integer.toHexString(System.identityHashCode(this)) +
                     "(" + remote + ")";
+        }
+
+        public long getReceiveMessages() {
+            return receiveMessages;
         }
     }
 

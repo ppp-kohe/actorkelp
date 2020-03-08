@@ -45,6 +45,11 @@ public class PhaseShift implements CallableMessage.CallableMessageConsumer<Actor
     }
 
     @Override
+    public void accept(Actor self) {
+        accept(self, null);
+    }
+
+    @Override
     public void accept(Actor actor, ActorRef sender) {
         if (!actor.isEmptyMailbox()) {
             count = 0;
@@ -152,6 +157,11 @@ public class PhaseShift implements CallableMessage.CallableMessageConsumer<Actor
             accept(self, sender, sender);
         }
 
+        @Override
+        public void accept(Actor self) {
+            throw new RuntimeException("illegal: " + this + " : " + self);
+        }
+
         public void accept(Actor self, ActorRef router, ActorRef sender) {
             if (!self.isEmptyMailbox() || count < 3) {
                 retry(self, sender);
@@ -202,7 +212,7 @@ public class PhaseShift implements CallableMessage.CallableMessageConsumer<Actor
         }
 
         @Override
-        public void accept(Actor self, ActorRef sender) {
+        public void accept(Actor self) {
             if (self instanceof StageSupported) {
                 ActorRef next = ((StageSupported) self).nextStage();
                 if (next != null) {

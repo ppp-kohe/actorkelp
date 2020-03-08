@@ -41,7 +41,7 @@ public class MailboxPersistableTest {
                 s = w.reader();
                 w.save(new Message<>(a, a, "hello"));
                 w.save(new Message<>(a, a, 1234));
-                w.save(new Message<>(a, a, CallableMessage.callableMessage((self, sender) -> "hello")));
+                w.save(new Message<>(a, a, CallableMessage.callableMessage((self) -> "hello")));
             }
 
             Message<?> m = s.readNext();
@@ -168,7 +168,7 @@ public class MailboxPersistableTest {
         PhaseShift.PhaseTerminalActor finishActor = new PhaseShift.PhaseTerminalActor(system, false,
                 (sys, comp) -> {
                     try {
-                        ResponsiveCalls.<TestActor>sendTaskConsumer(sys, a, (self, send) -> {
+                        ResponsiveCalls.<TestActor>sendTaskConsumer(sys, a, (self) -> {
                                 TestMailboxPersistable  m = (TestMailboxPersistable) self.getMailbox();
                                 System.err.println("persist: " + m.persistCount);
                                 self.log();
@@ -284,7 +284,7 @@ public class MailboxPersistableTest {
         PhaseShift.PhaseTerminalActor finishActor = new PhaseShift.PhaseTerminalActor(system, false,
                 (sys, comp) -> {
                     try {
-                        ResponsiveCalls.<TestActorForSpeed>sendTaskConsumer(sys, a, (self, send) -> {
+                        ResponsiveCalls.<TestActorForSpeed>sendTaskConsumer(sys, a, (self) -> {
                             if (self.getMailbox() instanceof TestMailboxPersistable) {
                                 TestMailboxPersistable m = (TestMailboxPersistable) self.getMailbox();
                                 System.err.println("persist: " + m.persistCount);

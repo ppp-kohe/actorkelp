@@ -64,7 +64,7 @@ public class DelayedLabelRemote extends DelayedLabelAggregationReplicable {
         LearnerActorAggregationReplicable r = new LearnerRemote(system, out, resultActor, config);
         root = r;
         ResponsiveCalls.sendTask(system, r,
-                CallableMessage.callableMessageConsumer((a, s) -> ((ActorKeyAggregation) a).routerSplit(3)));
+                CallableMessage.callableMessageConsumer((a) -> ((ActorKeyAggregation) a).routerSplit(3)));
         return r;
     }
 
@@ -86,7 +86,7 @@ public class DelayedLabelRemote extends DelayedLabelAggregationReplicable {
             super.finish(f);
             ((ActorPlacement.ActorPlacementDefault) getPlacement()).getCluster().stream()
                 .map(ActorPlacement.AddressListEntry::getPlacementActor)
-                .forEach(a -> ResponsiveCalls.sendTaskConsumer(system, a, (act,sen) -> {
+                .forEach(a -> ResponsiveCalls.sendTaskConsumer(system, a, (act) -> {
                     System.out.println("#remote close: " + act);
                     act.getSystem().getScheduledExecutor().schedule(() -> act.getSystem().close(), 1, TimeUnit.SECONDS);
                 }));

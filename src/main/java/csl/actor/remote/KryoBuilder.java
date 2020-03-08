@@ -260,6 +260,7 @@ public class KryoBuilder {
                 ActorKeyAggregation.StateUnit.class,
                 ActorKeyAggregation.ActorKeyAggregationSerializable.class,
                 ActorKeyAggregation.CallableToLocalSerializable.class,
+                KeyAggregationRoutingSplit.SplitPath.class,
                 KeyHistograms.HistogramTree.class,
                 KeyHistograms.HistogramNodeTree.class,
                 KeyHistograms.HistogramNodeLeaf.class,
@@ -301,8 +302,19 @@ public class KryoBuilder {
 
                 ClusterDeployment.ConfigSet.class,
                 ClusterDeployment.ShutdownTask.class,
+                ClusterDeployment.NetworkStats.class,
+                ClusterCommands.ClusterUnit.class,
+                ClusterCommands.CommandToken.class,
+                ClusterCommands.CommandTokenType.class,
+                ClusterCommands.CommandBlock.class,
+                ClusterCommands.CommandBlockNamed.class,
+                ClusterCommands.CommandBlockRoot.class,
+                ClusterCommands.CommandBlockLineContinue.class,
                 ConfigDeployment.class,
-                FileSplitter.FileSplit.class);
+                FileSplitter.FileSplit.class,
+                ClusterKeyAggregation.RouterSplitStat.class,
+                ClusterKeyAggregation.HistogramStat.class,
+                ClusterKeyAggregation.ActorStat.class);
     }
 
     public interface SerializerFunction {

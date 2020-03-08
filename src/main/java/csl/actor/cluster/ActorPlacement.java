@@ -10,6 +10,7 @@ import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 public interface ActorPlacement {
@@ -68,6 +69,13 @@ public interface ActorPlacement {
 
         public synchronized List<AddressListEntry> getCluster() {
             return new ArrayList<>(cluster);
+        }
+
+        public synchronized List<AddressListEntry> getClusterWithSelf() {
+            ArrayList<AddressListEntry> es = new ArrayList<>();
+            es.add(getSelfEntry());
+            es.addAll(cluster);
+            return es;
         }
 
         public ActorPlacementDefault(ActorSystem system) {
@@ -259,7 +267,7 @@ public interface ActorPlacement {
             return getCluster().stream()
                     .filter(e -> e.getPlacementActor().getHostAddress().equals(host))
                     .findFirst()
-                    .orElse(null);
+                    .orElse(host.equals(getSelfAddress().getHostAddress()) ? getSelfEntry() : null);
         }
 
         public ActorRef getPlace(ActorRef actor) {
@@ -291,11 +299,15 @@ public interface ActorPlacement {
         public String toStringContents() {
             return (Objects.equals(name, PLACEMENT_NAME) ? "" : (name + ", ")) + system;
         }
+
+        public long getCreatedActors() {
+            return createdActors.get();
+        }
     }
 
     class CallableMasterThreads implements CallableMessage<Actor, Integer> {
         @Override
-        public Integer call(Actor self, ActorRef sender) {
+        public Integer call(Actor self) {
             return self.getSystem().getThreads();
         }
     }
@@ -324,7 +336,7 @@ public interface ActorPlacement {
         }
     }
 
-    class AddressListEntry implements Serializable {
+    class AddressListEntry implements Serializable, ClusterHttp.ToJson {
         protected ActorAddress.ActorAddressRemoteActor placementActor;
         protected int threads;
 
@@ -364,6 +376,14 @@ public interface ActorPlacement {
         @Override
         public int hashCode() {
             return Objects.hash(placementActor);
+        }
+
+        @Override
+        public Map<String, Object> toJson(Function<Object, Object> valueConveter) {
+            Map<String, Object> json = new LinkedHashMap<>();
+            json.put("placementActor", toStringOrNull(placementActor));
+            json.put("threads", (long) threads);
+            return json;
         }
     }
 

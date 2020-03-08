@@ -87,7 +87,7 @@ public class SerializeExample2 extends SerializeExample{
 
     private void runCallableMessage() {
         String data = this.toString();
-        writeRead(p, CallableMessage.callableMessage((a,s) -> "HELLO" + data), false,
+        writeRead(p, CallableMessage.callableMessage((a) -> "HELLO" + data), false,
                 (src,dst) ->
                 src.call(null, null).equals(dst.call(null, null)));
     }

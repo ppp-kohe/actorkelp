@@ -16,6 +16,9 @@ import io.netty.handler.logging.LoggingHandler;
 import io.netty.util.ReferenceCountUtil;
 
 import java.io.Closeable;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
 
 public class ObjectMessageServer implements Closeable {
@@ -42,6 +45,11 @@ public class ObjectMessageServer implements Closeable {
     protected Function<Object, Integer> receiver;
 
     protected ActorSystem.SystemLogger logger;
+
+    protected AtomicLong recordReceiveCount = new AtomicLong();
+    protected AtomicLong recordReceiveBytes = new AtomicLong();
+    protected AtomicLong recordReceiveErrors = new AtomicLong();
+    protected AtomicLong recordReceiveTimeNanos = new AtomicLong();
 
     public static boolean debugTraceLog = System.getProperty("csl.actor.trace.server", "false").equals("true");
     public static int debugLogServerColor = ActorSystem.systemPropertyColor("csl.actor.server.color", 162);
@@ -201,6 +209,10 @@ public class ObjectMessageServer implements Closeable {
         if (debugTraceLog) {
             bootstrap.handler(new LoggingHandler(ObjectMessageServer.class, LogLevel.INFO));
         }
+        initBootstrapInitializer();
+    }
+
+    protected void initBootstrapInitializer() {
         bootstrap.childHandler(new ServerInitializer(this));
     }
 
@@ -241,6 +253,32 @@ public class ObjectMessageServer implements Closeable {
                 Integer.toHexString(System.identityHashCode(this)) + "(" + host + ':' + port + ")";
     }
 
+    public void recordReceiveBytesAndTime(long n, Duration time) {
+        recordReceiveCount.incrementAndGet();
+        recordReceiveBytes.addAndGet(n);
+        recordReceiveTimeNanos.addAndGet(time.toNanos());
+    }
+
+    public void recordReceiveError(Throwable ex) {
+        recordReceiveErrors.incrementAndGet();
+    }
+
+    public long getRecordReceiveBytes() {
+        return recordReceiveBytes.get();
+    }
+
+    public long getRecordReceiveCount() {
+        return recordReceiveCount.get();
+    }
+
+    public long getRecordReceiveErrors() {
+        return recordReceiveErrors.get();
+    }
+
+    public Duration getRecordReceiveTime() {
+        return Duration.ofNanos(recordReceiveTimeNanos.get());
+    }
+
     public static class ServerInitializer extends ChannelInitializer<SocketChannel> {
         protected ObjectMessageServer owner;
 
@@ -250,7 +288,7 @@ public class ObjectMessageServer implements Closeable {
 
         @Override
         protected void initChannel(SocketChannel socketChannel) throws Exception {
-            QueueServerHandler handler = new QueueServerHandler(owner.getLogger(), owner.getSerializer(), owner.getReceiver());
+            QueueServerHandler handler = new QueueServerHandler(owner, owner.getLogger(), owner.getSerializer(), owner.getReceiver());
             owner.getLogger().log(ActorSystemRemote.debugLog, debugLogServerColor,
                     "%s local:%s, remote:%s, handler:%s", this, socketChannel.localAddress(), socketChannel.remoteAddress(), handler);
             ActorSystemRemote.settingsSocketChannel(socketChannel);
@@ -278,12 +316,14 @@ public class ObjectMessageServer implements Closeable {
     }
 
     public static class QueueServerHandler extends ChannelInboundHandlerAdapter {
+        protected ObjectMessageServer owner;
         protected ActorSystem.SystemLogger logger;
         protected KryoBuilder.SerializerFunction serializer;
         protected Function<Object,Integer> receiver;
         protected volatile boolean firstError = true;
 
-        public QueueServerHandler(ActorSystem.SystemLogger logger, KryoBuilder.SerializerFunction serializer, Function<Object, Integer> receiver) {
+        public QueueServerHandler(ObjectMessageServer owner, ActorSystem.SystemLogger logger, KryoBuilder.SerializerFunction serializer, Function<Object, Integer> receiver) {
+            this.owner = owner;
             this.logger = logger;
             this.serializer = serializer;
             this.receiver = receiver;
@@ -291,27 +331,37 @@ public class ObjectMessageServer implements Closeable {
 
         @Override
         public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
-            if (msg instanceof ByteBuf) {
-                ByteBuf buf = (ByteBuf) msg;
-                int length = buf.readInt();
-                logger.log(ActorSystemRemote.debugLogMsg, debugLogServerColor, "%s bytes %,d  len %,d, serializer=%s", this, buf.readableBytes(), length, serializer);
-                Input input = new Input(new ByteBufInputStream(buf, length));
-                Object value = serializer.read(input);
-                ReferenceCountUtil.release(buf);
-                int r = 200;
-                if (receiver != null) {
-                    r = receiver.apply(value);
-                }
+            Instant start = Instant.now();
+            long n = 0;
+            try {
+                if (msg instanceof ByteBuf) {
+                    ByteBuf buf = (ByteBuf) msg;
+                    int length = buf.readInt();
+                    logger.log(ActorSystemRemote.debugLogMsg, debugLogServerColor, "%s bytes %,d  len %,d, serializer=%s", this, buf.readableBytes(), length, serializer);
+                    Input input = new Input(new ByteBufInputStream(buf, length));
+                    Object value = serializer.read(input);
+                    ReferenceCountUtil.release(buf);
+                    int r = 200;
+                    if (receiver != null) {
+                        r = receiver.apply(value);
+                    }
 
-                ByteBuf res = ctx.alloc().buffer(4);
-                res.writeInt(r);
-                ctx.writeAndFlush(res);
-                if (ActorSystemRemote.CLOSE_EACH_WRITE) {
-                    ctx.close();
+                    n += 4 + input.total();
+
+                    ByteBuf res = ctx.alloc().buffer(4);
+                    res.writeInt(r);
+                    ctx.writeAndFlush(res);
+                    if (ActorSystemRemote.CLOSE_EACH_WRITE) {
+                        ctx.close();
+                    }
+                    logger.log(ActorSystemRemote.debugLogMsg, debugLogServerColor, "%s read finish: %d", this, r);
+                } else {
+                    logger.log(ActorSystemRemote.debugLogMsg, debugLogServerColor, "%s ignore %s", this, msg);
                 }
-                logger.log(ActorSystemRemote.debugLogMsg, debugLogServerColor, "%s read finish: %d", this, r);
-            } else {
-                logger.log(ActorSystemRemote.debugLogMsg, debugLogServerColor, "%s ignore %s", this, msg);
+            } finally {
+                if (owner != null) {
+                    owner.recordReceiveBytesAndTime(n, Duration.between(start, Instant.now()));
+                }
             }
         }
 
@@ -324,6 +374,9 @@ public class ObjectMessageServer implements Closeable {
                 logger.log(ActorSystemRemote.debugLogMsg, debugLogServerColor, cause, "%s exceptionCaught", this);
             }
             ctx.close();
+            if (owner != null) {
+                owner.recordReceiveError(cause);
+            }
         }
 
         /** @return implementation field getter */

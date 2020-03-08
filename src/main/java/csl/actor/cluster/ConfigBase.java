@@ -144,6 +144,22 @@ public class ConfigBase implements Serializable {
         }
     }
 
+    public Object get(Field f) {
+        try {
+            return f.get(this);
+        } catch (Exception ex) {
+            throw new RuntimeException(ex);
+        }
+    }
+
+    public Map<String,Object> toJson() {
+        LinkedHashMap<String,Object> vs = new LinkedHashMap<>();
+        Arrays.stream(getClass().getFields())
+                .filter(ConfigBase::isConfigProperty)
+                .sorted(getPropertyFieldComparator())
+                .forEach(f -> vs.put(f.getName(), get(f)));
+        return vs;
+    }
 
     @Override
     public String toString() {

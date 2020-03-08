@@ -9,6 +9,10 @@ public interface KeyAggregationVisitor<ActorType extends Actor>
         extends CallableMessage.CallableMessageConsumer<ActorType>, MessageNoRouting {
     void visitActor(ActorType actor, ActorRef sender);
 
+    default void accept(ActorType actor) {
+        accept(actor, null);
+    }
+
     @Override
     default void accept(ActorType actor, ActorRef sender) {
         if (actor instanceof ActorKeyAggregation) {

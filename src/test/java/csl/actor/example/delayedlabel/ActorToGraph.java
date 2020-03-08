@@ -92,7 +92,7 @@ public class ActorToGraph {
             saving.tell(-1, null);
         }
         schedule(10000, () -> {
-            saving.tell(CallableMessage.callableMessageConsumer((self,r) -> {
+            saving.tell(CallableMessage.callableMessageConsumer((self) -> {
                 if (saving.write()) {
                     System.err.println("#graph timeout saving");
                 }
@@ -140,7 +140,7 @@ public class ActorToGraph {
             saveTask(-1, fn, label, a);
         } else {
             int id = saving.next();
-            a.tell(CallableMessage.callableMessage((self, from) ->
+            a.tell(CallableMessage.callableMessage((self) ->
                     saveTask(id, fn, label, self)), saving);
         }
     }

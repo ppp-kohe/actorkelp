@@ -240,7 +240,7 @@ public class WordCount {
                     Files.createDirectories(outFile.getParent());
                     writer = new PrintWriter(new FileWriter(outFile.toFile()));
                     flushTask = getSystem().getScheduledExecutor().scheduleAtFixedRate(() ->
-                            this.tell(CallableMessage.callableMessageConsumer((a,s) -> writer.flush())), 3, 3, TimeUnit.SECONDS);
+                            this.tell(CallableMessage.callableMessageConsumer((a) -> writer.flush())), 3, 3, TimeUnit.SECONDS);
                     log("start writing: " + outFile);
                 }
 

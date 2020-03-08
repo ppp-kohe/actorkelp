@@ -5,6 +5,7 @@ import csl.actor.ActorRef;
 import csl.actor.Message;
 import csl.actor.cluster.ResponsiveCalls;
 
+import java.io.Serializable;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -212,7 +213,7 @@ public interface KeyAggregationRoutingSplit {
                     }
                     return newMergedLeaf(context, a2, path, leaf);
                 } else { //both remote
-                    Boolean b = ResponsiveCalls.sendTask(context.router().getSystem(), a1, (self, sender) -> {
+                    Boolean b = ResponsiveCalls.sendTask(context.router().getSystem(), a1, (self) -> {
                         ActorKeyAggregation l2 = ((ActorKeyAggregation) self).toLocal(a2);
                         if (l2 != null) {
                             ((ActorKeyAggregation) self).internalMerge(l2);
@@ -241,7 +242,7 @@ public interface KeyAggregationRoutingSplit {
 
         public boolean hasRemainingProcesses(ActorKeyAggregation router, ActorRef a) {
             try {
-                return ResponsiveCalls.sendTask(router.getSystem(), a, (self, sender) ->
+                return ResponsiveCalls.sendTask(router.getSystem(), a, (self) ->
                         ((ActorKeyAggregation) self).hasRemainingProcesses())
                         .get(router.toLocalWaitMs(), TimeUnit.MILLISECONDS);
             } catch (Exception ex) {
@@ -266,7 +267,7 @@ public interface KeyAggregationRoutingSplit {
     }
 
     class RoutingSplitNode implements KeyAggregationRoutingSplit {
-        protected List<Object> splitPoints;
+        protected Object[] splitPoints;
         protected KeyAggregationRoutingSplit left;
         protected KeyAggregationRoutingSplit right;
         protected SplitPath path;
@@ -274,7 +275,7 @@ public interface KeyAggregationRoutingSplit {
         protected AtomicLong processCount = new AtomicLong();
 
         public RoutingSplitNode(List<Object> splitPoints, KeyAggregationRoutingSplit left, KeyAggregationRoutingSplit right, SplitPath path, int historyEntrySize) {
-            this.splitPoints = splitPoints;
+            this.splitPoints = splitPoints.toArray();
             this.left = left;
             this.right = right;
             this.path = path;
@@ -282,7 +283,7 @@ public interface KeyAggregationRoutingSplit {
         }
 
         public RoutingSplitNode(List<Object> splitPoints, KeyAggregationRoutingSplit left, KeyAggregationRoutingSplit right, SplitPath path, RoutingHistory history) {
-            this.splitPoints = splitPoints;
+            this.splitPoints = splitPoints.toArray();
             this.left = left;
             this.right = right;
             this.path = path;
@@ -290,7 +291,7 @@ public interface KeyAggregationRoutingSplit {
         }
 
         public RoutingSplitNode newNode(KeyAggregationRoutingSplit left, KeyAggregationRoutingSplit right, SplitPath path) {
-            return new RoutingSplitNode(splitPoints, left, right, path, history);
+            return new RoutingSplitNode(Arrays.asList(splitPoints), left, right, path, history);
         }
 
         protected RoutingSplitNode newNodeOrThis(KeyAggregationRoutingSplit left, KeyAggregationRoutingSplit right, SplitPath path) {
@@ -330,12 +331,12 @@ public interface KeyAggregationRoutingSplit {
             if (selection == null) {
                 return router.getRandom().nextBoolean();
             } else {
-                Object point = splitPoints.get(selection.entryId);
+                Object point = splitPoints[selection.entryId];
                 if (point == null) { //the first arriving key becomes splitPoint
                     synchronized (this) {
-                        point = splitPoints.get(selection.entryId);
+                        point = splitPoints[selection.entryId];
                         if (point == null) {
-                            splitPoints.set(selection.entryId, key);
+                            splitPoints[selection.entryId] = key;
                             point = key;
                         }
                     }
@@ -368,7 +369,7 @@ public interface KeyAggregationRoutingSplit {
         }
 
         /** @return implementation field getter */
-        public List<Object> getSplitPoints() {
+        public Object[] getSplitPoints() {
             return splitPoints;
         }
 
@@ -594,7 +595,7 @@ public interface KeyAggregationRoutingSplit {
     }
 
 
-    class SplitPath implements Comparable<SplitPath> {
+    class SplitPath implements Comparable<SplitPath>, Serializable {
         private byte length;
         private byte[] path;
 
