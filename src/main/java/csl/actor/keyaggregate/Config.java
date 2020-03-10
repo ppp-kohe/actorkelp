@@ -5,6 +5,8 @@ import csl.actor.cluster.ConfigBase;
 public class Config extends ConfigBase {
     public static final Config CONFIG_DEFAULT = new Config();
 
+    public boolean routerAutoSplit = true;
+    public boolean routerAutoMerge = true;
     public int mailboxThreshold = 1000;
     public int mailboxTreeSize = 32;
     public float lowerBoundThresholdFactor = 0.001f;

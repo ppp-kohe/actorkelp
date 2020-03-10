@@ -1,14 +1,19 @@
 package csl.actor.example.keyaggregate;
 
 import csl.actor.ActorBehavior;
+import csl.actor.ActorRef;
 import csl.actor.ActorSystem;
+import csl.actor.cluster.ClusterHttp;
 import csl.actor.cluster.PhaseShift;
 import csl.actor.keyaggregate.ActorKeyAggregation;
 import csl.actor.keyaggregate.ClusterKeyAggregation;
 import csl.actor.keyaggregate.Config;
+import csl.actor.keyaggregate.KeyAggregationStateRouter;
 
 import java.io.Console;
 import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Random;
 import java.util.Scanner;
 import java.util.function.Function;
@@ -19,7 +24,8 @@ public class ExampleCluster {
 
         ClusterKeyAggregation d = ClusterKeyAggregation.create();
         d.deploy(d.master()
-                    .edit(c -> c.getDeploymentConfig().baseDir = dir),
+                    .edit(c -> c.getDeploymentConfig().baseDir = dir)
+                    .edit(c -> c.getAppConfig().routerAutoMerge = false),
                 d.node("localhost", 30001)
                     .edit(c -> c.getDeploymentConfig().baseDir = dir)
                     .edit(c -> c.getDeploymentConfig().java = "java %s %s %s"),
@@ -46,6 +52,12 @@ public class ExampleCluster {
                 } catch (Exception ex) {
                     ex.printStackTrace();
                 }
+            } else if (line.startsWith("stats ")) {
+                String p = line.split(" ")[1];
+                ClusterKeyAggregation.RouterSplitStat o = d.getSplit(a, p);
+                ClusterKeyAggregation.ActorStat as = d.getActorStat(o.actor);
+                Object json = d.getHttp().jsonConverter(Object.class).apply(as);
+                System.out.println(json);
             }
         }
         d.shutdownAll();
@@ -66,7 +78,7 @@ public class ExampleCluster {
                     .matchKey(Tuple.class, t -> t.value)
                     .fold((k,v) -> v.stream().reduce((a,b) -> new Tuple(a.value, a.count + b.count))
                             .orElse(new Tuple(0,0)))
-                    .forEach(System.out::println)
+                    .forEach(o -> {})
                     .build();
         }
     }

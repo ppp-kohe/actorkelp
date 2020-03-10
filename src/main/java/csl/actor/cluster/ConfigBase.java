@@ -12,11 +12,12 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.time.Instant;
 import java.util.*;
+import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
-public class ConfigBase implements Serializable {
+public class ConfigBase implements Serializable, ClusterHttp.ToJson {
     protected transient ActorSystem.SystemLogger logger;
 
     public static <ConfType extends ConfigBase> ConfType readConfig(Class<ConfType> type, Map<Object, Object> properties) {
@@ -152,12 +153,12 @@ public class ConfigBase implements Serializable {
         }
     }
 
-    public Map<String,Object> toJson() {
+    public Map<String,Object> toJson(Function<Object, Object> valueConverter) {
         LinkedHashMap<String,Object> vs = new LinkedHashMap<>();
         Arrays.stream(getClass().getFields())
                 .filter(ConfigBase::isConfigProperty)
                 .sorted(getPropertyFieldComparator())
-                .forEach(f -> vs.put(f.getName(), get(f)));
+                .forEach(f -> vs.put(f.getName(), toJson(valueConverter, get(f))));
         return vs;
     }
 

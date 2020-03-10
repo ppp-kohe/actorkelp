@@ -379,10 +379,10 @@ public interface ActorPlacement {
         }
 
         @Override
-        public Map<String, Object> toJson(Function<Object, Object> valueConveter) {
+        public Map<String, Object> toJson(Function<Object, Object> valueConverter) {
             Map<String, Object> json = new LinkedHashMap<>();
-            json.put("placementActor", toStringOrNull(placementActor));
-            json.put("threads", (long) threads);
+            json.put("placementActor", toJson(valueConverter, placementActor, ""));
+            json.put("threads", toJson(valueConverter, (long) threads));
             return json;
         }
     }

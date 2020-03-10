@@ -3,6 +3,7 @@ package csl.actor.cluster;
 import csl.actor.ActorRef;
 import csl.actor.ActorRefLocalNamed;
 import csl.actor.ActorSystem;
+import csl.actor.ActorSystemDefault;
 import csl.actor.remote.ActorAddress;
 import csl.actor.remote.ActorRefRemote;
 import csl.actor.remote.ActorRefRemoteSerializer;
@@ -17,6 +18,8 @@ import io.netty.handler.ssl.SslContext;
 import java.lang.reflect.*;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
@@ -38,8 +41,13 @@ public class ClusterHttp {
 
     public ClusterHttp(ClusterDeployment<?, ?> deployment) {
         this.deployment = deployment;
-        logger = deployment.getSystem().getLogger();
-        actorToAddress = new ActorRefRemoteSerializer<>(deployment.getSystem());
+        if (deployment.getSystem() != null) {
+            logger = deployment.getSystem().getLogger();
+            actorToAddress = new ActorRefRemoteSerializer<>(deployment.getSystem());
+        } else { //for testing
+            logger = new ActorSystemDefault.SystemLoggerErr();
+            actorToAddress = new ActorRefRemoteSerializer<>(null);
+        }
         initMethods();
     }
 
@@ -113,6 +121,7 @@ public class ClusterHttp {
     public static class HttpHandler extends SimpleChannelInboundHandler<HttpObject> {
         protected ClusterHttp owner;
         protected ActorSystem.SystemLogger logger;
+        public static boolean supportKeepAlive = true;
 
         public HttpHandler(ClusterHttp owner) {
             this.owner = owner;
@@ -139,7 +148,7 @@ public class ClusterHttp {
                 FullHttpResponse res = res(req.protocolVersion(), path, query);
                 res.headers()
                         .set(HttpHeaderNames.CONTENT_TYPE, HttpHeaderValues.APPLICATION_JSON);
-                boolean ka = HttpUtil.isKeepAlive(req);
+                boolean ka = supportKeepAlive && HttpUtil.isKeepAlive(req);
                 if (ka) {
                     res.headers().setInt(HttpHeaderNames.CONTENT_LENGTH, res.content().readableBytes());
                     res.headers().set(HttpHeaderNames.CONNECTION, HttpHeaderValues.KEEP_ALIVE);
@@ -223,22 +232,6 @@ public class ClusterHttp {
     public Function<Object,Object> jsonConverterRaw(Type retType) {
         if (retType == null) {
             return Function.identity();
-        } else if (retType.equals(Class.class)) {
-            return o -> ((Class<?>) o).getName();
-        } else if (retType.equals(String.class)) {
-            return Objects::toString;
-        } else if (retType.equals(int.class)) {
-            return o -> ((Integer) o).longValue();
-        } else if (retType.equals(long.class)) {
-            return Function.identity();
-        } else if (retType.equals(boolean.class)) {
-            return Function.identity();
-        } else if (retType.equals(double.class)) {
-            return Function.identity();
-        } else if (retType.equals(float.class)) {
-            return o -> ((Float) o).doubleValue();
-        } else if (retType.equals(void.class)) {
-            return o -> null;
         } else if (matchType(retType, List.class)) {
             Function<Object, Object> paramConv = jsonConverter(getParamType(retType, 0));
             return o -> ((List<?>) o).stream()
@@ -262,29 +255,48 @@ public class ClusterHttp {
             };
         } else if (!(retType instanceof Class<?>)) {
             return jsonConverter(getRawType(retType));
-        } else if (ActorRef.class.isAssignableFrom(getRawType(retType))) {
-            return o -> toJson((ActorRef) o);
+        } else if (retType.equals(Class.class)) {
+            return o -> o == null ? null : ((Class<?>) o).getName();
+        } else if (retType.equals(String.class)) {
+            return o -> o == null ? null : Objects.toString(o);
+        } else if (retType.equals(int.class) || retType.equals(Integer.class)) {
+            return o -> o == null ? null : ((Integer) o).longValue();
+        } else if (retType.equals(long.class) || retType.equals(Long.class)) {
+            return Function.identity();
+        } else if (retType.equals(boolean.class) || retType.equals(Boolean.class)) {
+            return Function.identity();
+        } else if (retType.equals(double.class) || retType.equals(Double.class)) {
+            return Function.identity();
+        } else if (retType.equals(float.class) || retType.equals(Float.class)) {
+            return o -> o == null ? null : ((Float) o).doubleValue();
+        } else if (retType.equals(void.class)) {
+            return o -> null;
         } else if (ToJson.class.isAssignableFrom(getRawType(retType))) {
-            return o -> ((ToJson) o).toJson(jsonConverter(Object.class));
+            return o -> o == null ? null : ((ToJson) o).toJson(jsonConverter(Object.class));
+        } else if (ActorRef.class.isAssignableFrom(getRawType(retType))) {
+            return o -> o == null ? null : toJsonActor((ActorRef) o);
+        } else if (Instant.class.isAssignableFrom(getRawType(retType))) {
+            return o -> o == null ? null : Objects.toString(o);
+        } else if (Duration.class.isAssignableFrom(getRawType(retType))) {
+            return o -> o == null ? null : Objects.toString(o);
         } else {
-            return Objects::toString;
+            return o -> o == null ? null : Objects.toString(o);
         }
     }
 
-    public Object toJson(ActorRef actor) {
-        ActorAddress a = actorToAddress.getAddress(actor);
-        if (a == null) {
-            return null;
-        } else {
-            return a.toString();
-        }
+    public Object toJsonActor(ActorRef ref) {
+        return Objects.toString(actorToAddress.getAddress(ref));
     }
 
     public interface ToJson {
         Map<String,Object> toJson(Function<Object,Object> valueConverter);
 
-        default String toStringOrNull(Object o) {
-            return o == null ? null : o.toString();
+        default Object toJson(Function<Object,Object> valueConverter, Object o) {
+            return valueConverter.apply(o);
+        }
+
+        default Object toJson(Function<Object,Object> valueConverter, Object o, Object nullVal) {
+            return o == null ? valueConverter.apply(nullVal) : valueConverter.apply(o);
         }
     }
 
@@ -292,12 +304,12 @@ public class ClusterHttp {
         if (type instanceof ParameterizedType) {
             ParameterizedType pType = (ParameterizedType) type;
             Type[] argTypes = pType.getActualTypeArguments();
-            return pType.getRawType().equals(baseType) &&
+            return pType.getRawType().equals(baseType) && //not isAssignableFrom but equals
                     IntStream.range(0, paramTypes.length)
                         .allMatch(i -> matchType(argTypes[i], paramTypes[i]));
         } else if (paramTypes.length == 0) {
-            if (type instanceof Class<?>) {
-                return type.equals(baseType);
+            if (type instanceof Class<?>) { //for raw-type assignableFrom
+                return baseType.isAssignableFrom((Class<?>) type);
             } else if (type instanceof TypeVariable<?>) {
                 Type[] bs = ((TypeVariable<?>) type).getBounds();
                 if (bs.length > 0) {
@@ -365,7 +377,7 @@ public class ClusterHttp {
                 return paramType;
             }
         } else {
-            return null;
+            return Object.class;
         }
     }
 

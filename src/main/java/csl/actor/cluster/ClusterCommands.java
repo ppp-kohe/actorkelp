@@ -727,13 +727,13 @@ public class ClusterCommands<AppConfType extends ConfigBase> {
         }
 
         @Override
-        public Map<String, Object> toJson(Function<Object, Object> valueConveter) {
+        public Map<String, Object> toJson(Function<Object, Object> valueConverter) {
             Map<String,Object> json = new LinkedHashMap<>();
-            json.put("name", name);
-            json.put("deploymentConfig", deploymentConfig == null ? null : deploymentConfig.toJson());
-            json.put("appConfig", appConfig == null ? null : appConfig.toJson());
-            json.put("classPathList", classPathList == null ? null : new ArrayList<>(classPathList));
-            Object blk = null;
+            json.put("name", toJson(valueConverter, name, ""));
+            json.put("deploymentConfig", toJson(valueConverter, deploymentConfig, ""));
+            json.put("appConfig", toJson(valueConverter, appConfig, null));
+            json.put("classPathList", toJson(valueConverter, classPathList, new ArrayList<>()));
+            Object blk = "";
             if (block != null) {
                 StringBuilder buf = new StringBuilder();
                 block.write(s -> buf.append(s).append("\n"));

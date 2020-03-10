@@ -71,6 +71,14 @@ public abstract class ActorKeyAggregation extends ActorDefault
         return config;
     }
 
+    public boolean routerAutoSplit() {
+        return config.routerAutoSplit;
+    }
+
+    public boolean routerAutoMerge() {
+        return config.routerAutoMerge;
+    }
+
     public int mailboxTreeSize() {
         return config.mailboxTreeSize;
     }

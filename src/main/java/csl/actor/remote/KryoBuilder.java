@@ -303,6 +303,8 @@ public class KryoBuilder {
                 ClusterDeployment.ConfigSet.class,
                 ClusterDeployment.ShutdownTask.class,
                 ClusterDeployment.NetworkStats.class,
+                ClusterDeployment.SystemStats.class,
+                ClusterDeployment.ClusterStats.class,
                 ClusterCommands.ClusterUnit.class,
                 ClusterCommands.CommandToken.class,
                 ClusterCommands.CommandTokenType.class,

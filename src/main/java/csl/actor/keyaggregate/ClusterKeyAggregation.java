@@ -39,7 +39,7 @@ public class ClusterKeyAggregation extends ClusterDeployment<Config, ActorPlacem
         }
     }
 
-    @PropertyInterface("actor-stat")
+    @PropertyInterface("actor-stats")
     public ActorStat getActorStat(ActorRef actor) {
         return placeGetForActor(actor, a -> new ActorStat().set(actor.asLocal()));
     }
@@ -62,7 +62,7 @@ public class ClusterKeyAggregation extends ClusterDeployment<Config, ActorPlacem
         return placeGetForActor(actor, a -> new RouterSplitStat().set(actor.asLocal(), path));
     }
 
-    @PropertyInterface("actor-split")
+    @PropertyInterface("actor-split-tree")
     public Map<String,RouterSplitStat> getSplitTree(ActorRef actor) {
         return placeGetForActor(actor, a -> toStatTree(actor.asLocal()));
     }
@@ -85,7 +85,7 @@ public class ClusterKeyAggregation extends ClusterDeployment<Config, ActorPlacem
         if (split instanceof KeyAggregationRoutingSplit.RoutingSplitNode) {
             KeyAggregationRoutingSplit.RoutingSplitNode node = (KeyAggregationRoutingSplit.RoutingSplitNode) split;
             toStatTree(map, node.getLeft(), path.add(true));
-            toStatTree(map, node.getLeft(), path.add(false));
+            toStatTree(map, node.getRight(), path.add(false));
         }
     }
 
@@ -178,22 +178,20 @@ public class ClusterKeyAggregation extends ClusterDeployment<Config, ActorPlacem
         }
 
         @Override
-        public Map<String, Object> toJson(Function<Object, Object> valueConveter) {
+        public Map<String, Object> toJson(Function<Object, Object> valueConverter) {
             Map<String,Object> json = new LinkedHashMap<>();
-            json.put("ref", valueConveter.apply(ref));
-            json.put("name", name);
-            json.put("className", className);
-            json.put("stateType", stateType);
-            json.put("processCount", processCount);
-            json.put("outputFileHeader", outputFileHeader);
-            json.put("mailboxSize", (long) mailboxSize);
-            json.put("mailboxPersistable", mailboxPersistable);
-            json.put("histogram", histograms == null ? null : histograms.stream()
-                    .map(h -> h.toJson(valueConveter))
-                    .collect(Collectors.toList()));
-            json.put("maxHeight", (long) maxHeight);
-            json.put("height", (long) height);
-            json.put("parallelRouting", parallelRouting);
+            json.put("ref", toJson(valueConverter, ref, ""));
+            json.put("name", toJson(valueConverter, name, ""));
+            json.put("className", toJson(valueConverter, className, ""));
+            json.put("stateType", toJson(valueConverter, stateType, ""));
+            json.put("processCount", toJson(valueConverter, processCount));
+            json.put("outputFileHeader", toJson(valueConverter, outputFileHeader, ""));
+            json.put("mailboxSize", toJson(valueConverter, (long) mailboxSize));
+            json.put("mailboxPersistable", toJson(valueConverter, mailboxPersistable));
+            json.put("histogram", toJson(valueConverter, histograms, new ArrayList<>()));
+            json.put("maxHeight", toJson(valueConverter, (long) maxHeight));
+            json.put("height", toJson(valueConverter, (long) height));
+            json.put("parallelRouting", toJson(valueConverter, parallelRouting));
             return json;
         }
     }
@@ -229,7 +227,6 @@ public class ClusterKeyAggregation extends ClusterDeployment<Config, ActorPlacem
             KeyAggregationRoutingSplit split = router.getSplit();
             for (boolean left : path.toFlags()) {
                 if (!(split instanceof KeyAggregationRoutingSplit.RoutingSplitNode)) {
-                    split = null;
                     break;
                 }
                 KeyAggregationRoutingSplit.RoutingSplitNode node = (KeyAggregationRoutingSplit.RoutingSplitNode) split;
@@ -268,19 +265,18 @@ public class ClusterKeyAggregation extends ClusterDeployment<Config, ActorPlacem
         @Override
         public Map<String, Object> toJson(Function<Object,Object> valueConverter) {
             Map<String,Object> json = new LinkedHashMap<>();
-            json.put("type", type);
-            json.put("path", toString(path));
-            json.put("depth", (long) depth);
-            json.put("processCount", processCount);
-            json.put("processPoints", processPoints == null ? null : processPoints.stream()
-                .map(o -> o == null ? null : o.toString())
-                .collect(Collectors.toList()));
+            json.put("type", toJson(valueConverter, type, ""));
+            json.put("path", toJson(valueConverter, toString(path), ""));
+            json.put("depth", toJson(valueConverter, (long) depth));
+            json.put("processCount", toJson(valueConverter, processCount));
+            json.put("processPoints", toJson(valueConverter, processPoints));
             json.put("history", history == null ? null : history.stream()
                 .map(h -> Arrays.stream(h)
                         .boxed()
+                        .map(valueConverter)
                         .collect(Collectors.toList()))
                 .collect(Collectors.toList()));
-            json.put("actor", valueConverter.apply(actor));
+            json.put("actor", toJson(valueConverter, actor, ""));
             return json;
         }
 
@@ -340,32 +336,26 @@ public class ClusterKeyAggregation extends ClusterDeployment<Config, ActorPlacem
         }
 
         @Override
-        public Map<String, Object> toJson(Function<Object, Object> valueConveter) {
+        public Map<String, Object> toJson(Function<Object, Object> valueConverter) {
             Map<String, Object> json = new LinkedHashMap<>();
-            json.put("entryId", (long) entryId);
-            json.put("nextSchedule", toJson(nextSchedule));
-            json.put("lastTraversal", toJson(lastTraversal));
-            json.put("persistable", persistable);
-            json.put("valueSize", valueSize);
-            json.put("leafSize", leafSize);
-            json.put("leafSizeNonZero", leafSizeNonZero);
-            json.put("persistedSize", persistedSize);
+            json.put("entryId", toJson(valueConverter, (long) entryId));
+            json.put("nextSchedule", toJson(valueConverter, nextSchedule, Instant.EPOCH));
+            json.put("lastTraversal", toJson(valueConverter, lastTraversal, Instant.EPOCH));
+            json.put("persistable", toJson(valueConverter, persistable));
+            json.put("valueSize", toJson(valueConverter, valueSize));
+            json.put("leafSize", toJson(valueConverter, leafSize));
+            json.put("leafSizeNonZero", toJson(valueConverter, leafSizeNonZero));
+            json.put("persistedSize", toJson(valueConverter, persistedSize));
             if (persistHistoryTotalMean != null) {
                 List<Object> ds = new ArrayList<>(persistHistoryTotalMean.length);
                 for (float f : persistHistoryTotalMean) {
-                    ds.add((double) f);
+                    ds.add(valueConverter.apply((double) f));
                 }
                 json.put("persistHistoryTotalMean", ds);
+            } else {
+                json.put("persistHistoryTotalMean", new ArrayList<>());
             }
             return json;
-        }
-
-        private Object toJson(Instant n) {
-            if (n == null) {
-                return null;
-            } else {
-                return n.toString();
-            }
         }
     }
 }

@@ -87,10 +87,10 @@ public class KeyAggregationStateRouter implements ActorKeyAggregation.State {
             MailboxKeyAggregation m = self.getMailboxAsKeyAggregation();
             int size = m.size();
 
-            if (status.equals(MailboxKeyAggregation.MailboxStatus.Exceeded)) {
+            if (self.routerAutoSplit() && status.equals(MailboxKeyAggregation.MailboxStatus.Exceeded)) {
                 int h = nextHeight(maxHeight, size, self.minSizeOfEachMailboxSplit());
                 splitAndParallelRouting(self, m, message, h);
-            } else if (split != null && status.equals(MailboxKeyAggregation.MailboxStatus.Few) &&
+            } else if (self.routerAutoMerge() && split != null && status.equals(MailboxKeyAggregation.MailboxStatus.Few) &&
                     split.isHistoryExceeded((int) (self.historyExceededLimit()))) {
                 mergeInactive(self, m, message);
             } else {

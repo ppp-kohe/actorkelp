@@ -62,27 +62,22 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         this.placeType = placeType;
     }
 
-    @PropertyInterface("cluster-default-conf-type")
     public Class<AppConfType> getDefaultConfType() {
         return defaultConfType;
     }
 
-    @PropertyInterface("cluster-node-main-type")
     public Class<?> getNodeMainType() {
         return NodeMain.class;
     }
 
-    @PropertyInterface("cluster-placement-type")
     public Class<PlaceType> getPlaceType() {
         return placeType;
     }
 
-    @PropertyInterface("cluster-master")
     public ClusterUnit<AppConfType> getMaster() {
         return master;
     }
 
-    @PropertyInterface("cluster-nodes")
     public List<ClusterUnit<AppConfType>> getNodes() {
         return nodes;
     }
@@ -93,6 +88,10 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
 
     public PlaceType getMasterPlace() {
         return masterPlace;
+    }
+
+    public ClusterHttp getHttp() {
+        return http;
     }
 
     public ActorSystemRemote getSystem() {
@@ -332,8 +331,6 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         return unit;
     }
 
-
-    @PropertyInterface("cluster-app-name")
     public String getAppName() {
         if (appName == null) {
             appName = getNextAppName();
@@ -734,6 +731,42 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
 
     ///////////////
 
+    @PropertyInterface("cluster")
+    public ClusterStats getClusterStats() {
+        return new ClusterStats().set(this);
+    }
+
+    public static class ClusterStats implements Serializable, ClusterHttp.ToJson {
+        public String appName;
+        public Class<? extends ConfigBase> defaultConfType;
+        public Class<?> nodeMainType;
+        public Class<? extends ActorPlacementForCluster<?>> placeType;
+        public ClusterUnit<?> master;
+        public List<ClusterUnit<?>> nodes;
+
+        public ClusterStats set(ClusterDeployment<?,?> d) {
+            appName = d.getAppName();
+            defaultConfType = d.getDefaultConfType();
+            nodeMainType = d.getNodeMainType();
+            placeType = d.getPlaceType();
+            master = d.getMaster();
+            nodes = new ArrayList<>(d.getNodes());
+            return this;
+        }
+
+        @Override
+        public Map<String, Object> toJson(Function<Object, Object> valueConverter) {
+            Map<String, Object> json = new LinkedHashMap<>();
+            json.put("appName", toJson(valueConverter, appName, ""));
+            json.put("defaultConfType", toJson(valueConverter, defaultConfType, ""));
+            json.put("nodeMainType", toJson(valueConverter, nodeMainType, ""));
+            json.put("placeType", toJson(valueConverter, placeType, ""));
+            json.put("master", toJson(valueConverter, master, null));
+            json.put("nodes", toJson(valueConverter, nodes, new ArrayList<>()));
+            return json;
+        }
+    }
+
     public ActorRef getPlace(ActorRef actor) {
         if (actor instanceof ActorRefRemote) {
             ActorAddress address = ((ActorRefRemote) actor).getAddress();
@@ -926,14 +959,9 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
 
     //////
 
-    @PropertyInterface("system-throughput")
-    public int getAttachedSystemThroughput() {
-        return placeGet(p -> ((ActorSystemRemote) p.getSystem()).getLocalSystem().getThroughput());
-    }
-
     @PropertyInterface("system")
-    public String getAttachedSystemToString() {
-        return placeGet(p -> p.getSystem().toString());
+    public SystemStats getAttachedSystemStats() {
+        return placeGet(p -> new SystemStats().set(p));
     }
 
     @PropertyInterface("system-actors")
@@ -972,11 +1000,6 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         return placeGet(ActorPlacement.ActorPlacementDefault::getClusterWithSelf);
     }
 
-    @PropertyInterface("placement-strategy")
-    public String getAttachedPlacementStrategyToString() {
-        return placeGet(p -> p.getStrategy().toString());
-    }
-
     @PropertyInterface("placement-created-actors")
     public long getAttachedPlacementCreatedActors() {
         return placeGet(ActorPlacement.ActorPlacementDefault::getCreatedActors);
@@ -991,6 +1014,29 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         return map.entrySet()
                 .stream()
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+    }
+
+    public static class SystemStats implements Serializable, ClusterHttp.ToJson {
+        public int throughput;
+        public String systemToString;
+        public String placementStrategyToString;
+
+        public SystemStats set(ActorPlacementForCluster<?> a) {
+            throughput = ((ActorSystemRemote) a.getSystem()).getLocalSystem().getThroughput();
+            systemToString = a.getSystem().toString();
+            placementStrategyToString = a.getStrategy().toString();
+            return this;
+        }
+
+        @Override
+        public Map<String, Object> toJson(Function<Object, Object> valueConverter) {
+            Map<String, Object> json = new LinkedHashMap<>();
+            json.put("throughput", toJson(valueConverter, (long) throughput));
+            json.put("systemToString", toJson(valueConverter, systemToString, ""));
+            json.put("placementStrategyToString", toJson(valueConverter,
+                    placementStrategyToString, ""));
+            return json;
+        }
     }
 
     public static class NetworkStats implements Serializable, ClusterHttp.ToJson {
@@ -1036,28 +1082,23 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         }
 
         @Override
-        public Map<String, Object> toJson(Function<Object, Object> valueConveter) {
+        public Map<String, Object> toJson(Function<Object, Object> valueConverter) {
             Map<String,Object> json = new LinkedHashMap<>();
-            json.put("address", toStringOrNull(address));
-            json.put("count", count);
-            json.put("messages", messages);
-            json.put("time", toStringOrNull(time));
-            json.put("bytes", bytes);
-            json.put("errors", errors);
+            json.put("address", toJson(valueConverter, address, ""));
+            json.put("count", toJson(valueConverter, count));
+            json.put("messages", toJson(valueConverter, messages));
+            json.put("time", toJson(valueConverter, time, Duration.ZERO));
+            json.put("bytes", toJson(valueConverter, bytes));
+            json.put("errors", toJson(valueConverter, errors));
             return json;
         }
     }
 
     ///////
 
-    @PropertyInterface("system-throughput")
-    public int getAttachedSystemThroughput(ActorAddress.ActorAddressRemote host) {
-        return placeGet(host, p -> ((ActorSystemRemote) p.getSystem()).getLocalSystem().getThroughput());
-    }
-
     @PropertyInterface("system")
-    public String getAttachedSystemToString(ActorAddress.ActorAddressRemote host) {
-        return placeGet(host, p -> p.getSystem().toString());
+    public SystemStats getAttachedSystemStats(ActorAddress.ActorAddressRemote host) {
+        return placeGet(host, p -> new SystemStats().set(p));
     }
 
     @PropertyInterface("system-actors")
@@ -1094,11 +1135,6 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
     @PropertyInterface("placement-clusters-with-self")
     public List<ActorPlacement.AddressListEntry> getAttachedPlacementClusterWithSelf(ActorAddress.ActorAddressRemote host) {
         return placeGet(host, ActorPlacement.ActorPlacementDefault::getClusterWithSelf);
-    }
-
-    @PropertyInterface("placement-strategy")
-    public String getAttachedPlacementStrategyToString(ActorAddress.ActorAddressRemote host) {
-        return placeGet(host, p -> p.getStrategy().toString());
     }
 
     @PropertyInterface("placement-created-actors")
