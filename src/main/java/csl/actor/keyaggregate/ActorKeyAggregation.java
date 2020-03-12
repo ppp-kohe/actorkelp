@@ -567,14 +567,14 @@ public abstract class ActorKeyAggregation extends ActorDefault
         String name = actor.name;
         if (name != null) {
             int ni = name.lastIndexOf("#");
-            if (ni < 0) { //no postfix
-                name += "#";
+            if (ni >= 0) {
+                name = name.substring(0, ni);
             }
-            if (path.depth() > 0) {
-                name += (path.getLast() ? "0" : "1");
+            name += "#" + path.toBinaryString();
+            if (!(actor.state instanceof KeyAggregationStateRouter)) { //router
+                actor.name = name;
+                actor.getSystem().register(actor);
             }
-            actor.name = name;
-            actor.getSystem().register(actor);
         }
     }
 

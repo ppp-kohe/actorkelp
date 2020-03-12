@@ -426,6 +426,7 @@ public interface ActorPlacement {
     interface PlacementStrategy {
         ActorAddress.ActorAddressRemoteActor getNextAddress(ActorPlacementDefault pa, Actor a, int retryCount);
         long getNextLocalNumber();
+        String getDescription();
     }
 
     class PlacementStrategyUndertaker implements PlacementStrategy {
@@ -438,6 +439,11 @@ public interface ActorPlacement {
         @Override
         public long getNextLocalNumber() {
             return localNum.incrementAndGet();
+        }
+
+        @Override
+        public String getDescription() {
+            return "undertaker(" + localNum + ")";
         }
     }
 
@@ -481,6 +487,11 @@ public interface ActorPlacement {
         @Override
         public long getNextLocalNumber() {
             return localNum.incrementAndGet();
+        }
+
+        @Override
+        public String getDescription() {
+            return "roundRobinThreads(local=" + localNum + ",clusterIdx=" + clusterIndex + ")";
         }
 
         /** @return implementation field getter */
@@ -549,6 +560,11 @@ public interface ActorPlacement {
         public synchronized long getNextLocalNumber() {
             ++totalCount;
             return totalCount;
+        }
+
+        @Override
+        public String getDescription() {
+            return "roundRobin(total=" + totalCount + ",localLimit=" + localLimit + ")";
         }
 
         /** @return implementation field getter */

@@ -473,6 +473,10 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
             this.logger = logger;
         }
 
+        public ConfigDeployment.PathModifier getPathModifier() {
+            return pathModifier;
+        }
+
         public synchronized PersistentFileWriter createWriter(String head) {
             try {
                 String path = createPath(head);

@@ -120,11 +120,12 @@ public class ClusterKeyAggregation extends ClusterDeployment<Config, ActorPlacem
         public ActorRef ref;
         public String name;
         public String className;
-        public String stateType = "";
+        public String stateType;
         public long processCount;
         public String outputFileHeader;
 
         public int mailboxSize;
+        public int mailboxThreshold;
         public boolean mailboxPersistable;
         public List<HistogramStat> histograms;
 
@@ -135,14 +136,22 @@ public class ClusterKeyAggregation extends ClusterDeployment<Config, ActorPlacem
 
         public ActorStat set(Actor actor) {
             ref = actor;
-            if (actor instanceof ActorKeyAggregation) {
-                ActorKeyAggregation a = (ActorKeyAggregation) actor;
+            if (actor != null) {
                 name = actor.getName();
                 className = actor.getClass().getName();
-                outputFileHeader = a.getOutputFileHeader();
+                if (actor instanceof ActorKeyAggregation) {
+                    ActorKeyAggregation a = (ActorKeyAggregation) actor;
 
-                setMailbox(a, a.getMailboxAsKeyAggregation());
-                setState(a.getState());
+                    MailboxPersistable.PersistentFileManager m = MailboxPersistable.getPersistentFile(a.getSystem(), a::persistMailboxPath);
+                    outputFileHeader = m.getPathModifier().expandPath(a.getOutputFileHeader());
+
+                    setMailbox(a, a.getMailboxAsKeyAggregation());
+                    setState(a.getState());
+                } else {
+                    stateType = "";
+                }
+            } else {
+                stateType = "";
             }
             return this;
         }
@@ -150,6 +159,7 @@ public class ClusterKeyAggregation extends ClusterDeployment<Config, ActorPlacem
         public void setMailbox(ActorKeyAggregation actor, MailboxKeyAggregation mailbox) {
             mailboxSize = mailbox.size();
             mailboxPersistable = mailbox.getMailbox() instanceof MailboxPersistable;
+            mailboxThreshold = mailbox.getThreshold();
 
             histograms = new ArrayList<>(mailbox.getEntrySize());
             for (MailboxKeyAggregation.HistogramEntry e : mailbox.getEntries()) {
@@ -187,6 +197,7 @@ public class ClusterKeyAggregation extends ClusterDeployment<Config, ActorPlacem
             json.put("processCount", toJson(valueConverter, processCount));
             json.put("outputFileHeader", toJson(valueConverter, outputFileHeader, ""));
             json.put("mailboxSize", toJson(valueConverter, (long) mailboxSize));
+            json.put("mailboxThreshold", toJson(valueConverter, (long) mailboxThreshold));
             json.put("mailboxPersistable", toJson(valueConverter, mailboxPersistable));
             json.put("histogram", toJson(valueConverter, histograms, new ArrayList<>()));
             json.put("maxHeight", toJson(valueConverter, (long) maxHeight));
@@ -284,15 +295,7 @@ public class ClusterKeyAggregation extends ClusterDeployment<Config, ActorPlacem
             if (path == null) {
                 return null;
             } else {
-                StringBuilder buf = new StringBuilder();
-                for (boolean l : path.toFlags()) {
-                    if (l) {
-                        buf.append("1");
-                    } else {
-                        buf.append("0");
-                    }
-                }
-                return buf.toString();
+                return path.toBinaryString();
             }
         }
 

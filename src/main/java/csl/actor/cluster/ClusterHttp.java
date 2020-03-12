@@ -147,7 +147,9 @@ public class ClusterHttp {
 
                 FullHttpResponse res = res(req.protocolVersion(), path, query);
                 res.headers()
-                        .set(HttpHeaderNames.CONTENT_TYPE, HttpHeaderValues.APPLICATION_JSON);
+                        .set(HttpHeaderNames.CONTENT_TYPE, HttpHeaderValues.APPLICATION_JSON)
+                        .set(HttpHeaderNames.ACCESS_CONTROL_ALLOW_ORIGIN, "*");
+
                 boolean ka = supportKeepAlive && HttpUtil.isKeepAlive(req);
                 if (ka) {
                     res.headers().setInt(HttpHeaderNames.CONTENT_LENGTH, res.content().readableBytes());

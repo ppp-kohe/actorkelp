@@ -685,5 +685,13 @@ public interface KeyAggregationRoutingSplit {
             }
             return Integer.compare(d1, d2);
         }
+
+        public String toBinaryString() {
+            StringBuilder buf = new StringBuilder();
+            for (boolean b : toFlags()) {
+                buf.append(b ? "1" : "0");
+            }
+            return buf.toString();
+        }
     }
 }

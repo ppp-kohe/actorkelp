@@ -1018,13 +1018,15 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
 
     public static class SystemStats implements Serializable, ClusterHttp.ToJson {
         public int throughput;
+        public int threads;
         public String systemToString;
-        public String placementStrategyToString;
+        public String placementStrategy;
 
         public SystemStats set(ActorPlacementForCluster<?> a) {
             throughput = ((ActorSystemRemote) a.getSystem()).getLocalSystem().getThroughput();
             systemToString = a.getSystem().toString();
-            placementStrategyToString = a.getStrategy().toString();
+            placementStrategy = a.getStrategy().getDescription();
+            threads = a.getSystem().getThreads();
             return this;
         }
 
@@ -1032,9 +1034,10 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         public Map<String, Object> toJson(Function<Object, Object> valueConverter) {
             Map<String, Object> json = new LinkedHashMap<>();
             json.put("throughput", toJson(valueConverter, (long) throughput));
+            json.put("threads", toJson(valueConverter, (long) threads));
             json.put("systemToString", toJson(valueConverter, systemToString, ""));
-            json.put("placementStrategyToString", toJson(valueConverter,
-                    placementStrategyToString, ""));
+            json.put("placementStrategy", toJson(valueConverter,
+                    placementStrategy, ""));
             return json;
         }
     }
