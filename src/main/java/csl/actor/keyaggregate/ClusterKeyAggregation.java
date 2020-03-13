@@ -3,10 +3,7 @@ package csl.actor.keyaggregate;
 import csl.actor.Actor;
 import csl.actor.ActorRef;
 import csl.actor.CallableMessage;
-import csl.actor.cluster.ClusterDeployment;
-import csl.actor.cluster.ClusterHttp;
-import csl.actor.cluster.MailboxPersistable;
-import csl.actor.cluster.ResponsiveCalls;
+import csl.actor.cluster.*;
 import csl.actor.remote.ActorAddress;
 import csl.actor.remote.ActorRefRemote;
 
@@ -129,6 +126,8 @@ public class ClusterKeyAggregation extends ClusterDeployment<Config, ActorPlacem
         public boolean mailboxPersistable;
         public List<HistogramStat> histograms;
 
+        public ActorRef nextStage;
+
         //router
         public int maxHeight;
         public int height;
@@ -149,6 +148,9 @@ public class ClusterKeyAggregation extends ClusterDeployment<Config, ActorPlacem
                     setState(a.getState());
                 } else {
                     stateType = "";
+                }
+                if (actor instanceof PhaseShift.StageSupported) {
+                    nextStage = ((PhaseShift.StageSupported) actor).nextStage();
                 }
             } else {
                 stateType = "";
@@ -199,6 +201,7 @@ public class ClusterKeyAggregation extends ClusterDeployment<Config, ActorPlacem
             json.put("mailboxSize", toJson(valueConverter, (long) mailboxSize));
             json.put("mailboxThreshold", toJson(valueConverter, (long) mailboxThreshold));
             json.put("mailboxPersistable", toJson(valueConverter, mailboxPersistable));
+            json.put("nextStage", toJson(valueConverter, nextStage, ""));
             json.put("histogram", toJson(valueConverter, histograms, new ArrayList<>()));
             json.put("maxHeight", toJson(valueConverter, (long) maxHeight));
             json.put("height", toJson(valueConverter, (long) height));

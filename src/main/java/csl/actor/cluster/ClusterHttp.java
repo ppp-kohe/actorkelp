@@ -15,6 +15,7 @@ import io.netty.channel.socket.SocketChannel;
 import io.netty.handler.codec.http.*;
 import io.netty.handler.ssl.SslContext;
 
+import java.io.Closeable;
 import java.lang.reflect.*;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
@@ -29,7 +30,7 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
-public class ClusterHttp {
+public class ClusterHttp implements Closeable {
     protected ClusterDeployment<?,?> deployment;
     protected Map<String, List<HttpMethod>> methods;
     protected HttpServer server;
@@ -67,6 +68,10 @@ public class ClusterHttp {
                 .setHost(host).setPort(port)
                 .startWithoutWait();
         getLogger().log(logHttp, logColorHttp, "http-server started: %s:%d methods=%,d", host, port, methods.size());
+    }
+
+    public void close() {
+        server.close();
     }
 
     public ClusterDeployment<?, ?> getDeployment() {
@@ -462,7 +467,9 @@ public class ClusterHttp {
     }
 
     public void write(Consumer<String> out, Object json) {
-        if (json instanceof List<?>) {
+        if (json == null) {
+            out.accept("null");
+        } else if (json instanceof List<?>) {
             out.accept("[");
             boolean first = true;
             for (Object o : (List<?>) json) {

@@ -81,7 +81,8 @@ public class KryoBuilder {
         register(kryo, getBaseClasses());
 
         kryo.register(SerializedLambda.class);
-        kryo.register(ClosureSerializer.Closure.class, new PatchedClosureSerializer());
+        kryo.register(ClosureSerializer.Closure.class, new ClosureSerializer());
+        //kryo.register(ClosureSerializer.Closure.class, new PatchedClosureSerializer());
 
         registerObjectStream(kryo, EnumMap.class);
         registerObjectStream(kryo, SimpleTimeZone.class);

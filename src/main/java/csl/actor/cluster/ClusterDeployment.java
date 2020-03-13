@@ -863,6 +863,9 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         }
         destroyClusterProcesses();
         getSystem().close();
+        if (http != null) {
+            http.close();
+        }
     }
 
     /////////
