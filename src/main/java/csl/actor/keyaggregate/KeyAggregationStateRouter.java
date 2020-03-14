@@ -7,6 +7,7 @@ import csl.actor.cluster.PhaseShift;
 import csl.actor.keyaggregate.KeyAggregationRoutingSplit.SplitOrMergeContextDefault;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
 public class KeyAggregationStateRouter implements ActorKeyAggregation.State {
@@ -20,8 +21,8 @@ public class KeyAggregationStateRouter implements ActorKeyAggregation.State {
     protected volatile boolean needClearHistory;
     protected volatile boolean logAfterParallelRouting;
 
-    protected Map<Object, KeyAggregationPhaseEntry> phase = new HashMap<>();
-    protected Set<ActorRef> canceled = new HashSet<>();
+    protected Map<Object, KeyAggregationPhaseEntry> phase = new ConcurrentHashMap<>();
+    protected Set<ActorRef> canceled = Collections.synchronizedSet(new HashSet<>());
 
     protected AtomicLong processCount = new AtomicLong();
 
@@ -297,7 +298,11 @@ public class KeyAggregationStateRouter implements ActorKeyAggregation.State {
         }
     }
 
+    public Map<Object, KeyAggregationPhaseEntry> getPhase() {
+        return new HashMap<>(phase);
+    }
+
     public Set<ActorRef> getCanceled() {
-        return canceled;
+        return new HashSet<>(canceled);
     }
 }

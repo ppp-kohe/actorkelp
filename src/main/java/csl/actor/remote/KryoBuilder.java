@@ -317,7 +317,8 @@ public class KryoBuilder {
                 FileSplitter.FileSplit.class,
                 ClusterKeyAggregation.RouterSplitStat.class,
                 ClusterKeyAggregation.HistogramStat.class,
-                ClusterKeyAggregation.ActorStat.class);
+                ClusterKeyAggregation.ActorStat.class,
+                ClusterKeyAggregation.PhaseStat.class);
     }
 
     public interface SerializerFunction {

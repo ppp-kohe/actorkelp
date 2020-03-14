@@ -300,9 +300,11 @@ public class PhaseShift implements CallableMessage.CallableMessageConsumer<Actor
         }
 
         public CompletableFuture<PhaseCompleted> start(Object key, ActorRef initialTarget) {
-            CompletableFuture<PhaseCompleted> c = completed.computeIfAbsent(key, PhaseTerminalEntry::new)
-                    .future();
-            initialTarget.tell(createPhaseShift(key), this);
+            PhaseTerminalEntry e = completed.computeIfAbsent(key, PhaseTerminalEntry::new);
+            CompletableFuture<PhaseCompleted> c = e.start();
+            PhaseShift shift = createPhaseShift(key);
+            e.setStartTime(shift.getStartTime());
+            initialTarget.tell(shift, this);
             return c;
         }
 
@@ -332,6 +334,7 @@ public class PhaseShift implements CallableMessage.CallableMessageConsumer<Actor
     public static class PhaseTerminalEntry {
         protected Object key;
         protected int count;
+        protected Instant startTime;
         protected CompletableFuture<PhaseCompleted> future;
 
         public PhaseTerminalEntry(Object key) {
@@ -340,6 +343,14 @@ public class PhaseShift implements CallableMessage.CallableMessageConsumer<Actor
 
         public Object getKey() {
             return key;
+        }
+
+        public void setStartTime(Instant startTime) {
+            this.startTime = startTime;
+        }
+
+        public Instant getStartTime() {
+            return startTime;
         }
 
         public synchronized int getNextCount() {
@@ -358,11 +369,16 @@ public class PhaseShift implements CallableMessage.CallableMessageConsumer<Actor
             return future;
         }
 
-        public synchronized void complete(PhaseCompleted c) {
-            if (future != null) {
-                future.complete(c);
-                future = null;
+        public synchronized CompletableFuture<PhaseCompleted> start() {
+            if (future == null || future.isDone()) {
+                startTime = Instant.now();
+                future = new CompletableFuture<>();
             }
+            return future;
+        }
+
+        public synchronized void complete(PhaseCompleted c) {
+            future().complete(c);
         }
     }
 

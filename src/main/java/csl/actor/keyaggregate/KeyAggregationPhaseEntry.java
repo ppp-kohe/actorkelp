@@ -5,12 +5,13 @@ import csl.actor.ActorRef;
 import csl.actor.cluster.PhaseShift;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class KeyAggregationPhaseEntry {
     protected Object key;
     protected PhaseShift origin;
     protected ActorRef sender;
-    protected Map<ActorRef, Boolean> finished = new HashMap<>();
+    protected Map<ActorRef, Boolean> finished = new ConcurrentHashMap<>();
 
     public KeyAggregationPhaseEntry(Object key) {
         this.key = key;
@@ -18,6 +19,18 @@ public class KeyAggregationPhaseEntry {
 
     public Object getKey() {
         return key;
+    }
+
+    public ActorRef getSender() {
+        return sender;
+    }
+
+    public PhaseShift getOrigin() {
+        return origin;
+    }
+
+    public Map<ActorRef, Boolean> getFinished() {
+        return finished;
     }
 
     public void setOriginAndSender(PhaseShift origin, ActorRef sender) {

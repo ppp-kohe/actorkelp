@@ -132,6 +132,9 @@ public class ClusterKeyAggregation extends ClusterDeployment<Config, ActorPlacem
         public int maxHeight;
         public int height;
         public boolean parallelRouting;
+        public List<ActorRef> canceled;
+        //router or PhaseTerminalActor
+        public List<PhaseStat> phase;
 
         public ActorStat set(Actor actor) {
             ref = actor;
@@ -146,6 +149,13 @@ public class ClusterKeyAggregation extends ClusterDeployment<Config, ActorPlacem
 
                     setMailbox(a, a.getMailboxAsKeyAggregation());
                     setState(a.getState());
+                } else if (actor instanceof PhaseShift.PhaseTerminalActor) {
+                    stateType = "phaseTerminal";
+
+                    PhaseShift.PhaseTerminalActor a = (PhaseShift.PhaseTerminalActor) actor;
+                    phase = a.getCompleted().values().stream()
+                            .map(e -> new PhaseStat().set(a, e))
+                            .collect(Collectors.toList());
                 } else {
                     stateType = "";
                 }
@@ -177,6 +187,10 @@ public class ClusterKeyAggregation extends ClusterDeployment<Config, ActorPlacem
                 maxHeight = router.getMaxHeight();
                 height = router.getHeight();
                 parallelRouting = !router.isNonParallelRouting();
+                canceled = new ArrayList<>(router.getCanceled());
+                phase = router.getPhase().values().stream()
+                    .map(v -> new PhaseStat().set(v))
+                    .collect(Collectors.toList());
 
             } else if (state instanceof ActorKeyAggregation.StateUnit) {
                 stateType = "unit";
@@ -206,6 +220,52 @@ public class ClusterKeyAggregation extends ClusterDeployment<Config, ActorPlacem
             json.put("maxHeight", toJson(valueConverter, (long) maxHeight));
             json.put("height", toJson(valueConverter, (long) height));
             json.put("parallelRouting", toJson(valueConverter, parallelRouting));
+            json.put("canceled", toJson(valueConverter, canceled));
+            json.put("phase", toJson(valueConverter, phase));
+            return json;
+        }
+    }
+
+    public static class PhaseStat implements Serializable, ClusterHttp.ToJson {
+        public Object key;
+        public Instant startTime;
+        public Instant endTime;
+        public ActorRef target;
+        public Map<ActorRef, Boolean> finished;
+
+        public PhaseStat set(KeyAggregationPhaseEntry e) {
+            key = e.getKey();
+            startTime = e.getOrigin().getStartTime();
+            target = e.getOrigin().getTarget();
+            finished = new HashMap<>(e.getFinished());
+            return this;
+        }
+
+        public PhaseStat set(PhaseShift.PhaseTerminalActor a, PhaseShift.PhaseTerminalEntry e) {
+            key = e.getKey();
+            startTime = e.getStartTime();
+            finished = new HashMap<>();
+            target = a;
+            if (e.future().isDone()) {
+                try {
+                    PhaseShift.PhaseCompleted completed = e.future().get();
+                    finished.put(completed.getActor(), true);
+                    endTime = completed.getTime();
+                } catch (Exception ex) {
+                    throw new RuntimeException(ex);
+                }
+            }
+            return this;
+        }
+
+        @Override
+        public Map<String, Object> toJson(Function<Object, Object> valueConverter) {
+            Map<String,Object> json = new LinkedHashMap<>();
+            json.put("key", toJson(valueConverter, key));
+            json.put("startTime", toJson(valueConverter, startTime));
+            json.put("endTime", toJson(valueConverter, endTime));
+            json.put("target", toJson(valueConverter, target));
+            json.put("finished", toJson(valueConverter, finished));
             return json;
         }
     }
