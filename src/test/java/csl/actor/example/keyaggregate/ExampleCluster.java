@@ -25,7 +25,8 @@ public class ExampleCluster {
         ClusterKeyAggregation d = ClusterKeyAggregation.create();
         d.deploy(d.master()
                     .edit(c -> c.getDeploymentConfig().baseDir = dir)
-                    .edit(c -> c.getAppConfig().routerAutoMerge = false),
+                    .edit(c -> c.getAppConfig().routerAutoMerge = false)
+                    .edit(c -> c.getDeploymentConfig().httpHost = "0.0.0.0"),
                 d.node("localhost", 30001)
                     .edit(c -> c.getDeploymentConfig().baseDir = dir)
                     .edit(c -> c.getDeploymentConfig().java = "java %s %s %s"),

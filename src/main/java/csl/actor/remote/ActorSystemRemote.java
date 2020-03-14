@@ -16,6 +16,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
 
 public class ActorSystemRemote implements ActorSystem {
@@ -176,13 +177,14 @@ public class ActorSystemRemote implements ActorSystem {
     public void send(Message<?> message) {
         ActorRef target = message.getTarget();
         if (target instanceof ActorRefRemote) {
-            ActorAddress addr = ((ActorRefRemote) target).getAddress().getHostAddress();
+            ActorAddress addrActor = ((ActorRefRemote) target).getAddress();
+            ActorAddress addrHost = addrActor.getHostAddress();
             ActorAddress local = getServerAddress();
-            if (local != null && local.equals(addr)) { //localhost
+            if (local != null && local.equals(addrHost)) { //localhost
                 localSystem.send(new Message<>(localize(target), message.getSender(), message.getData()));
             } else {
-                getLogger().log(debugLogMsg, debugLogMsgColorSend, "%s: client tell to remote %s", this, addr);
-                ConnectionActor a = connectionMap.computeIfAbsent(addr, k -> createConnection(addr));
+                getLogger().log(debugLogMsg, debugLogMsgColorSend, "%s: client tell to remote %s", this, addrActor);
+                ConnectionActor a = connectionMap.computeIfAbsent(addrActor, k -> createConnection(addrActor));
                 if (a != null) {
                     a.tell(message);
                 } else {
@@ -225,7 +227,7 @@ public class ActorSystemRemote implements ActorSystem {
     }
 
     public int receive(Object msg) {
-        deliverer.tell(msg);
+        deliverer.deliver(msg);
         if (msg instanceof TransferredMessage) {
             return ((TransferredMessage) msg).id;
         } else {
@@ -569,7 +571,7 @@ public class ActorSystemRemote implements ActorSystem {
 
     public static class MessageDeliveringActor extends Actor {
         protected ActorSystemRemote remote;
-        protected long receiveMessages;
+        protected AtomicLong receiveMessages = new AtomicLong();
 
         public MessageDeliveringActor(ActorSystemRemote system) {
             super(system, MessageDeliveringActor.class.getName());
@@ -578,7 +580,10 @@ public class ActorSystemRemote implements ActorSystem {
 
         @Override
         protected void processMessage(Message<?> message) {
-            Object msg = message.getData();
+            deliver(message.getData());
+        }
+
+        public void deliver(Object msg) {
             if (msg instanceof TransferredMessage) {
                 msg = ((TransferredMessage) msg).body;
             }
@@ -594,7 +599,7 @@ public class ActorSystemRemote implements ActorSystem {
                             msgElem.getSender(),
                             msgElem.getData()));
                     ++i;
-                    ++receiveMessages;
+                    receiveMessages.incrementAndGet();
                 }
             } else if (msg instanceof Message<?>) {
                 Message<?> m = (Message<?>)  msg;
@@ -603,7 +608,7 @@ public class ActorSystemRemote implements ActorSystem {
                         remote.localize(m.getTarget()),
                         m.getSender(),
                         m.getData()));
-                ++receiveMessages;
+                receiveMessages.incrementAndGet();
             } else {
                 logMsg("%s receive unintended object: %s", this, msg);
             }
@@ -620,7 +625,7 @@ public class ActorSystemRemote implements ActorSystem {
         }
 
         public long getReceiveMessages() {
-            return receiveMessages;
+            return receiveMessages.get();
         }
     }
 

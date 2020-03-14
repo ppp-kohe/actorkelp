@@ -154,7 +154,7 @@ public class ActorBehaviorBuilder {
                 Object res;
                 ActorRef sender = message.getSender();
                 try {
-                    res = dataType.cast(d).call((ActorType) self, sender);
+                    res = new CallableMessage.CallableResponse<>(dataType.cast(d).call((ActorType) self, sender));
                 } catch (Throwable ex) {
                     res = new CallableMessage.CallableFailure(ex);
                 }
@@ -162,7 +162,9 @@ public class ActorBehaviorBuilder {
                     sender.tell(res, self);
                 }
                 return true;
-            } else if (d instanceof CallableMessage.CallableResponseVoid) { //the guard for Void response
+            } else if (d instanceof CallableMessage.CallableResponseVoid ||
+                    (d instanceof CallableMessage.CallableResponse &&
+                    ((CallableMessage.CallableResponse<?>) d).getValue() instanceof CallableMessage.CallableResponseVoid)) { //the guard for Void response
                 //nothing
                 return true;
             }

@@ -950,13 +950,19 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
     }
 
     public <T> T placeGet(ActorAddress.ActorAddressRemote host, CallableMessage<PlaceType, T> getter) {
+        ActorAddress.ActorAddressRemoteActor addr;
+        try {
+            addr = this.<ActorAddress.ActorAddressRemoteActor>placeGet(mp -> mp.getEntry(host).getPlacementActor());
+        } catch (Exception ex) {
+            throw new RuntimeException("placeGet.1: getPlacementActor", ex);
+        }
         try {
             return ResponsiveCalls.sendTask(getSystem(),
-                    this.<ActorAddress.ActorAddressRemoteActor>placeGet(mp -> mp.getEntry(host).getPlacementActor()),
+                    addr,
                     getter)
                     .get(10, TimeUnit.SECONDS);
         } catch (Exception ex) {
-            throw new RuntimeException(ex);
+            throw new RuntimeException("placeGet.2: sendTask " + addr, ex);
         }
     }
 
