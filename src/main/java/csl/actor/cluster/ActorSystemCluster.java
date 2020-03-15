@@ -278,6 +278,8 @@ public class ActorSystemCluster extends ActorSystemRemote implements MailboxPers
         protected boolean isSpecial(Object msg) {
             if (msg instanceof TransferredMessage) {
                 return isSpecial(((TransferredMessage) msg).body);
+            } else if (msg instanceof Message<?>) {
+                return isSpecial(((Message<?>) msg).getData());
             } else {
                 return ((ObjectMessageClientThrottle) getClient()).isSpecial(msg);
             }
