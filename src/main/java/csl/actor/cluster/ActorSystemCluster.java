@@ -40,18 +40,13 @@ public class ActorSystemCluster extends ActorSystemRemote implements MailboxPers
     }
 
     @Override
-    public boolean isSpecialMessage(Message<?> message) {
-        if (message != null) {
-            Object data = message.getData();
-            return super.isSpecialMessage(message) ||
-                    data instanceof ActorPlacement.AddressList ||
-                    data instanceof ClusterDeployment.ConfigSet ||
-                    data instanceof PhaseShift ||
-                    data instanceof PhaseShift.PhaseShiftIntermediate ||
-                    data instanceof PhaseShift.PhaseCompleted;
-        } else {
-            return false;
-        }
+    public boolean isSpecialMessageData(Object data) {
+        return super.isSpecialMessageData(data)||
+                data instanceof ActorPlacement.AddressList ||
+                data instanceof ClusterDeployment.ConfigSet ||
+                data instanceof PhaseShift ||
+                data instanceof PhaseShift.PhaseShiftIntermediate ||
+                data instanceof PhaseShift.PhaseCompleted;
     }
 
     @Override
@@ -244,6 +239,10 @@ public class ActorSystemCluster extends ActorSystemRemote implements MailboxPers
         protected ObjectMessageConnection initConnection() {
             return new ObjectMessageConnectionThrottle(this);
         }
+
+        public boolean isSpecial(Object msg) {
+            return system.isSpecialMessageData(msg);
+        }
     }
 
     public static class ObjectMessageConnectionThrottle extends ObjectMessageClient.ObjectMessageConnection {
@@ -280,7 +279,7 @@ public class ActorSystemCluster extends ActorSystemRemote implements MailboxPers
             if (msg instanceof TransferredMessage) {
                 return isSpecial(((TransferredMessage) msg).body);
             } else {
-                return msg instanceof CallableMessage;
+                return ((ObjectMessageClientThrottle) getClient()).isSpecial(msg);
             }
         }
     }

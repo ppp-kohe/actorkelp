@@ -363,15 +363,18 @@ public class ActorSystemRemote implements ActorSystem {
 
     public boolean isSpecialMessage(Message<?> message) {
         if (message != null) {
-            Object data = message.getData();
-            return data instanceof ConnectionCloseNotice ||
-                    data instanceof CallableMessage ||
-                    data instanceof CallableMessage.CallableFailure ||
-                    data instanceof CallableMessage.CallableResponse<?> ||
-                    data instanceof CallableMessage.CallableResponseVoid;
+            return isSpecialMessageData(message.getData());
         } else {
             return false;
         }
+    }
+
+    public boolean isSpecialMessageData(Object data) {
+        return data instanceof ConnectionCloseNotice ||
+                data instanceof CallableMessage ||
+                data instanceof CallableMessage.CallableFailure ||
+                data instanceof CallableMessage.CallableResponse<?> ||
+                data instanceof CallableMessage.CallableResponseVoid;
     }
 
     public static class ConnectionActor extends Actor {
