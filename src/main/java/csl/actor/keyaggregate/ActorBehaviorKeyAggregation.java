@@ -13,6 +13,7 @@ import java.math.RoundingMode;
 import java.util.*;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
+import java.util.function.Function;
 
 public class ActorBehaviorKeyAggregation {
     @SuppressWarnings("unchecked")
@@ -100,16 +101,19 @@ public class ActorBehaviorKeyAggregation {
         }
     }
 
-    public static class ActorBehaviorMatchKey1<KeyType, ValueType1> extends ActorBehaviorMatchKey<KeyType> {
-        protected ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType1> keyExtractorFromValue1;
+    public static class ActorBehaviorMatchKey1<KeyType, ParamType1, ValueType1> extends ActorBehaviorMatchKey<KeyType> {
+        protected ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ParamType1> keyExtractorFromValue1;
+        protected Function<ParamType1, ValueType1> valueExtractorFromValue1;
 
         protected BiConsumer<KeyType, ValueType1> handler;
 
         public ActorBehaviorMatchKey1(int matchKeyEntryId, KeyHistograms.KeyComparator<KeyType> keyComparator,
-                                      ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType1> keyExtractorFromValue1,
+                                      ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ParamType1> keyExtractorFromValue1,
+                                      Function<ParamType1, ValueType1> valueExtractorFromValue1,
                                       BiConsumer<KeyType, ValueType1> handler) {
             super(matchKeyEntryId, 1, keyComparator);
             this.keyExtractorFromValue1 = keyExtractorFromValue1;
+            this.valueExtractorFromValue1 = valueExtractorFromValue1;
             this.handler = handler;
         }
 
@@ -125,8 +129,9 @@ public class ActorBehaviorKeyAggregation {
             KeyType key;
             Comparable<?> pos;
             if (keyExtractorFromValue1.matchValue(value)) {
-                key = keyExtractorFromValue1.toKey((ValueType1) value);
+                key = keyExtractorFromValue1.toKey((ParamType1) value);
                 pos = 0;
+                value = valueExtractorFromValue1.apply((ParamType1) value);
             } else {
                 return false;
             }
@@ -159,7 +164,7 @@ public class ActorBehaviorKeyAggregation {
         @Override
         public Object extractKeyFromValue(Object value, Object position) {
             if (position.equals(0)) {
-                return keyExtractorFromValue1.toKey((ValueType1) value);
+                return keyExtractorFromValue1.toKey((ParamType1) value);
             } else {
                 return null;
             }
@@ -225,19 +230,26 @@ public class ActorBehaviorKeyAggregation {
         }
     }
 
-    public static class ActorBehaviorMatchKey2<KeyType, ValueType1, ValueType2> extends ActorBehaviorMatchKey<KeyType> {
-        protected ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType1> keyExtractorFromValue1;
-        protected ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType2> keyExtractorFromValue2;
+    public static class ActorBehaviorMatchKey2<KeyType, ParamType1, ParamType2, ValueType1, ValueType2> extends ActorBehaviorMatchKey<KeyType> {
+        protected ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ParamType1> keyExtractorFromValue1;
+        protected ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ParamType2> keyExtractorFromValue2;
+        protected Function<ParamType1, ValueType1> valueExtractorFromValue1;
+        protected Function<ParamType2, ValueType2> valueExtractorFromValue2;
 
         protected TriConsumer<KeyType, ValueType1, ValueType2> handler;
 
+
         public ActorBehaviorMatchKey2(int matchKeyEntryId, KeyHistograms.KeyComparator<KeyType> keyComparator,
-                                      ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType1> keyExtractorFromValue1,
-                                      ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType2> keyExtractorFromValue2,
+                                      ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ParamType1> keyExtractorFromValue1,
+                                      ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ParamType2> keyExtractorFromValue2,
+                                      Function<ParamType1, ValueType1> valueExtractorFromValue1,
+                                      Function<ParamType2, ValueType2> valueExtractorFromValue2,
                                       TriConsumer<KeyType, ValueType1, ValueType2> handler) {
             super(matchKeyEntryId, 2, keyComparator);
             this.keyExtractorFromValue1 = keyExtractorFromValue1;
             this.keyExtractorFromValue2 = keyExtractorFromValue2;
+            this.valueExtractorFromValue1 = valueExtractorFromValue1;
+            this.valueExtractorFromValue2 = valueExtractorFromValue2;
             this.handler = handler;
         }
 
@@ -253,10 +265,12 @@ public class ActorBehaviorKeyAggregation {
             KeyType key;
             Comparable<?> pos;
             if (keyExtractorFromValue1.matchValue(value)) {
-                key = keyExtractorFromValue1.toKey((ValueType1) value);
+                key = keyExtractorFromValue1.toKey((ParamType1) value);
                 pos = 0;
+                value = valueExtractorFromValue1.apply((ParamType1) value);
             } else if (keyExtractorFromValue2.matchValue(value)) {
-                key = keyExtractorFromValue2.toKey((ValueType2) value);
+                key = keyExtractorFromValue2.toKey((ParamType2) value);
+                value = valueExtractorFromValue2.apply((ParamType2) value);
                 pos = 1;
             } else {
                 return false;
@@ -292,9 +306,9 @@ public class ActorBehaviorKeyAggregation {
         @Override
         public Object extractKeyFromValue(Object value, Object position) {
             if (position.equals(0)) {
-                return keyExtractorFromValue1.toKey((ValueType1) value);
+                return keyExtractorFromValue1.toKey((ParamType1) value);
             } else if (position.equals(1)) {
-                return keyExtractorFromValue2.toKey((ValueType2) value);
+                return keyExtractorFromValue2.toKey((ParamType2) value);
             } else {
                 return null;
             }
@@ -361,22 +375,31 @@ public class ActorBehaviorKeyAggregation {
         }
     }
 
-    public static class ActorBehaviorMatchKey3<KeyType, ValueType1, ValueType2, ValueType3> extends ActorBehaviorMatchKey<KeyType> {
-        protected ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType1> keyExtractorFromValue1;
-        protected ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType2> keyExtractorFromValue2;
-        protected ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType3> keyExtractorFromValue3;
+    public static class ActorBehaviorMatchKey3<KeyType, ParamType1, ParamType2, ParamType3, ValueType1, ValueType2, ValueType3> extends ActorBehaviorMatchKey<KeyType> {
+        protected ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ParamType1> keyExtractorFromValue1;
+        protected ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ParamType2> keyExtractorFromValue2;
+        protected ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ParamType3> keyExtractorFromValue3;
+        protected Function<ParamType1, ValueType1> valueExtractorFromValue1;
+        protected Function<ParamType2, ValueType2> valueExtractorFromValue2;
+        protected Function<ParamType3, ValueType3> valueExtractorFromValue3;
 
         protected QuadConsumer<KeyType, ValueType1, ValueType2, ValueType3> handler;
 
         public ActorBehaviorMatchKey3(int matchKeyEntryId, KeyHistograms.KeyComparator<KeyType> keyComparator,
-                                      ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType1> keyExtractorFromValue1,
-                                      ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType2> keyExtractorFromValue2,
-                                      ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType3> keyExtractorFromValue3,
+                                      ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ParamType1> keyExtractorFromValue1,
+                                      ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ParamType2> keyExtractorFromValue2,
+                                      ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ParamType3> keyExtractorFromValue3,
+                                      Function<ParamType1, ValueType1> valueExtractorFromValue1,
+                                      Function<ParamType2, ValueType2> valueExtractorFromValue2,
+                                      Function<ParamType3, ValueType3> valueExtractorFromValue3,
                                       QuadConsumer<KeyType, ValueType1, ValueType2, ValueType3> handler) {
             super(matchKeyEntryId, 3, keyComparator);
             this.keyExtractorFromValue1 = keyExtractorFromValue1;
             this.keyExtractorFromValue2 = keyExtractorFromValue2;
             this.keyExtractorFromValue3 = keyExtractorFromValue3;
+            this.valueExtractorFromValue1 = valueExtractorFromValue1;
+            this.valueExtractorFromValue2 = valueExtractorFromValue2;
+            this.valueExtractorFromValue3 = valueExtractorFromValue3;
             this.handler = handler;
         }
 
@@ -392,14 +415,17 @@ public class ActorBehaviorKeyAggregation {
             KeyType key;
             Comparable<?> pos;
             if (keyExtractorFromValue1.matchValue(value)) {
-                key = keyExtractorFromValue1.toKey((ValueType1) value);
+                key = keyExtractorFromValue1.toKey((ParamType1) value);
                 pos = 0;
+                value = valueExtractorFromValue1.apply((ParamType1) value);
             } else if (keyExtractorFromValue2.matchValue(value)) {
-                key = keyExtractorFromValue2.toKey((ValueType2) value);
+                key = keyExtractorFromValue2.toKey((ParamType2) value);
                 pos = 1;
+                value = valueExtractorFromValue2.apply((ParamType2) value);
             } else if (keyExtractorFromValue3.matchValue(value)) {
-                key = keyExtractorFromValue3.toKey((ValueType3) value);
+                key = keyExtractorFromValue3.toKey((ParamType3) value);
                 pos = 2;
+                value = valueExtractorFromValue3.apply((ParamType3) value);
             } else {
                 return false;
             }
@@ -436,11 +462,11 @@ public class ActorBehaviorKeyAggregation {
         @Override
         public Object extractKeyFromValue(Object value, Object position) {
             if (position.equals(0)) {
-                return keyExtractorFromValue1.toKey((ValueType1) value);
+                return keyExtractorFromValue1.toKey((ParamType1) value);
             } else if (position.equals(1)) {
-                return keyExtractorFromValue2.toKey((ValueType2) value);
+                return keyExtractorFromValue2.toKey((ParamType2) value);
             } else if (position.equals(2)) {
-                return keyExtractorFromValue3.toKey((ValueType3) value);
+                return keyExtractorFromValue3.toKey((ParamType3) value);
             } else {
                 return null;
             }
@@ -513,25 +539,37 @@ public class ActorBehaviorKeyAggregation {
         }
     }
 
-    public static class ActorBehaviorMatchKey4<KeyType, ValueType1, ValueType2, ValueType3, ValueType4> extends ActorBehaviorMatchKey<KeyType> {
-        protected ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType1> keyExtractorFromValue1;
-        protected ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType2> keyExtractorFromValue2;
-        protected ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType3> keyExtractorFromValue3;
-        protected ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType4> keyExtractorFromValue4;
+    public static class ActorBehaviorMatchKey4<KeyType, ParamType1, ParamType2, ParamType3, ParamType4, ValueType1, ValueType2, ValueType3, ValueType4> extends ActorBehaviorMatchKey<KeyType> {
+        protected ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ParamType1> keyExtractorFromValue1;
+        protected ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ParamType2> keyExtractorFromValue2;
+        protected ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ParamType3> keyExtractorFromValue3;
+        protected ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ParamType4> keyExtractorFromValue4;
+        protected Function<ParamType1, ValueType1> valueExtractorFromValue1;
+        protected Function<ParamType2, ValueType2> valueExtractorFromValue2;
+        protected Function<ParamType3, ValueType3> valueExtractorFromValue3;
+        protected Function<ParamType4, ValueType4> valueExtractorFromValue4;
 
         protected QuintConsumer<KeyType, ValueType1, ValueType2, ValueType3, ValueType4> handler;
 
         public ActorBehaviorMatchKey4(int matchKeyEntryId, KeyHistograms.KeyComparator<KeyType> keyComparator,
-                                      ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType1> keyExtractorFromValue1,
-                                      ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType2> keyExtractorFromValue2,
-                                      ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType3> keyExtractorFromValue3,
-                                      ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType4> keyExtractorFromValue4,
+                                      ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ParamType1> keyExtractorFromValue1,
+                                      ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ParamType2> keyExtractorFromValue2,
+                                      ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ParamType3> keyExtractorFromValue3,
+                                      ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ParamType4> keyExtractorFromValue4,
+                                      Function<ParamType1, ValueType1> valueExtractorFromValue1,
+                                      Function<ParamType2, ValueType2> valueExtractorFromValue2,
+                                      Function<ParamType3, ValueType3> valueExtractorFromValue3,
+                                      Function<ParamType4, ValueType4> valueExtractorFromValue4,
                                       QuintConsumer<KeyType, ValueType1, ValueType2, ValueType3, ValueType4> handler) {
             super(matchKeyEntryId, 4, keyComparator);
             this.keyExtractorFromValue1 = keyExtractorFromValue1;
             this.keyExtractorFromValue2 = keyExtractorFromValue2;
             this.keyExtractorFromValue3 = keyExtractorFromValue3;
             this.keyExtractorFromValue4 = keyExtractorFromValue4;
+            this.valueExtractorFromValue1 = valueExtractorFromValue1;
+            this.valueExtractorFromValue2 = valueExtractorFromValue2;
+            this.valueExtractorFromValue3 = valueExtractorFromValue3;
+            this.valueExtractorFromValue4 = valueExtractorFromValue4;
             this.handler = handler;
         }
 
@@ -547,17 +585,21 @@ public class ActorBehaviorKeyAggregation {
             KeyType key;
             Comparable<?> pos;
             if (keyExtractorFromValue1.matchValue(value)) {
-                key = keyExtractorFromValue1.toKey((ValueType1) value);
+                key = keyExtractorFromValue1.toKey((ParamType1) value);
                 pos = 0;
+                value = valueExtractorFromValue1.apply((ParamType1) value);
             } else if (keyExtractorFromValue2.matchValue(value)) {
-                key = keyExtractorFromValue2.toKey((ValueType2) value);
+                key = keyExtractorFromValue2.toKey((ParamType2) value);
                 pos = 1;
+                value = valueExtractorFromValue2.apply((ParamType2) value);
             } else if (keyExtractorFromValue3.matchValue(value)) {
-                key = keyExtractorFromValue3.toKey((ValueType3) value);
+                key = keyExtractorFromValue3.toKey((ParamType3) value);
                 pos = 2;
+                value = valueExtractorFromValue3.apply((ParamType3) value);
             } else if (keyExtractorFromValue4.matchValue(value)) {
-                key = keyExtractorFromValue4.toKey((ValueType4) value);
+                key = keyExtractorFromValue4.toKey((ParamType4) value);
                 pos = 3;
+                value = valueExtractorFromValue4.apply((ParamType4) value);
             } else {
                 return false;
             }
@@ -596,13 +638,13 @@ public class ActorBehaviorKeyAggregation {
         @Override
         public Object extractKeyFromValue(Object value, Object position) {
             if (position.equals(0)) {
-                return keyExtractorFromValue1.toKey((ValueType1) value);
+                return keyExtractorFromValue1.toKey((ParamType1) value);
             } else if (position.equals(1)) {
-                return keyExtractorFromValue2.toKey((ValueType2) value);
+                return keyExtractorFromValue2.toKey((ParamType2) value);
             } else if (position.equals(2)) {
-                return keyExtractorFromValue3.toKey((ValueType3) value);
+                return keyExtractorFromValue3.toKey((ParamType3) value);
             } else if (position.equals(3)) {
-                return keyExtractorFromValue4.toKey((ValueType4) value);
+                return keyExtractorFromValue4.toKey((ParamType4) value);
             } else {
                 return null;
             }
@@ -679,15 +721,18 @@ public class ActorBehaviorKeyAggregation {
         }
     }
 
-    public static class ActorBehaviorMatchKeyList<KeyType, ValueType> extends ActorBehaviorMatchKey<KeyType> {
-        protected ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType> keyExtractorFromValue;
+    public static class ActorBehaviorMatchKeyList<KeyType, ParamType, ValueType> extends ActorBehaviorMatchKey<KeyType> {
+        protected ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ParamType> keyExtractorFromValue;
+        protected Function<ParamType, ValueType> valueExtractorFromValue;
         protected BiConsumer<KeyType, List<ValueType>> handler;
 
         public ActorBehaviorMatchKeyList(int matchKeyEntryId, int threshold, KeyHistograms.KeyComparator<KeyType> keyComparator,
-                                         ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType> keyExtractorFromValue,
+                                         ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ParamType> keyExtractorFromValue,
+                                         Function<ParamType, ValueType> valueExtractorFromValue,
                                          BiConsumer<KeyType, List<ValueType>> handler) {
             super(matchKeyEntryId, threshold, keyComparator);
             this.keyExtractorFromValue = keyExtractorFromValue;
+            this.valueExtractorFromValue = valueExtractorFromValue;
             this.handler = handler;
         }
 
@@ -696,7 +741,7 @@ public class ActorBehaviorKeyAggregation {
                 return this;
             } else {
                 return new ActorBehaviorMatchKeyListFuture<>(matchKeyEntryId, this.putRequiredSize, keyComparator,
-                        new ActorBehaviorBuilderKeyAggregation.KeyValuesReducerList<>(keyValuesReducers), keyExtractorFromValue, handler);
+                        new ActorBehaviorBuilderKeyAggregation.KeyValuesReducerList<>(keyValuesReducers), keyExtractorFromValue, valueExtractorFromValue, handler);
             }
         }
 
@@ -711,7 +756,8 @@ public class ActorBehaviorKeyAggregation {
             Object value = message.getData();
             KeyType key;
             if (keyExtractorFromValue.matchValue(value)) {
-                key = keyExtractorFromValue.toKey((ValueType) value);
+                key = keyExtractorFromValue.toKey((ParamType) value);
+                value = valueExtractorFromValue.apply((ParamType) value);
             } else {
                 return false;
             }
@@ -742,7 +788,7 @@ public class ActorBehaviorKeyAggregation {
         @SuppressWarnings("unchecked")
         @Override
         public Object extractKeyFromValue(Object value, Object position) {
-            return keyExtractorFromValue.toKey((ValueType) value);
+            return keyExtractorFromValue.toKey((ParamType) value);
         }
 
         /** @return implementation field getter */
@@ -806,20 +852,23 @@ public class ActorBehaviorKeyAggregation {
         }
     }
 
-    public static class ActorBehaviorMatchKeyListFuture<KeyType, ValueType>
+    public static class ActorBehaviorMatchKeyListFuture<KeyType, ParamType, ValueType>
             extends ActorBehaviorMatchKey<KeyType> {
         protected BiFunction<KeyType, List<ValueType>, Iterable<ValueType>> keyValuesReducer;
-        protected ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType> keyExtractorFromValue;
+        protected ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ParamType> keyExtractorFromValue;
+        protected Function<ParamType, ValueType> valueExtractorFromValue;
         protected BiConsumer<KeyType, List<ValueType>> handler;
 
         public ActorBehaviorMatchKeyListFuture(int matchKeyEntryId, int requiredSize,
                                                KeyHistograms.KeyComparator<KeyType> keyComparator,
                                                BiFunction<KeyType, List<ValueType>, Iterable<ValueType>> keyValuesReducer,
-                                               ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType> keyExtractorFromValue,
+                                               ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ParamType> keyExtractorFromValue,
+                                               Function<ParamType, ValueType> valueExtractorFromValue,
                                                BiConsumer<KeyType, List<ValueType>> handler) {
             super(matchKeyEntryId, requiredSize, keyComparator);
             this.keyValuesReducer = keyValuesReducer;
             this.keyExtractorFromValue = keyExtractorFromValue;
+            this.valueExtractorFromValue = valueExtractorFromValue;
             this.handler = handler;
         }
 
@@ -839,7 +888,8 @@ public class ActorBehaviorKeyAggregation {
             Object value = message.getData();
             KeyType key;
             if (keyExtractorFromValue.matchValue(value)) {
-                key = keyExtractorFromValue.toKey((ValueType) value);
+                key = keyExtractorFromValue.toKey((ParamType) value);
+                value = valueExtractorFromValue.apply((ParamType) value);
             } else {
                 return false;
             }
@@ -872,7 +922,7 @@ public class ActorBehaviorKeyAggregation {
         @SuppressWarnings("unchecked")
         @Override
         public Object extractKeyFromValue(Object value, Object position) {
-            return keyExtractorFromValue.toKey((ValueType) value);
+            return keyExtractorFromValue.toKey((ParamType) value);
         }
 
         @Override
@@ -975,14 +1025,15 @@ public class ActorBehaviorKeyAggregation {
         }
     }
 
-    public static class ActorBehaviorMatchKeyListFuturePhase<KeyType, ValueType>
-            extends ActorBehaviorMatchKeyListFuture<KeyType, ValueType> {
+    public static class ActorBehaviorMatchKeyListFuturePhase<KeyType, ParamType, ValueType>
+            extends ActorBehaviorMatchKeyListFuture<KeyType, ParamType, ValueType> {
 
         public ActorBehaviorMatchKeyListFuturePhase(int matchKeyEntryId, int requiredSize, KeyHistograms.KeyComparator<KeyType> keyComparator,
                                                     BiFunction<KeyType, List<ValueType>, Iterable<ValueType>> keyValuesReducer,
-                                                    ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType> keyExtractorFromValue,
+                                                    ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ParamType> keyExtractorFromValue,
+                                                    Function<ParamType, ValueType> valueExtractorFromValue,
                                                     BiConsumer<KeyType, List<ValueType>> handler) {
-            super(matchKeyEntryId, requiredSize, keyComparator, keyValuesReducer, keyExtractorFromValue, handler);
+            super(matchKeyEntryId, requiredSize, keyComparator, keyValuesReducer, keyExtractorFromValue, valueExtractorFromValue, handler);
         }
 
         @Override

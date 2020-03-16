@@ -11,49 +11,51 @@ import csl.actor.keyaggregate.MailboxKeyAggregation;
 import java.util.List;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
+import java.util.function.Function;
 
 public class DebugBehavior {
     public static class DebugFactory extends ActorBehaviorBuilderKeyAggregation.ActorBehaviorMatchKeyFactory {
         @Override
-        public <KeyType, ValueType1> ActorBehavior get1(int matchKeyEntryId, KeyHistograms.KeyComparator<KeyType> keyComparator, ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType1> keyExtractorFromValue1, BiConsumer<KeyType, ValueType1> handler) {
-            return new DebugMatchKey1<>(matchKeyEntryId, keyComparator, keyExtractorFromValue1, handler);
+        public <KeyType, ParamType1, ValueType1> ActorBehavior get1(int matchKeyEntryId, KeyHistograms.KeyComparator<KeyType> keyComparator, ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ParamType1> keyExtractorFromValue1, Function<ParamType1, ValueType1> valueExtractorFromValue1, BiConsumer<KeyType, ValueType1> handler) {
+            return new DebugMatchKey1<>(matchKeyEntryId, keyComparator, keyExtractorFromValue1, valueExtractorFromValue1, handler);
         }
 
         @Override
-        public <KeyType, ValueType1, ValueType2> ActorBehavior get2(int matchKeyEntryId, KeyHistograms.KeyComparator<KeyType> keyComparator, ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType1> keyExtractorFromValue1, ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType2> keyExtractorFromValue2, ActorBehaviorBuilderKeyAggregation.TriConsumer<KeyType, ValueType1, ValueType2> handler) {
-            return new DebugMatchKey2<>(matchKeyEntryId, keyComparator, keyExtractorFromValue1, keyExtractorFromValue2, handler);
+        public <KeyType, ParamType1, ParamType2, ValueType1, ValueType2> ActorBehavior get2(int matchKeyEntryId, KeyHistograms.KeyComparator<KeyType> keyComparator, ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ParamType1> keyExtractorFromValue1, ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ParamType2> keyExtractorFromValue2, Function<ParamType1, ValueType1> valueExtractorFromValue1, Function<ParamType2, ValueType2> valueExtractorFromValue2, ActorBehaviorBuilderKeyAggregation.TriConsumer<KeyType, ValueType1, ValueType2> handler) {
+            return new DebugMatchKey2<>(matchKeyEntryId, keyComparator, keyExtractorFromValue1, keyExtractorFromValue2, valueExtractorFromValue1, valueExtractorFromValue2, handler);
         }
 
         @Override
-        public <KeyType, ValueType1, ValueType2, ValueType3> ActorBehavior get3(int matchKeyEntryId, KeyHistograms.KeyComparator<KeyType> keyComparator, ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType1> keyExtractorFromValue1, ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType2> keyExtractorFromValue2, ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType3> keyExtractorFromValue3, ActorBehaviorBuilderKeyAggregation.QuadConsumer<KeyType, ValueType1, ValueType2, ValueType3> handler) {
-            return new DebugMatchKey3<>(matchKeyEntryId, keyComparator, keyExtractorFromValue1, keyExtractorFromValue2, keyExtractorFromValue3, handler);
+        public <KeyType, ParamType1, ParamType2, ParamType3, ValueType1, ValueType2, ValueType3> ActorBehavior get3(int matchKeyEntryId, KeyHistograms.KeyComparator<KeyType> keyComparator, ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ParamType1> keyExtractorFromValue1, ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ParamType2> keyExtractorFromValue2, ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ParamType3> keyExtractorFromValue3, Function<ParamType1, ValueType1> valueExtractorFromValue1, Function<ParamType2, ValueType2> valueExtractorFromValue2, Function<ParamType3, ValueType3> valueExtractorFromValue3, ActorBehaviorBuilderKeyAggregation.QuadConsumer<KeyType, ValueType1, ValueType2, ValueType3> handler) {
+            return new DebugMatchKey3<>(matchKeyEntryId, keyComparator, keyExtractorFromValue1, keyExtractorFromValue2, keyExtractorFromValue3, valueExtractorFromValue1, valueExtractorFromValue2, valueExtractorFromValue3, handler);
         }
 
         @Override
-        public <KeyType, ValueType1, ValueType2, ValueType3, ValueType4> ActorBehavior get4(int matchKeyEntryId, KeyHistograms.KeyComparator<KeyType> keyComparator, ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType1> keyExtractorFromValue1, ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType2> keyExtractorFromValue2, ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType3> keyExtractorFromValue3, ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType4> keyExtractorFromValue4, ActorBehaviorBuilderKeyAggregation.QuintConsumer<KeyType, ValueType1, ValueType2, ValueType3, ValueType4> handler) {
-            return new DebugMatchKey4<>(matchKeyEntryId, keyComparator, keyExtractorFromValue1, keyExtractorFromValue2, keyExtractorFromValue3, keyExtractorFromValue4, handler);
+        public <KeyType, ParamType1, ParamType2, ParamType3, ParamType4, ValueType1, ValueType2, ValueType3, ValueType4> ActorBehavior get4(int matchKeyEntryId, KeyHistograms.KeyComparator<KeyType> keyComparator, ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ParamType1> keyExtractorFromValue1, ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ParamType2> keyExtractorFromValue2, ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ParamType3> keyExtractorFromValue3, ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ParamType4> keyExtractorFromValue4, Function<ParamType1, ValueType1> valueExtractorFromValue1, Function<ParamType2, ValueType2> valueExtractorFromValue2, Function<ParamType3, ValueType3> valueExtractorFromValue3, Function<ParamType4, ValueType4> valueExtractorFromValue4, ActorBehaviorBuilderKeyAggregation.QuintConsumer<KeyType, ValueType1, ValueType2, ValueType3, ValueType4> handler) {
+            return new DebugMatchKey4<>(matchKeyEntryId, keyComparator, keyExtractorFromValue1, keyExtractorFromValue2, keyExtractorFromValue3, keyExtractorFromValue4, valueExtractorFromValue1, valueExtractorFromValue2, valueExtractorFromValue3, valueExtractorFromValue4, handler);
         }
 
         @Override
-        public <KeyType, ValueType> ActorBehaviorKeyAggregation.ActorBehaviorMatchKeyList<KeyType, ValueType> getList(int matchKeyEntryId, int threshold, KeyHistograms.KeyComparator<KeyType> keyComparator, ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType> keyExtractorFromValue, BiConsumer<KeyType, List<ValueType>> handler) {
-            return new DebugMatchKeyList<>(matchKeyEntryId, threshold, keyComparator, keyExtractorFromValue, handler);
+        public <KeyType, ParamType, ValueType> ActorBehaviorKeyAggregation.ActorBehaviorMatchKeyList<KeyType, ParamType, ValueType> getList(int matchKeyEntryId, int threshold, KeyHistograms.KeyComparator<KeyType> keyComparator, ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ParamType> keyExtractorFromValue, Function<ParamType, ValueType> valueExtractorFromValue, BiConsumer<KeyType, List<ValueType>> handler) {
+            return new DebugMatchKeyList<>(matchKeyEntryId, threshold, keyComparator, keyExtractorFromValue, valueExtractorFromValue, handler);
         }
 
         @Override
-        public <KeyType, ValueType> ActorBehaviorKeyAggregation.ActorBehaviorMatchKeyListFuture<KeyType, ValueType> getListFuture(int matchKeyEntryId, int requiredSize, KeyHistograms.KeyComparator<KeyType> keyComparator, BiFunction<KeyType, List<ValueType>, Iterable<ValueType>> keyValuesReducer, ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType> keyExtractorFromValue, BiConsumer<KeyType, List<ValueType>> handler) {
-            return new DebugMatchKeyListFuture<>(matchKeyEntryId, requiredSize, keyComparator, keyValuesReducer, keyExtractorFromValue, handler);
+        public <KeyType, ParamType, ValueType> ActorBehaviorKeyAggregation.ActorBehaviorMatchKeyListFuture<KeyType, ParamType, ValueType> getListFuture(int matchKeyEntryId, int requiredSize, KeyHistograms.KeyComparator<KeyType> keyComparator, BiFunction<KeyType, List<ValueType>, Iterable<ValueType>> keyValuesReducer, ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ParamType> keyExtractorFromValue, Function<ParamType, ValueType> valueExtractorFromValue, BiConsumer<KeyType, List<ValueType>> handler) {
+            return new DebugMatchKeyListFuture<>(matchKeyEntryId, requiredSize, keyComparator, keyValuesReducer, keyExtractorFromValue, valueExtractorFromValue, handler);
         }
 
         @Override
-        public <KeyType, ValueType> ActorBehaviorKeyAggregation.ActorBehaviorMatchKeyListFuturePhase<KeyType, ValueType> getListFuturePhase(int matchKeyEntryId, int requiredSize, KeyHistograms.KeyComparator<KeyType> keyComparator, BiFunction<KeyType, List<ValueType>, Iterable<ValueType>> keyValuesReducer, ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType> keyExtractorFromValue, BiConsumer<KeyType, List<ValueType>> handler) {
-            return new DebugMatchKeyListFuturePhase<>(matchKeyEntryId, requiredSize, keyComparator, keyValuesReducer, keyExtractorFromValue, handler);
+        public <KeyType, ParamType, ValueType> ActorBehaviorKeyAggregation.ActorBehaviorMatchKeyListFuturePhase<KeyType, ParamType, ValueType> getListFuturePhase(int matchKeyEntryId, int requiredSize, KeyHistograms.KeyComparator<KeyType> keyComparator, BiFunction<KeyType, List<ValueType>, Iterable<ValueType>> keyValuesReducer, ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ParamType> keyExtractorFromValue, Function<ParamType, ValueType> valueExtractorFromValue, BiConsumer<KeyType, List<ValueType>> handler) {
+            return new DebugMatchKeyListFuturePhase<>(matchKeyEntryId, requiredSize, keyComparator, keyValuesReducer, keyExtractorFromValue, valueExtractorFromValue, handler);
         }
     }
 
-    public static class DebugMatchKey1<KeyType,ValueType1> extends ActorBehaviorKeyAggregation.ActorBehaviorMatchKey1<KeyType,ValueType1> {
+    public static class DebugMatchKey1<KeyType,ParamType1,ValueType1> extends ActorBehaviorKeyAggregation.ActorBehaviorMatchKey1<KeyType,ParamType1,ValueType1> {
         private final DebugThreadChecker checker = new DebugThreadChecker(this);
-        public DebugMatchKey1(int matchKeyEntryId, KeyHistograms.KeyComparator<KeyType> keyComparator, ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType1> keyExtractorFromValue1, BiConsumer<KeyType, ValueType1> handler) {
-            super(matchKeyEntryId, keyComparator, keyExtractorFromValue1, handler);
+
+        public DebugMatchKey1(int matchKeyEntryId, KeyHistograms.KeyComparator<KeyType> keyComparator, ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ParamType1> keyExtractorFromValue1, Function<ParamType1, ValueType1> valueExtractorFromValue1, BiConsumer<KeyType, ValueType1> handler) {
+            super(matchKeyEntryId, keyComparator, keyExtractorFromValue1, valueExtractorFromValue1, handler);
         }
 
         @Override
@@ -93,10 +95,10 @@ public class DebugBehavior {
         }
     }
 
-    public static class DebugMatchKey2<KeyType,ValueType1,ValueType2> extends ActorBehaviorKeyAggregation.ActorBehaviorMatchKey2<KeyType,ValueType1,ValueType2> {
+    public static class DebugMatchKey2<KeyType,ParamType1,ParamType2,ValueType1,ValueType2> extends ActorBehaviorKeyAggregation.ActorBehaviorMatchKey2<KeyType,ParamType1, ParamType2,ValueType1,ValueType2> {
         private final DebugThreadChecker checker = new DebugThreadChecker(this);
-        public DebugMatchKey2(int matchKeyEntryId, KeyHistograms.KeyComparator<KeyType> keyComparator, ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType1> keyExtractorFromValue1, ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType2> keyExtractorFromValue2, ActorBehaviorBuilderKeyAggregation.TriConsumer<KeyType, ValueType1, ValueType2> handler) {
-            super(matchKeyEntryId, keyComparator, keyExtractorFromValue1, keyExtractorFromValue2, handler);
+        public DebugMatchKey2(int matchKeyEntryId, KeyHistograms.KeyComparator<KeyType> keyComparator, ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ParamType1> keyExtractorFromValue1, ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ParamType2> keyExtractorFromValue2, Function<ParamType1, ValueType1> valueExtractorFromValue1, Function<ParamType2, ValueType2> valueExtractorFromValue2, ActorBehaviorBuilderKeyAggregation.TriConsumer<KeyType, ValueType1, ValueType2> handler) {
+            super(matchKeyEntryId, keyComparator, keyExtractorFromValue1, keyExtractorFromValue2, valueExtractorFromValue1, valueExtractorFromValue2, handler);
         }
 
         @Override
@@ -135,10 +137,10 @@ public class DebugBehavior {
         }
     }
 
-    public static class DebugMatchKey3<KeyType,ValueType1,ValueType2,ValueType3> extends ActorBehaviorKeyAggregation.ActorBehaviorMatchKey3<KeyType,ValueType1,ValueType2,ValueType3> {
+    public static class DebugMatchKey3<KeyType,ParamType1,ParamType2,ParamType3,ValueType1,ValueType2,ValueType3> extends ActorBehaviorKeyAggregation.ActorBehaviorMatchKey3<KeyType,ParamType1,ParamType2,ParamType3,ValueType1,ValueType2,ValueType3> {
         private final DebugThreadChecker checker = new DebugThreadChecker(this);
-        public DebugMatchKey3(int matchKeyEntryId, KeyHistograms.KeyComparator<KeyType> keyComparator, ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType1> keyExtractorFromValue1, ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType2> keyExtractorFromValue2, ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType3> keyExtractorFromValue3, ActorBehaviorBuilderKeyAggregation.QuadConsumer<KeyType, ValueType1, ValueType2, ValueType3> handler) {
-            super(matchKeyEntryId, keyComparator, keyExtractorFromValue1, keyExtractorFromValue2, keyExtractorFromValue3, handler);
+        public DebugMatchKey3(int matchKeyEntryId, KeyHistograms.KeyComparator<KeyType> keyComparator, ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ParamType1> keyExtractorFromValue1, ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ParamType2> keyExtractorFromValue2, ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ParamType3> keyExtractorFromValue3, Function<ParamType1, ValueType1> valueExtractorFromValue1, Function<ParamType2, ValueType2> valueExtractorFromValue2, Function<ParamType3, ValueType3> valueExtractorFromValue3, ActorBehaviorBuilderKeyAggregation.QuadConsumer<KeyType, ValueType1, ValueType2, ValueType3> handler) {
+            super(matchKeyEntryId, keyComparator, keyExtractorFromValue1, keyExtractorFromValue2, keyExtractorFromValue3, valueExtractorFromValue1, valueExtractorFromValue2, valueExtractorFromValue3, handler);
         }
 
         @Override
@@ -177,10 +179,10 @@ public class DebugBehavior {
         }
     }
 
-    public static class DebugMatchKey4<KeyType,ValueType1,ValueType2,ValueType3,ValueType4> extends ActorBehaviorKeyAggregation.ActorBehaviorMatchKey4<KeyType,ValueType1,ValueType2,ValueType3,ValueType4> {
+    public static class DebugMatchKey4<KeyType,ParamType1,ParamType2,ParamType3,ParamType4,ValueType1,ValueType2,ValueType3,ValueType4> extends ActorBehaviorKeyAggregation.ActorBehaviorMatchKey4<KeyType,ParamType1,ParamType2,ParamType3,ParamType4,ValueType1,ValueType2,ValueType3,ValueType4> {
         private final DebugThreadChecker checker = new DebugThreadChecker(this);
-        public DebugMatchKey4(int matchKeyEntryId, KeyHistograms.KeyComparator<KeyType> keyComparator, ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType1> keyExtractorFromValue1, ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType2> keyExtractorFromValue2, ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType3> keyExtractorFromValue3, ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType4> keyExtractorFromValue4, ActorBehaviorBuilderKeyAggregation.QuintConsumer<KeyType, ValueType1, ValueType2, ValueType3, ValueType4> handler) {
-            super(matchKeyEntryId, keyComparator, keyExtractorFromValue1, keyExtractorFromValue2, keyExtractorFromValue3, keyExtractorFromValue4, handler);
+        public DebugMatchKey4(int matchKeyEntryId, KeyHistograms.KeyComparator<KeyType> keyComparator, ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ParamType1> keyExtractorFromValue1, ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ParamType2> keyExtractorFromValue2, ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ParamType3> keyExtractorFromValue3, ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ParamType4> keyExtractorFromValue4, Function<ParamType1, ValueType1> valueExtractorFromValue1, Function<ParamType2, ValueType2> valueExtractorFromValue2, Function<ParamType3, ValueType3> valueExtractorFromValue3, Function<ParamType4, ValueType4> valueExtractorFromValue4, ActorBehaviorBuilderKeyAggregation.QuintConsumer<KeyType, ValueType1, ValueType2, ValueType3, ValueType4> handler) {
+            super(matchKeyEntryId, keyComparator, keyExtractorFromValue1, keyExtractorFromValue2, keyExtractorFromValue3, keyExtractorFromValue4, valueExtractorFromValue1, valueExtractorFromValue2, valueExtractorFromValue3, valueExtractorFromValue4, handler);
         }
 
         @Override
@@ -219,11 +221,11 @@ public class DebugBehavior {
         }
     }
 
-    public static class DebugMatchKeyList<KeyType,ValueType> extends ActorBehaviorKeyAggregation.ActorBehaviorMatchKeyList<KeyType,ValueType> {
+    public static class DebugMatchKeyList<KeyType,ParamType,ValueType> extends ActorBehaviorKeyAggregation.ActorBehaviorMatchKeyList<KeyType,ParamType,ValueType> {
         private final DebugThreadChecker checker = new DebugThreadChecker(this);
 
-        public DebugMatchKeyList(int matchKeyEntryId, int threshold, KeyHistograms.KeyComparator<KeyType> keyComparator, ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType> keyExtractorFromValue, BiConsumer<KeyType, List<ValueType>> handler) {
-            super(matchKeyEntryId, threshold, keyComparator, keyExtractorFromValue, handler);
+        public DebugMatchKeyList(int matchKeyEntryId, int threshold, KeyHistograms.KeyComparator<KeyType> keyComparator, ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ParamType> keyExtractorFromValue, Function<ParamType, ValueType> valueExtractorFromValue, BiConsumer<KeyType, List<ValueType>> handler) {
+            super(matchKeyEntryId, threshold, keyComparator, keyExtractorFromValue, valueExtractorFromValue, handler);
         }
 
         @Override
@@ -262,11 +264,11 @@ public class DebugBehavior {
         }
     }
 
-    public static class DebugMatchKeyListFuture<KeyType,ValueType> extends ActorBehaviorKeyAggregation.ActorBehaviorMatchKeyListFuture<KeyType,ValueType> {
+    public static class DebugMatchKeyListFuture<KeyType,ParamType,ValueType> extends ActorBehaviorKeyAggregation.ActorBehaviorMatchKeyListFuture<KeyType,ParamType,ValueType> {
         private final DebugThreadChecker checker = new DebugThreadChecker(this);
 
-        public DebugMatchKeyListFuture(int matchKeyEntryId, int requiredSize, KeyHistograms.KeyComparator<KeyType> keyComparator, BiFunction<KeyType, List<ValueType>, Iterable<ValueType>> keyValuesReducer, ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType> keyExtractorFromValue, BiConsumer<KeyType, List<ValueType>> handler) {
-            super(matchKeyEntryId, requiredSize, keyComparator, keyValuesReducer, keyExtractorFromValue, handler);
+        public DebugMatchKeyListFuture(int matchKeyEntryId, int requiredSize, KeyHistograms.KeyComparator<KeyType> keyComparator, BiFunction<KeyType, List<ValueType>, Iterable<ValueType>> keyValuesReducer, ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ParamType> keyExtractorFromValue, Function<ParamType, ValueType> valueExtractorFromValue, BiConsumer<KeyType, List<ValueType>> handler) {
+            super(matchKeyEntryId, requiredSize, keyComparator, keyValuesReducer, keyExtractorFromValue, valueExtractorFromValue, handler);
         }
 
         @Override
@@ -305,10 +307,11 @@ public class DebugBehavior {
         }
     }
 
-    public static class DebugMatchKeyListFuturePhase<KeyType,ValueType> extends ActorBehaviorKeyAggregation.ActorBehaviorMatchKeyListFuturePhase<KeyType,ValueType> {
+    public static class DebugMatchKeyListFuturePhase<KeyType,ParamType,ValueType> extends ActorBehaviorKeyAggregation.ActorBehaviorMatchKeyListFuturePhase<KeyType,ParamType,ValueType> {
         private final DebugThreadChecker checker = new DebugThreadChecker(this);
-        public DebugMatchKeyListFuturePhase(int matchKeyEntryId, int requiredSize, KeyHistograms.KeyComparator<KeyType> keyComparator, BiFunction<KeyType, List<ValueType>, Iterable<ValueType>> keyValuesReducer, ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ValueType> keyExtractorFromValue, BiConsumer<KeyType, List<ValueType>> handler) {
-            super(matchKeyEntryId, requiredSize, keyComparator, keyValuesReducer, keyExtractorFromValue, handler);
+
+        public DebugMatchKeyListFuturePhase(int matchKeyEntryId, int requiredSize, KeyHistograms.KeyComparator<KeyType> keyComparator, BiFunction<KeyType, List<ValueType>, Iterable<ValueType>> keyValuesReducer, ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ParamType> keyExtractorFromValue, Function<ParamType, ValueType> valueExtractorFromValue, BiConsumer<KeyType, List<ValueType>> handler) {
+            super(matchKeyEntryId, requiredSize, keyComparator, keyValuesReducer, keyExtractorFromValue, valueExtractorFromValue, handler);
         }
 
         @Override

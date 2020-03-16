@@ -47,7 +47,7 @@ public class ExampleCluster {
                 try {
                     int n = Integer.parseInt(line.split(" ")[1]);
                     for (int i = 0; i < n; ++i) {
-                        a.tell(new Tuple(rand.nextInt(n), 1));
+                        a.tell(Integer.toString(rand.nextInt(n)));
                     }
                     PhaseShift.start(d.getSystem(), a);
                 } catch (Exception ex) {
@@ -76,19 +76,19 @@ public class ExampleCluster {
         @Override
         protected ActorBehavior initBehavior() {
             return behaviorBuilder()
-                    .matchKey(Tuple.class, t -> t.value)
+                    .matchKey(String.class, Function.identity(), s -> new Tuple(s, 1))
                     .fold((k,v) -> v.stream().reduce((a,b) -> new Tuple(a.value, a.count + b.count))
-                            .orElse(new Tuple(0,0)))
+                            .orElse(new Tuple("",0)))
                     .forEach(o -> {})
                     .build();
         }
     }
 
     public static class Tuple {
-        int value;
+        String value;
         int count;
 
-        public Tuple(int value, int count) {
+        public Tuple(String value, int count) {
             this.value = value;
             this.count = count;
         }
