@@ -77,12 +77,14 @@ public class ClusterKeyAggregation extends ClusterDeployment<Config, ActorPlacem
     }
 
     public static void toStatTree(Map<String, RouterSplitStat> map, KeyAggregationRoutingSplit split, KeyAggregationRoutingSplit.SplitPath path) {
-        RouterSplitStat s = new RouterSplitStat().setSplit(split, path);
-        map.put(s.getPathString(), s);
-        if (split instanceof KeyAggregationRoutingSplit.RoutingSplitNode) {
-            KeyAggregationRoutingSplit.RoutingSplitNode node = (KeyAggregationRoutingSplit.RoutingSplitNode) split;
-            toStatTree(map, node.getLeft(), path.add(true));
-            toStatTree(map, node.getRight(), path.add(false));
+        if (split != null) {
+            RouterSplitStat s = new RouterSplitStat().setSplit(split, path);
+            map.put(s.getPathString(), s);
+            if (split instanceof KeyAggregationRoutingSplit.RoutingSplitNode) {
+                KeyAggregationRoutingSplit.RoutingSplitNode node = (KeyAggregationRoutingSplit.RoutingSplitNode) split;
+                toStatTree(map, node.getLeft(), path.add(true));
+                toStatTree(map, node.getRight(), path.add(false));
+            }
         }
     }
 

@@ -249,7 +249,7 @@ public class ClusterHttp implements Closeable {
             Function<Object, Object> valConv = jsonConverter(getParamType(retType, 1));
             return o -> ((Map<?,?>) o).entrySet().stream()
                         .collect(Collectors.toMap(
-                                e -> keyConv.apply(e.getKey()),
+                                e -> Objects.toString(keyConv.apply(e.getKey())), //null -> "null"
                                 e -> valConv.apply(e.getValue())));
         } else if (matchType(retType, CompletableFuture.class)) {
             Function<Object, Object> paramConv = jsonConverter(getParamType(retType, 0));
