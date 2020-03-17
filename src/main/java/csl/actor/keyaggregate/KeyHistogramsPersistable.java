@@ -856,8 +856,10 @@ public class KeyHistogramsPersistable extends KeyHistograms {
                     break;
                 }
             }
-            for (int i = 0, len = h.indexHistogram.length; i < len; ++i) {
-                ms[i] /= (float) n;
+            if (n != 0) {
+                for (int i = 0, len = h.indexHistogram.length; i < len; ++i) {
+                    ms[i] /= (float) n;
+                }
             }
             return ms;
         }
