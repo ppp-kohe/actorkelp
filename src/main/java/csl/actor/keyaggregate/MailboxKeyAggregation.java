@@ -60,11 +60,13 @@ public class MailboxKeyAggregation implements Mailbox, Cloneable {
         int s = size();
         int t = threshold;
         if (s > t) {
+            /*
             if (hasSufficientPoints()) {
                 return MailboxStatus.Exceeded;
             } else {
                 return MailboxStatus.Unready;
-            }
+            }*/
+            return MailboxStatus.Exceeded;
         } else if (s < t * thresholdFactor) {
             return MailboxStatus.Few;
         } else {

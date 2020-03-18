@@ -152,9 +152,13 @@ public class KeyAggregationStateRouter implements ActorKeyAggregation.State {
 
     protected void splitAndParallelRouting(ActorKeyAggregation self, MailboxKeyAggregation m, Message<?> message,
                                            int height) {
-        split(self, height);
+        if (m.hasSufficientPoints()) {
+            split(self, height);
+        }
         route(self, m, message, false);
-        startParallelRouting(self);
+        if (height > 0) {
+            startParallelRouting(self);
+        }
     }
 
     public void startParallelRouting(ActorKeyAggregation self) {
