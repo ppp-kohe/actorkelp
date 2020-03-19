@@ -15,6 +15,7 @@ import io.netty.handler.codec.MessageToByteEncoder;
 import io.netty.handler.logging.LogLevel;
 import io.netty.handler.logging.LoggingHandler;
 import io.netty.util.ReferenceCountUtil;
+import io.netty.util.concurrent.DefaultThreadFactory;
 
 import java.io.Closeable;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -112,8 +113,12 @@ public class ObjectMessageClient implements Closeable {
 
     protected void initGroup() {
         if (group == null) {
-            group = new NioEventLoopGroup(threads);
+            group = new NioEventLoopGroup(threads, new DefaultThreadFactory(getPoolNameHead() + "", 10));
         }
+    }
+
+    protected String getPoolNameHead() {
+        return getClass().getSimpleName();
     }
 
     protected void initBootstrap() {

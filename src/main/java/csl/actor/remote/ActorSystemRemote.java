@@ -349,15 +349,15 @@ public class ActorSystemRemote implements ActorSystem {
         }
 
         public int getServerLeaderThreads() {
-            return 1;
+            return 4;
         }
 
         public int getServerWorkerThreads() {
-            return getThreads();
+            return getThreads() * 20;
         }
 
         public int getClientThreads() {
-            return getThreads();
+            return getThreads() * 10;
         }
     }
 

@@ -14,6 +14,7 @@ import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
 import io.netty.handler.logging.LogLevel;
 import io.netty.handler.logging.LoggingHandler;
 import io.netty.util.ReferenceCountUtil;
+import io.netty.util.concurrent.DefaultThreadFactory;
 
 import java.io.Closeable;
 import java.time.Duration;
@@ -186,13 +187,17 @@ public class ObjectMessageServer implements Closeable {
 
     protected void initLeaderGroup() {
         if (leaderGroup == null) {
-            leaderGroup = new NioEventLoopGroup(leaderThreads);
+            leaderGroup = new NioEventLoopGroup(leaderThreads, new DefaultThreadFactory(getPoolNameHead() + "Leader", 10));
         }
+    }
+
+    protected String getPoolNameHead() {
+        return getClass().getSimpleName();
     }
 
     protected void initWorkerGroup() {
         if (workerGroup == null) {
-            workerGroup = new NioEventLoopGroup(workerThreads);
+            workerGroup = new NioEventLoopGroup(workerThreads, new DefaultThreadFactory(getPoolNameHead() + "Client", 10));
         }
     }
 

@@ -4,6 +4,7 @@ import csl.actor.Actor;
 import csl.actor.ActorRef;
 import csl.actor.cluster.PhaseShift;
 
+import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -12,6 +13,7 @@ public class KeyAggregationPhaseEntry {
     protected PhaseShift origin;
     protected ActorRef sender;
     protected Map<ActorRef, Boolean> finished = new ConcurrentHashMap<>();
+    protected Instant completedTime;
 
     public KeyAggregationPhaseEntry(Object key) {
         this.key = key;
@@ -148,12 +150,16 @@ public class KeyAggregationPhaseEntry {
                 .filter(b -> b)
                 .count();
         int all = finished.size();
+        completedTime = Instant.now();
 
         float okp = (float) ok / (float) all * 100f;
         router.logPhase("#phase intermediate: %s : %s %3.1f%%", origin.getKey(), msg, okp);
         return ok >= all;
     }
 
+    public Instant getCompletedTime() {
+        return completedTime;
+    }
 
     public Set<ActorRef> collect(ActorKeyAggregation router) {
         Set<ActorRef> result = new HashSet<>();

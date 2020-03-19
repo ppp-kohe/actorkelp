@@ -9,6 +9,8 @@ import csl.actor.keyaggregate.KeyAggregationRoutingSplit.SplitOrMergeContextDefa
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 public class KeyAggregationStateRouter implements ActorKeyAggregation.State {
     protected volatile KeyAggregationRoutingSplit split;
@@ -199,12 +201,12 @@ public class KeyAggregationStateRouter implements ActorKeyAggregation.State {
             Message<?> msg = self.internalPollForParallelRouting();
             if (msg != null) {
                 if (self.isNoRoutingMessage(msg)) {
+                    self.processMessageDelayWhileParallelRouting(msg);
                     if (noRoutingTops.contains(msg)) {
                         break;
                     } else if (noRoutingTops.size() < 16) {
                         noRoutingTops.add(msg);
                     }
-                    self.processMessageDelayWhileParallelRouting(msg);
                 } else {
                     route(self, m, msg, true);
                 }
@@ -287,7 +289,21 @@ public class KeyAggregationStateRouter implements ActorKeyAggregation.State {
             self.processPhaseEnd(ps.getKey());
         }
         if (finish.processIntermediate(self, ps)) {
-            phase.remove(ps.getKey());
+            processMessagePhaseCleanUp(self);
+        }
+    }
+
+    protected void processMessagePhaseCleanUp(ActorKeyAggregation self) {
+        int size = phase.size();
+        if (size > 30) {
+            List<Object> keys = phase.values().stream()
+                    .filter(e -> e.getCompletedTime() != null)
+                    .sorted(Comparator.comparing(KeyAggregationPhaseEntry::getCompletedTime))
+                    .map(KeyAggregationPhaseEntry::getKey)
+                    .collect(Collectors.toList());
+            IntStream.range(0, Math.max(size - 30, 0))
+                    .mapToObj(keys::get)
+                    .forEach(phase::remove);
         }
     }
 
