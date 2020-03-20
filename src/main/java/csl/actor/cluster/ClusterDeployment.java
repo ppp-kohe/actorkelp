@@ -10,9 +10,7 @@ import csl.actor.remote.ActorAddress;
 import csl.actor.remote.ActorRefRemote;
 import csl.actor.remote.ActorSystemRemote;
 
-import java.io.BufferedOutputStream;
 import java.io.File;
-import java.io.FileOutputStream;
 import java.io.Serializable;
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
@@ -22,20 +20,25 @@ import java.net.ServerSocket;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.nio.file.attribute.FileTime;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.function.Consumer;
 import java.util.function.Function;
-import java.util.jar.JarEntry;
-import java.util.jar.JarOutputStream;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 public class ClusterDeployment<AppConfType extends ConfigBase,
         PlaceType extends ClusterDeployment.ActorPlacementForCluster<AppConfType>> {
+    public static String NON_DRIVER_SYMBOL_CONF = "-";
+    public static String NON_DRIVER_PROPERTY_CONF = "csl.actor.cluster.conf";
+    public static String NON_DRIVER_FILE_CONF = "cluster-config.txt"; //under appDir
+    public static String NON_DRIVER_PROPERTY_APP_NAME = "csl.actor.cluster.appName";
+
+    protected String masterMainType; //for remoteDriver
+    protected List<String> masterMainArgs = new ArrayList<>(); //for remoteDriver
+
+    protected boolean driverMode = true;
     protected Class<AppConfType> defaultConfType;
     protected Class<PlaceType> placeType;
 
@@ -55,6 +58,28 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
     @Target(ElementType.METHOD)
     public @interface PropertyInterface {
         String value() default "";
+    }
+
+    /**
+     * starts cluster as remote-driver mode
+     * @param args {configFilePath, masterMainType, masterMainArgs}
+     */
+    public static void main(String[] args) throws Exception {
+        new ClusterDeployment<>(ConfigBase.class, ActorPlacementForCluster.class)
+                .runAsRemoteDriver(args);
+    }
+
+    public void runAsRemoteDriver(String... args) throws Exception {
+        String masterMainType = args[0];
+        String configFilePath = args[1];
+        List<String> masterMainArgs = Arrays.asList(args).subList(2, args.length);
+        runAsRemoteDriver(configFilePath, masterMainType, masterMainArgs);
+    }
+
+    public void runAsRemoteDriver(String configFilePath, String masterMainType, List<String> masterMainArgs) throws Exception {
+        int n = deployAsRemoteDriver(configFilePath, masterMainType, masterMainArgs)
+                .waitFor();
+        System.exit(n);
     }
 
     public ClusterDeployment(Class<AppConfType> defaultConfType, Class<PlaceType> placeType) {
@@ -98,11 +123,121 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         return system;
     }
 
-    public PlaceType deploy(String confFile) {
+    /**
+     * @return true if the running process is a driver
+     */
+    public boolean isDriverMode() {
+        return driverMode;
+    }
+
+    public void setDriverMode(boolean driverMode) {
+        this.driverMode = driverMode;
+    }
+
+    public String getMasterMainType() {
+        return masterMainType;
+    }
+
+    public void setMasterMainType(String masterMainType) {
+        this.masterMainType = masterMainType;
+    }
+
+    public List<String> getMasterMainArgs() {
+        return masterMainArgs;
+    }
+
+    public Process deployAsRemoteDriver(String confFile, String masterMainType, List<String> masterArgs) {
+        setMasterMainType(masterMainType);
+        getMasterMainArgs().addAll(masterArgs);
+        return deployAsRemoteDriver(confFile);
+    }
+
+    public Process deployAsRemoteDriver(String confFile) {
         try {
-            return deploy(new ClusterCommands<>(defaultConfType).loadConfigFile(confFile));
+            return deployAsRemoteDriver(loadConfigFile(confFile));
         } catch (Exception ex) {
             throw new RuntimeException(ex);
+        }
+    }
+
+    public Process deployAsRemoteDriver(List<ClusterCommands.ClusterUnit<AppConfType>> units) throws Exception {
+        deployMasterInitMaster(units);
+        deployMasterInitAppName();
+        deployFiles(master);
+        deployNodesAsRemoteDriver(units);
+        deployNodeStartProcess(master);
+        attachAsRemoteDriver(ActorAddress.get(master.getDeploymentConfig().getAddress()));
+        return processes.get(master);
+    }
+
+    public void deployNodesAsRemoteDriver(List<ClusterUnit<AppConfType>> units) {
+        units.stream()
+                .filter(u -> !u.getDeploymentConfig().master)
+                .forEach(this::deployNodeFiles);
+    }
+
+    public void attachAsRemoteDriver(ActorAddress.ActorAddressRemote addr) {
+        if (system == null) {
+            attachInitSystem();
+        }
+        try {
+            Exception last = null;
+            for (int i = 0; i < 12; ++i) {
+                try {
+                    Thread.sleep(5_000);
+                    attachInitPlaceRef(addr);
+
+                    String s = ResponsiveCalls.sendTask(getSystem(), getPlace(),
+                            Object::toString).get(30, TimeUnit.SECONDS);
+                    master.log("launched: %s", s);
+                    return;
+                } catch (Exception ex) {
+                    last = ex;
+                    if (!ex.toString().contains("connection refused")) {
+                        throw ex;
+                    }
+                }
+            }
+            throw last;
+        } catch (Exception ex) {
+            throw new RuntimeException(ex);
+        }
+    }
+
+    /**
+     *
+     * @param confFile a cluster commands file parsed by {@link ClusterCommands#loadConfigFile(String)}, or
+     *                   special symbol "-" ({@link #NON_DRIVER_SYMBOL_CONF}) for non-driver mode
+     *                   and then it loads from the system property {@link #NON_DRIVER_PROPERTY_CONF}.
+     *
+     * @return the created instance of {@link ActorPlacementForCluster}
+     */
+    public PlaceType deploy(String confFile) {
+        try {
+            return deploy(loadConfigFile(confFile));
+        } catch (Exception ex) {
+            throw new RuntimeException(ex);
+        }
+    }
+
+    public PlaceType deployAsNonDriver() {
+        return deploy("-");
+    }
+
+    public List<ClusterUnit<AppConfType>> loadConfigFile(String confFile) {
+        if (confFile.equals(NON_DRIVER_SYMBOL_CONF)) {
+            setDriverMode(false);
+            confFile = System.getProperty(NON_DRIVER_PROPERTY_CONF, NON_DRIVER_FILE_CONF);
+        }
+        confFile = confFile.replaceAll("/", File.separator);
+        return new ClusterCommands<>(defaultConfType).loadConfigFile(confFile);
+    }
+
+    public String getUnitMainType(ClusterUnit<AppConfType> unit) {
+        if (unit.getDeploymentConfig().master) {
+            return masterMainType;
+        } else {
+            return getNodeMainType().getName();
         }
     }
 
@@ -121,7 +256,6 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         awaitNodes();
         return getMasterPlace();
     }
-
 
     public void deployMaster(List<ClusterUnit<AppConfType>> units) throws Exception {
         deployMasterInitMaster(units);
@@ -227,13 +361,22 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
                     system.execute(() -> deployNode(u)));
     }
 
+
     public void deployNode(ClusterUnit<AppConfType> unit) {
         try {
-            nodes.add(unit);
             unit.log("%s: deploy: %s", appName, unit.getDeploymentConfig().getAddress());
-            deployFiles(unit);
-
+            deployNodeFiles(unit);
             deployNodeStartProcess(unit);
+        } catch (Exception ex) {
+            throw new RuntimeException(ex);
+        }
+    }
+
+    public void deployNodeFiles(ClusterUnit<AppConfType> unit) {
+        try {
+            nodes.add(unit);
+            unit.log("%s: deploy: %s files", appName, unit.getDeploymentConfig().getAddress());
+            deployFiles(unit);
         } catch (Exception ex) {
             throw new RuntimeException(ex);
         }
@@ -244,7 +387,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
             String javaCmd = getCommandWithDir(unit, getJavaCommand(unit));
 
             processes.put(unit,
-                    launch(unit,
+                    launch(unit, getAppName(),
                             sshCommand(unit, javaCmd)));
         } catch (Exception ex) {
             throw new RuntimeException(ex);
@@ -260,10 +403,8 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
     protected String getJavaCommand(ClusterUnit<AppConfType> unit) throws Exception {
         return String.format(unit.getDeploymentConfig().java,
                 getJavaCommandOptions(unit),
-                escape(getNodeMainType().getName()),
-                unit.getDeploymentConfig().getAddress() + " " +
-                master.getDeploymentConfig().getAddress() + " " +
-                escape(getPlaceType().getName()));
+                escape(getUnitMainType(unit)),
+                getJavaCommandArgs(unit));
     }
 
     protected String getJavaCommandOptions(ClusterUnit<AppConfType> unit) throws Exception {
@@ -277,12 +418,36 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
             }
         }
 
+        if (unit.getDeploymentConfig().master) {
+            pathProps += escape("-D" + NON_DRIVER_PROPERTY_CONF + "=" +
+                    getAppName() + "/" + NON_DRIVER_FILE_CONF) + " "; //suppose the working dir is baseDir
+        }
+
+
         return escape("-Dcsl.actor.logColor=" + unit.getAppConfig().get("logColor")) + " " +
                 escape("-Dcsl.actor.logFile=" + unit.getDeploymentConfig().logFile) + " " +
                 escape("-Dcsl.actor.logFilePath=" + unit.getDeploymentConfig().logFilePath) + " " +
                 escape("-Dcsl.actor.logFilePreserveColor=" + unit.getDeploymentConfig().logFilePreserveColor) + " " +
+                escape("-D" + NON_DRIVER_PROPERTY_APP_NAME + "=" + getAppName()) + " " +
                 pathProps +
                 getJavaCommandOptionsClassPath(unit);
+    }
+
+    protected String getJavaCommandArgs(ClusterUnit<AppConfType> unit) throws Exception {
+        if (unit.getDeploymentConfig().master) {
+            String args = "";
+            if (unit.getDeploymentConfig().configPathAsMasterFirstArgument) {
+                args += "- ";
+            }
+            args += masterMainArgs.stream()
+                    .map(this::escape)
+                    .collect(Collectors.joining(" "));
+            return args;
+        } else {
+            return unit.getDeploymentConfig().getAddress() + " " +
+                    master.getDeploymentConfig().getAddress() + " " +
+                    escape(getPlaceType().getName());
+        }
     }
 
     protected String escape(String s) {
@@ -333,7 +498,12 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
 
     public String getAppName() {
         if (appName == null) {
-            appName = getNextAppName();
+            String name = System.getProperty(NON_DRIVER_PROPERTY_APP_NAME, "");
+            if (name.isEmpty()) {
+                appName = getNextAppName();
+            } else {
+                appName = name;
+            }
         }
         return appName;
     }
@@ -348,7 +518,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         return ConfigDeployment.getAppName(head);
     }
 
-    public List<String> sshCommand(ClusterUnit<?> unit, String appCmd) {
+    public static List<String> sshCommand(ClusterUnit<?> unit, String appCmd) {
         String ssh = String.format(unit.getDeploymentConfig().ssh,
                 unit.getDeploymentConfig().host);
         ClusterCommands.CommandLineParser parser = new ClusterCommands.CommandLineParser(ssh.trim());
@@ -369,12 +539,19 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         return sshCmd;
     }
 
-    public Process launch(ClusterUnit<?> unit, List<String> cmd) {
+    public static Process launch(ClusterUnit<?> unit, String appName, List<String> cmd) {
+        return launch(unit, null, appName, cmd);
+    }
+
+    public static Process launch(ClusterUnit<?> unit, File dir, String appName, List<String> cmd) {
         try {
-            unit.log("%s: command: %s : %s", getAppName(), unit.getDeploymentConfig().getAddress(), cmd);
+            unit.log("%s: command: %s : %s", appName, unit.getDeploymentConfig().getAddress(), cmd);
             ProcessBuilder builder = new ProcessBuilder().command(cmd);
             builder.redirectOutput(ProcessBuilder.Redirect.INHERIT)
                     .redirectError(ProcessBuilder.Redirect.INHERIT);
+            if (dir != null) {
+                builder.directory(dir);
+            }
             return builder.start();
         } catch (Exception ex) {
             throw new RuntimeException(ex);
@@ -384,108 +561,37 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
     public void deployFiles(ClusterUnit<?> unit) throws Exception {
         ConfigDeployment conf = unit.getDeploymentConfig();
 
-        String appName = getAppName();
-
-        if (conf.master && conf.sharedDeploy) { //suppose the code is running under the master
-            //the baseDir is shared between all nodes
-            Path appDir = Paths.get(conf.baseDir, appName);
-            if (Files.exists(appDir)) {
-                throw new RuntimeException("failed creation: " + appDir);
-            }
-
-            Path jarDir = appDir.resolve("jars");
-            Files.createDirectories(jarDir);
-
-            String path = System.getProperty("java.class.path", "");
-            String[] items = path.split(Pattern.quote(File.pathSeparator));
-            List<String> pathList = new ArrayList<>();
-            for (String pathItem : items) {
-                Path filePath = Paths.get(pathItem);
-                if (Files.isDirectory(filePath)) { //creates jar and copies it
-                    deployFilesDirToJar(unit, filePath, jarDir, pathList);
-                } else { //copy jar
-                    deployFilesCopyFile(unit, filePath, jarDir, pathList);
+        if (conf.master) { //suppose the code is running under the master
+            if (driverMode) {
+                if (conf.sharedDeploy) {
+                    //the baseDir is shared between all nodes
+                    new ClusterFiles(getAppName(), unit).deployFiles();
+                } else {
+                    new ClusterFiles.ClusterFilesSsh(getAppName(), unit).deployFiles();
                 }
-            }
-
-            unit.setClassPathList(pathList);
-
-        } else if (!conf.master) {
-            if (conf.sharedDeploy) {
-                String masterBase = "^" + Pattern.quote(Paths.get(master.getDeploymentConfig().baseDir).toString());
-                String unitBase = conf.baseDir;
-                unit.setClassPathList(master.getClassPathList().stream()
-                        .map(p -> p.replaceFirst(masterBase, unitBase))
-                        .collect(Collectors.toList()));
             } else {
-                String sshCommand = String.format(conf.ssh, conf.host, conf.port);
-                //TODO ssh deploy
+                String appName = getAppName();
+                unit.setClassPathList(Arrays.stream(System.getProperty("java.class.path", "").split(Pattern.quote(File.pathSeparator)))
+                    .filter(item -> item.startsWith(appName)) //appName/jars/
+                    .collect(Collectors.toList()));
             }
-        }
-    }
-
-    protected void deployFilesDirToJar(ClusterUnit<?> unit, Path filePath, Path jarDir, List<String> pathList) throws Exception {
-        String header = unit.getDeploymentConfig().getAddress();
-        int count = pathList.size();
-        String fileName = String.format("%s-%03d.jar", filePath.getFileName(), count);
-        Path jarPath = jarDir.resolve(fileName);
-        pathList.add(jarPath.toString());
-
-        unit.log(String.format("%s deployFiles: %s\n      %s\n  ->  %s", appName, header, filePath, jarPath));
-        try (Stream<Path> ps = Files.walk(filePath);
-             JarOutputStream out = new JarOutputStream(
-                     new BufferedOutputStream(new FileOutputStream(jarPath.toFile())))) {
-            ps.forEachOrdered(p -> writeToJar(unit, filePath, p, out));
-        }
-    }
-
-    public void writeToJar(ClusterUnit<?> unit, Path startDir, Path path, JarOutputStream out) {
-        try {
-            String p = startDir.relativize(path).toString()
-                    .replaceAll(Pattern.quote(File.separator), "/");
-            boolean dir = Files.isDirectory(path);
-            if (dir && !p.endsWith("/")) {
-                p += "/";
-            }
-            JarEntry e = new JarEntry(p);
-            try {
-                FileTime time = Files.getLastModifiedTime(path);
-                e.setLastModifiedTime(time);
-            } catch (Exception ex) {
-                //
-            }
-            out.putNextEntry(e);
-            try {
-                if (!dir) {
-                    Files.copy(path, out);
+        } else {
+            if (driverMode) {
+                if (conf.sharedDeploy) {
+                    String masterBase = "^" + Pattern.quote(Paths.get(master.getDeploymentConfig().baseDir).toString());
+                    String unitBase = conf.baseDir;
+                    unit.setClassPathList(master.getClassPathList().stream()
+                            .map(p -> p.replaceFirst(masterBase, unitBase))
+                            .collect(Collectors.toList()));
+                } else {
+                    new ClusterFiles.ClusterFilesSsh(getAppName(), unit).deployFiles();
                 }
-            } finally {
-                out.closeEntry();
+            } else {
+                unit.setClassPathList(master.getClassPathList());
             }
-        } catch (Exception ex) {
-            unit.log("error writeToJar: " + path + " : " + ex);
         }
     }
 
-    protected void deployFilesCopyFile(ClusterUnit<?> unit, Path filePath, Path jarDir, List<String> pathList) throws Exception {
-        String header = unit.getDeploymentConfig().getAddress();
-        int count = pathList.size();
-        String fileName = filePath.getFileName().toString();
-        Path jarPath = jarDir.resolve(fileName);
-        unit.log("%s deployFiles: %s\n      %s\n  ->  %s", getAppName(), header, filePath, jarPath);
-        if (pathList.contains(jarPath.toString())) {
-            int i = fileName.lastIndexOf(".");
-            if (i > 0) {
-                String pre = fileName.substring(0, i);
-                String pos = fileName.substring(i);
-                jarPath = jarDir.resolve(String.format("%s-%03d%s", pre, count, pos));
-            } else {
-                jarPath = jarDir.resolve(String.format("%s-%03d", fileName, count));
-            }
-        }
-        Files.copy(filePath, jarPath);
-        pathList.add(jarPath.toString());
-    }
 
     public static void setDefaultUncaughtHandler(ConfigBase base) {
         Thread.setDefaultUncaughtExceptionHandler((t,ex) -> {

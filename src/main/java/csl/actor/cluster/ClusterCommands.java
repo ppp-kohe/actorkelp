@@ -609,6 +609,10 @@ public class ClusterCommands<AppConfType extends ConfigBase> {
             this.indentLevel = indentLength(indent);
         }
 
+        public CommandBlock getParent() {
+            return parent;
+        }
+
         public boolean isClassType() {
             return isClass;
         }

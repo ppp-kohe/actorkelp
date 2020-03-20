@@ -36,6 +36,8 @@ public class ConfigDeployment extends ConfigBase {
     public String httpHost = ""; //use host
     public int httpPort = 48888;
 
+    public boolean configPathAsMasterFirstArgument = true;
+
     public ConfigDeployment() {
     }
 

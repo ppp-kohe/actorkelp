@@ -15,6 +15,17 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 public class ClusterKeyAggregation extends ClusterDeployment<Config, ActorPlacementKeyAggregation> {
+
+    public static void main(String[] args) throws Exception {
+        ClusterKeyAggregation.create()
+                .runAsRemoteDriver(args);
+    }
+
+    public static void run(String configFile, String mainType, String... args) throws Exception {
+        ClusterKeyAggregation.create()
+                .runAsRemoteDriver(configFile, mainType, Arrays.asList(args));
+    }
+
     public static ClusterKeyAggregation create() {
         return new ClusterKeyAggregation();
     }
