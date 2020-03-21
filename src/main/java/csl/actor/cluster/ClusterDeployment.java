@@ -9,6 +9,7 @@ import csl.actor.cluster.ClusterCommands.ClusterUnit;
 import csl.actor.remote.ActorAddress;
 import csl.actor.remote.ActorRefRemote;
 import csl.actor.remote.ActorSystemRemote;
+import csl.actor.remote.KryoBuilder;
 
 import java.io.File;
 import java.io.Serializable;
@@ -50,6 +51,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
 
     protected PlaceType masterPlace;
 
+    protected String attachKryoBuilderType = KryoBuilder.class.getName();
     protected ActorRef attachedPlace;
 
     protected ClusterHttp http;
@@ -282,8 +284,24 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
     }
 
     protected void deployMasterInitSystem() {
-        system = new ActorSystemCluster();
+        master.log("master %s: create system with serializer %s", master.getDeploymentConfig().getAddress(), master.getDeploymentConfig().kryoBuilderType);
+        system = createSystem(master.getDeploymentConfig().kryoBuilderType);
         system.getLocalSystem().setLogger(new ConfigBase.SystemLoggerHeader(system.getLogger(), master.getAppConfig()));
+    }
+
+    @SuppressWarnings("unchecked")
+    public static ActorSystemCluster createSystem(String buildType) {
+        try {
+            Class<?> cls = Class.forName(buildType);
+            if (KryoBuilder.class.isAssignableFrom(cls)) {
+                return ActorSystemCluster.createWithKryoBuilderType((Class<? extends KryoBuilder>) cls);
+            } else {
+                throw new RuntimeException("not a KryoBuilder: " + cls);
+            }
+        } catch (Exception ex) {
+            throw new RuntimeException();
+        }
+
     }
 
     protected void deployMasterInitUncaughtHandler() {
@@ -428,6 +446,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
                 escape("-Dcsl.actor.logFile=" + unit.getDeploymentConfig().logFile) + " " +
                 escape("-Dcsl.actor.logFilePath=" + unit.getDeploymentConfig().logFilePath) + " " +
                 escape("-Dcsl.actor.logFilePreserveColor=" + unit.getDeploymentConfig().logFilePreserveColor) + " " +
+                escape("-Dcsl.actor.kryoBuilderType=" + unit.getDeploymentConfig().kryoBuilderType) + " " +
                 escape("-D" + NON_DRIVER_PROPERTY_APP_NAME + "=" + getAppName()) + " " +
                 pathProps +
                 getJavaCommandOptionsClassPath(unit);
@@ -609,6 +628,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         protected ActorAddress.ActorAddressRemote selfAddress;
         protected ActorSystemRemote system;
         protected ActorPlacement.ActorPlacementDefault place;
+        protected String kryoBuilderType;
 
         public void run(String[] args) throws Exception {
             initLogger();
@@ -617,7 +637,9 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
             String joinAddr = args[1];
             String placeType = (args.length > 2 ? args[2] : "");
 
+            kryoBuilderType = initKryoBuilderType();
             selfAddress = initSelfAddress(selfAddr);
+            logger.log(logColor, "%s: system %s with serializer %s", selfAddress, kryoBuilderType);
             system = initSystem();
 
             initPath();
@@ -643,8 +665,12 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
             return selfAddrObj;
         }
 
+        protected String initKryoBuilderType() {
+            return System.getProperty("csl.actor.kryoBuilderType", KryoBuilder.class.getName());
+        }
+
         protected ActorSystemRemote initSystem() {
-            ActorSystemRemote system = new ActorSystemCluster();
+            ActorSystemRemote system = createSystem(kryoBuilderType);
             system.getLocalSystem().setLogger(new ConfigBase.SystemLoggerHeader(system.getLogger(), logger));
             return system;
         }
@@ -998,6 +1024,14 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         return attachedPlace;
     }
 
+    public void setAttachKryoBuilderType(String attachKryoBuilderType) {
+        this.attachKryoBuilderType = attachKryoBuilderType;
+    }
+
+    public String getAttachKryoBuilderType() {
+        return attachKryoBuilderType;
+    }
+
     public void attach(String hostAndPort) {
         attach(ActorAddress.get(hostAndPort));
     }
@@ -1025,7 +1059,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
     }
 
     protected void attachInitSystem() {
-        system = new ActorSystemCluster();
+        system = createSystem(attachKryoBuilderType);
         int port;
         try (ServerSocket sock = new ServerSocket(0)) { //obtain a dynamic port
             port = sock.getLocalPort();

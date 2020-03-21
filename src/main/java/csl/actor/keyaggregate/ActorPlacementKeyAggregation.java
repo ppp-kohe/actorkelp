@@ -1,9 +1,6 @@
 package csl.actor.keyaggregate;
 
-import csl.actor.Actor;
-import csl.actor.ActorRef;
-import csl.actor.ActorSystem;
-import csl.actor.Message;
+import csl.actor.*;
 import csl.actor.cluster.ClusterDeployment;
 import csl.actor.cluster.ResponsiveCalls;
 import csl.actor.remote.ActorAddress;
@@ -154,4 +151,40 @@ public class ActorPlacementKeyAggregation extends ClusterDeployment.ActorPlaceme
         CompletableFuture<?> apply(ActorKeyAggregation prev, ActorRef next);
     }
 
+    public ActorKeyAggregation actor(String name, InitBuilder builderFunction) {
+        Config conf = this.deployment.getMasterConfig();
+        return new ActorKeyAggregationOneShot(getSystem(), name, conf, builderFunction);
+    }
+
+    public interface InitBuilder extends Serializable {
+        void build(ActorKeyAggregation self, ActorBehaviorBuilderKeyAggregation builder);
+    }
+
+    public static class ActorKeyAggregationOneShot extends ActorKeyAggregation {
+        protected InitBuilder builder;
+        public ActorKeyAggregationOneShot(ActorSystem system, String name, Config config) {
+            super(system, name, config);
+        }
+
+        public ActorKeyAggregationOneShot(ActorSystem system, String name, Config config, InitBuilder builder) {
+            super(system, name, config);
+        }
+
+        @Override
+        protected void initSerializedInternalState(Serializable s) {
+            builder = (InitBuilder) s;
+        }
+
+        @Override
+        protected Serializable toSerializableInternalState() {
+            return builder;
+        }
+
+        @Override
+        protected ActorBehavior initBehavior() {
+             ActorBehaviorBuilderKeyAggregation b = behaviorBuilder();
+             builder.build(this, b);
+             return b.build();
+        }
+    }
 }

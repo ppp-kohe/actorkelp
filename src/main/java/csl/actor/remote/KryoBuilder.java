@@ -106,6 +106,10 @@ public class KryoBuilder {
         }
     }
 
+    public void register(Kryo kryo, Class<?>... types) {
+        register(kryo, Arrays.asList(types));
+    }
+
     @SuppressWarnings("unchecked")
     public void registerObjectStream(Kryo kryo, Class<? extends Serializable> cls) {
         Registration r = kryo.register(cls);
@@ -258,6 +262,7 @@ public class KryoBuilder {
                 ActorPlacement.LeaveEntry.class,
                 ActorPlacementKeyAggregation.Task.class,
                 ActorPlacementKeyAggregation.TaskChain.class,
+                ActorPlacementKeyAggregation.InitBuilder.class,
                 ActorKeyAggregation.StateUnit.class,
                 ActorKeyAggregation.ActorKeyAggregationSerializable.class,
                 ActorKeyAggregation.CallableToLocalSerializable.class,

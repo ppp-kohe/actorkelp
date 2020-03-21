@@ -6,6 +6,7 @@ import csl.actor.CallableMessage;
 import csl.actor.cluster.*;
 import csl.actor.remote.ActorAddress;
 import csl.actor.remote.ActorRefRemote;
+import csl.actor.remote.KryoBuilder;
 
 import java.io.Serializable;
 import java.time.Instant;
@@ -28,6 +29,12 @@ public class ClusterKeyAggregation extends ClusterDeployment<Config, ActorPlacem
 
     public static ClusterKeyAggregation create() {
         return new ClusterKeyAggregation();
+    }
+
+    public static ClusterKeyAggregation createWithAttachKryoBuilderType(Class<? extends KryoBuilder> cls) {
+        ClusterKeyAggregation c = create();
+        c.setAttachKryoBuilderType(cls.getName());
+        return c;
     }
 
     public ClusterKeyAggregation() {

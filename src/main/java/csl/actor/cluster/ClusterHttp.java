@@ -67,6 +67,9 @@ public class ClusterHttp implements Closeable {
         server = (HttpServer) new HttpServer(this)
                 .setHost(host).setPort(port)
                 .startWithoutWait();
+        if (deployment.getSystem() != null) {
+            server.setSerializer(deployment.getSystem().getSerializer());
+        }
         getLogger().log(logHttp, logColorHttp, "http-server started: %s:%d methods=%,d", host, port, methods.size());
     }
 

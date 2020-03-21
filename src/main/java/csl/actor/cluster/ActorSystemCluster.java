@@ -4,6 +4,7 @@ import com.esotericsoftware.kryo.Kryo;
 import csl.actor.*;
 import csl.actor.remote.*;
 
+import java.lang.reflect.Constructor;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
@@ -22,6 +23,17 @@ public class ActorSystemCluster extends ActorSystemRemote implements MailboxPers
 
     public ActorSystemCluster(ActorSystemDefault localSystem, Function<ActorSystem, Kryo> kryoFactory) {
         super(localSystem, kryoFactory);
+    }
+
+    public static ActorSystemCluster createWithKryoBuilderType(Class<? extends KryoBuilder> kryoBuilderType) throws Exception {
+        Constructor<? extends KryoBuilder> cons = kryoBuilderType.getConstructor();
+        return new ActorSystemCluster(new ActorSystemDefaultForRemote(), KryoBuilder.builder(() -> {
+            try {
+                return cons.newInstance();
+            } catch (Exception ex) {
+                throw new RuntimeException(ex);
+            }
+        }));
     }
 
     @Override

@@ -3,6 +3,7 @@ package csl.actor.cluster;
 import csl.actor.ActorSystem;
 import csl.actor.remote.ActorAddress;
 import csl.actor.remote.ActorSystemRemote;
+import csl.actor.remote.KryoBuilder;
 
 import java.io.File;
 import java.lang.reflect.Field;
@@ -37,6 +38,7 @@ public class ConfigDeployment extends ConfigBase {
     public int httpPort = 48888;
 
     public boolean configPathAsMasterFirstArgument = true;
+    public String kryoBuilderType = KryoBuilder.class.getName();
 
     public ConfigDeployment() {
     }

@@ -1,5 +1,6 @@
 package csl.actor.example.wordcount;
 
+import com.esotericsoftware.kryo.Kryo;
 import csl.actor.ActorSystem;
 import csl.actor.cluster.ConfigDeployment;
 import csl.actor.cluster.FileSplitter;
@@ -7,6 +8,7 @@ import csl.actor.keyaggregate.ActorPlacementKeyAggregation;
 import csl.actor.keyaggregate.ClusterKeyAggregation;
 import csl.actor.keyaggregate.Config;
 import csl.actor.keyaggregate.FileMapper;
+import csl.actor.remote.KryoBuilder;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -42,6 +44,15 @@ public class WordCountCluster {
         c.shutdownAll();
     }
 
+    public static class KryoBuilderWordCount extends KryoBuilder {
+        @Override
+        public Kryo build() {
+            Kryo k = super.build();
+            register(k, WordCount.Count.class);
+            return k;
+        }
+    }
+
     static String[] createConf(String inputFile) throws Exception {
         Path inputPath = Paths.get(inputFile);
         Path dir = inputPath.getParent();
@@ -54,6 +65,7 @@ public class WordCountCluster {
                 "   logColor 102\n" +
                 "   logFile true\n" +
                 "   lowerBoundThresholdFactor 0\n" +
+                "   kryoBuilderType \"" + KryoBuilderWordCount.class.getName() + "\"\n" +
                 "\n" +
                 "node follower1:\n" +
                 "   host \"localhost\"\n" +
@@ -65,6 +77,7 @@ public class WordCountCluster {
                 "   persist true\n" +
                 "   persistMailboxOnMemorySize 1_000\n" +
                 "   lowerBoundThresholdFactor 0\n" +
+                "   kryoBuilderType \"" + KryoBuilderWordCount.class.getName() + "\"\n" +
                 "\n" +
                 "node follower2:\n" +
                 "   host \"localhost\"\n" +
@@ -76,6 +89,7 @@ public class WordCountCluster {
                 "   persist true\n" +
                 "   persistMailboxOnMemorySize 1_000\n" +
                 "   lowerBoundThresholdFactor 0\n" +
+                "   kryoBuilderType \"" + KryoBuilderWordCount.class.getName() + "\"\n" +
                 "\n";
         Path confPath = dir.resolve("config.txt");
         Files.writeString(confPath, confData);
