@@ -72,7 +72,7 @@ public class PhaseShift implements CallableMessage.CallableMessageConsumer<Actor
             //ignore
         }
         ++count;
-        actor.tell(this, sender);
+        actor.getDelayedMailbox().offer(new Message<>(actor, sender, this));
     }
 
     public PhaseCompleted createCompleted(Actor actor) {
@@ -178,7 +178,7 @@ public class PhaseShift implements CallableMessage.CallableMessageConsumer<Actor
                 //ignore
             }
             ++count;
-            actor.tell(this, sender);
+            actor.getDelayedMailbox().offer(new Message<>(actor, sender, this));
         }
     }
 

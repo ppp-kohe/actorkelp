@@ -21,9 +21,9 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.regex.Pattern;
 
-public class SerializeExample {
+public class ExampleSerialize {
     public static void main(String[] args)throws Exception {
-        new SerializeExample().run();
+        new ExampleSerialize().run();
     }
 
     public void run() throws Exception {

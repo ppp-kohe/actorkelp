@@ -205,7 +205,7 @@ public interface ActorPlacement {
                         target.ref(getSystem()),
                         new ActorCreationRequest(previous)).get(10, TimeUnit.SECONDS);
                 if (a.getName() != null) {
-                    system.unregister(a.getName());
+                    system.unregister(a);
                 }
                 return remote;
             } catch (Throwable ex) {
@@ -284,7 +284,7 @@ public interface ActorPlacement {
 
         public void close() {
             log("close");
-            getSystem().unregister(getName());
+            getSystem().unregister(this);
             LeaveEntry l = new LeaveEntry(getSelfAddress());
             cluster.forEach(e -> e.getPlacementActor()
                             .ref(getSystem()).tell(l, this));

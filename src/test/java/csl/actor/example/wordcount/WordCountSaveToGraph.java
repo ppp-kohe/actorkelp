@@ -42,7 +42,7 @@ public class WordCountSaveToGraph {
 
         System.err.println(String.format("save %s -> %s", p, outPath.getFileName()));
 
-        g = new ActorToGraph(system, outPath.toFile(), null);
+//        g = new ActorToGraph(system, outPath.toFile(), null);
 
         try (Input in = new Input(new FileInputStream(p.toFile()))) {
             Object o = pool.read(in);
@@ -51,7 +51,7 @@ public class WordCountSaveToGraph {
             ex.printStackTrace();
         }
 
-        g.finish();
+//        g.finish(); TODO
     }
 
     void processObj(Object o) {
@@ -60,7 +60,7 @@ public class WordCountSaveToGraph {
                 processObj(c);
             }
         } else if (o instanceof KeyHistograms.HistogramTree) {
-            g.save(null, (KeyHistograms.HistogramTree) o, 0);
+            //TODO g.save(null, (KeyHistograms.HistogramTree) o, 0);
         } else {
             System.err.println("??? " + o);
         }

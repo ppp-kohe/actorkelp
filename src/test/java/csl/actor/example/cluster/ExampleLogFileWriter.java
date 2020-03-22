@@ -1,11 +1,11 @@
-package csl.actor.example.wordcount;
+package csl.actor.example.cluster;
 
 import csl.actor.ActorSystemDefault;
 import csl.actor.cluster.LogFileWriter;
 
 import java.nio.file.Paths;
 
-public class LogFileWriterTest {
+public class ExampleLogFileWriter {
     public static void main(String[] args) throws Exception {
         try (LogFileWriter w = new LogFileWriter(System.err, Paths.get("target/debug-log.txt"), false)) {
             w.println("hello, world");

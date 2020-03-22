@@ -5,8 +5,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public abstract class Actor implements ActorRef {
     protected transient ActorSystem system;
     protected Mailbox mailbox;
-    protected String name;
+    protected volatile String name;
     protected transient AtomicBoolean processLock = new AtomicBoolean(false);
+    protected Mailbox delayedMailbox;
 
     public Actor(ActorSystem system) {
         this(system, null);
@@ -64,7 +65,14 @@ public abstract class Actor implements ActorRef {
             processMessage(message);
             return true;
         } else {
-            return false;
+            Mailbox dm = delayedMailbox;
+            if (dm != null && !dm.isEmpty() &&
+                    (message = dm.poll()) != null) {
+                processDelayedMessage(message);
+                return true;
+            } else {
+                return false;
+            }
         }
     }
 
@@ -77,5 +85,24 @@ public abstract class Actor implements ActorRef {
     @Override
     public void tell(Object data, ActorRef sender) {
         system.send(new Message<>(this, sender, data));
+    }
+
+    public Mailbox getDelayedMailbox() {
+        if (delayedMailbox == null) {
+            synchronized (this) {
+                if (delayedMailbox == null) {
+                    delayedMailbox = initDelayedMailbox();
+                }
+            }
+        }
+        return delayedMailbox;
+    }
+
+    protected Mailbox initDelayedMailbox() {
+        return new MailboxDefault();
+    }
+
+    protected void processDelayedMessage(Message<?> message) {
+        processMessage(message);
     }
 }

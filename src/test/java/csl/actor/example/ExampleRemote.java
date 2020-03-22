@@ -60,7 +60,9 @@ public class ExampleRemote {
     static String classpath;
     public static void setMvnClasspath() {
         try {
-            Process proc = new ProcessBuilder().command("mvn", "dependency:build-classpath", "-DincludeScope=test")
+            ProcessBuilder pb = new ProcessBuilder();
+            pb.environment().put("MAVEN_OPTS", "");
+            Process proc = pb.command("mvn", "dependency:build-classpath", "-DincludeScope=test")
                     .start();
             try (BufferedReader r = new BufferedReader(new InputStreamReader(proc.getInputStream(), StandardCharsets.UTF_8))) {
                 String line;

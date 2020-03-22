@@ -12,7 +12,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiFunction;
 
-public class LockExample {
+public class ExpLock {
     static AtomicBoolean error = new AtomicBoolean();
     public static void main(String[] args) throws Exception {
         for (int n = 0; n < 7; ++n) {

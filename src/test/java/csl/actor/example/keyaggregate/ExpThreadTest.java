@@ -15,9 +15,9 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.IntStream;
 
-public class ThreadTest {
+public class ExpThreadTest {
     public static void main(String[] args) {
-        new ThreadTest().run(args);
+        new ExpThreadTest().run(args);
     }
 
     public void run(String... args) {
@@ -35,8 +35,8 @@ public class ThreadTest {
 
     }
 
-    public ThreadTest create() {
-        return new ThreadTest();
+    public ExpThreadTest create() {
+        return new ExpThreadTest();
     }
 
     int num;

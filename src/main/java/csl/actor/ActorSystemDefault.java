@@ -162,6 +162,7 @@ public class ActorSystemDefault implements ActorSystem {
         }
     }
 
+    @Override
     public void register(Actor actor) {
         String name = actor.getName();
         if (name != null) {
@@ -169,10 +170,12 @@ public class ActorSystemDefault implements ActorSystem {
         }
     }
 
-    public void unregister(String actorName) {
-        namedActorMap.remove(actorName);
+    @Override
+    public void unregister(Actor actor) {
+        namedActorMap.remove(actor.getName(), actor);
     }
 
+    @Override
     public Actor resolveActorLocalNamed(ActorRefLocalNamed ref) {
         if (ref instanceof ActorRefLocalNamed.ActorRefLocalNamedNoName) {
             getLogger().log("resolveActorLocalNamed error: %s", ref);

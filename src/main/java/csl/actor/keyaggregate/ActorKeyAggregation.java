@@ -604,6 +604,9 @@ public abstract class ActorKeyAggregation extends ActorDefault
         merged.getMailboxAsKeyAggregation().lockRemainingProcesses();
         getMailboxAsKeyAggregation()
                 .merge(merged.getMailboxAsKeyAggregation());
+        if (this.name != null) {
+            getSystem().register(this); //re-register this for this.name == merged.name
+        }
         merged.internalCancel();
         try {
             initMerged(merged);
@@ -677,6 +680,8 @@ public abstract class ActorKeyAggregation extends ActorDefault
 
     public void internalCancel() { //remaining messages are processed by the canceled state
         state = new StateCanceled(router(), state == null ? 0 : state.getProcessCount());
+        this.name = this.name + ".canceled." + Instant.now().getNano();
+        getSystem().register(this);
         router().tell(new CancelChange(this, CanceledChangeType.CancelAdded));
     }
 

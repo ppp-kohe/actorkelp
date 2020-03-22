@@ -7,14 +7,14 @@ import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
-public class ThreadTestKMeans extends ThreadTest {
+public class ExpThreadTestKMeans extends ExpThreadTest {
     public static void main(String[] args) {
-        new ThreadTestKMeans().run(args);
+        new ExpThreadTestKMeans().run(args);
     }
 
     @Override
-    public ThreadTest create() {
-        return new ThreadTestKMeans();
+    public ExpThreadTest create() {
+        return new ExpThreadTestKMeans();
     }
 
     @Override
@@ -22,7 +22,7 @@ public class ThreadTestKMeans extends ThreadTest {
         return new ReadActorKMeans(sys, r, fa);
     }
 
-    static class ReadActorKMeans extends ThreadTest.ReadActor {
+    static class ReadActorKMeans extends ExpThreadTest.ReadActor {
         double diff;
         public ReadActorKMeans(ActorSystem system, int n, ActorRef target) {
             super(system, n, target);

@@ -1,7 +1,7 @@
 package csl.actor.example.keyaggregate;
 
 import csl.actor.*;
-import csl.actor.example.SerializeExample2;
+import csl.actor.example.ExampleSerialize2;
 import csl.actor.keyaggregate.Config;
 import csl.actor.cluster.MailboxPersistable;
 import csl.actor.cluster.PhaseShift;
@@ -34,7 +34,7 @@ public class MailboxPersistableTest {
                     "target/debug-persist", p, Paths::get, system.getLogger());
             MailboxPersistable.MessagePersistentFile mp = new MailboxPersistable.MessagePersistentFile(manager);
 
-            SerializeExample2.MyActor a = new SerializeExample2.MyActor(system, "hello", Config.CONFIG_DEFAULT);
+            ExampleSerialize2.MyActor a = new ExampleSerialize2.MyActor(system, "hello", Config.CONFIG_DEFAULT);
 
             MailboxPersistable.MessageOnStorage s;
             try (MailboxPersistable.MessagePersistentWriter w = mp.get()) {
@@ -71,7 +71,7 @@ public class MailboxPersistableTest {
                     "target/debug-persist", p, Paths::get, system.getLogger());
             MailboxPersistable.MessagePersistentFile mp = new MailboxPersistable.MessagePersistentFile(manager);
 
-            SerializeExample2.MyActor a = new SerializeExample2.MyActor(system, "hello", Config.CONFIG_DEFAULT);
+            ExampleSerialize2.MyActor a = new ExampleSerialize2.MyActor(system, "hello", Config.CONFIG_DEFAULT);
 
             int blockSize = 3;
 

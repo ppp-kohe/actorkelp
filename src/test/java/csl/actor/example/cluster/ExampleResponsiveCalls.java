@@ -1,4 +1,4 @@
-package csl.actor.example.keyaggregate;
+package csl.actor.example.cluster;
 
 import csl.actor.*;
 import csl.actor.cluster.ResponsiveCalls;

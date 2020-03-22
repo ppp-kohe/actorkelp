@@ -1,4 +1,4 @@
-package csl.actor.example.wordcount;
+package csl.actor.example.cluster;
 
 import csl.actor.ActorBehavior;
 import csl.actor.ActorRef;
@@ -7,7 +7,7 @@ import csl.actor.ActorSystemDefault;
 import csl.actor.keyaggregate.ActorKeyAggregation;
 import csl.actor.cluster.PhaseShift;
 
-public class PhaseExample {
+public class ExamplePhase {
     public static void main(String[] args) {
 
         ActorSystem system = new ActorSystemDefault();

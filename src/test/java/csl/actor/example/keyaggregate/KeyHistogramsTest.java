@@ -1,5 +1,6 @@
 package csl.actor.example.keyaggregate;
 
+import csl.actor.ActorSystem;
 import csl.actor.ActorSystemDefault;
 import csl.actor.example.delayedlabel.ActorToGraph;
 import csl.actor.keyaggregate.KeyHistograms;
@@ -484,10 +485,12 @@ public class KeyHistogramsTest {
             assertEquals(Arrays.asList("<ddd>", "<ddd2>"), Arrays.asList(vs));
         }
 
+        save("target/msgassoc-debug/put.dot", tree);
+    }
+
+    public void save(String fileName, KeyHistograms.HistogramTree tree) {
         try (ActorSystemDefault sys = new ActorSystemDefault()) {
-            ActorToGraph save = new ActorToGraph(sys, new File("target/msgassoc-debug/put.dot"), null);
-            save.save(null, tree, 0);
-            save.finish();
+            ActorToGraph.save(sys, tree, new File(fileName));
         }
     }
 
@@ -538,9 +541,7 @@ public class KeyHistogramsTest {
         tree.put("ccc", ctx);
 
         try (ActorSystemDefault sys = new ActorSystemDefault()) {
-            ActorToGraph save = new ActorToGraph(sys, new File("target/msgassoc-debug/split-before.dot"), null);
-            save.save(null, tree, 0);
-            save.finish();
+            ActorToGraph.save(sys, tree, new File("target/msgassoc-debug/split-before.dot"));
         }
 
 
@@ -616,12 +617,8 @@ public class KeyHistogramsTest {
         }
 
 
-        try (ActorSystemDefault sys = new ActorSystemDefault()) {
-            ActorToGraph save = new ActorToGraph(sys, new File("target/msgassoc-debug/split.dot"), null);
-            save.save(null, tree2, 0);
-            save.save(null, tree, 1);
-            save.finish();
-        }
+        save("target/msgassoc-debug/split2.dot", tree2);
+        save("target/msgassoc-debug/split1.dot", tree);
     }
 
     public void testMerge() {
@@ -700,12 +697,7 @@ public class KeyHistogramsTest {
 
         tree3.merge(tree4);
 
-        try (ActorSystemDefault sys = new ActorSystemDefault()) {
-            ActorToGraph save = new ActorToGraph(sys, new File("target/msgassoc-debug/merge.dot"), null)
-                    .setSaveLeafNode(true);
-            save.save(null, tree3, 0);
-            save.finish();
-        }
+        save("target/msgassoc-debug/merge.dot", tree3);
     }
 
     protected List<Object> values(KeyHistograms.HistogramNode node, Object pos) {

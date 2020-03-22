@@ -12,9 +12,9 @@ import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
-public class SerializeExample2 extends SerializeExample{
+public class ExampleSerialize2 extends ExampleSerialize {
     public static void main(String[] args) throws Exception {
-        new SerializeExample2().run();
+        new ExampleSerialize2().run();
     }
     KryoBuilder.SerializerPoolDefault p;
     ActorSystemDefault system;

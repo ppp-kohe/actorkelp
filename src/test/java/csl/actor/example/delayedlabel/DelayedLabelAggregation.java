@@ -111,6 +111,7 @@ public class DelayedLabelAggregation extends DelayedLabelManual {
             }
             String sn = self.getClass().getSimpleName();
             File file = new File(dir, String.format("delayed-%s-%s.dot", sn, count));
+            /*TODO
             ResponsiveCalls.sendTaskConsumer(self.getSystem(), root, (self) -> {
                 if (new ActorToGraph(self.getSystem(), file, self).save(self).finish()) {
                     if (finish) {
@@ -123,7 +124,7 @@ public class DelayedLabelAggregation extends DelayedLabelManual {
                         });
                     }
                 }
-            });
+            });*/
         }
 
         public void finish(Finish f) {

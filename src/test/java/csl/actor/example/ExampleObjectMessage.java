@@ -9,16 +9,16 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 
-public class ObjectMessageExample {
+public class ExampleObjectMessage {
     public static void main(String[] args) throws Exception {
         ActorSystemRemote.debugLog = true;
         ActorSystemRemote.debugLogMsg = true;
 
         new Thread() {public void run() {
             ObjectMessageServer server = new ObjectMessageServer();
-            ObjectMessageExample.server = server;
+            ExampleObjectMessage.server = server;
             server.setPort(30000);
-            server.setReceiver(ObjectMessageExample::receive);
+            server.setReceiver(ExampleObjectMessage::receive);
             System.err.println("server start");
             server.start();
         }}.start();

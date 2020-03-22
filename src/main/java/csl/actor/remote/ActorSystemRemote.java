@@ -253,8 +253,8 @@ public class ActorSystemRemote implements ActorSystem {
     }
 
     @Override
-    public void unregister(String actorName) {
-        localSystem.unregister(actorName);
+    public void unregister(Actor actor) {
+        localSystem.unregister(actor);
     }
 
     @Override

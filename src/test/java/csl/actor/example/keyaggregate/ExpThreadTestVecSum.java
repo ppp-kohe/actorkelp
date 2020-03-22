@@ -6,14 +6,14 @@ import csl.actor.ActorSystem;
 import java.util.Arrays;
 import java.util.Random;
 
-public class ThreadTestVecSum extends ThreadTest {
+public class ExpThreadTestVecSum extends ExpThreadTest {
     public static void main(String[] args) {
-        new ThreadTestVecSum().run(args);
+        new ExpThreadTestVecSum().run(args);
     }
 
     @Override
-    public ThreadTest create() {
-        return new ThreadTestVecSum();
+    public ExpThreadTest create() {
+        return new ExpThreadTestVecSum();
     }
 
     @Override
@@ -36,7 +36,7 @@ public class ThreadTestVecSum extends ThreadTest {
         }
 
         double sum() {
-            return ThreadTestVecSum.sum(vec, rand);
+            return ExpThreadTestVecSum.sum(vec, rand);
         }
 
         @Override
@@ -61,7 +61,7 @@ public class ThreadTestVecSum extends ThreadTest {
 
 
 
-    static class ReadActorVecSum extends ThreadTest.ReadActor {
+    static class ReadActorVecSum extends ExpThreadTest.ReadActor {
         double[] vec = new double[vecSize];
         Random rand = new Random();
         public ReadActorVecSum(ActorSystem system, int n, ActorRef target) {

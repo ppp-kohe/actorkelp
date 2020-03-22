@@ -5,6 +5,7 @@ import csl.actor.ActorDefault;
 import csl.actor.ActorRef;
 import csl.actor.ActorSystem;
 import csl.actor.cluster.ActorPlacement;
+import csl.actor.cluster.PhaseShift;
 import csl.actor.cluster.ResponsiveCalls;
 import csl.actor.example.ExampleRemote;
 import csl.actor.keyaggregate.*;
@@ -21,33 +22,43 @@ public class ExampleActorReplicablePlacement {
         int serverPort = 10000;
         system.startWithoutWait(serverPort);
 
-        new ActorPlacementKeyAggregation(system,
+        ActorPlacementKeyAggregation p = new ActorPlacementKeyAggregation(system,
                 new ActorPlacement.PlacementStrategyRoundRobin(0));
 
         ExampleRemote.setMvnClasspath();
         ExampleRemote.launchJava("-Dcsl.actor.debug.color=106", Follower.class.getName(), "10001", Integer.toString(serverPort));
-        Thread.sleep(15000);
+        Thread.sleep(5000);
 
         ActorRefRemote.get(system, "localhost", 10001, "recv")
                 .tell(ActorRefRemote.get(system, "localhost", 10001, "recv"), null);
 
         TestActor a = new TestActor(system, "hello", new Config());
-        ResponsiveCalls.sendTask(system, a, (s) -> {((TestActor) s).move(); return "";});
 
-        a.routerSplit(2);
+        a.routerSplit(2).get();
 
+        ActorRef ref = ResponsiveCalls.sendTask(system, a, TestActor::move).get();
         for (int i = 0; i < 100; ++i) {
             for (int j = 0; j < 20; ++j) {
-                a.tell(i, null);
+                ref.tell(i, null);
             }
         }
 
+        PhaseShift.start(system, ref).get();
+        p.close();
+        Thread.sleep(3000);
+        system.close();
     }
 
     public static class TestActor extends ActorKeyAggregation {
         long[] model;
         public TestActor(ActorSystem system, String name, Config config) {
             super(system, name, config);
+            model = new long[1000];
+            Arrays.fill(model, 123);
+        }
+
+        public TestActor(ActorSystem system, String name, Config config, State state) {
+            super(system, name, config, state);
             model = new long[1000];
             Arrays.fill(model, 123);
         }
@@ -78,10 +89,10 @@ public class ExampleActorReplicablePlacement {
             return new ExampleActorReplicablePlacement.State(model);
         }
 
-        public void move() {
+        public ActorRef move() {
             ActorRef ref = place(getPlacement(), this);
-            System.err.println(getSystem() + ": " + ref);
-            ref.tell("hello", this);
+            System.out.println(getSystem() + " : place " + ref);
+            return ref;
         }
 
         public void info(String n, ActorRef sender) {
@@ -110,7 +121,7 @@ public class ExampleActorReplicablePlacement {
 
             ActorPlacementKeyAggregation p = new ActorPlacementKeyAggregation(system,
                     new ActorPlacement.PlacementStrategyUndertaker());
-            Thread.sleep(10000);
+            Thread.sleep(3000);
             p.join(ActorAddress.get("localhost", joinPort));
         }
     }

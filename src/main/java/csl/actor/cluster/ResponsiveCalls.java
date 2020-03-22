@@ -232,7 +232,7 @@ public class ResponsiveCalls {
 
         @SuppressWarnings("unchecked")
         public void receive(Object v, ActorRef sender) {
-            getSystem().unregister(getName());
+            getSystem().unregister(this);
             if (v instanceof CallableMessage.CallableFailure) {
                 resultHolder.completeExceptionally(this, ((CallableMessage.CallableFailure) v).getError(), sender);
             } else {

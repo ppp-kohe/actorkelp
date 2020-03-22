@@ -18,7 +18,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
-public class RemoteSending {
+public class ExpRemoteSending {
     public static void main(String[] args) throws Exception {
         int msgBytes = 1000_000;
         int msgs = 1_000;
@@ -96,14 +96,12 @@ public class RemoteSending {
         long maxMessages;
         Instant prevTime = Instant.now();
         LinkedList<Long> nums = new LinkedList<>();
-        ScheduledExecutorService service;
 
         long nextExtension = 1;
 
         ActorReceiver(ActorSystem s, String name, long maxMessages) {
             super(s, name);
             this.maxMessages = maxMessages;
-            service = Executors.newSingleThreadScheduledExecutor();
         }
 
         @Override
@@ -131,7 +129,7 @@ public class RemoteSending {
             prevTime = Instant.now();
             if (msg.equals("end") || msg.equals("extension")) {
                 if (receivedMessages < maxMessages) {
-                    service.schedule(() -> tell("extension", this), nextExtension, TimeUnit.SECONDS);
+                    getSystem().getScheduledExecutor().schedule(() -> tell("extension", this), nextExtension, TimeUnit.SECONDS);
                     nextExtension *= 2L;
                 }
                 if (msg.equals("end")) {

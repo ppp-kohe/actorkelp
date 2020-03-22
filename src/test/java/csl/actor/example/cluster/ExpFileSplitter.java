@@ -1,4 +1,4 @@
-package csl.actor.example.wordcount;
+package csl.actor.example.cluster;
 
 import csl.actor.cluster.FileSplitter;
 
@@ -7,9 +7,9 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.concurrent.atomic.AtomicLong;
 
-public class FileSplitterBench {
+public class ExpFileSplitter {
     public static void main(String[] args) throws Exception {
-        new FileSplitterBench().run(args);
+        new ExpFileSplitter().run(args);
     }
 
     public void run(String[] args) throws IOException  {

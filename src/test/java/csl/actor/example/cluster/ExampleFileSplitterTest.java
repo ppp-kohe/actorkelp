@@ -1,4 +1,4 @@
-package csl.actor.example.wordcount;
+package csl.actor.example.cluster;
 
 import csl.actor.cluster.FileSplitter;
 
@@ -8,7 +8,7 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 
-public class FileSplitterTest {
+public class ExampleFileSplitterTest {
     public static void main(String[] args) throws Exception {
         String src = args[0];
         long block = 10_000_000L;

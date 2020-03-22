@@ -1,4 +1,4 @@
-package csl.actor.example.wordcount;
+package csl.actor.example.cluster;
 
 import csl.actor.cluster.FileSplitter;
 
@@ -11,7 +11,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-public class FileSplitterExample {
+public class ExampleFileSplitter {
     public static void main(String[] args) throws Exception {
         String path = args[0];
         FileSplitter s;
