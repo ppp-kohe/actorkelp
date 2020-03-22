@@ -29,13 +29,9 @@ public class WordCountCluster {
         ClusterKeyAggregation c = ClusterKeyAggregation.create();
         ActorPlacementKeyAggregation place = c.deploy(confFile);
 
-        Config conf = c.getMaster().getAppConfig();
-        ActorSystem system = c.getSystem();
-
-        FileMapper fileReader = new FileMapper(system, "fileReader", conf,
-                FileSplitter.getWithSplitCount(10, ConfigDeployment.getPathModifier(system)));
-        WordCount.WordCountMapper mapper = new WordCount.WordCountMapper(system, "mapper", conf);
-        WordCount.WordCountReducer reducer = new WordCount.WordCountReducer(system, "reducer", conf, ".");
+        FileMapper fileReader = place.fileMapperWithSplitCount(10);
+        WordCount.WordCountMapper mapper = place.actor((system, conf) -> new WordCount.WordCountMapper(system, "mapper", conf));
+        WordCount.WordCountReducer reducer = place.actor((system, conf) -> new WordCount.WordCountReducer(system, "reducer", conf, "."));
 
         place.connectStage(fileReader, mapper, reducer).get();
 

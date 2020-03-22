@@ -24,6 +24,7 @@ import java.nio.file.Paths;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.regex.Pattern;
@@ -832,6 +833,14 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
             } catch (Exception ex) {
                 throw new RuntimeException(ex);
             }
+        }
+
+        public <ActorType extends Actor> ActorType actor(BiFunction<ActorSystem, AppConfType, ActorType> creator) {
+            return creator.apply(getSystem(), getMasterConfig());
+        }
+
+        public AppConfType getMasterConfig() {
+            return this.deployment.getMasterConfig();
         }
     }
 

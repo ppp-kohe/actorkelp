@@ -2,6 +2,8 @@ package csl.actor.keyaggregate;
 
 import csl.actor.*;
 import csl.actor.cluster.ClusterDeployment;
+import csl.actor.cluster.ConfigDeployment;
+import csl.actor.cluster.FileSplitter;
 import csl.actor.cluster.ResponsiveCalls;
 import csl.actor.remote.ActorAddress;
 
@@ -151,9 +153,22 @@ public class ActorPlacementKeyAggregation extends ClusterDeployment.ActorPlaceme
         CompletableFuture<?> apply(ActorKeyAggregation prev, ActorRef next);
     }
 
+    public FileMapper fileMapper(FileSplitter splitter) {
+        return new FileMapper(getSystem(), "fileMapper", getMasterConfig(), splitter);
+    }
+
+    public FileMapper fileMapperWithSplitCount(long splits) {
+        return fileMapper(FileSplitter.getWithSplitCount(splits,
+                ConfigDeployment.getPathModifier(getSystem())));
+    }
+
+    public FileMapper fileMapperWithSplitLength(long length) {
+        return fileMapper(FileSplitter.getWithSplitLength(length,
+                ConfigDeployment.getPathModifier(getSystem())));
+    }
+
     public ActorKeyAggregation actor(String name, InitBuilder builderFunction) {
-        Config conf = this.deployment.getMasterConfig();
-        return new ActorKeyAggregationOneShot(getSystem(), name, conf, builderFunction);
+        return new ActorKeyAggregationOneShot(getSystem(), name, getMasterConfig(), builderFunction);
     }
 
     public interface InitBuilder extends Serializable {
