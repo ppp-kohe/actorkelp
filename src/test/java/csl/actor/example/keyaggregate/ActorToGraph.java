@@ -1,4 +1,4 @@
-package csl.actor.example.delayedlabel;
+package csl.actor.example.keyaggregate;
 
 import csl.actor.*;
 import csl.actor.cluster.PhaseShift;
@@ -18,7 +18,6 @@ import java.util.stream.Collectors;
 
 public class ActorToGraph extends ActorDefault {
     protected List<GraphNode> nodes = new ArrayList<>();
-    protected List<GraphEdge> edges = new ArrayList<>();
     protected Map<String,GraphNode> nodeMap = new HashMap<>();
     protected Map<String,List<GraphEdge>> edgeMap = new HashMap<>();
     protected boolean saveLeafNode;
@@ -32,7 +31,7 @@ public class ActorToGraph extends ActorDefault {
         ag.tell(a);
         try {
             PhaseShift.start(system, ag).get(100, TimeUnit.SECONDS);
-            ag.tell(file);
+            ResponsiveCalls.sendTaskConsumer(ag, self -> self.save(file)).get();
         } catch (Exception ex) {
             throw new RuntimeException(ex);
         }
@@ -44,6 +43,7 @@ public class ActorToGraph extends ActorDefault {
                 .match(GraphGen.class, this::add)
                 .match(File.class, this::save)
                 .match(ActorRef.class, this::receive)
+                .match(KeyHistograms.HistogramTree.class, this::receive)
                 .build();
     }
 
@@ -105,13 +105,15 @@ public class ActorToGraph extends ActorDefault {
         } catch (Exception ex) {
             throw new RuntimeException(ex);
         }
+        getSystem().getLogger().log("#saved: %s", file);
     }
 
     public void receive(ActorRef ref) {
         if (ref instanceof ActorRefRemote) {
             try {
+                boolean sln = saveLeafNode;
                 add(ResponsiveCalls.sendTask(getSystem(), ref, a ->
-                    new GraphGen(this, saveLeafNode).build(a)).get());
+                    new GraphGen(a, sln).build(a)).get());
             } catch (Exception ex) {
                 throw new RuntimeException(ex);
             }
@@ -122,8 +124,8 @@ public class ActorToGraph extends ActorDefault {
 
     public void receive(KeyHistograms.HistogramTree tree) {
         GraphGen g = new GraphGen(this, saveLeafNode);
-        GraphNode n = new GraphNode("?:" + Instant.now());
-        g.addNode(n);
+        GraphNode n = g.createNode("?:" + Instant.now());
+        n.tableLabel = new ArrayList<>();
         g.createNodeHistTree(n, tree, 0);
         add(g);
     }
@@ -141,10 +143,6 @@ public class ActorToGraph extends ActorDefault {
         public GraphGen(ActorRef actorToGraph, boolean saveLeafNode) {
             this.actorToGraph = actorToGraph;
             this.saveLeafNode = saveLeafNode;
-        }
-
-        public void addNode(GraphNode n) {
-            nodes.add(n);
         }
 
         public GraphGen build(Actor a) {
@@ -169,6 +167,8 @@ public class ActorToGraph extends ActorDefault {
                 return "actor:" + getId(((Actor) ref).getSystem()) + "/" + name;
             } else if (ref instanceof ActorRefLocalNamed) {
                 return getId(ref.asLocal());
+            } else if (ref instanceof ActorRefRemote) {
+                return "actor:" + ((ActorRefRemote) ref).getAddress();
             } else {
                 return "actor:" + ref.toString();
             }
@@ -180,12 +180,18 @@ public class ActorToGraph extends ActorDefault {
             return e;
         }
 
+        public GraphNode createNode(String key) {
+            GraphNode n = new GraphNode(key);
+            nodes.add(n);
+            return n;
+        }
+
         public GraphNode createNode(Actor a) {
-            GraphNode n = new GraphNode(getId(a));
-            addNode(n);
+            GraphNode n = createNode(getId(a));
             List<List<String>> table = new ArrayList<>();
             table.add(Arrays.asList("actor", a.getClass().getSimpleName()));
             table.add(Arrays.asList("name", Objects.toString(a.getName())));
+            table.add(Arrays.asList("address", getId(a)));
             table.add(Arrays.asList("idhash", idStr(a)));
             createNodeMailbox(table, a.getMailbox());
             n.tableLabel = table;
@@ -222,9 +228,21 @@ public class ActorToGraph extends ActorDefault {
                 n.tableLabel.add(Arrays.asList("maxHeight", String.format("%,d", sr.getMaxHeight())));
                 createNodeSplit(n, sr.getSplit(), "");
             } else if (s instanceof ActorKeyAggregation.StateUnit) {
-                n.tableLabel.add(Arrays.asList("router", Objects.toString(((ActorKeyAggregation.StateUnit) s).getRouter())));
+                n.tableLabel.add(Arrays.asList("router", actorStr(((ActorKeyAggregation.StateUnit) s).getRouter())));
             } else if (s instanceof ActorKeyAggregation.StateCanceled) {
-                n.tableLabel.add(Arrays.asList("router", Objects.toString(((ActorKeyAggregation.StateCanceled) s).getRouter())));
+                n.tableLabel.add(Arrays.asList("router", actorStr(((ActorKeyAggregation.StateCanceled) s).getRouter())));
+            }
+        }
+
+        public String actorStr(ActorRef ref) {
+            if (ref instanceof Actor) {
+                return idStr(ref);
+            } else if (ref instanceof ActorRefRemote) {
+                return Objects.toString(((ActorRefRemote) ref).getAddress());
+            } else if (ref instanceof ActorRefLocalNamed) {
+                return ((ActorRefLocalNamed) ref).getName();
+            } else {
+                return ref.toString();
             }
         }
 
@@ -244,8 +262,7 @@ public class ActorToGraph extends ActorDefault {
 
         public GraphEdge createNodeHistNode(GraphNode from, KeyHistograms.HistogramNode node) {
             if (node == null) {
-                GraphNode n = new GraphNode("null:" + Instant.now());
-                addNode(n);
+                GraphNode n = createNode("null:" + Instant.now());
                 n.label = "tree null";
                 return createEdge(from, n);
             } else if (node instanceof KeyHistograms.HistogramNodeTree) {
@@ -282,7 +299,7 @@ public class ActorToGraph extends ActorDefault {
                 ++i;
             }
 
-            GraphNode n = new GraphNode("histTree:" + Instant.now());
+            GraphNode n = createNode("histTree:" + Instant.now());
             n.tableLabel = table;
             GraphEdge e = createEdge(from, n);
             if (t.getChildren() != null) {
@@ -317,12 +334,12 @@ public class ActorToGraph extends ActorDefault {
 
         public void createNodeSplit(GraphNode from, KeyAggregationRoutingSplit s, String edgeLabel) {
             if (s == null) {
-                GraphNode n = new GraphNode("null:" + Instant.now());
+                GraphNode n = createNode("null:" + Instant.now());
                 n.label = "null";
                 createEdge(from, n);
             } else if (s instanceof KeyAggregationRoutingSplit.RoutingSplitNode) {
                 KeyAggregationRoutingSplit.RoutingSplitNode st = (KeyAggregationRoutingSplit.RoutingSplitNode) s;
-                GraphNode n = new GraphNode("splitNode:" + Instant.now());
+                GraphNode n = createNode("splitNode:" + Instant.now());
                 n.tableLabel = new ArrayList<>();
                 n.tableLabel.add(Arrays.asList("split.procs", String.format("%,d", st.getProcessCount())));
                 n.tableLabel.add(Arrays.asList("path", st.getPath().toString()));
@@ -342,7 +359,7 @@ public class ActorToGraph extends ActorDefault {
                 createEdge(from, n).label = edgeLabel;
             } else if (s instanceof KeyAggregationRoutingSplit.RoutingSplitLeaf) {
                 ActorRef ref = ((KeyAggregationRoutingSplit.RoutingSplitLeaf) s).getActor();
-                GraphNode n = new GraphNode(getId(ref));
+                GraphNode n = createNode(getId(ref));
                 createEdge(from, n).label = edgeLabel + " dep:" + s.getDepth();
                 actorToGraph.tell(ref);
             }
@@ -400,7 +417,9 @@ public class ActorToGraph extends ActorDefault {
             out.println(";");
         }
 
-        for (GraphEdge e : edges) {
+        for (GraphEdge e : edgeMap.values().stream()
+                .flatMap(List::stream)
+                .collect(Collectors.toList())) {
             out.print("n" + e.from.id + " -> n" + e.to.id);
             if (e.label != null) {
                 out.print("[label=\"" + escape(e.label) + "\"]");

@@ -1,4 +1,4 @@
-package csl.actor.example.wordcount;
+package csl.actor.example.exp.wordcount;
 
 import java.io.File;
 import java.io.PrintWriter;

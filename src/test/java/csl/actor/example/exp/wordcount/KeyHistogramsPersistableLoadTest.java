@@ -1,4 +1,4 @@
-package csl.actor.example.wordcount;
+package csl.actor.example.exp.wordcount;
 
 import csl.actor.ActorSystemDefault;
 import csl.actor.cluster.ConfigDeployment;

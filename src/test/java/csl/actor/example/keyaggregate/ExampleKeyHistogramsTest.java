@@ -1,18 +1,16 @@
 package csl.actor.example.keyaggregate;
 
-import csl.actor.ActorSystem;
 import csl.actor.ActorSystemDefault;
-import csl.actor.example.delayedlabel.ActorToGraph;
 import csl.actor.keyaggregate.KeyHistograms;
 
 import java.io.File;
 import java.util.*;
 
-public class KeyHistogramsTest {
+public class ExampleKeyHistogramsTest {
     public static void main(String[] args) {
-        new KeyHistogramsTest().testPut();
-        new KeyHistogramsTest().testSplit();
-        new KeyHistogramsTest().testMerge();
+        new ExampleKeyHistogramsTest().testPut();
+        new ExampleKeyHistogramsTest().testSplit();
+        new ExampleKeyHistogramsTest().testMerge();
     }
 
     public void testPut() {

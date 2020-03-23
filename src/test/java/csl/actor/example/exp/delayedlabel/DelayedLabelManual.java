@@ -1,11 +1,11 @@
-package csl.actor.example.delayedlabel;
+package csl.actor.example.exp.delayedlabel;
 
 import csl.actor.*;
+import csl.actor.cluster.PhaseShift;
 import csl.actor.keyaggregate.Config;
 import csl.actor.keyaggregate.MessageNoRouting;
 
 import java.io.BufferedReader;
-import java.io.PrintWriter;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.time.Duration;
@@ -15,7 +15,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
-import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -79,11 +78,16 @@ public class DelayedLabelManual {
 
         ResultActor resultActor = resultActor(system, out, startTime);
         ActorRef learnerActor = learnerActor(system, out, resultActor);
-        resultActor.setLearner(learnerActor);
 
         while (inputs.hasNext()) {
             learnerActor.tell(inputs.next());
         }
+        try {
+            PhaseShift.start(system, learnerActor, startTime).get();
+        } catch (Exception ex) {
+            ex.printStackTrace();
+        }
+        system.close();
     }
 
     public Iterator<Object> inputs(ActorSystem.SystemLogger out, String src) {
@@ -162,9 +166,6 @@ public class DelayedLabelManual {
         long finishedInstances;
         ActorSystem.SystemLogger out;
         Instant lastTime;
-        ScheduledExecutorService exe;
-        ActorRef learner;
-        ScheduledFuture<?> checker;
 
         public ResultActor(ActorSystem system, ActorSystem.SystemLogger out, Instant startTime, int numInstances) {
             super(system, "resultActor");
@@ -172,23 +173,6 @@ public class DelayedLabelManual {
             this.numInstances = numInstances;
             this.out = out;
             this.lastTime = startTime;
-            exe = Executors.newSingleThreadScheduledExecutor();
-            checker = exe.scheduleAtFixedRate(this::check, 1, 1, TimeUnit.SECONDS);
-        }
-
-        void check() {
-            Duration d = Duration.between(lastTime, Instant.now());
-            if (!d.minusSeconds(10).isNegative()) {
-                out.log(String.format("#not yet finished: %,d %s since-start:%s",
-                        finishedInstances, d, Duration.between(startTime, Instant.now())));
-                learner.tell(new Finish(finishedInstances), this);
-                checker.cancel(false);
-                exe.shutdown();
-            }
-        }
-
-        public void setLearner(ActorRef learner) {
-            this.learner = learner;
         }
 
         @Override
@@ -204,27 +188,40 @@ public class DelayedLabelManual {
             if (numInstances <= finishedInstances) {
                 Duration d = Duration.between(startTime, Instant.now());
                 out.log(String.format("#finish: %,d %s", finishedInstances, d));
-                learner.tell(new Finish(finishedInstances), this);
-                checker.cancel(true);
-                exe.shutdown();
-                //finish
-                //((ActorSystemDefault) getSystem()).stop();
             }
         }
     }
 
-    public static class LearnerActor extends ActorDefault {
+    public static class LearnerActor extends ActorDefault implements PhaseShift.StageSupported {
         Map<Integer, double[]> featureBuffer = new HashMap<>();
         LearnerModel model;
+
+        ActorRef nextStage;
+
+        @Override
+        public ActorRef nextStage() {
+            return nextStage;
+        }
+
+        public void setNextStage(ActorRef nextStage) {
+            this.nextStage = nextStage;
+        }
+
+        @Override
+        public void logPhase(String str, Object... args) {
+            getSystem().getLogger().log(str, args);
+        }
 
         public LearnerActor(ActorSystem system, String name, ActorRef resultActor) {
             super(system, name);
             this.model = new LearnerModel(resultActor);
+            nextStage = resultActor;
         }
 
         public LearnerActor(ActorSystem system, ActorRef resultActor) {
             super(system);
             this.model = new LearnerModel(resultActor);
+            nextStage = resultActor;
         }
 
         @Override
@@ -232,7 +229,6 @@ public class DelayedLabelManual {
             return behaviorBuilder()
                     .match(FeatureInstance.class, this::testAndKeep)
                     .match(LabelInstance.class, this::train)
-                    .match(Finish.class, this::finish)
                     .build();
         }
 
@@ -245,10 +241,6 @@ public class DelayedLabelManual {
             DataInstance di = new DataInstance(i.getId(), vs, i.getLabel());
 
             model.train(di, this);
-        }
-
-        public void finish(Finish f) {
-            System.exit(0);
         }
     }
 

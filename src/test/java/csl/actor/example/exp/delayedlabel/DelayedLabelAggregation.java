@@ -1,14 +1,13 @@
-package csl.actor.example.delayedlabel;
+package csl.actor.example.exp.delayedlabel;
 
 import csl.actor.*;
-import csl.actor.cluster.ResponsiveCalls;
+import csl.actor.cluster.PhaseShift;
+import csl.actor.example.keyaggregate.ActorToGraph;
 import csl.actor.keyaggregate.*;
 
 import java.io.File;
-import java.io.PrintWriter;
 import java.util.HashMap;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.function.Consumer;
 
 public class DelayedLabelAggregation extends DelayedLabelManual {
     public static void main(String[] args) {
@@ -25,12 +24,14 @@ public class DelayedLabelAggregation extends DelayedLabelManual {
 
         public LernerActorAggregation(ActorSystem system, String name, ActorSystem.SystemLogger out, ActorRef resultActor, int numInstances) {
             super(system, name);
+            nextStage = resultActor;
             support = new LearnerAggregationSupport(this, out, resultActor, numInstances);
             setAsUnit();
         }
 
         public LernerActorAggregation(ActorSystem system, ActorSystem.SystemLogger out, ActorRef resultActor, int numInstances) {
             super(system);
+            nextStage = resultActor;
             support = new LearnerAggregationSupport(this, out, resultActor, numInstances);
             setAsUnit();
         }
@@ -41,16 +42,17 @@ public class DelayedLabelAggregation extends DelayedLabelManual {
                     .matchKey(FeatureInstance.class, FeatureInstance::getId)
                           .or(LabelInstance.class, LabelInstance::getId)
                     .forEachPair(this::train)
-                    .match(Finish.class, this::finish)
+                    .match(PhaseShift.PhaseCompleted.class, this::finish)
                     .build();
+        }
+
+        public void finish(PhaseShift.PhaseCompleted c) {
+            support.finish();
+            c.accept(this);
         }
 
         public void train(FeatureInstance f, LabelInstance l) {
             support.train(f, l);
-        }
-
-        public void finish(Finish f) {
-            support.finish(f);
         }
 
         @Override
@@ -111,29 +113,16 @@ public class DelayedLabelAggregation extends DelayedLabelManual {
             }
             String sn = self.getClass().getSimpleName();
             File file = new File(dir, String.format("delayed-%s-%s.dot", sn, count));
-            /*TODO
-            ResponsiveCalls.sendTaskConsumer(self.getSystem(), root, (self) -> {
-                if (new ActorToGraph(self.getSystem(), file, self).save(self).finish()) {
-                    if (finish) {
-                        System.exit(0);
-                    }
-                } else {
-                    if (finish) {
-                        ActorToGraph.schedule(50000, () -> {
-                            System.exit(0);
-                        });
-                    }
-                }
-            });*/
+            ActorToGraph.save(self.getSystem(), root, file);
         }
 
-        public void finish(Finish f) {
+        public void finish() {
             KeyHistograms.HistogramTree tree = self.getMailboxAsKeyAggregation().getHistogram(0);
             out.log(String.format("#prune-count: %,d : leaf=%,d, non-zero-leaf=%,d : %04f",
                     pruneCount.get(), tree.getLeafSize(), tree.getLeafSizeNonZero(), tree.getLeafSizeNonZeroRate()));
             out.log(String.format("#debug-free-memory: %,d bytes",
                     Runtime.getRuntime().freeMemory()));
-            save("finish-" + f.numInstances, true);
+            save("finish-" + numInstances, true);
         }
     }
 }

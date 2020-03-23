@@ -1,18 +1,17 @@
-package csl.actor.example.delayedlabel;
+package csl.actor.example.exp.delayedlabel;
 
 import csl.actor.ActorBehavior;
 import csl.actor.ActorRef;
 import csl.actor.ActorSystem;
 import csl.actor.Message;
+import csl.actor.cluster.PhaseShift;
 import csl.actor.keyaggregate.ActorKeyAggregation;
 import csl.actor.keyaggregate.KeyAggregationVisitor;
 import csl.actor.keyaggregate.Config;
 import csl.actor.cluster.ResponsiveCalls;
 
-import java.io.PrintWriter;
 import java.time.Instant;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Consumer;
 
 public class DelayedLabelAggregationReplicable extends DelayedLabelManual {
     public static void main(String[] args) {
@@ -41,9 +40,9 @@ public class DelayedLabelAggregationReplicable extends DelayedLabelManual {
         @Override
         public void receive(int next, ActorRef sender) {
             super.receive(next, sender);
-            if (learner != null) {
-                root.support.process();
-            }
+//            if (learner != null) {
+//                root.support.process();
+//            }
             if (!printed && (numInstances * 0.9) < this.finishedInstances) {
                 ResponsiveCalls.sendTask(system, root, (a) -> {
                     System.err.println("print router");
@@ -69,6 +68,7 @@ public class DelayedLabelAggregationReplicable extends DelayedLabelManual {
 
         public LearnerActorAggregationReplicable(ActorSystem system, String name, Config config, ActorRef result, State state) {
             super(system, name, config, state);
+            nextStage = result;
             support = new DelayedLabelAggregation.LearnerAggregationSupport(this, config.getLogger(), result,
                     ((DelayedLabelConfig) config).instances);
         }
@@ -76,12 +76,14 @@ public class DelayedLabelAggregationReplicable extends DelayedLabelManual {
         public LearnerActorAggregationReplicable(ActorSystem system, String name, ActorSystem.SystemLogger out, ActorRef resultActor,
                                                  DelayedLabelConfig config, State state) {
             super(system, name, config, state);
+            nextStage = resultActor;
             support = new DelayedLabelAggregation.LearnerAggregationSupport(this, out, resultActor, config.instances);
         }
 
         public LearnerActorAggregationReplicable(ActorSystem system, ActorSystem.SystemLogger out, ActorRef resultActor,
                                                  DelayedLabelConfig config) {
             this(system, "learner", out, resultActor, config, null);
+            nextStage = resultActor;
             state = initStateRouter();
         }
 
@@ -98,7 +100,7 @@ public class DelayedLabelAggregationReplicable extends DelayedLabelManual {
                     .matchKey(FeatureInstance.class, FeatureInstance::getId)
                           .or(LabelInstance.class, LabelInstance::getId)
                     .forEachPair(this::train)
-                    .match(Finish.class, this::finish)
+                    .match(PhaseShift.PhaseCompleted.class, this::finish)
                     .build();
         }
 
@@ -106,13 +108,9 @@ public class DelayedLabelAggregationReplicable extends DelayedLabelManual {
             support.train(f, l);
         }
 
-        public void finish(Finish f) {
-            try {
-                Thread.sleep(1000);
-            } catch (Exception ex) {
-                ex.printStackTrace();
-            }
-            support.finish(f);
+        public void finish(PhaseShift.PhaseCompleted c) {
+            support.finish();
+            c.accept(this);
         }
 
         AtomicInteger rec = new AtomicInteger();

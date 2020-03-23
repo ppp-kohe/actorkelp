@@ -1,12 +1,8 @@
-package csl.actor.example.wordcount;
+package csl.actor.example.exp.wordcount;
 
 import com.esotericsoftware.kryo.Kryo;
-import csl.actor.ActorSystem;
-import csl.actor.cluster.ConfigDeployment;
-import csl.actor.cluster.FileSplitter;
 import csl.actor.keyaggregate.ActorPlacementKeyAggregation;
 import csl.actor.keyaggregate.ClusterKeyAggregation;
-import csl.actor.keyaggregate.Config;
 import csl.actor.keyaggregate.FileMapper;
 import csl.actor.remote.KryoBuilder;
 

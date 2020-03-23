@@ -5,7 +5,7 @@ import csl.actor.ActorSystemDefault;
 import csl.actor.cluster.ClusterCommands;
 import csl.actor.cluster.ClusterDeployment;
 import csl.actor.cluster.ClusterHttp;
-import csl.actor.example.wordcount.WordCount;
+import csl.actor.example.exp.wordcount.WordCount;
 import csl.actor.keyaggregate.ClusterKeyAggregation;
 import csl.actor.keyaggregate.Config;
 

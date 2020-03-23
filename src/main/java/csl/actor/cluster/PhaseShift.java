@@ -19,17 +19,29 @@ public class PhaseShift implements CallableMessage.CallableMessageConsumer<Actor
     protected int count;
 
     public static CompletableFuture<PhaseCompleted> start(ActorSystem system, ActorRef target) {
-        return start(UUID.randomUUID(), system, target);
+        return start(system, target, Instant.now());
     }
 
     public static CompletableFuture<PhaseCompleted> start(Object key, ActorSystem system, ActorRef target) {
-        return new PhaseTerminalActor(system, false).start(key, target);
+        return start(key, system, target, Instant.now());
+    }
+
+    public static CompletableFuture<PhaseCompleted> start(ActorSystem system, ActorRef target, Instant startTime) {
+        return start(UUID.randomUUID(), system, target, startTime);
+    }
+
+    public static CompletableFuture<PhaseCompleted> start(Object key, ActorSystem system, ActorRef target, Instant startTime) {
+        return new PhaseTerminalActor(system, false).start(key, target, startTime);
     }
 
     public PhaseShift(Object key, ActorRef target) {
+        this(key, target, Instant.now());
+    }
+
+    public PhaseShift(Object key, ActorRef target, Instant startTime) {
         this.key = key;
         this.target = target;
-        startTime = Instant.now();
+        this.startTime = startTime;
     }
 
     public PhaseShift(Object key) {
@@ -299,17 +311,17 @@ public class PhaseShift implements CallableMessage.CallableMessageConsumer<Actor
             }
         }
 
-        public CompletableFuture<PhaseCompleted> start(Object key, ActorRef initialTarget) {
+        public CompletableFuture<PhaseCompleted> start(Object key, ActorRef initialTarget, Instant startTime) {
             PhaseTerminalEntry e = completed.computeIfAbsent(key, PhaseTerminalEntry::new);
             CompletableFuture<PhaseCompleted> c = e.start();
-            PhaseShift shift = createPhaseShift(key);
+            PhaseShift shift = createPhaseShift(key, startTime);
             e.setStartTime(shift.getStartTime());
             initialTarget.tell(shift, this);
             return c;
         }
 
-        protected PhaseShift createPhaseShift(Object key) {
-            return new PhaseShift(key, this);
+        protected PhaseShift createPhaseShift(Object key, Instant startTime) {
+            return new PhaseShift(key, this, startTime);
         }
 
         public Map<Object, PhaseTerminalEntry> getCompleted() {

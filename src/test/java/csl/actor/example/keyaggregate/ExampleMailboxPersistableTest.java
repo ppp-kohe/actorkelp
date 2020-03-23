@@ -15,9 +15,9 @@ import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BiPredicate;
 
-public class MailboxPersistableTest {
+public class ExampleMailboxPersistableTest {
     public static void main(String[] args) throws Exception {
-        new MailboxPersistableTest().run();
+        new ExampleMailboxPersistableTest().run();
     }
     public void run() throws Exception {
         runPersistentFileManager();

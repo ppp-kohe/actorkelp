@@ -1,22 +1,21 @@
-package csl.actor.example.delayedlabel;
+package csl.actor.example.exp.delayedlabel;
 
 import csl.actor.ActorRef;
 import csl.actor.ActorSystem;
 import csl.actor.CallableMessage;
 import csl.actor.cluster.ActorPlacement;
+import csl.actor.cluster.PhaseShift;
 import csl.actor.cluster.ResponsiveCalls;
 import csl.actor.example.ExampleRemote;
 import csl.actor.keyaggregate.*;
 import csl.actor.remote.ActorAddress;
 import csl.actor.remote.ActorSystemRemote;
 
-import java.io.PrintWriter;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
-import java.util.function.Consumer;
 
 public class DelayedLabelRemote extends DelayedLabelAggregationReplicable {
     public static void main(String[] args) {
@@ -34,7 +33,7 @@ public class DelayedLabelRemote extends DelayedLabelAggregationReplicable {
         int serverPort = 10000;
         system.startWithoutWait(serverPort);
 
-        new ActorPlacementKeyAggregation(system,
+        ActorPlacementKeyAggregation place = new ActorPlacementKeyAggregation(system,
                 new ActorPlacement.PlacementStrategyRoundRobin(0));
 
         List<Process> ps = new ArrayList<>();
@@ -50,13 +49,20 @@ public class DelayedLabelRemote extends DelayedLabelAggregationReplicable {
         Instant startTime = Instant.now();
         ResultActor resultActor = resultActor(system, out, startTime);
         ActorRef learnerActor = learnerActor(system, out, resultActor);
-        resultActor.setLearner(learnerActor);
 
         System.out.println(system.getLocalSystem().getNamedActorMap());
 
         while (inputs.hasNext()) {
             learnerActor.tell(inputs.next(), null);
         }
+
+        try {
+            PhaseShift.start(system, learnerActor, startTime).get();
+        } catch (Exception ex) {
+            ex.printStackTrace();
+        }
+        place.close();
+        system.close();
     }
 
     @Override
@@ -79,23 +85,6 @@ public class DelayedLabelRemote extends DelayedLabelAggregationReplicable {
 
         public LearnerRemote(ActorSystem system, ActorSystem.SystemLogger out, ActorRef resultActor, DelayedLabelConfig config) {
             super(system, out, resultActor, config);
-        }
-
-        @Override
-        public void finish(Finish f) {
-            super.finish(f);
-            ((ActorPlacement.ActorPlacementDefault) getPlacement()).getCluster().stream()
-                .map(ActorPlacement.AddressListEntry::getPlacementActor)
-                .forEach(a -> ResponsiveCalls.sendTaskConsumer(system, a, (act) -> {
-                    System.out.println("#remote close: " + act);
-                    act.getSystem().getScheduledExecutor().schedule(() -> act.getSystem().close(), 1, TimeUnit.SECONDS);
-                }));
-            try {
-                Thread.sleep(3000);
-            } catch (Exception ex) {
-                ex.printStackTrace();
-            }
-            getSystem().close();
         }
     }
 

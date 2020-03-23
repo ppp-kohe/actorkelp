@@ -1,4 +1,4 @@
-package csl.actor.example.delayedlabel;
+package csl.actor.example.exp.delayedlabel;
 
 import java.io.File;
 import java.io.PrintWriter;

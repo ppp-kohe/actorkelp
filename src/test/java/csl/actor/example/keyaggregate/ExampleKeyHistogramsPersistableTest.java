@@ -10,18 +10,17 @@ import csl.actor.cluster.MailboxPersistable;
 import csl.actor.remote.KryoBuilder;
 
 import java.io.ByteArrayInputStream;
-import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Objects;
 import java.util.function.BiPredicate;
 
-public class KeyHistogramsPersistableTest {
+public class ExampleKeyHistogramsPersistableTest {
     public static void main(String[] args) {
-        new KeyHistogramsPersistableTest().runCheckingKryoInput();
-        new KeyHistogramsPersistableTest().runPersistTree();
-        new KeyHistogramsPersistableTest().runPersistLargeLeaves();
-        new KeyHistogramsPersistableTest().runAuto();
-        new KeyHistogramsPersistableTest().runAutoSerialize();
+        new ExampleKeyHistogramsPersistableTest().runCheckingKryoInput();
+        new ExampleKeyHistogramsPersistableTest().runPersistTree();
+        new ExampleKeyHistogramsPersistableTest().runPersistLargeLeaves();
+        new ExampleKeyHistogramsPersistableTest().runAuto();
+        new ExampleKeyHistogramsPersistableTest().runAutoSerialize();
     }
 
     private long fail;

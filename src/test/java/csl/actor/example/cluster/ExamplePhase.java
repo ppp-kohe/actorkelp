@@ -7,6 +7,8 @@ import csl.actor.ActorSystemDefault;
 import csl.actor.keyaggregate.ActorKeyAggregation;
 import csl.actor.cluster.PhaseShift;
 
+import java.time.Instant;
+
 public class ExamplePhase {
     public static void main(String[] args) {
 
@@ -24,7 +26,7 @@ public class ExamplePhase {
         b.tell("aaa");
         b.tell("bbb");
         b.tell("ccc");
-        new PhaseShift.PhaseTerminalActor(system, true).start("end2", b);
+        new PhaseShift.PhaseTerminalActor(system, true).start("end2", b, Instant.now());
     }
 
     public static class MyActor extends ActorKeyAggregation {

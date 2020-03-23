@@ -1,4 +1,4 @@
-package csl.actor.example.wordcount;
+package csl.actor.example.exp.wordcount;
 
 import com.esotericsoftware.kryo.io.Output;
 import csl.actor.*;
