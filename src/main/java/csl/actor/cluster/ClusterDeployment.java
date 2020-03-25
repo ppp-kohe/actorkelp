@@ -85,6 +85,12 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         System.exit(n);
     }
 
+    public void runAsRemoteDriver(List<ClusterUnit<AppConfType>> units, String masterMainType, List<String> masterMainArgs) throws Exception {
+        int n = deployAsRemoteDriver(units, masterMainType, masterMainArgs)
+                .waitFor();
+        System.exit(n);
+    }
+
     public ClusterDeployment(Class<AppConfType> defaultConfType, Class<PlaceType> placeType) {
         this.defaultConfType = defaultConfType;
         this.placeType = placeType;
@@ -155,22 +161,39 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         return deployAsRemoteDriver(confFile);
     }
 
+    public Process deployAsRemoteDriver(List<ClusterUnit<AppConfType>> units, String masterMainType, List<String> masterArgs) {
+        setMasterMainType(masterMainType);
+        getMasterMainArgs().addAll(masterArgs);
+        return deployAsRemoteDriver(units);
+    }
+
     public Process deployAsRemoteDriver(String confFile) {
+        return deployAsRemoteDriver(loadConfigFile(confFile));
+    }
+
+    public Process deployAsRemoteDriver(List<ClusterCommands.ClusterUnit<AppConfType>> units) {
         try {
-            return deployAsRemoteDriver(loadConfigFile(confFile));
+            deployUnitsAsConfigFile(units);
+            deployMasterInitMaster(units);
+            deployMasterInitAppName();
+            deployFiles(master);
+            deployNodesAsRemoteDriver(units);
+            deployNodeStartProcess(master);
+            attachAsRemoteDriver(ActorAddress.get(master.getDeploymentConfig().getAddress()));
+            return processes.get(master);
         } catch (Exception ex) {
             throw new RuntimeException(ex);
         }
     }
 
-    public Process deployAsRemoteDriver(List<ClusterCommands.ClusterUnit<AppConfType>> units) throws Exception {
-        deployMasterInitMaster(units);
-        deployMasterInitAppName();
-        deployFiles(master);
-        deployNodesAsRemoteDriver(units);
-        deployNodeStartProcess(master);
-        attachAsRemoteDriver(ActorAddress.get(master.getDeploymentConfig().getAddress()));
-        return processes.get(master);
+    public void deployUnitsAsConfigFile(List<ClusterUnit<AppConfType>> units) {
+        if (!units.isEmpty()) {
+            ClusterCommands.CommandBlockRoot root = units.get(0).getOrCreateRootBlock();
+            units.stream()
+                    .filter(unit -> unit.getTopBlock(unit.getBlock()) != root)
+                    .map(ClusterUnit::getOrCreateBlock)
+                    .forEach(root.getBlocks()::add);
+        }
     }
 
     public void deployNodesAsRemoteDriver(List<ClusterUnit<AppConfType>> units) {
@@ -640,7 +663,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
 
             kryoBuilderType = initKryoBuilderType();
             selfAddress = initSelfAddress(selfAddr);
-            logger.log(logColor, "%s: system %s with serializer %s", selfAddress, kryoBuilderType);
+            logger.log(logColor, "%s: system  with serializer %s", selfAddress, kryoBuilderType);
             system = initSystem();
 
             initPath();
@@ -952,14 +975,14 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
 
     @PropertyInterface("placement-shutdown")
     public CompletableFuture<?> shutdown(ActorAddress targetHost) {
-        return ResponsiveCalls.<ActorPlacement.ActorPlacementDefault>sendTaskConsumer(getSystem(),
+        return ResponsiveCalls.<ActorPlacement.ActorPlacementDefault, String>sendTask(getSystem(),
                 placeGet(p -> p.getEntry(targetHost)).getPlacementActor().ref(getSystem()),
                 new ShutdownTask());
     }
 
-    public static class ShutdownTask implements CallableMessage.CallableMessageConsumer<ActorPlacement.ActorPlacementDefault> {
+    public static class ShutdownTask implements CallableMessage<ActorPlacement.ActorPlacementDefault, String> {
         @Override
-        public void accept(ActorPlacement.ActorPlacementDefault self) {
+        public String call(ActorPlacement.ActorPlacementDefault self) {
             self.close();
             new Thread() { public void run() { //the shutting down thread
                 try {
@@ -967,13 +990,20 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
                 } catch (Exception ex) {
                     throw new RuntimeException(ex);
                 }
+                self.getSystem().getLogger().log("close system %s", self.getSystem());
                 self.getSystem().close();
             }}.start();
-            try {
-                self.getSystem().awaitClose(6_000, TimeUnit.MILLISECONDS);
-            } catch (Exception ex) {
-                throw new RuntimeException(ex);
-            }
+            return "shutdown: " + self.toString();
+//            try {
+//                self.getSystem().awaitClose(6_000, TimeUnit.MILLISECONDS);
+//            } catch (Exception ex) {
+//                throw new RuntimeException(ex);
+//            }
+        }
+
+        @Override
+        public String toString() {
+            return getClass().getSimpleName();
         }
     }
 
@@ -988,8 +1018,8 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
     public void destroyClusterProcesses() {
         getProcesses().forEach((unit, proc) -> {
             if (proc.isAlive()) {
-                unit.log("%s : destroy process: %s", unit, proc);
                 proc.destroy();
+                unit.log("%s : destroy process: %s", unit, proc);
             }
         });
     }

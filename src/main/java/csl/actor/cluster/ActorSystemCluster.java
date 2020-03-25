@@ -19,7 +19,9 @@ import java.util.function.Function;
 public class ActorSystemCluster extends ActorSystemRemote implements MailboxPersistable.PersistentFileManagerFactory {
     protected Map<ActorAddress, UnitStatus> units;
 
-    public ActorSystemCluster() { }
+    public ActorSystemCluster() {
+        super(new ActorSystemDefaultForCluster(), KryoBuilder.builder());
+    }
 
     public ActorSystemCluster(ActorSystemDefault localSystem, Function<ActorSystem, Kryo> kryoFactory) {
         super(localSystem, kryoFactory);
@@ -27,13 +29,24 @@ public class ActorSystemCluster extends ActorSystemRemote implements MailboxPers
 
     public static ActorSystemCluster createWithKryoBuilderType(Class<? extends KryoBuilder> kryoBuilderType) throws Exception {
         Constructor<? extends KryoBuilder> cons = kryoBuilderType.getConstructor();
-        return new ActorSystemCluster(new ActorSystemDefaultForRemote(), KryoBuilder.builder(() -> {
+        return new ActorSystemCluster(new ActorSystemDefaultForCluster(), KryoBuilder.builder(() -> {
             try {
                 return cons.newInstance();
             } catch (Exception ex) {
                 throw new RuntimeException(ex);
             }
         }));
+    }
+
+    public static class ActorSystemDefaultForCluster extends ActorSystemDefaultForRemote {
+        @Override
+        public void sendDeadLetter(Message<?> message) {
+            if (message.getData() instanceof ActorPlacement.LeaveEntry) {
+                //the target might be already left
+            } else {
+                super.sendDeadLetter(message);
+            }
+        }
     }
 
     @Override

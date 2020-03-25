@@ -27,6 +27,11 @@ public class ClusterKeyAggregation extends ClusterDeployment<Config, ActorPlacem
                 .runAsRemoteDriver(configFile, mainType, Arrays.asList(args));
     }
 
+    public static void run(List<ClusterCommands.ClusterUnit<Config>> units, String mainType, String... args) throws Exception {
+        ClusterKeyAggregation.create()
+                .runAsRemoteDriver(units, mainType, Arrays.asList(args));
+    }
+
     public static ClusterKeyAggregation create() {
         return new ClusterKeyAggregation();
     }

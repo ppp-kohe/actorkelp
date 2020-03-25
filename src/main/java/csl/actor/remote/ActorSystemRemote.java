@@ -183,7 +183,8 @@ public class ActorSystemRemote implements ActorSystem {
             if (local != null && local.equals(addrHost)) { //localhost
                 localSystem.send(new Message<>(localize(target), message.getSender(), message.getData()));
             } else {
-                getLogger().log(debugLogMsg, debugLogMsgColorSend, "%s: client tell to remote %s", this, addrActor);
+                getLogger().log(debugLogMsg, debugLogMsgColorSend, "%s: client tell <%s> to remote %s", this,
+                        message.getData(), addrActor);
                 ConnectionActor a = connectionMap.computeIfAbsent(addrActor, k -> createConnection(addrActor));
                 if (a != null) {
                     a.tell(message);
@@ -454,10 +455,14 @@ public class ActorSystemRemote implements ActorSystem {
 
         protected void writeSpecial(Message<?> message) {
             logMsg("%s special", message);
-            connection.write(new TransferredMessage(count, message));
+            boolean close = (message.getData() instanceof ConnectionCloseNotice);
+            int id = close ? ObjectMessageServer.RESULT_CLOSE : count;
+            if (!close || connection.isOpen()) {
+                connection.write(new TransferredMessage(id, message));
+            }
             ++count;
             ++recordSendMessages;
-            if (message.getData() instanceof ConnectionCloseNotice) {
+            if (close) {
                 close();
             }
         }
@@ -481,6 +486,10 @@ public class ActorSystemRemote implements ActorSystem {
         }
 
         public void close() {
+            if (connection.isOpen()) {
+                logMsg("write empty for closing -> %s", address);
+                connection.write(new TransferredMessage(ObjectMessageServer.RESULT_CLOSE, new ArrayList<>()));
+            }
             connection.close();
             remoteSystem.connectionClosed(this);
         }
@@ -549,12 +558,16 @@ public class ActorSystemRemote implements ActorSystem {
         }
 
         public void receive(ConnectionCloseNotice notice) {
+            getSystem().logDebug("receive close-notice: %s", notice);
             ActorSystemRemote remote = getSystem();
-            ConnectionActor a = remote.getConnectionMap().get(notice.getAddress());
-            remote.logDebug("receive: %s -> close %s", notice, a);
-            if (a != null) {
-                a.close();
-            }
+            remote.getConnectionMap().values().stream()
+                .filter(a -> a.getAddress().equals(notice.getAddress()))
+                .forEach(a -> close(notice, a));
+        }
+
+        public void close(ConnectionCloseNotice notice, ConnectionActor a) {
+            getSystem().logDebug("receive close-notice: %s -> close %s", notice, a);
+            a.close();
         }
 
         @Override

@@ -7,8 +7,15 @@ import csl.actor.cluster.FileSplitter;
 import csl.actor.cluster.ResponsiveCalls;
 import csl.actor.remote.ActorAddress;
 
+import java.io.FileWriter;
+import java.io.PrintWriter;
 import java.io.Serializable;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 
 public class ActorPlacementKeyAggregation extends ClusterDeployment.ActorPlacementForCluster<Config> {
 
@@ -172,34 +179,201 @@ public class ActorPlacementKeyAggregation extends ClusterDeployment.ActorPlaceme
     }
 
     public interface InitBuilder extends Serializable {
-        void build(ActorKeyAggregation self, ActorBehaviorBuilderKeyAggregation builder);
+        void build(ActorKeyAggregationOneShot self, ActorBehaviorBuilderKeyAggregation builder);
     }
 
     public static class ActorKeyAggregationOneShot extends ActorKeyAggregation {
         protected InitBuilder builder;
+        protected LineWriter writer;
+
         public ActorKeyAggregationOneShot(ActorSystem system, String name, Config config) {
             super(system, name, config);
         }
 
         public ActorKeyAggregationOneShot(ActorSystem system, String name, Config config, InitBuilder builder) {
             super(system, name, config);
+            this.builder = builder;
+            initBuilderFromBuilder();
         }
 
         @Override
         protected void initSerializedInternalState(Serializable s) {
-            builder = (InitBuilder) s;
+            OneShotState os = (OneShotState) s;
+            if (os != null) {
+                builder = os.builder;
+                initBuilderFromBuilder();
+                writer = os.writer;
+                if (writer != null) {
+                    writer.setOwner(this);
+                }
+            }
+        }
+
+        protected void initBuilderFromBuilder() {
+            ActorBehaviorBuilderKeyAggregation b = behaviorBuilder();
+            builder.build(this, b);
+            behavior = b.build();
         }
 
         @Override
         protected Serializable toSerializableInternalState() {
-            return builder;
+            return new OneShotState(builder, writer);
         }
 
         @Override
-        protected ActorBehavior initBehavior() {
-             ActorBehaviorBuilderKeyAggregation b = behaviorBuilder();
-             builder.build(this, b);
-             return b.build();
+        protected ActorBehavior initBehavior() { //nothing
+            return null;
+        }
+
+        @Override
+        protected void initClone(ActorKeyAggregation original) {
+            super.initClone(original);
+            initBuilderFromBuilder();
+            LineWriter w = ((ActorKeyAggregationOneShot) original).writer;
+            if (w != null) {
+                writer = w.copy(this);
+            }
+        }
+
+        public LineWriter writer() {
+            return writer(DEFAULT_PREFIX, DEFAULT_SUFFIX);
+        }
+
+        public LineWriter writer(String prefix, String suffix) {
+            if (writer == null) {
+                writer = new LineWriter(prefix, suffix, this);
+            } else if (!prefix.equals(writer.getPrefix()) || !suffix.equals(writer.getSuffix())) {
+                writer.close();
+                writer = new LineWriter(prefix, suffix, this);
+            }
+            return writer;
+        }
+    }
+
+    public static class OneShotState implements Serializable {
+        public InitBuilder builder;
+        public LineWriter writer;
+
+        public OneShotState(InitBuilder builder, LineWriter writer) {
+            this.builder = builder;
+            this.writer = writer;
+        }
+
+        @Override
+        public String toString() {
+            return getClass().getSimpleName() + "(" + builder + ", " + writer + ")";
+        }
+    }
+
+    public static String DEFAULT_PREFIX = "%a/output-";
+    public static String DEFAULT_SUFFIX = ".txt";
+
+    public static class LineWriter implements Serializable {
+        protected String prefix;
+        protected String suffix;
+        protected transient String path;
+        protected transient Path expandedPath;
+        protected transient PrintWriter writer;
+        protected transient ScheduledFuture<?> flushTask;
+        protected transient ActorKeyAggregation owner;
+
+        public LineWriter(ActorKeyAggregation owner) {
+            this(DEFAULT_PREFIX, DEFAULT_SUFFIX, owner);
+        }
+
+        public LineWriter(String prefix, String suffix, ActorKeyAggregation owner) {
+            this.prefix = prefix;
+            this.suffix = suffix;
+            this.owner = owner;
+        }
+
+        public LineWriter copy(ActorKeyAggregation owner) {
+            return new LineWriter(prefix, suffix, owner);
+        }
+
+        public void setOwner(ActorKeyAggregation owner) {
+            this.owner = owner;
+        }
+
+        public ActorKeyAggregation getOwner() {
+            return owner;
+        }
+
+        @Override
+        public String toString() {
+            return getClass().getSimpleName() + "(prefix=" + prefix + ", suffix=" + suffix +
+                    "current-path=" + path + ", current-expandedPath=" + expandedPath + ")";
+        }
+
+        public String getSuffix() {
+            return suffix;
+        }
+
+        public String getPrefix() {
+            return prefix;
+        }
+
+        public void print(Object value) {
+            try {
+                if (writer == null) {
+                    init();
+                }
+                writer.print(value);
+            } catch (Exception ex) {
+                owner.getSystem().getLogger().log(true, owner.config.logColor, ex, "write failure: path=%s, expandedPath=%s, %s", path, expandedPath, owner);
+            }
+        }
+
+        public void println(Object value) {
+            try {
+                if (writer == null) {
+                    init();
+                }
+                writer.println(value);
+            } catch (Exception ex) {
+                owner.getSystem().getLogger().log(true, owner.config.logColor, ex, "write failure: path=%s, expandedPath=%s, %s", path, expandedPath, owner);
+            }
+        }
+
+        protected void init() throws Exception {
+            ActorKeyAggregation self = owner;
+            path = getPath(self);
+            expandedPath = ConfigDeployment.getPathModifier(self.getSystem()).getExpanded(path);
+            Path parent = expandedPath.getParent();
+            if (parent != null && !parent.toString().isEmpty()) {
+                Files.createDirectories(expandedPath.getParent());
+            }
+            writer = initWriter(expandedPath);
+            flushTask = initFlushTask(self);
+        }
+
+        protected PrintWriter initWriter(Path expandedPath) throws Exception {
+            return new PrintWriter(new FileWriter(expandedPath.toFile(), StandardCharsets.UTF_8));
+
+        }
+
+        protected ScheduledFuture<?> initFlushTask(ActorKeyAggregation self) {
+            return self.getSystem().getScheduledExecutor().scheduleAtFixedRate(() ->
+                    self.tell(CallableMessage.callableMessageConsumer((a) -> this.flush())), 3, 3, TimeUnit.SECONDS);
+        }
+
+        public void flush() {
+            if (writer != null) {
+                writer.flush();
+            }
+        }
+
+        public String getPath(ActorKeyAggregation self) {
+            return prefix + self.getOutputFileHeader() + suffix;
+        }
+
+        public void close() {
+            if (writer != null) {
+                writer.close();
+            }
+            if (flushTask != null) {
+                flushTask.cancel(false);
+            }
         }
     }
 }

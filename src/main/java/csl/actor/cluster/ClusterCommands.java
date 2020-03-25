@@ -613,6 +613,10 @@ public class ClusterCommands<AppConfType extends ConfigBase> {
             return parent;
         }
 
+        public void setParent(CommandBlock parent) {
+            this.parent = parent;
+        }
+
         public boolean isClassType() {
             return isClass;
         }
@@ -745,6 +749,78 @@ public class ClusterCommands<AppConfType extends ConfigBase> {
             }
             json.put("block", blk);
             return json;
+        }
+
+        public CommandBlock getOrCreateBlock() {
+            if (this.block == null) {
+                CommandBlockNamed block = new CommandBlockNamed(
+                        new CommandToken(CommandTokenType.Indent, ""),
+                        false,
+                        new CommandToken(CommandTokenType.String, name), null);
+
+                addToBlock(block.getClusterLines(), deploymentConfig);
+                addToBlock(block.getConfigLines(), appConfig);
+                this.block = block;
+            }
+            return this.block;
+        }
+
+        public void addToBlock(List<List<CommandToken>> block, ConfigBase conf) {
+            if (conf != null) {
+                Arrays.stream(conf.getClass().getFields())
+                        .filter(ConfigBase::isConfigProperty)
+                        .map(f -> Arrays.asList(
+                                new CommandToken(CommandTokenType.Indent, "    "),
+                                new CommandToken(CommandTokenType.Identifier, f.getName()),
+                                toValueToken(conf.get(f))))
+                        .forEach(block::add);
+            }
+        }
+
+        public CommandToken toValueToken(Object o) {
+            if (o instanceof String) {
+                return new CommandToken(CommandTokenType.String, (String) o);
+            } else if (o instanceof Number) {
+                return new CommandToken(CommandTokenType.Number, o.toString());
+            } else {
+                return new CommandToken(CommandTokenType.Identifier, Objects.toString(o));
+            }
+        }
+
+        public CommandBlockRoot getOrCreateRootBlock() {
+            CommandBlock top = block;
+            if (block != null) {
+                top = getTopBlock(block);
+            } else {
+                block = getOrCreateBlock();
+            }
+            CommandBlockRoot root;
+            if (top instanceof CommandBlockRoot) {
+                root = (CommandBlockRoot) top;
+            } else {
+                root = new CommandBlockRoot();
+                add(root, block);
+            }
+            return root;
+        }
+
+        protected void add(CommandBlock block, CommandBlock child) {
+            block.getBlocks().add(child);
+            if (child instanceof CommandBlockNamed) {
+                ((CommandBlockNamed) child).setParent(block);
+            }
+        }
+
+        protected ClusterCommands.CommandBlock getTopBlock(ClusterCommands.CommandBlock block) {
+            while (block instanceof ClusterCommands.CommandBlockNamed) {
+                ClusterCommands.CommandBlock p = ((ClusterCommands.CommandBlockNamed) block).getParent();
+                if (p == null) {
+                    break;
+                } else {
+                    block = p;
+                }
+            }
+            return block;
         }
     }
 }

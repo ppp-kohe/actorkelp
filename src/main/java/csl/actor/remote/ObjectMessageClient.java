@@ -18,6 +18,7 @@ import io.netty.util.ReferenceCountUtil;
 import io.netty.util.concurrent.DefaultThreadFactory;
 
 import java.io.Closeable;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -214,21 +215,21 @@ public class ObjectMessageClient implements Closeable {
         public ObjectMessageConnection write(Object msg, int retryCount) {
             if (channel == null || !channel.isOpen()) {
                 try {
-                    logWrite(retryCount, "before write re-open");
+                    logWrite(retryCount, "before write re-open", msg);
                     //close();
                     open();
                 } catch (InterruptedException ex) {
                     throw new RuntimeException(ex);
                 }
             }
-            logWrite(retryCount, "before write");
+            logWrite(retryCount, "before write", msg);
             try {
                 clearResult();
                 ChannelFuture f = channel.writeAndFlush(msg);
                 checkResult(f);
             } catch (Exception c) {
                 client.getLogger().log(true, debugLogClientColor, "%s write failure: %s %s", this, c, Thread.currentThread());
-                logWrite(retryCount, String.format("write failure %s", c));
+                logWrite(retryCount, String.format("write failure %s", c), msg);
                 if (retryCount < 10) {
                     return write(msg, retryCount + 1);
                 } else {
@@ -238,14 +239,18 @@ public class ObjectMessageClient implements Closeable {
             return this;
         }
 
-        private void logWrite(int retryCount, String msg) {
+        private void logWrite(int retryCount, String msg, Object obj) {
             if (ActorSystemRemote.debugLogMsg) {
+                String s = Objects.toString(obj);
+                if (s.length() > 100) {
+                    s = s.substring(0, 100) + "...";
+                }
                 if (channel == null) {
-                    client.getLogger().log(ActorSystemRemote.debugLogMsg, debugLogClientColor, "%s %s, retry=%d, channel=null",
-                            this, msg, retryCount);
+                    client.getLogger().log(ActorSystemRemote.debugLogMsg, debugLogClientColor, "%s %s, msg=%s, retry=%d, channel=null",
+                            this, msg, s, retryCount);
                 } else {
-                    client.getLogger().log(ActorSystemRemote.debugLogMsg, debugLogClientColor, "%s %s, retry=%d, open=%s, active=%s, writable=%s",
-                            this, msg, retryCount,
+                    client.getLogger().log(ActorSystemRemote.debugLogMsg, debugLogClientColor, "%s %s, msg=%s, retry=%d, open=%s, active=%s, writable=%s",
+                            this, msg, s, retryCount,
                             channel.isOpen(), channel.isActive(),
                             channel.isWritable());
                 }
@@ -288,6 +293,10 @@ public class ObjectMessageClient implements Closeable {
                     lastSize.decrementAndGet();
                 }
             });
+        }
+
+        public boolean isOpen() {
+            return channel != null && channel.isOpen();
         }
 
         public void close() {
@@ -375,9 +384,22 @@ public class ObjectMessageClient implements Closeable {
                             new ResponseHandler(owner.getLogger(), connection::setResult));
         }
 
+        @Override
+        public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
+            owner.getLogger().log(ActorSystemRemote.debugLogMsg,
+                    ActorSystemRemote.debugLogMsgColorConnect,
+                    "ClientInitializer error: %s", cause);
+            super.exceptionCaught(ctx, cause);
+        }
+
         /** @return implementation field getter */
         public ObjectMessageClient getOwner() {
             return owner;
+        }
+
+        @Override
+        public String toString() {
+            return getClass().getSimpleName() + "@" + Integer.toHexString(System.identityHashCode(this)) + "(" + owner + ")";
         }
     }
 
@@ -418,6 +440,11 @@ public class ObjectMessageClient implements Closeable {
         /** @return implementation field getter */
         public KryoBuilder.SerializerFunction getSerializer() {
             return serializer;
+        }
+
+        @Override
+        public String toString() {
+            return getClass().getSimpleName() + "@" + Integer.toHexString(System.identityHashCode(this)) + "(" + owner + ")";
         }
     }
 

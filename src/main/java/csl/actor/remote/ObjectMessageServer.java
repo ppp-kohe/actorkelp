@@ -17,6 +17,7 @@ import io.netty.util.ReferenceCountUtil;
 import io.netty.util.concurrent.DefaultThreadFactory;
 
 import java.io.Closeable;
+import java.net.InetSocketAddress;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.concurrent.atomic.AtomicLong;
@@ -293,20 +294,32 @@ public class ObjectMessageServer implements Closeable {
 
         @Override
         protected void initChannel(SocketChannel socketChannel) throws Exception {
-            QueueServerHandler handler = new QueueServerHandler(owner, owner.getLogger(), owner.getSerializer(), owner.getReceiver());
+            ChannelHandler handler = initHandler(socketChannel);
             owner.getLogger().log(ActorSystemRemote.debugLog, debugLogServerColor,
                     "%s local:%s, remote:%s, handler:%s", this, socketChannel.localAddress(), socketChannel.remoteAddress(), handler);
             ActorSystemRemote.settingsSocketChannel(socketChannel);
 
+            initPipeline(socketChannel, handler);
+        }
+
+        protected void initPipeline(SocketChannel socketChannel, ChannelHandler handler) {
             //length[4] + contents[length]
             ChannelPipeline pipeline = socketChannel.pipeline();
             if (debugTraceLog) {
                 pipeline.addLast(new LoggingHandler(ObjectMessageServer.class, LogLevel.INFO));
             }
-            pipeline.addLast(new LengthFieldBasedFrameDecoder(
-                                    Integer.MAX_VALUE,
-                                    0, 4, 0, 0),
-                            handler);
+            pipeline.addLast(initFrameDecoder(socketChannel),
+                    handler);
+        }
+
+        protected ChannelHandler initHandler(SocketChannel channel) {
+            return new QueueServerHandler(owner, channel.remoteAddress(), owner.getLogger(), owner.getSerializer(), owner.getReceiver());
+        }
+
+        protected ChannelHandler initFrameDecoder(SocketChannel channel) {
+            return new LengthFieldBasedFrameDecoder(
+                    Integer.MAX_VALUE,
+                    0, 4, 0, 0);
         }
 
         /** @return implementation field getter */
@@ -320,15 +333,19 @@ public class ObjectMessageServer implements Closeable {
         }
     }
 
+    public static final int RESULT_CLOSE = 0xFFFF_FFFF;
+
     public static class QueueServerHandler extends ChannelInboundHandlerAdapter {
         protected ObjectMessageServer owner;
         protected ActorSystem.SystemLogger logger;
         protected KryoBuilder.SerializerFunction serializer;
         protected Function<Object,Integer> receiver;
         protected volatile boolean firstError = true;
+        protected InetSocketAddress clientAddress;
 
-        public QueueServerHandler(ObjectMessageServer owner, ActorSystem.SystemLogger logger, KryoBuilder.SerializerFunction serializer, Function<Object, Integer> receiver) {
+        public QueueServerHandler(ObjectMessageServer owner, InetSocketAddress clientAddress, ActorSystem.SystemLogger logger, KryoBuilder.SerializerFunction serializer, Function<Object, Integer> receiver) {
             this.owner = owner;
+            this.clientAddress = clientAddress;
             this.logger = logger;
             this.serializer = serializer;
             this.receiver = receiver;
@@ -337,46 +354,51 @@ public class ObjectMessageServer implements Closeable {
         @Override
         public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
             Instant start = Instant.now();
-            long n = 0;
+            long[] n = {0};
             try {
                 if (msg instanceof ByteBuf) {
                     ByteBuf buf = (ByteBuf) msg;
                     int length = buf.readInt();
-                    logger.log(ActorSystemRemote.debugLogMsg, debugLogServerColor, "%s bytes %,d  len %,d, serializer=%s", this, buf.readableBytes(), length, serializer);
-                    Input input = new Input(new ByteBufInputStream(buf, length));
-                    Object value = serializer.read(input);
-                    ReferenceCountUtil.release(buf);
-                    int r = 200;
-                    if (receiver != null) {
-                        r = receiver.apply(value);
-                    }
-
-                    n += 4 + input.total();
-
-                    ByteBuf res = ctx.alloc().buffer(4);
-                    res.writeInt(r);
-                    ctx.writeAndFlush(res);
-                    if (ActorSystemRemote.CLOSE_EACH_WRITE) {
-                        ctx.close();
-                    }
-                    logger.log(ActorSystemRemote.debugLogMsg, debugLogServerColor, "%s read finish: %d", this, r);
+                    logger.log(ActorSystemRemote.debugLogMsg, debugLogServerColor, "%s %s bytes %,d  len %,d, serializer=%s", this, clientAddress, buf.readableBytes(), length, serializer);
+                    int r = channelReadByteBuf(ctx, buf, length, n);
+                    logger.log(ActorSystemRemote.debugLogMsg, debugLogServerColor, "%s %s read finish: %d", this, clientAddress, r);
                 } else {
-                    logger.log(ActorSystemRemote.debugLogMsg, debugLogServerColor, "%s ignore %s", this, msg);
+                    logger.log(ActorSystemRemote.debugLogMsg, debugLogServerColor, "%s %s ignore %s", this, clientAddress, msg);
                 }
             } finally {
                 if (owner != null) {
-                    owner.recordReceiveBytesAndTime(n, Duration.between(start, Instant.now()));
+                    owner.recordReceiveBytesAndTime(n[0], Duration.between(start, Instant.now()));
                 }
             }
+        }
+
+        protected int channelReadByteBuf(ChannelHandlerContext ctx, ByteBuf buf, int length, long[] n) {
+            Input input = new Input(new ByteBufInputStream(buf, length));
+            Object value = serializer.read(input);
+            ReferenceCountUtil.release(buf);
+            int r = 200;
+            if (receiver != null) {
+                r = receiver.apply(value);
+            }
+
+            n[0] += 4 + input.total();
+
+            ByteBuf res = ctx.alloc().buffer(4);
+            res.writeInt(r);
+            ctx.writeAndFlush(res);
+            if (r == RESULT_CLOSE || ActorSystemRemote.CLOSE_EACH_WRITE) {
+                ctx.close();
+            }
+            return r;
         }
 
         @Override
         public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
             if (firstError) {
-                logger.log(true, debugLogServerColor, cause, "%s exceptionCaught", this);
+                logger.log(true, debugLogServerColor, cause, "%s %s exceptionCaught", this, clientAddress);
                 firstError = false;
             } else {
-                logger.log(ActorSystemRemote.debugLogMsg, debugLogServerColor, cause, "%s exceptionCaught", this);
+                logger.log(ActorSystemRemote.debugLogMsg, debugLogServerColor, cause, "%s %s exceptionCaught", this, clientAddress);
             }
             ctx.close();
             if (owner != null) {
@@ -396,7 +418,7 @@ public class ObjectMessageServer implements Closeable {
 
         @Override
         public String toString() {
-            return getClass().getSimpleName() + "@" + Integer.toHexString(System.identityHashCode(this));
+            return getClass().getSimpleName() + "@" + Integer.toHexString(System.identityHashCode(this)) + "(" + owner + ")";
         }
     }
 }

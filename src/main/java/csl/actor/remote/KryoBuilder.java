@@ -263,6 +263,7 @@ public class KryoBuilder {
                 ActorPlacementKeyAggregation.Task.class,
                 ActorPlacementKeyAggregation.TaskChain.class,
                 ActorPlacementKeyAggregation.InitBuilder.class,
+                ActorPlacementKeyAggregation.OneShotState.class,
                 ActorKeyAggregation.StateUnit.class,
                 ActorKeyAggregation.ActorKeyAggregationSerializable.class,
                 ActorKeyAggregation.CallableToLocalSerializable.class,

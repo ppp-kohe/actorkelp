@@ -1,19 +1,13 @@
 package csl.actor.example.keyaggregate;
 
 import csl.actor.ActorBehavior;
-import csl.actor.ActorRef;
 import csl.actor.ActorSystem;
-import csl.actor.cluster.ClusterHttp;
 import csl.actor.cluster.PhaseShift;
 import csl.actor.keyaggregate.ActorKeyAggregation;
 import csl.actor.keyaggregate.ClusterKeyAggregation;
 import csl.actor.keyaggregate.Config;
-import csl.actor.keyaggregate.KeyAggregationStateRouter;
 
-import java.io.Console;
 import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Random;
 import java.util.Scanner;
 import java.util.function.Function;
@@ -21,6 +15,7 @@ import java.util.function.Function;
 public class ExampleCluster {
     public static void main(String[] args) {
         String dir = Paths.get("").toAbsolutePath().toString() + "/target/debug";
+        String debugFlag = "false";
 
         ClusterKeyAggregation d = ClusterKeyAggregation.create();
         d.deploy(d.master()
@@ -29,10 +24,10 @@ public class ExampleCluster {
                     .edit(c -> c.getDeploymentConfig().httpHost = "0.0.0.0"),
                 d.node("localhost", 30001)
                     .edit(c -> c.getDeploymentConfig().baseDir = dir)
-                    .edit(c -> c.getDeploymentConfig().java = "java %s %s %s"),
+                    .edit(c -> c.getDeploymentConfig().java = "java -Dcsl.actor.debug=" + debugFlag + " -Dcsl.actor.debugMsg=" + debugFlag + " %s %s %s"),
                 d.node("localhost", 30002)
                     .edit(c -> c.getDeploymentConfig().baseDir = dir)
-                    .edit(c -> c.getDeploymentConfig().java = "java %s %s %s"));
+                    .edit(c -> c.getDeploymentConfig().java = "java -Dcsl.actor.debug=" + debugFlag + " -Dcsl.actor.debugMsg=" + debugFlag + " %s %s %s"));
 
         TestActor a = new TestActor(d.getSystem(), "test", d.getMasterConfig());
         Random rand = new Random();
