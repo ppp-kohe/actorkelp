@@ -62,7 +62,8 @@ public class ExampleRemote {
         try {
             ProcessBuilder pb = new ProcessBuilder();
             pb.environment().put("MAVEN_OPTS", "");
-            Process proc = pb.command("mvn", "dependency:build-classpath", "-DincludeScope=test")
+            boolean win = System.getProperty("os.name", "").contains("Windows");
+            Process proc = pb.command(win ? "mvn.cmd" : "mvn", "dependency:build-classpath", "-DincludeScope=test")
                     .start();
             try (BufferedReader r = new BufferedReader(new InputStreamReader(proc.getInputStream(), StandardCharsets.UTF_8))) {
                 String line;

@@ -1,4 +1,4 @@
-package csl.actor.example.keyaggregate;
+package csl.actor.example.exp.thread;
 
 import csl.actor.ActorRef;
 import csl.actor.ActorSystem;

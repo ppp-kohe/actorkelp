@@ -1,4 +1,4 @@
-package csl.actor.example;
+package csl.actor.example.exp.thread;
 
 import csl.actor.*;
 import csl.actor.example.keyaggregate.DebugBehavior;

@@ -3,7 +3,7 @@ package csl.actor.example.keyaggregate;
 import csl.actor.ActorSystemDefault;
 import csl.actor.cluster.FileSplitter;
 import csl.actor.cluster.PhaseShift;
-import csl.actor.example.ExpLock;
+import csl.actor.example.exp.thread.ExpLock;
 import csl.actor.keyaggregate.Config;
 import csl.actor.keyaggregate.FileMapper;
 

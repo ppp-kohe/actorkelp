@@ -10,27 +10,42 @@ import csl.actor.cluster.PhaseShift;
 import java.time.Instant;
 
 public class ExamplePhase {
-    public static void main(String[] args) {
+    public static void main(String[] args) throws Exception {
 
         ActorSystem system = new ActorSystemDefault();
 
-        MyActor2 a = new MyActor2(system);
+        MyActor a = new MyActor(system);
         a.tell("aaa");
         a.tell("bbb");
         a.tell("ccc");
         a.tell(new PhaseShift("end"));
 
+        PhaseShift.start(system, a).get(); //UUID key
+
+        System.err.println("--------------");
 
         MyActor b = new MyActor(system);
-        b.next = a;
+        b.setNextStage(a);
         b.tell("aaa");
         b.tell("bbb");
         b.tell("ccc");
-        new PhaseShift.PhaseTerminalActor(system, true).start("end2", b, Instant.now());
+        new PhaseShift.PhaseTerminalActor(system, false, (sys,comp) -> {
+            sys.getLogger().log("completed with handler: %s", comp);
+        }).start("end2", b, Instant.now()).get();
+
+        System.err.println("--------------");
+
+        MyActor2 c = new MyActor2(system);
+        c.setNextStage(new MyActor2(system));
+        c.tell("aaa");
+        c.tell("bbb");
+        c.tell("ccc");
+        PhaseShift.start(c.getSystem(), c).get();
+
+        system.close();
     }
 
     public static class MyActor extends ActorKeyAggregation {
-        ActorRef next;
         public MyActor(ActorSystem system) {
             super(system);
         }
@@ -40,11 +55,11 @@ public class ExamplePhase {
         @Override
         protected ActorBehavior initBehavior() {
             return behaviorBuilder()
-                    .match(String.class, s -> count += s.length())
-                    .match(PhaseShift.PhaseCompleted.class, s -> s.redirectTo(next))
+                    .match(String.class, s -> count+=s.length())
                     .build();
         }
     }
+
 
     public static class MyActor2 extends ActorKeyAggregation {
         public MyActor2(ActorSystem system) {
@@ -56,9 +71,14 @@ public class ExamplePhase {
         @Override
         protected ActorBehavior initBehavior() {
             return behaviorBuilder()
-                    .match(String.class, s -> count+=s.length())
-                    .match(PhaseShift.PhaseCompleted.class, PhaseShift.PhaseCompleted::sendToTarget)
+                    .match(String.class, s -> count += s.length())
+                    .match(PhaseShift.PhaseCompleted.class, this::complete)
                     .build();
+        }
+
+        public void complete(PhaseShift.PhaseCompleted comp) { //custom handler
+            log("completed: %s, this=%s, count=%,d", comp, this, count);
+            comp.accept(this);
         }
     }
 }

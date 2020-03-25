@@ -241,6 +241,8 @@ public class ActorToGraph extends ActorDefault {
                 return Objects.toString(((ActorRefRemote) ref).getAddress());
             } else if (ref instanceof ActorRefLocalNamed) {
                 return ((ActorRefLocalNamed) ref).getName();
+            } else if (ref == null) {
+                return "null";
             } else {
                 return ref.toString();
             }

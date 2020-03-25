@@ -20,6 +20,7 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Function;
 
 public class WordCount {
     public static void main(String[] args) throws Exception {
@@ -119,6 +120,7 @@ public class WordCount {
         protected ActorBehavior initBehavior() {
             return behaviorBuilder()
                     //.matchKeyFactory(new DebugBehavior.DebugFactory())
+                    //.matchKey(String.class, Function.identity(), w -> new Count(w, 1))
                     .matchKey(Count.class, Count::getWord)
                         .fold((k,vs) -> vs.stream().reduce(new Count(k, 0), Count::add))
                         .eventually()
