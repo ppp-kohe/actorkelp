@@ -16,7 +16,7 @@ public interface KeyAggregationVisitor<ActorType extends Actor>
     @Override
     default void accept(ActorType actor, ActorRef sender) {
         if (actor instanceof ActorKeyAggregation) {
-            ActorKeyAggregation ar = (ActorKeyAggregation) actor;
+            ActorKeyAggregation<?> ar = (ActorKeyAggregation<?>) actor;
             if (ar.getState() instanceof ActorKeyAggregation.StateUnit) {
                 visitActor(actor, sender);
             } else if (ar.getState() instanceof KeyAggregationStateRouter) {
@@ -50,19 +50,19 @@ public interface KeyAggregationVisitor<ActorType extends Actor>
         }
     }
 
-    static <ActorType extends ActorKeyAggregation> void tell(ActorType a, KeyAggregationVisitor<ActorType> v, ActorRef sender) {
+    static <ActorType extends ActorKeyAggregation<ActorType>> void tell(ActorType a, KeyAggregationVisitor<ActorType> v, ActorRef sender) {
         a.tell(v, sender);
     }
 
-    static <ActorType extends ActorKeyAggregation> void tell(ActorType a, VisitorNoSender<ActorType> v) {
+    static <ActorType extends ActorKeyAggregation<ActorType>> void tell(ActorType a, VisitorNoSender<ActorType> v) {
         a.tell(v);
     }
 
-    static <ActorType extends ActorKeyAggregation> KeyAggregationVisitor<ActorType> visitor(KeyAggregationVisitor<ActorType> v) {
+    static <ActorType extends ActorKeyAggregation<ActorType>> KeyAggregationVisitor<ActorType> visitor(KeyAggregationVisitor<ActorType> v) {
         return v;
     }
 
-    static <ActorType extends ActorKeyAggregation> VisitorNoSender<ActorType> visitorNoSender(VisitorNoSender<ActorType> v) {
+    static <ActorType extends ActorKeyAggregation<ActorType>> VisitorNoSender<ActorType> visitorNoSender(VisitorNoSender<ActorType> v) {
         return v;
     }
 

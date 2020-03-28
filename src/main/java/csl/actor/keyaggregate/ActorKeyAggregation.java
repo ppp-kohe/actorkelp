@@ -14,7 +14,7 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
-public abstract class ActorKeyAggregation extends ActorDefault
+public abstract class ActorKeyAggregation<SelfType extends ActorKeyAggregation<SelfType>> extends ActorDefault
         implements KeyHistogramsPersistable.HistogramTreePersistableConfig, PhaseShift.StageSupported, Cloneable {
     protected Config config;
     protected volatile ActorRef nextStage;
@@ -242,18 +242,19 @@ public abstract class ActorKeyAggregation extends ActorDefault
         return getMailboxAsKeyAggregation().create();
     }
 
-    protected void initMerged(ActorKeyAggregation m) { }
+    protected void initMerged(SelfType m) { }
 
-    protected void initClone(ActorKeyAggregation original) { }
+    protected void initClone(SelfType original) { }
 
     @Override
     protected ActorBehaviorBuilderKeyAggregation behaviorBuilder() {
         return new ActorBehaviorBuilderKeyAggregation((ps) -> getMailboxAsKeyAggregation().initMessageEntries(ps));
     }
 
-    public ActorKeyAggregation setAsUnit() {
+    @SuppressWarnings("unchecked")
+    public SelfType setAsUnit() {
         state = initStateUnit(null);
-        return this;
+        return (SelfType) this;
     }
 
     ////////////////////////
@@ -599,7 +600,7 @@ public abstract class ActorKeyAggregation extends ActorDefault
         return mailbox.poll();
     }
 
-    public void internalMerge(ActorKeyAggregation merged) {
+    public void internalMerge(SelfType merged) {
         getMailboxAsKeyAggregation().lockRemainingProcesses();
         merged.getMailboxAsKeyAggregation().lockRemainingProcesses();
         getMailboxAsKeyAggregation()

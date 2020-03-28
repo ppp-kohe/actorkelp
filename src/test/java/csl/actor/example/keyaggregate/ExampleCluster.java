@@ -4,6 +4,7 @@ import csl.actor.ActorBehavior;
 import csl.actor.ActorSystem;
 import csl.actor.cluster.PhaseShift;
 import csl.actor.keyaggregate.ActorKeyAggregation;
+import csl.actor.keyaggregate.ActorPlacementKeyAggregation;
 import csl.actor.keyaggregate.ClusterKeyAggregation;
 import csl.actor.keyaggregate.Config;
 
@@ -13,12 +14,12 @@ import java.util.Scanner;
 import java.util.function.Function;
 
 public class ExampleCluster {
-    public static void main(String[] args) {
+    public static void main(String[] args) throws Exception {
         String dir = Paths.get("").toAbsolutePath().toString() + "/target/debug";
         String debugFlag = "false";
 
         ClusterKeyAggregation d = ClusterKeyAggregation.create();
-        d.deploy(d.master()
+        ActorPlacementKeyAggregation place = d.deploy(d.master()
                     .edit(c -> c.getDeploymentConfig().baseDir = dir)
                     .edit(c -> c.getAppConfig().routerAutoMerge = false)
                     .edit(c -> c.getDeploymentConfig().httpHost = "0.0.0.0"),
@@ -29,8 +30,11 @@ public class ExampleCluster {
                     .edit(c -> c.getDeploymentConfig().baseDir = dir)
                     .edit(c -> c.getDeploymentConfig().java = "java -Dcsl.actor.debug=" + debugFlag + " -Dcsl.actor.debugMsg=" + debugFlag + " %s %s %s"));
 
+        TestSource s = new TestSource(d.getSystem(), "source", d.getMasterConfig());
         TestActor a = new TestActor(d.getSystem(), "test", d.getMasterConfig());
-        Random rand = new Random();
+//        Random rand = new Random();
+
+        place.connectStage(s, a).get();
 
         Scanner scn = new Scanner(System.in);
         while (true) {
@@ -39,15 +43,22 @@ public class ExampleCluster {
             if (line.equals("exit") || line.equals("quit")) {
                 break;
             } else if (line.startsWith("test ")) {
+                int n = Integer.parseInt(line.split(" ")[1]);
+                /*
                 try {
-                    int n = Integer.parseInt(line.split(" ")[1]);
                     for (int i = 0; i < n; ++i) {
                         a.tell(Integer.toString(rand.nextInt(n)));
                     }
                     PhaseShift.start(d.getSystem(), a);
                 } catch (Exception ex) {
                     ex.printStackTrace();
-                }
+                }*/
+                s.tell(n);
+                PhaseShift.start(d.getSystem(), s).get();
+            } else if (line.startsWith("split ")) {
+                int n = Integer.parseInt(line.split(" ")[1]);
+                a.routerSplitOrMerge(n).get();
+
             } else if (line.startsWith("stats ")) {
                 String p = line.split(" ")[1];
                 ClusterKeyAggregation.RouterSplitStat o = d.getSplit(a, p);
@@ -59,7 +70,35 @@ public class ExampleCluster {
         d.shutdownAll();
     }
 
-    public static class TestActor extends ActorKeyAggregation {
+    public static class TestSource extends ActorKeyAggregation<TestSource> {
+        public TestSource(ActorSystem system, String name, Config config) {
+            super(system, name, config);
+        }
+
+        public TestSource(ActorSystem system, String name, Config config, State state) {
+            super(system, name, config, state);
+        }
+
+        @Override
+        protected ActorBehavior initBehavior() {
+            return behaviorBuilder()
+                    .match(Integer.class, this::start)
+                    .build();
+        }
+
+        public void start(int n) {
+            try {
+                for (int i = 0; i < n; ++i) {
+                    nextStage().tell("n" + i);
+                    Thread.sleep(1000);
+                }
+            } catch (Exception ex) {
+                throw new RuntimeException(ex);
+            }
+        }
+    }
+
+    public static class TestActor extends ActorKeyAggregation<TestActor> {
         public TestActor(ActorSystem system, String name, Config config) {
             super(system, name, config);
         }

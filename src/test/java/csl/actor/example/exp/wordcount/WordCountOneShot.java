@@ -10,7 +10,7 @@ import java.util.Arrays;
 import java.util.function.Function;
 
 public class WordCountOneShot {
-    public static void main(String[] args) {
+    public static void main(String[] args) throws Exception {
         ClusterKeyAggregation cluster = ClusterKeyAggregation.create();
         ActorPlacementKeyAggregation place = cluster.deploy(args[0]);
         FileMapper fileMapper = place.fileMapperWithSplitCount(10);
@@ -25,7 +25,7 @@ public class WordCountOneShot {
                             .eventually()
                         .forEach(t -> self.writer().println(t))));
 
-        fileMapper.startReadFile(args[1]);
+        fileMapper.startReadFile(args[1]).get();
 
         cluster.shutdownAll();
     }

@@ -116,7 +116,7 @@ public class KryoBuilder {
         try {
             cls.getConstructor();
         } catch (Exception ex) {
-            r.setInstantiator(new ObjectStreamClassInstantiator(cls));
+            r.setInstantiator(new ObjectStreamClassInstantiator<>(cls));
             r.setSerializer(new JavaSerializer());
         }
     }
@@ -125,10 +125,10 @@ public class KryoBuilder {
     @SuppressWarnings("unchecked")
     public void registerWithSerializable(Kryo kryo, List<Class<?>> types) {
         for (Class<?> t : types) {
-            Serializer s = kryo.getDefaultSerializer(t);
+            Serializer<?> s = kryo.getDefaultSerializer(t);
             if (Serializable.class.isAssignableFrom(t) && s instanceof FieldSerializer) {
                 Registration r = kryo.register(t);
-                r.setInstantiator(new ObjectStreamClassInstantiator(t));
+                r.setInstantiator(new ObjectStreamClassInstantiator<>(t));
                 r.setSerializer(new JavaSerializer());
             } else {
                 kryo.register(t);

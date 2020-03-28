@@ -19,7 +19,7 @@ public class DelayedLabelAggregation extends DelayedLabelManual {
         return new LernerActorAggregation(system, out, resultActor, config.instances);
     }
 
-    public static class LernerActorAggregation extends ActorKeyAggregation {
+    public static class LernerActorAggregation extends ActorKeyAggregation<LernerActorAggregation> {
         LearnerAggregationSupport support;
 
         public LernerActorAggregation(ActorSystem system, String name, ActorSystem.SystemLogger out, ActorRef resultActor, int numInstances) {

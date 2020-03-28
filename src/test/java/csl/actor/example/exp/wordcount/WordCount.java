@@ -60,7 +60,7 @@ public class WordCount {
 
     }
 
-    public static class WordCountMapper extends ActorKeyAggregation {
+    public static class WordCountMapper extends ActorKeyAggregation<WordCountMapper> {
         public WordCountMapper(ActorSystem system, String name, Config config) {
             super(system, name, config);
         }
@@ -92,7 +92,7 @@ public class WordCount {
         }
     }
 
-    public static class WordCountReducer extends ActorKeyAggregation {
+    public static class WordCountReducer extends ActorKeyAggregation<WordCountReducer> {
         PrintWriter writer;
         String dst;
         ScheduledFuture<?> flushTask;
@@ -129,7 +129,7 @@ public class WordCount {
         }
 
         @Override
-        protected void initClone(ActorKeyAggregation original) {
+        protected void initClone(WordCountReducer original) {
             super.initClone(original);
             initDebug();
         }
@@ -218,7 +218,7 @@ public class WordCount {
         }
 
         @Override
-        protected void initMerged(ActorKeyAggregation m) {
+        protected void initMerged(WordCountReducer m) {
             ((WordCountReducer) m).close();
             initDebug();
         }

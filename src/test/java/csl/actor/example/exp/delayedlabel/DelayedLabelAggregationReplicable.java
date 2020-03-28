@@ -63,7 +63,7 @@ public class DelayedLabelAggregationReplicable extends DelayedLabelManual {
         }
     }
 
-    public static class LearnerActorAggregationReplicable extends ActorKeyAggregation {
+    public static class LearnerActorAggregationReplicable extends ActorKeyAggregation<LearnerActorAggregationReplicable> {
         DelayedLabelAggregation.LearnerAggregationSupport support;
 
         public LearnerActorAggregationReplicable(ActorSystem system, String name, Config config, ActorRef result, State state) {
@@ -116,14 +116,14 @@ public class DelayedLabelAggregationReplicable extends DelayedLabelManual {
         AtomicInteger rec = new AtomicInteger();
 
         @Override
-        protected void initClone(ActorKeyAggregation original) {
+        protected void initClone(LearnerActorAggregationReplicable original) {
             log("clone");
             rec = new AtomicInteger();
             support = support.createClone(this);
         }
 
         @Override
-        protected void initMerged(ActorKeyAggregation m) {
+        protected void initMerged(LearnerActorAggregationReplicable m) {
             log("merge");
         }
 

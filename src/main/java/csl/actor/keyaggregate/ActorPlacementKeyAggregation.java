@@ -91,7 +91,7 @@ public class ActorPlacementKeyAggregation extends ClusterDeployment.ActorPlaceme
     public CompletableFuture<?> splitStage(CompletableFuture<?> prevTask, ActorRef... stageActors) {
         Task splitTask = (a) -> {
             try {
-                return a.routerSplit(a.routerGetMaxHeight().get());
+                return a.routerSplit((Integer) a.routerGetMaxHeight().get());
             } catch (Exception ex) {
                 throw new RuntimeException(ex);
             }
@@ -182,7 +182,7 @@ public class ActorPlacementKeyAggregation extends ClusterDeployment.ActorPlaceme
         void build(ActorKeyAggregationOneShot self, ActorBehaviorBuilderKeyAggregation builder);
     }
 
-    public static class ActorKeyAggregationOneShot extends ActorKeyAggregation {
+    public static class ActorKeyAggregationOneShot extends ActorKeyAggregation<ActorKeyAggregationOneShot> {
         protected InitBuilder builder;
         protected LineWriter writer;
 
@@ -226,10 +226,10 @@ public class ActorPlacementKeyAggregation extends ClusterDeployment.ActorPlaceme
         }
 
         @Override
-        protected void initClone(ActorKeyAggregation original) {
+        protected void initClone(ActorKeyAggregationOneShot original) {
             super.initClone(original);
             initBuilderFromBuilder();
-            LineWriter w = ((ActorKeyAggregationOneShot) original).writer;
+            LineWriter w = original.writer;
             if (w != null) {
                 writer = w.copy(this);
             }

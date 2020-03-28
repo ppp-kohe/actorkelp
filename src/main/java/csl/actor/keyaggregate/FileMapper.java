@@ -9,7 +9,7 @@ import csl.actor.cluster.PhaseShift;
 
 import java.util.concurrent.CompletableFuture;
 
-public class FileMapper extends ActorKeyAggregation {
+public class FileMapper extends ActorKeyAggregation<FileMapper> {
     protected FileSplitter splitter;
     protected long splitCount;
 
@@ -42,9 +42,8 @@ public class FileMapper extends ActorKeyAggregation {
     }
 
     @Override
-    protected void initMerged(ActorKeyAggregation m) {
-        FileMapper fm = (FileMapper) m;
-        splitCount = Math.max(splitCount, fm.splitCount);
+    protected void initMerged(FileMapper m) {
+        splitCount = Math.max(splitCount, m.splitCount);
     }
 
     public CompletableFuture<PhaseShift.PhaseCompleted> startReadFile(String path) {
