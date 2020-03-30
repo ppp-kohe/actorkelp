@@ -30,7 +30,7 @@ public class WordCount {
         pool = new KryoBuilder.SerializerPoolDefault(system);
 
         Config conf = Config.readConfig(Config.class, System.getProperties());
-        conf.log(conf.toString());
+        conf.log("%s", conf.toString());
 
         PhaseShift.PhaseTerminalActor finisher = new PhaseShift.PhaseTerminalActor(system, true);
 
@@ -42,6 +42,7 @@ public class WordCount {
         mapper.setNextStage(reducer).get();
         fileReader.routerSplit(3);
         mapper.routerSplit(2);
+        reducer.routerSplit(3);
 
         fileReader.tell(new FileSplitter.FileSplit(src), finisher);
 

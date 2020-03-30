@@ -174,7 +174,7 @@ public class ActorPlacementKeyAggregation extends ClusterDeployment.ActorPlaceme
                 ConfigDeployment.getPathModifier(getSystem())));
     }
 
-    public ActorKeyAggregation actor(String name, InitBuilder builderFunction) {
+    public ActorKeyAggregationOneShot actor(String name, InitBuilder builderFunction) {
         return new ActorKeyAggregationOneShot(getSystem(), name, getMasterConfig(), builderFunction);
     }
 

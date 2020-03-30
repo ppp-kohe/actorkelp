@@ -15,16 +15,17 @@ public class WordCountOneShot {
         ActorPlacementKeyAggregation place = cluster.deploy(args[0]);
         FileMapper fileMapper = place.fileMapperWithSplitCount(10);
 
+        ActorPlacementKeyAggregation.ActorKeyAggregationOneShot reducer;
         place.connectStage(fileMapper,
                 place.actor("mapper", (self, builder) ->
                         builder.match(String.class, line -> Arrays.stream(line.split("\\W+"))
                             .forEach(w -> self.nextStage().tell(w)))),
-                place.actor("reducer", (self, builder) ->
+                reducer = place.actor("reducer", (self, builder) ->
                         builder.matchKey(String.class, Function.identity(), w -> new Tuple(w, 1))
                             .fold((w, ts) -> ts.stream().reduce(new Tuple(w, 0), Tuple::add))
                             .eventually()
                         .forEach(t -> self.writer().println(t))));
-
+        //reducer.routerSplit(3);
         fileMapper.startReadFile(args[1]).get();
 
         cluster.shutdownAll();

@@ -226,7 +226,7 @@ public class KeyAggregationStateRouter implements ActorKeyAggregation.State {
         } else {
             MailboxKeyAggregation.HistogramSelection selection = m.selectHistogram(message.getData());
             Object key = m.extractKey(selection, message);
-            split.process(self, this, key, selection, message);
+            split.process(self, this, key, selection, message, KeyAggregationRoutingSplit.ProcessGuide.Init);
         }
     }
 
