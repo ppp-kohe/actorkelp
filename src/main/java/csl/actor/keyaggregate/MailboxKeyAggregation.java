@@ -594,9 +594,9 @@ public class MailboxKeyAggregation implements Mailbox, Cloneable {
     }
 
     @SuppressWarnings("unchecked")
-    public boolean compare(int entryId, Object key, Object point) {
+    public int compare(int entryId, Object key, Object point) {
         HistogramProcessor p = entries[entryId].getProcessor();
-        return ((KeyHistograms.KeyComparator<Object>) p.getKeyComparator()).compare(key, point) < 0;
+        return ((KeyHistograms.KeyComparator<Object>) p.getKeyComparator()).compare(key, point);
     }
 
     public void merge(MailboxKeyAggregation m) {

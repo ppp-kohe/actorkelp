@@ -13,13 +13,26 @@ import java.util.concurrent.atomic.AtomicLong;
 
 public interface KeyAggregationRoutingSplit {
     enum ProcessGuide {
+        InitToEquivalent { @Override public boolean left() { return false; } @Override public boolean init() { return true; } },
         /** the initial state:
          *   if it finds a null point, sets the point with the current key,
          *    and goes down to the right hand side.
-         *   then, the next state becomes {@link #Left} */
-        Init,
+         *   then, the next state becomes {@link #NullToRight} */
+        InitToLeft       { @Override public boolean left() { return true;  } @Override public boolean init() { return true; } },
+        InitToRight      { @Override public boolean left() { return false; } @Override public boolean init() { return true; } },
+
+        /** after setting a null point, it turns to right and goes down to left by {@link #NullToEquivalent} */
+        NullToRight      { @Override public boolean left() { return false; } @Override public boolean init() { return false; } },
         /** the routing always selects the left hand side, without setting null points. */
-        Left
+        NullToEquivalent { @Override public boolean left() { return true;  } @Override public boolean init() { return false; } };
+
+        public boolean init() {
+            return false;
+        }
+
+        public boolean left() {
+            return false;
+        }
     }
 
     void process(ActorKeyAggregation router, KeyAggregationStateRouter stateRouter,
@@ -317,13 +330,13 @@ public interface KeyAggregationRoutingSplit {
         public void process(ActorKeyAggregation router, KeyAggregationStateRouter stateRouter,
                             Object key, MailboxKeyAggregation.HistogramSelection selection, Message<?> message,
                             ProcessGuide guide) {
-            ProcessSplitSelection next = select(router, stateRouter, key, selection, message, guide);
-            if (next.left) {
+            ProcessGuide next = select(router, stateRouter, key, selection, message, guide);
+            if (next.left()) {
                 countHistory(true, router);
-                left.process(router, stateRouter, key, selection, message, next.guide);
+                left.process(router, stateRouter, key, selection, message, next);
             } else {
                 countHistory(false, router);
-                right.process(router, stateRouter, key, selection, message, next.guide);
+                right.process(router, stateRouter, key, selection, message, next);
             }
         }
 
@@ -340,28 +353,34 @@ public interface KeyAggregationRoutingSplit {
         }
 
 
-        protected ProcessSplitSelection select(ActorKeyAggregation self, KeyAggregationStateRouter router,
+        protected ProcessGuide select(ActorKeyAggregation self, KeyAggregationStateRouter router,
                                                Object key, MailboxKeyAggregation.HistogramSelection selection, Message<?> message,
                                                ProcessGuide guide) {
             if (selection == null) {
-                return new ProcessSplitSelection(router.getRandom().nextBoolean(), guide);
+                return router.getRandom().nextBoolean() ? ProcessGuide.InitToLeft : ProcessGuide.InitToRight;
             } else {
                 Object point = splitPoints[selection.entryId];
                 if (point == null) {
-                    if (guide.equals(ProcessGuide.Init)) { //the first arriving key becomes splitPoint
-                        synchronized (this) {
-                            point = splitPoints[selection.entryId];
-                            if (point == null) {
-                                splitPoints[selection.entryId] = key;
-                                point = key;
-                                guide = ProcessGuide.Left;
+                    synchronized (this) {
+                        point = splitPoints[selection.entryId];
+                        if (point == null) {
+                            if (guide.init()) { //the first arriving key becomes splitPoint
+                                if (guide.equals(ProcessGuide.InitToEquivalent)) { //upper parent is non-null and same key: (right) -> left -> left ...
+                                    return ProcessGuide.NullToEquivalent;
+                                } else {
+                                    splitPoints[selection.entryId] = key;
+                                    return ProcessGuide.NullToRight; // set key -> right -> left -> left ...
+                                }
+                            } else {
+                                return ProcessGuide.NullToEquivalent;
                             }
                         }
-                    } else if (guide.equals(ProcessGuide.Left)) {
-                        return new ProcessSplitSelection(true, guide);
                     }
                 }
-                return new ProcessSplitSelection(self.getMailboxAsKeyAggregation().compare(selection.entryId, key, point), guide);
+                int c = self.getMailboxAsKeyAggregation().compare(selection.entryId, key, point);
+                return c == 0 ? ProcessGuide.InitToEquivalent :
+                        c < 0 ? ProcessGuide.InitToLeft :
+                                ProcessGuide.InitToRight;
             }
         }
 
@@ -526,16 +545,6 @@ public interface KeyAggregationRoutingSplit {
         @Override
         public <ActorType extends Actor> void accept(ActorType actor, ActorRef sender, KeyAggregationVisitor<ActorType> v) {
             v.visitRouterNode(actor, sender, this);
-        }
-    }
-
-    final class ProcessSplitSelection {
-        public final boolean left;
-        public final ProcessGuide guide;
-
-        public ProcessSplitSelection(boolean left, ProcessGuide guide) {
-            this.left = left;
-            this.guide = guide;
         }
     }
 
