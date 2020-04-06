@@ -306,6 +306,7 @@ public interface ActorPlacement {
     }
 
     class CallableMasterThreads implements CallableMessage<Actor, Integer> {
+        public static final long serialVersionUID = 1L;
         @Override
         public Integer call(Actor self) {
             return self.getSystem().getThreads();
@@ -313,6 +314,7 @@ public interface ActorPlacement {
     }
 
     class AddressList implements Serializable {
+        public static final long serialVersionUID = 1L;
         protected List<AddressListEntry> cluster;
 
         public AddressList(List<AddressListEntry> cluster) {
@@ -337,6 +339,7 @@ public interface ActorPlacement {
     }
 
     class AddressListEntry implements Serializable, ClusterHttp.ToJson {
+        public static final long serialVersionUID = 1L;
         protected ActorAddress.ActorAddressRemoteActor placementActor;
         protected int threads;
 
@@ -388,6 +391,7 @@ public interface ActorPlacement {
     }
 
     class ActorCreationRequest implements Serializable {
+        public static final long serialVersionUID = 1L;
         protected Serializable data;
 
         public ActorCreationRequest(Serializable data) {
@@ -407,6 +411,7 @@ public interface ActorPlacement {
     }
 
     class LeaveEntry implements Serializable {
+        public static final long serialVersionUID = 1L;
         protected ActorAddress.ActorAddressRemoteActor placementActor;
 
         public LeaveEntry(ActorAddress.ActorAddressRemoteActor placementActor) {

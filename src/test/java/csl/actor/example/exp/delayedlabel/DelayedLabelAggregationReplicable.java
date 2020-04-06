@@ -5,9 +5,9 @@ import csl.actor.ActorRef;
 import csl.actor.ActorSystem;
 import csl.actor.Message;
 import csl.actor.cluster.PhaseShift;
-import csl.actor.keyaggregate.ActorKeyAggregation;
-import csl.actor.keyaggregate.KeyAggregationVisitor;
-import csl.actor.keyaggregate.Config;
+import csl.actor.kelp.ActorKelp;
+import csl.actor.kelp.KelpVisitor;
+import csl.actor.kelp.Config;
 import csl.actor.cluster.ResponsiveCalls;
 
 import java.time.Instant;
@@ -38,6 +38,7 @@ public class DelayedLabelAggregationReplicable extends DelayedLabelManual {
         }
 
         @Override
+        @SuppressWarnings({"rawtypes", "unchecked"})
         public void receive(int next, ActorRef sender) {
             super.receive(next, sender);
 //            if (learner != null) {
@@ -46,7 +47,7 @@ public class DelayedLabelAggregationReplicable extends DelayedLabelManual {
             if (!printed && (numInstances * 0.9) < this.finishedInstances) {
                 ResponsiveCalls.sendTask(system, root, (a) -> {
                     System.err.println("print router");
-                    KeyAggregationVisitor.tell((ActorKeyAggregation) a, (v, snd) -> v.printStatus(), null);
+                    KelpVisitor.tell((ActorKelp) a, (v, snd) -> v.printStatus(), null);
                     return null;
                 });
                 printed = true;
@@ -54,16 +55,17 @@ public class DelayedLabelAggregationReplicable extends DelayedLabelManual {
         }
     }
 
-    public static class LearnerState extends ActorKeyAggregation.ActorKeyAggregationSerializable {
+    public static class LearnerState extends ActorKelp.ActorKelpSerializable {
+        public static final long serialVersionUID = 1L;
         public ActorRef resultActor;
 
         @Override
-        protected ActorKeyAggregation create(ActorSystem system, String name, Config config, ActorKeyAggregation.State state) throws Exception {
+        protected ActorKelp<?> create(ActorSystem system, String name, Config config, ActorKelp.State state) throws Exception {
             return new LearnerActorAggregationReplicable(system, name, config, resultActor, state);
         }
     }
 
-    public static class LearnerActorAggregationReplicable extends ActorKeyAggregation<LearnerActorAggregationReplicable> {
+    public static class LearnerActorAggregationReplicable extends ActorKelp<LearnerActorAggregationReplicable> {
         DelayedLabelAggregation.LearnerAggregationSupport support;
 
         public LearnerActorAggregationReplicable(ActorSystem system, String name, Config config, ActorRef result, State state) {
@@ -88,7 +90,7 @@ public class DelayedLabelAggregationReplicable extends DelayedLabelManual {
         }
 
         @Override
-        protected ActorKeyAggregationSerializable newSerializableState() {
+        protected ActorKelpSerializable newSerializableState() {
             LearnerState ls = new LearnerState();
             ls.resultActor = support.model.resultActor;
             return ls;
@@ -132,7 +134,7 @@ public class DelayedLabelAggregationReplicable extends DelayedLabelManual {
             if (root == this) {
                 support.processMessageBefore(message);
             } else {
-                DelayedLabelAggregation.LearnerAggregationSupport.pruneCount.addAndGet(getMailboxAsKeyAggregation().prune(32, 0.5));
+                DelayedLabelAggregation.LearnerAggregationSupport.pruneCount.addAndGet(getMailboxAsKelp().prune(32, 0.5));
             }
             super.processMessage(message);
         }

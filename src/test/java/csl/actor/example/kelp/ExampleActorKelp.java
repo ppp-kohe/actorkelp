@@ -1,19 +1,19 @@
-package csl.actor.example.keyaggregate;
+package csl.actor.example.kelp;
 
 import csl.actor.ActorBehavior;
 import csl.actor.ActorSystem;
 import csl.actor.ActorSystemDefault;
-import csl.actor.keyaggregate.ActorKeyAggregation;
-import csl.actor.keyaggregate.Config;
+import csl.actor.kelp.ActorKelp;
+import csl.actor.kelp.Config;
 import csl.actor.cluster.PhaseShift;
 
 import java.util.*;
 import java.util.function.BiPredicate;
 
-public class ExampleActorKeyAggregation {
+public class ExampleActorKelp {
     public static void main(String[] args) throws Exception {
-        new ExampleActorKeyAggregation().runUnit();
-        new ExampleActorKeyAggregation().runRouter();
+        new ExampleActorKelp().runUnit();
+        new ExampleActorKelp().runRouter();
     }
 
     public void runUnit() throws Exception {
@@ -59,7 +59,7 @@ public class ExampleActorKeyAggregation {
         return String.format("\033[38;5;%dm%s\033[0m",c, s);
     }
 
-    public static class MyActor extends ActorKeyAggregation {
+    public static class MyActor extends ActorKelp<MyActor> {
         public Map<String, List<String>> record = new LinkedHashMap<>();
         public int count;
 
@@ -80,15 +80,15 @@ public class ExampleActorKeyAggregation {
         }
 
         @Override
-        protected void initClone(ActorKeyAggregation original) {
+        protected void initClone(MyActor original) {
             record = new LinkedHashMap<>();
             count = 0;
         }
 
         @Override
-        protected void initMerged(ActorKeyAggregation m) {
-            record.putAll(((MyActor) m).record);
-            count += ((MyActor) m).count;
+        protected void initMerged(MyActor m) {
+            record.putAll(m.record);
+            count += m.count;
         }
 
         public void process(String k, String v) {

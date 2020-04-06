@@ -45,9 +45,12 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
     public interface MessagePersistentWriter extends AutoCloseable {
         void save(Message<?> msg);
         MessageOnStorage reader();
+        @Override
+        void close();
     }
 
     public static abstract class MessageOnStorage extends Message<Object> {
+        public static final long serialVersionUID = 1L;
         public MessageOnStorage() {
             super(null, null, null);
         }
@@ -526,7 +529,9 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
         public void close(Path path) { }
     }
 
-    public static class PersistentFileEnd implements Serializable {}
+    public static class PersistentFileEnd implements Serializable {
+        public static final long serialVersionUID = 1L;
+    }
 
     public static class PersistentFileWriter implements AutoCloseable {
         protected String pathExpanded;
@@ -576,6 +581,7 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
     }
 
     public static class PersistentFileReaderSource implements Serializable {
+        public static final long serialVersionUID = 1L;
         protected String pathExpanded;
         protected long offset;
         protected transient PersistentFileManager manager;
@@ -725,6 +731,7 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
     }
 
     public static class MessageOnStorageFile extends MessageOnStorage {
+        public static final long serialVersionUID = 1L;
         protected PersistentFileReaderSource source;
         protected transient PersistentFileReader reader;
         protected transient MessageOnStorage currentMessage;

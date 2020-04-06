@@ -1,4 +1,4 @@
-package csl.actor.keyaggregate;
+package csl.actor.kelp;
 
 import csl.actor.Actor;
 import csl.actor.ActorRef;
@@ -11,7 +11,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
-public interface KeyAggregationRoutingSplit {
+@SuppressWarnings("rawtypes")
+public interface KelpRoutingSplit {
     enum ProcessGuide {
         InitToEquivalent { @Override public boolean left() { return false; } @Override public boolean init() { return true; } },
         /** the initial state:
@@ -35,8 +36,8 @@ public interface KeyAggregationRoutingSplit {
         }
     }
 
-    void process(ActorKeyAggregation router, KeyAggregationStateRouter stateRouter,
-                 Object key, MailboxKeyAggregation.HistogramSelection selection, Message<?> message, ProcessGuide guide);
+    void process(ActorKelp router, KelpStateRouter stateRouter,
+                 Object key, MailboxKelp.HistogramSelection selection, Message<?> message, ProcessGuide guide);
     int getDepth();
 
     default void clearHistory() {}
@@ -47,34 +48,34 @@ public interface KeyAggregationRoutingSplit {
         return false;
     }
 
-    KeyAggregationRoutingSplit split(SplitOrMergeContext context, int height);
-    KeyAggregationRoutingSplit mergeInactive(SplitOrMergeContext context);
-    KeyAggregationRoutingSplit mergeIntoLeaf(SplitOrMergeContext context);
+    KelpRoutingSplit split(SplitOrMergeContext context, int height);
+    KelpRoutingSplit mergeInactive(SplitOrMergeContext context);
+    KelpRoutingSplit mergeIntoLeaf(SplitOrMergeContext context);
 
-    KeyAggregationRoutingSplit splitOrMerge(SplitOrMergeContext context, int height);
+    KelpRoutingSplit splitOrMerge(SplitOrMergeContext context, int height);
 
-    KeyAggregationRoutingSplit adjustPath(SplitPath newPath);
+    KelpRoutingSplit adjustPath(SplitPath newPath);
 
-    default <ActorType extends Actor> void accept(ActorType actor, ActorRef sender, KeyAggregationVisitor<ActorType> v) {
+    default <ActorType extends Actor> void accept(ActorType actor, ActorRef sender, KelpVisitor<ActorType> v) {
         v.visitRouter(actor, sender, this);
     }
 
     SplitPath getPath();
 
     interface SplitOrMergeContext {
-        ActorKeyAggregation router();
-        void merged(KeyAggregationRoutingSplit newMerged, KeyAggregationRoutingSplit oldNode, KeyAggregationRoutingSplit oldAnother);
-        void split(KeyAggregationRoutingSplit newSplit, KeyAggregationRoutingSplit oldNode);
+        ActorKelp router();
+        void merged(KelpRoutingSplit newMerged, KelpRoutingSplit oldNode, KelpRoutingSplit oldAnother);
+        void split(KelpRoutingSplit newSplit, KelpRoutingSplit oldNode);
     }
 
     class SplitOrMergeContextDefault implements SplitOrMergeContext {
         protected String message;
-        protected ActorKeyAggregation router;
-        protected Set<KeyAggregationRoutingSplit> newSplits = new HashSet<>();
+        protected ActorKelp router;
+        protected Set<KelpRoutingSplit> newSplits = new HashSet<>();
         protected boolean mergedToRoot;
         protected boolean splitFromRoot;
 
-        public SplitOrMergeContextDefault(String message, ActorKeyAggregation router) {
+        public SplitOrMergeContextDefault(String message, ActorKelp router) {
             this.message = message;
             this.router = router;
         }
@@ -87,13 +88,13 @@ public interface KeyAggregationRoutingSplit {
             return !newSplits.isEmpty() || mergedToRoot;
         }
 
-        public Set<KeyAggregationRoutingSplit> getNewSplits() {
+        public Set<KelpRoutingSplit> getNewSplits() {
             return newSplits;
         }
 
-        public List<KeyAggregationRoutingSplit> getNewSplitsSorted() {
-            List<KeyAggregationRoutingSplit> s = new ArrayList<>(newSplits);
-            s.sort(Comparator.comparing(KeyAggregationRoutingSplit::getPath));
+        public List<KelpRoutingSplit> getNewSplitsSorted() {
+            List<KelpRoutingSplit> s = new ArrayList<>(newSplits);
+            s.sort(Comparator.comparing(KelpRoutingSplit::getPath));
             return s;
         }
 
@@ -106,12 +107,12 @@ public interface KeyAggregationRoutingSplit {
         }
 
         @Override
-        public ActorKeyAggregation router() {
+        public ActorKelp router() {
             return router;
         }
 
         @Override
-        public void merged(KeyAggregationRoutingSplit newMerged, KeyAggregationRoutingSplit oldNode, KeyAggregationRoutingSplit oldAnother) {
+        public void merged(KelpRoutingSplit newMerged, KelpRoutingSplit oldNode, KelpRoutingSplit oldAnother) {
             if (oldNode != null) {
                 newSplits.remove(oldNode);
             }
@@ -126,7 +127,7 @@ public interface KeyAggregationRoutingSplit {
         }
 
         @Override
-        public void split(KeyAggregationRoutingSplit newSplit, KeyAggregationRoutingSplit oldNode) {
+        public void split(KelpRoutingSplit newSplit, KelpRoutingSplit oldNode) {
             if (oldNode != null) {
                 newSplits.remove(oldNode);
             } else {
@@ -138,7 +139,7 @@ public interface KeyAggregationRoutingSplit {
         }
     }
 
-    class RoutingSplitLeaf implements KeyAggregationRoutingSplit {
+    class RoutingSplitLeaf implements KelpRoutingSplit {
         protected ActorRef actor;
         protected SplitPath path;
         protected AtomicLong processCount = new AtomicLong();
@@ -149,8 +150,8 @@ public interface KeyAggregationRoutingSplit {
         }
 
         @Override
-        public void process(ActorKeyAggregation router, KeyAggregationStateRouter stateRouter,
-                            Object key, MailboxKeyAggregation.HistogramSelection selection, Message<?> message,
+        public void process(ActorKelp router, KelpStateRouter stateRouter,
+                            Object key, MailboxKelp.HistogramSelection selection, Message<?> message,
                             ProcessGuide guide) {
             processCount.incrementAndGet();
             actor.tell(message.getData(), message.getSender());
@@ -185,11 +186,11 @@ public interface KeyAggregationRoutingSplit {
         }
 
         @Override
-        public KeyAggregationRoutingSplit split(SplitOrMergeContext context, int height) {
+        public KelpRoutingSplit split(SplitOrMergeContext context, int height) {
             if (getDepth() >= height) {
                 return this;
             }
-            ActorKeyAggregation self = context.router().toLocal(getActor());
+            ActorKelp self = context.router().toLocal(getActor());
             if (self == null) {
                 return this;
             }
@@ -198,7 +199,7 @@ public interface KeyAggregationRoutingSplit {
         }
 
         @Override
-        public KeyAggregationRoutingSplit mergeInactive(SplitOrMergeContext context) {
+        public KelpRoutingSplit mergeInactive(SplitOrMergeContext context) {
             return this;
         }
 
@@ -207,6 +208,7 @@ public interface KeyAggregationRoutingSplit {
             return this;
         }
 
+        @SuppressWarnings("unchecked")
         public RoutingSplitLeaf merge(SplitOrMergeContext context, RoutingSplitLeaf leaf, SplitPath path) {
             ActorRef a1 = getActor();
             ActorRef a2 = leaf.getActor();
@@ -215,32 +217,32 @@ public interface KeyAggregationRoutingSplit {
                 return null; //failure
             }
             try {
-                if (a1 instanceof ActorKeyAggregation) { //local
-                    if (a2 instanceof ActorKeyAggregation) {
-                        ((ActorKeyAggregation) a1).internalMerge((ActorKeyAggregation) a2);
+                if (a1 instanceof ActorKelp) { //local
+                    if (a2 instanceof ActorKelp) {
+                        ((ActorKelp) a1).internalMerge((ActorKelp) a2);
                         return newMergedLeaf(context, a1, path, leaf);
                     } else { //remote a2
-                        ActorKeyAggregation l2 = context.router().toLocal(a2);
+                        ActorKelp l2 = context.router().toLocal(a2);
                         if (l2 != null) {
-                            ((ActorKeyAggregation) a1).internalMerge(l2);
+                            ((ActorKelp) a1).internalMerge(l2);
                         } else {
                             return null;
                         }
                         return newMergedLeaf(context, a1, path, leaf);
                     }
-                } else if (a2 instanceof ActorKeyAggregation) { //remote a1, local a2
-                    ActorKeyAggregation l1 = context.router().toLocal(a1);
+                } else if (a2 instanceof ActorKelp) { //remote a1, local a2
+                    ActorKelp l1 = context.router().toLocal(a1);
                     if (l1 != null) {
-                        ((ActorKeyAggregation) a2).internalMerge(l1);
+                        ((ActorKelp) a2).internalMerge(l1);
                     } else {
                         return null;
                     }
                     return newMergedLeaf(context, a2, path, leaf);
                 } else { //both remote
                     Boolean b = ResponsiveCalls.sendTask(context.router().getSystem(), a1, (self) -> {
-                        ActorKeyAggregation l2 = ((ActorKeyAggregation) self).toLocal(a2);
+                        ActorKelp l2 = ((ActorKelp) self).toLocal(a2);
                         if (l2 != null) {
-                            ((ActorKeyAggregation) self).internalMerge(l2);
+                            ((ActorKelp) self).internalMerge(l2);
                             return true;
                         } else {
                             return false;
@@ -264,10 +266,10 @@ public interface KeyAggregationRoutingSplit {
             return l;
         }
 
-        public boolean hasRemainingProcesses(ActorKeyAggregation router, ActorRef a) {
+        public boolean hasRemainingProcesses(ActorKelp router, ActorRef a) {
             try {
                 return ResponsiveCalls.sendTask(router.getSystem(), a, (self) ->
-                        ((ActorKeyAggregation) self).hasRemainingProcesses())
+                        ((ActorKelp) self).hasRemainingProcesses())
                         .get(router.toLocalWaitMs(), TimeUnit.MILLISECONDS);
             } catch (Exception ex) {
                 router.errorToLocal(ex, "hasRemainingProcess", a);
@@ -276,7 +278,7 @@ public interface KeyAggregationRoutingSplit {
         }
 
         @Override
-        public KeyAggregationRoutingSplit splitOrMerge(SplitOrMergeContext context, int height) {
+        public KelpRoutingSplit splitOrMerge(SplitOrMergeContext context, int height) {
             if (getDepth() < height) {
                 return split(context, height);
             } else {
@@ -285,20 +287,20 @@ public interface KeyAggregationRoutingSplit {
         }
 
         @Override
-        public <ActorType extends Actor> void accept(ActorType actor, ActorRef sender, KeyAggregationVisitor<ActorType> v) {
+        public <ActorType extends Actor> void accept(ActorType actor, ActorRef sender, KelpVisitor<ActorType> v) {
             v.visitRouterLeaf(actor, sender, this);
         }
     }
 
-    class RoutingSplitNode implements KeyAggregationRoutingSplit {
+    class RoutingSplitNode implements KelpRoutingSplit {
         protected Object[] splitPoints;
-        protected KeyAggregationRoutingSplit left;
-        protected KeyAggregationRoutingSplit right;
+        protected KelpRoutingSplit left;
+        protected KelpRoutingSplit right;
         protected SplitPath path;
         protected RoutingHistory history;
         protected AtomicLong processCount = new AtomicLong();
 
-        public RoutingSplitNode(List<Object> splitPoints, KeyAggregationRoutingSplit left, KeyAggregationRoutingSplit right, SplitPath path, int historyEntrySize) {
+        public RoutingSplitNode(List<Object> splitPoints, KelpRoutingSplit left, KelpRoutingSplit right, SplitPath path, int historyEntrySize) {
             this.splitPoints = splitPoints.toArray();
             this.left = left;
             this.right = right;
@@ -306,7 +308,7 @@ public interface KeyAggregationRoutingSplit {
             history = initRoutingHistory(historyEntrySize);
         }
 
-        public RoutingSplitNode(List<Object> splitPoints, KeyAggregationRoutingSplit left, KeyAggregationRoutingSplit right, SplitPath path, RoutingHistory history) {
+        public RoutingSplitNode(List<Object> splitPoints, KelpRoutingSplit left, KelpRoutingSplit right, SplitPath path, RoutingHistory history) {
             this.splitPoints = splitPoints.toArray();
             this.left = left;
             this.right = right;
@@ -314,11 +316,11 @@ public interface KeyAggregationRoutingSplit {
             this.history = history;
         }
 
-        public RoutingSplitNode newNode(KeyAggregationRoutingSplit left, KeyAggregationRoutingSplit right, SplitPath path) {
+        public RoutingSplitNode newNode(KelpRoutingSplit left, KelpRoutingSplit right, SplitPath path) {
             return new RoutingSplitNode(Arrays.asList(splitPoints), left, right, path, history);
         }
 
-        protected RoutingSplitNode newNodeOrThis(KeyAggregationRoutingSplit left, KeyAggregationRoutingSplit right, SplitPath path) {
+        protected RoutingSplitNode newNodeOrThis(KelpRoutingSplit left, KelpRoutingSplit right, SplitPath path) {
             if (left != this.left || right != this.right || this.path != path) {
                 return newNode(left, right, path);
             } else {
@@ -327,8 +329,8 @@ public interface KeyAggregationRoutingSplit {
         }
 
         @Override
-        public void process(ActorKeyAggregation router, KeyAggregationStateRouter stateRouter,
-                            Object key, MailboxKeyAggregation.HistogramSelection selection, Message<?> message,
+        public void process(ActorKelp router, KelpStateRouter stateRouter,
+                            Object key, MailboxKelp.HistogramSelection selection, Message<?> message,
                             ProcessGuide guide) {
             ProcessGuide next = select(router, stateRouter, key, selection, message, guide);
             if (next.left()) {
@@ -340,7 +342,7 @@ public interface KeyAggregationRoutingSplit {
             }
         }
 
-        protected void countHistory(boolean left, ActorKeyAggregation router) {
+        protected void countHistory(boolean left, ActorKelp router) {
             if (left) {
                 history.left.getAndIncrement();
             } else {
@@ -353,9 +355,9 @@ public interface KeyAggregationRoutingSplit {
         }
 
 
-        protected ProcessGuide select(ActorKeyAggregation self, KeyAggregationStateRouter router,
-                                               Object key, MailboxKeyAggregation.HistogramSelection selection, Message<?> message,
-                                               ProcessGuide guide) {
+        protected ProcessGuide select(ActorKelp self, KelpStateRouter router,
+                                      Object key, MailboxKelp.HistogramSelection selection, Message<?> message,
+                                      ProcessGuide guide) {
             if (selection == null) {
                 return router.getRandom().nextBoolean() ? ProcessGuide.InitToLeft : ProcessGuide.InitToRight;
             } else {
@@ -377,7 +379,7 @@ public interface KeyAggregationRoutingSplit {
                         }
                     }
                 }
-                int c = self.getMailboxAsKeyAggregation().compare(selection.entryId, key, point);
+                int c = self.getMailboxAsKelp().compare(selection.entryId, key, point);
                 return c == 0 ? ProcessGuide.InitToEquivalent :
                         c < 0 ? ProcessGuide.InitToLeft :
                                 ProcessGuide.InitToRight;
@@ -399,11 +401,11 @@ public interface KeyAggregationRoutingSplit {
             return path;
         }
 
-        public KeyAggregationRoutingSplit getLeft() {
+        public KelpRoutingSplit getLeft() {
             return left;
         }
 
-        public KeyAggregationRoutingSplit getRight() {
+        public KelpRoutingSplit getRight() {
             return right;
         }
 
@@ -445,7 +447,7 @@ public interface KeyAggregationRoutingSplit {
         }
 
         @Override
-        public KeyAggregationRoutingSplit split(SplitOrMergeContext context, int height) {
+        public KelpRoutingSplit split(SplitOrMergeContext context, int height) {
             if (getDepth() < height) {
                 return newNodeOrThis(
                         left.split(context, height),
@@ -455,7 +457,7 @@ public interface KeyAggregationRoutingSplit {
         }
 
         @Override
-        public KeyAggregationRoutingSplit mergeInactive(SplitOrMergeContext context) {
+        public KelpRoutingSplit mergeInactive(SplitOrMergeContext context) {
             float r = history.ratioAll();
             float limit = context.router().mergeRatioThreshold();
             if (r > (1 - limit)) { //into left
@@ -473,7 +475,7 @@ public interface KeyAggregationRoutingSplit {
             }
         }
 
-        protected KeyAggregationRoutingSplit afterMerge(SplitOrMergeContext context, boolean intoLeft, KeyAggregationRoutingSplit left, KeyAggregationRoutingSplit right) {
+        protected KelpRoutingSplit afterMerge(SplitOrMergeContext context, boolean intoLeft, KelpRoutingSplit left, KelpRoutingSplit right) {
             boolean leftIsLeaf = (left instanceof RoutingSplitLeaf);
             boolean rightIsLeaf = (right instanceof RoutingSplitLeaf);
             if (leftIsLeaf && rightIsLeaf) {
@@ -494,15 +496,15 @@ public interface KeyAggregationRoutingSplit {
             }
         }
 
-        private KeyAggregationRoutingSplit newNodeOrMerged(KeyAggregationRoutingSplit left, KeyAggregationRoutingSplit right, KeyAggregationRoutingSplit merged) {
+        private KelpRoutingSplit newNodeOrMerged(KelpRoutingSplit left, KelpRoutingSplit right, KelpRoutingSplit merged) {
             return merged == null ? newNodeOrThis(left, right, path) : merged;
         }
 
-        public KeyAggregationRoutingSplit mergeIntoChildLeaf(SplitOrMergeContext context, boolean intoLeft, RoutingSplitLeaf merged, SplitPath path) {
-            KeyAggregationRoutingSplit first = intoLeft ? left : right;
-            KeyAggregationRoutingSplit second = intoLeft ? right : left;
+        public KelpRoutingSplit mergeIntoChildLeaf(SplitOrMergeContext context, boolean intoLeft, RoutingSplitLeaf merged, SplitPath path) {
+            KelpRoutingSplit first = intoLeft ? left : right;
+            KelpRoutingSplit second = intoLeft ? right : left;
 
-            KeyAggregationRoutingSplit newFirst;
+            KelpRoutingSplit newFirst;
             if (first instanceof RoutingSplitLeaf) {
                 newFirst = ((RoutingSplitLeaf) first).merge(context, merged, path.add(intoLeft));
             } else {
@@ -516,14 +518,14 @@ public interface KeyAggregationRoutingSplit {
                         second.adjustPath(path.add(!intoLeft)), path);
         }
 
-        private RoutingSplitNode newNode(boolean infoLeft, KeyAggregationRoutingSplit first, KeyAggregationRoutingSplit second, SplitPath path) {
+        private RoutingSplitNode newNode(boolean infoLeft, KelpRoutingSplit first, KelpRoutingSplit second, SplitPath path) {
             return newNode(infoLeft ? first : second, infoLeft ? second : first, path);
         }
 
         @Override
-        public KeyAggregationRoutingSplit mergeIntoLeaf(SplitOrMergeContext context) {
-            KeyAggregationRoutingSplit mergedLeft = left.mergeIntoLeaf(context);
-            KeyAggregationRoutingSplit mergedRight = right.mergeIntoLeaf(context);
+        public KelpRoutingSplit mergeIntoLeaf(SplitOrMergeContext context) {
+            KelpRoutingSplit mergedLeft = left.mergeIntoLeaf(context);
+            KelpRoutingSplit mergedRight = right.mergeIntoLeaf(context);
             if (mergedLeft instanceof RoutingSplitLeaf && mergedRight instanceof RoutingSplitLeaf) {
                 return newNodeOrMerged(mergedLeft, mergedRight, ((RoutingSplitLeaf) mergedLeft).merge(context, (RoutingSplitLeaf) mergedRight, path));
             } else {
@@ -532,7 +534,7 @@ public interface KeyAggregationRoutingSplit {
         }
 
         @Override
-        public KeyAggregationRoutingSplit splitOrMerge(SplitOrMergeContext context, int height) {
+        public KelpRoutingSplit splitOrMerge(SplitOrMergeContext context, int height) {
             if (getDepth() < height) {
                 return newNodeOrThis(
                         left.splitOrMerge(context, height),
@@ -543,7 +545,7 @@ public interface KeyAggregationRoutingSplit {
         }
 
         @Override
-        public <ActorType extends Actor> void accept(ActorType actor, ActorRef sender, KeyAggregationVisitor<ActorType> v) {
+        public <ActorType extends Actor> void accept(ActorType actor, ActorRef sender, KelpVisitor<ActorType> v) {
             v.visitRouterNode(actor, sender, this);
         }
     }
@@ -635,6 +637,7 @@ public interface KeyAggregationRoutingSplit {
 
 
     class SplitPath implements Comparable<SplitPath>, Serializable {
+        public static final long serialVersionUID = 1L;
         private byte length;
         private byte[] path;
 

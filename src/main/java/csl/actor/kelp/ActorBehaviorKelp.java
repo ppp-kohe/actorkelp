@@ -1,11 +1,11 @@
-package csl.actor.keyaggregate;
+package csl.actor.kelp;
 
 import csl.actor.Actor;
 import csl.actor.ActorBehavior;
 import csl.actor.Message;
-import csl.actor.keyaggregate.ActorBehaviorBuilderKeyAggregation.QuadConsumer;
-import csl.actor.keyaggregate.ActorBehaviorBuilderKeyAggregation.QuintConsumer;
-import csl.actor.keyaggregate.ActorBehaviorBuilderKeyAggregation.TriConsumer;
+import csl.actor.kelp.ActorBehaviorBuilderKelp.QuadConsumer;
+import csl.actor.kelp.ActorBehaviorBuilderKelp.QuintConsumer;
+import csl.actor.kelp.ActorBehaviorBuilderKelp.TriConsumer;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -15,7 +15,7 @@ import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 
-public class ActorBehaviorKeyAggregation {
+public class ActorBehaviorKelp {
     @SuppressWarnings("unchecked")
     public static <KeyType> KeyType centerPointPrimitive(KeyType leftEnd, KeyType rightStart) {
         if (leftEnd instanceof Number && rightStart instanceof Number) {
@@ -63,7 +63,7 @@ public class ActorBehaviorKeyAggregation {
     }
 
     public static abstract class ActorBehaviorMatchKey<KeyType> extends KeyHistograms.HistogramPutContext
-            implements ActorBehavior, MailboxKeyAggregation.HistogramProcessor {
+            implements ActorBehavior, MailboxKelp.HistogramProcessor {
         protected int matchKeyEntryId;
         protected KeyHistograms.KeyComparator<KeyType> keyComparator;
 
@@ -74,7 +74,7 @@ public class ActorBehaviorKeyAggregation {
         }
 
         protected void put(Actor self, KeyType key, Comparable<?> position, Object value) {
-            MailboxKeyAggregation m = (MailboxKeyAggregation) self.getMailbox();
+            MailboxKelp m = (MailboxKelp) self.getMailbox();
             this.putPosition = position;
             this.putValue = value;
             m.getHistogram(matchKeyEntryId).put(key, this);
@@ -85,11 +85,12 @@ public class ActorBehaviorKeyAggregation {
             return keyComparator;
         }
 
-        public abstract List<ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType,?>> getKeyExtractors();
+        public abstract List<ActorBehaviorBuilderKelp.KeyExtractor<KeyType,?>> getKeyExtractors();
         public abstract Object getHandler();
     }
 
     public static class KeyComparatorOrdered<KeyType extends Comparable<KeyType>> implements KeyHistograms.KeyComparator<KeyType> {
+        public static final long serialVersionUID = 1L;
         @Override
         public int compare(KeyType key1, KeyType key2) {
             return key1.compareTo(key2);
@@ -102,13 +103,13 @@ public class ActorBehaviorKeyAggregation {
     }
 
     public static class ActorBehaviorMatchKey1<KeyType, ParamType1, ValueType1> extends ActorBehaviorMatchKey<KeyType> {
-        protected ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ParamType1> keyExtractorFromValue1;
+        protected ActorBehaviorBuilderKelp.KeyExtractor<KeyType, ParamType1> keyExtractorFromValue1;
         protected Function<ParamType1, ValueType1> valueExtractorFromValue1;
 
         protected BiConsumer<KeyType, ValueType1> handler;
 
         public ActorBehaviorMatchKey1(int matchKeyEntryId, KeyHistograms.KeyComparator<KeyType> keyComparator,
-                                      ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ParamType1> keyExtractorFromValue1,
+                                      ActorBehaviorBuilderKelp.KeyExtractor<KeyType, ParamType1> keyExtractorFromValue1,
                                       Function<ParamType1, ValueType1> valueExtractorFromValue1,
                                       BiConsumer<KeyType, ValueType1> handler) {
             super(matchKeyEntryId, 1, keyComparator);
@@ -142,7 +143,7 @@ public class ActorBehaviorKeyAggregation {
 
         @SuppressWarnings("unchecked")
         @Override
-        public boolean processHistogram(Actor self, MailboxKeyAggregation m) {
+        public boolean processHistogram(Actor self, MailboxKelp m) {
             KeyHistograms.HistogramTree tree = m.getHistogram(matchKeyEntryId);
             HistogramNodeLeaf1 next = ((HistogramNodeLeaf1) tree.takeCompleted());
             if (next != null) {
@@ -171,7 +172,7 @@ public class ActorBehaviorKeyAggregation {
         }
 
         /** @return implementation field getter */
-        public List<ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType,?>> getKeyExtractors() {
+        public List<ActorBehaviorBuilderKelp.KeyExtractor<KeyType,?>> getKeyExtractors() {
             return Collections.singletonList(keyExtractorFromValue1);
         }
 
@@ -182,6 +183,7 @@ public class ActorBehaviorKeyAggregation {
     }
 
     public static abstract class HistogramNodeLeafN extends KeyHistograms.HistogramNodeLeaf {
+        public static final long serialVersionUID = 1L;
         public HistogramNodeLeafN(Object key, KeyHistograms.HistogramPutContext context, int height) {
             super(key, context, height);
         }
@@ -189,6 +191,7 @@ public class ActorBehaviorKeyAggregation {
 
 
     public static class HistogramNodeLeaf1 extends HistogramNodeLeafN {
+        public static final long serialVersionUID = 1L;
         protected KeyHistograms.HistogramLeafList values1;
 
         public HistogramNodeLeaf1(Object key, KeyHistograms.HistogramPutContext context, int height) {
@@ -231,8 +234,8 @@ public class ActorBehaviorKeyAggregation {
     }
 
     public static class ActorBehaviorMatchKey2<KeyType, ParamType1, ParamType2, ValueType1, ValueType2> extends ActorBehaviorMatchKey<KeyType> {
-        protected ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ParamType1> keyExtractorFromValue1;
-        protected ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ParamType2> keyExtractorFromValue2;
+        protected ActorBehaviorBuilderKelp.KeyExtractor<KeyType, ParamType1> keyExtractorFromValue1;
+        protected ActorBehaviorBuilderKelp.KeyExtractor<KeyType, ParamType2> keyExtractorFromValue2;
         protected Function<ParamType1, ValueType1> valueExtractorFromValue1;
         protected Function<ParamType2, ValueType2> valueExtractorFromValue2;
 
@@ -240,8 +243,8 @@ public class ActorBehaviorKeyAggregation {
 
 
         public ActorBehaviorMatchKey2(int matchKeyEntryId, KeyHistograms.KeyComparator<KeyType> keyComparator,
-                                      ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ParamType1> keyExtractorFromValue1,
-                                      ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ParamType2> keyExtractorFromValue2,
+                                      ActorBehaviorBuilderKelp.KeyExtractor<KeyType, ParamType1> keyExtractorFromValue1,
+                                      ActorBehaviorBuilderKelp.KeyExtractor<KeyType, ParamType2> keyExtractorFromValue2,
                                       Function<ParamType1, ValueType1> valueExtractorFromValue1,
                                       Function<ParamType2, ValueType2> valueExtractorFromValue2,
                                       TriConsumer<KeyType, ValueType1, ValueType2> handler) {
@@ -282,7 +285,7 @@ public class ActorBehaviorKeyAggregation {
 
         @SuppressWarnings("unchecked")
         @Override
-        public boolean processHistogram(Actor self, MailboxKeyAggregation m) {
+        public boolean processHistogram(Actor self, MailboxKelp m) {
             KeyHistograms.HistogramTree tree = m.getHistogram(matchKeyEntryId);
             HistogramNodeLeaf2 next = ((HistogramNodeLeaf2) tree.takeCompleted());
             if (next != null) {
@@ -315,7 +318,7 @@ public class ActorBehaviorKeyAggregation {
         }
 
         /** @return implementation field getter */
-        public List<ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType,?>> getKeyExtractors() {
+        public List<ActorBehaviorBuilderKelp.KeyExtractor<KeyType,?>> getKeyExtractors() {
             return Arrays.asList(keyExtractorFromValue1, keyExtractorFromValue2);
         }
 
@@ -327,6 +330,7 @@ public class ActorBehaviorKeyAggregation {
     }
 
     public static class HistogramNodeLeaf2 extends HistogramNodeLeafN {
+        public static final long serialVersionUID = 1L;
         protected KeyHistograms.HistogramLeafList values1;
         protected KeyHistograms.HistogramLeafList values2;
 
@@ -376,9 +380,9 @@ public class ActorBehaviorKeyAggregation {
     }
 
     public static class ActorBehaviorMatchKey3<KeyType, ParamType1, ParamType2, ParamType3, ValueType1, ValueType2, ValueType3> extends ActorBehaviorMatchKey<KeyType> {
-        protected ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ParamType1> keyExtractorFromValue1;
-        protected ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ParamType2> keyExtractorFromValue2;
-        protected ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ParamType3> keyExtractorFromValue3;
+        protected ActorBehaviorBuilderKelp.KeyExtractor<KeyType, ParamType1> keyExtractorFromValue1;
+        protected ActorBehaviorBuilderKelp.KeyExtractor<KeyType, ParamType2> keyExtractorFromValue2;
+        protected ActorBehaviorBuilderKelp.KeyExtractor<KeyType, ParamType3> keyExtractorFromValue3;
         protected Function<ParamType1, ValueType1> valueExtractorFromValue1;
         protected Function<ParamType2, ValueType2> valueExtractorFromValue2;
         protected Function<ParamType3, ValueType3> valueExtractorFromValue3;
@@ -386,9 +390,9 @@ public class ActorBehaviorKeyAggregation {
         protected QuadConsumer<KeyType, ValueType1, ValueType2, ValueType3> handler;
 
         public ActorBehaviorMatchKey3(int matchKeyEntryId, KeyHistograms.KeyComparator<KeyType> keyComparator,
-                                      ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ParamType1> keyExtractorFromValue1,
-                                      ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ParamType2> keyExtractorFromValue2,
-                                      ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ParamType3> keyExtractorFromValue3,
+                                      ActorBehaviorBuilderKelp.KeyExtractor<KeyType, ParamType1> keyExtractorFromValue1,
+                                      ActorBehaviorBuilderKelp.KeyExtractor<KeyType, ParamType2> keyExtractorFromValue2,
+                                      ActorBehaviorBuilderKelp.KeyExtractor<KeyType, ParamType3> keyExtractorFromValue3,
                                       Function<ParamType1, ValueType1> valueExtractorFromValue1,
                                       Function<ParamType2, ValueType2> valueExtractorFromValue2,
                                       Function<ParamType3, ValueType3> valueExtractorFromValue3,
@@ -436,7 +440,7 @@ public class ActorBehaviorKeyAggregation {
 
         @SuppressWarnings("unchecked")
         @Override
-        public boolean processHistogram(Actor self, MailboxKeyAggregation m) {
+        public boolean processHistogram(Actor self, MailboxKelp m) {
             KeyHistograms.HistogramTree tree = m.getHistogram(matchKeyEntryId);
             HistogramNodeLeaf3 next = ((HistogramNodeLeaf3) tree.takeCompleted());
             if (next != null) {
@@ -473,7 +477,7 @@ public class ActorBehaviorKeyAggregation {
         }
 
         /** @return implementation field getter */
-        public List<ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType,?>> getKeyExtractors() {
+        public List<ActorBehaviorBuilderKelp.KeyExtractor<KeyType,?>> getKeyExtractors() {
             return Arrays.asList(keyExtractorFromValue1, keyExtractorFromValue2, keyExtractorFromValue3);
         }
 
@@ -485,6 +489,7 @@ public class ActorBehaviorKeyAggregation {
     }
 
     public static class HistogramNodeLeaf3 extends HistogramNodeLeafN {
+        public static final long serialVersionUID = 1L;
         protected KeyHistograms.HistogramLeafList values1;
         protected KeyHistograms.HistogramLeafList values2;
         protected KeyHistograms.HistogramLeafList values3;
@@ -540,10 +545,10 @@ public class ActorBehaviorKeyAggregation {
     }
 
     public static class ActorBehaviorMatchKey4<KeyType, ParamType1, ParamType2, ParamType3, ParamType4, ValueType1, ValueType2, ValueType3, ValueType4> extends ActorBehaviorMatchKey<KeyType> {
-        protected ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ParamType1> keyExtractorFromValue1;
-        protected ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ParamType2> keyExtractorFromValue2;
-        protected ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ParamType3> keyExtractorFromValue3;
-        protected ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ParamType4> keyExtractorFromValue4;
+        protected ActorBehaviorBuilderKelp.KeyExtractor<KeyType, ParamType1> keyExtractorFromValue1;
+        protected ActorBehaviorBuilderKelp.KeyExtractor<KeyType, ParamType2> keyExtractorFromValue2;
+        protected ActorBehaviorBuilderKelp.KeyExtractor<KeyType, ParamType3> keyExtractorFromValue3;
+        protected ActorBehaviorBuilderKelp.KeyExtractor<KeyType, ParamType4> keyExtractorFromValue4;
         protected Function<ParamType1, ValueType1> valueExtractorFromValue1;
         protected Function<ParamType2, ValueType2> valueExtractorFromValue2;
         protected Function<ParamType3, ValueType3> valueExtractorFromValue3;
@@ -552,10 +557,10 @@ public class ActorBehaviorKeyAggregation {
         protected QuintConsumer<KeyType, ValueType1, ValueType2, ValueType3, ValueType4> handler;
 
         public ActorBehaviorMatchKey4(int matchKeyEntryId, KeyHistograms.KeyComparator<KeyType> keyComparator,
-                                      ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ParamType1> keyExtractorFromValue1,
-                                      ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ParamType2> keyExtractorFromValue2,
-                                      ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ParamType3> keyExtractorFromValue3,
-                                      ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ParamType4> keyExtractorFromValue4,
+                                      ActorBehaviorBuilderKelp.KeyExtractor<KeyType, ParamType1> keyExtractorFromValue1,
+                                      ActorBehaviorBuilderKelp.KeyExtractor<KeyType, ParamType2> keyExtractorFromValue2,
+                                      ActorBehaviorBuilderKelp.KeyExtractor<KeyType, ParamType3> keyExtractorFromValue3,
+                                      ActorBehaviorBuilderKelp.KeyExtractor<KeyType, ParamType4> keyExtractorFromValue4,
                                       Function<ParamType1, ValueType1> valueExtractorFromValue1,
                                       Function<ParamType2, ValueType2> valueExtractorFromValue2,
                                       Function<ParamType3, ValueType3> valueExtractorFromValue3,
@@ -610,7 +615,7 @@ public class ActorBehaviorKeyAggregation {
 
         @SuppressWarnings("unchecked")
         @Override
-        public boolean processHistogram(Actor self, MailboxKeyAggregation m) {
+        public boolean processHistogram(Actor self, MailboxKelp m) {
             KeyHistograms.HistogramTree tree = m.getHistogram(matchKeyEntryId);
             HistogramNodeLeaf4 next = ((HistogramNodeLeaf4) tree.takeCompleted());
             if (next != null) {
@@ -651,7 +656,7 @@ public class ActorBehaviorKeyAggregation {
         }
 
         /** @return implementation field getter */
-        public List<ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType,?>> getKeyExtractors() {
+        public List<ActorBehaviorBuilderKelp.KeyExtractor<KeyType,?>> getKeyExtractors() {
             return Arrays.asList(keyExtractorFromValue1, keyExtractorFromValue2, keyExtractorFromValue3, keyExtractorFromValue4);
         }
 
@@ -662,6 +667,7 @@ public class ActorBehaviorKeyAggregation {
     }
 
     public static class HistogramNodeLeaf4 extends HistogramNodeLeafN {
+        public static final long serialVersionUID = 1L;
         protected KeyHistograms.HistogramLeafList values1;
         protected KeyHistograms.HistogramLeafList values2;
         protected KeyHistograms.HistogramLeafList values3;
@@ -722,12 +728,12 @@ public class ActorBehaviorKeyAggregation {
     }
 
     public static class ActorBehaviorMatchKeyList<KeyType, ParamType, ValueType> extends ActorBehaviorMatchKey<KeyType> {
-        protected ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ParamType> keyExtractorFromValue;
+        protected ActorBehaviorBuilderKelp.KeyExtractor<KeyType, ParamType> keyExtractorFromValue;
         protected Function<ParamType, ValueType> valueExtractorFromValue;
         protected BiConsumer<KeyType, List<ValueType>> handler;
 
         public ActorBehaviorMatchKeyList(int matchKeyEntryId, int threshold, KeyHistograms.KeyComparator<KeyType> keyComparator,
-                                         ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ParamType> keyExtractorFromValue,
+                                         ActorBehaviorBuilderKelp.KeyExtractor<KeyType, ParamType> keyExtractorFromValue,
                                          Function<ParamType, ValueType> valueExtractorFromValue,
                                          BiConsumer<KeyType, List<ValueType>> handler) {
             super(matchKeyEntryId, threshold, keyComparator);
@@ -741,7 +747,7 @@ public class ActorBehaviorKeyAggregation {
                 return this;
             } else {
                 return new ActorBehaviorMatchKeyListFuture<>(matchKeyEntryId, this.putRequiredSize, keyComparator,
-                        new ActorBehaviorBuilderKeyAggregation.KeyValuesReducerList<>(keyValuesReducers), keyExtractorFromValue, valueExtractorFromValue, handler);
+                        new ActorBehaviorBuilderKelp.KeyValuesReducerList<>(keyValuesReducers), keyExtractorFromValue, valueExtractorFromValue, handler);
             }
         }
 
@@ -767,7 +773,7 @@ public class ActorBehaviorKeyAggregation {
 
         @SuppressWarnings({"unchecked", "rawtypes"})
         @Override
-        public boolean processHistogram(Actor self, MailboxKeyAggregation m) {
+        public boolean processHistogram(Actor self, MailboxKelp m) {
             KeyHistograms.HistogramTree tree = m.getHistogram(matchKeyEntryId);
             HistogramNodeLeafList next = (HistogramNodeLeafList) tree.takeCompleted();
             if (next != null) {
@@ -792,7 +798,7 @@ public class ActorBehaviorKeyAggregation {
         }
 
         /** @return implementation field getter */
-        public List<ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType,?>> getKeyExtractors() {
+        public List<ActorBehaviorBuilderKelp.KeyExtractor<KeyType,?>> getKeyExtractors() {
             return Collections.singletonList(keyExtractorFromValue);
         }
 
@@ -803,6 +809,7 @@ public class ActorBehaviorKeyAggregation {
     }
 
     public static class HistogramNodeLeafList extends HistogramNodeLeafN {
+        public static final long serialVersionUID = 1L;
         protected KeyHistograms.HistogramLeafList values;
         public HistogramNodeLeafList(Object key, KeyHistograms.HistogramPutContext context, int height) {
             super(key, context, height);
@@ -855,14 +862,14 @@ public class ActorBehaviorKeyAggregation {
     public static class ActorBehaviorMatchKeyListFuture<KeyType, ParamType, ValueType>
             extends ActorBehaviorMatchKey<KeyType> {
         protected BiFunction<KeyType, List<ValueType>, Iterable<ValueType>> keyValuesReducer;
-        protected ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ParamType> keyExtractorFromValue;
+        protected ActorBehaviorBuilderKelp.KeyExtractor<KeyType, ParamType> keyExtractorFromValue;
         protected Function<ParamType, ValueType> valueExtractorFromValue;
         protected BiConsumer<KeyType, List<ValueType>> handler;
 
         public ActorBehaviorMatchKeyListFuture(int matchKeyEntryId, int requiredSize,
                                                KeyHistograms.KeyComparator<KeyType> keyComparator,
                                                BiFunction<KeyType, List<ValueType>, Iterable<ValueType>> keyValuesReducer,
-                                               ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ParamType> keyExtractorFromValue,
+                                               ActorBehaviorBuilderKelp.KeyExtractor<KeyType, ParamType> keyExtractorFromValue,
                                                Function<ParamType, ValueType> valueExtractorFromValue,
                                                BiConsumer<KeyType, List<ValueType>> handler) {
             super(matchKeyEntryId, requiredSize, keyComparator);
@@ -873,7 +880,7 @@ public class ActorBehaviorKeyAggregation {
         }
 
         @Override
-        public List<ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ?>> getKeyExtractors() {
+        public List<ActorBehaviorBuilderKelp.KeyExtractor<KeyType, ?>> getKeyExtractors() {
             return Collections.singletonList(keyExtractorFromValue);
         }
 
@@ -893,7 +900,7 @@ public class ActorBehaviorKeyAggregation {
             } else {
                 return false;
             }
-            MailboxKeyAggregation mailbox = (MailboxKeyAggregation) self.getMailbox();
+            MailboxKelp mailbox = (MailboxKelp) self.getMailbox();
             mailbox.processPersistableTraversalBeforePut(self, matchKeyEntryId);
             put(self, key, true, value);
             mailbox.updateScheduledTraversalProcess(self, this.matchKeyEntryId);
@@ -906,7 +913,7 @@ public class ActorBehaviorKeyAggregation {
         }
 
         @Override
-        public boolean processHistogram(Actor self, MailboxKeyAggregation m) {
+        public boolean processHistogram(Actor self, MailboxKelp m) {
             return false; //instead, consuming is done by TraversalProcess
         }
 
@@ -933,10 +940,10 @@ public class ActorBehaviorKeyAggregation {
 
         @SuppressWarnings({"unchecked", "rawtypes"})
         @Override
-        public void processTraversal(Actor self, MailboxKeyAggregation.ReducedSize reducedSize, KeyHistograms.HistogramNodeLeaf leaf) {
+        public void processTraversal(Actor self, MailboxKelp.ReducedSize reducedSize, KeyHistograms.HistogramNodeLeaf leaf) {
             HistogramNodeLeafListReducible list = completedLeaf(putRequiredSize, HistogramNodeLeafListReducible.class, leaf);
             if (list != null && list.consume(putRequiredSize, putTree, reducedSize, (BiFunction) keyValuesReducer, (BiConsumer) handler)) {
-                self.tell(new MailboxKeyAggregation.TraversalProcess(matchKeyEntryId), self);
+                self.tell(new MailboxKelp.TraversalProcess(matchKeyEntryId), self);
             }
         }
 
@@ -956,6 +963,7 @@ public class ActorBehaviorKeyAggregation {
     }
 
     public static class HistogramNodeLeafListReducible extends HistogramNodeLeafList {
+        public static final long serialVersionUID = 1L;
         public HistogramNodeLeafListReducible(Object key, KeyHistograms.HistogramPutContext context, int height) {
             super(key, context, height);
         }
@@ -967,7 +975,7 @@ public class ActorBehaviorKeyAggregation {
 
         public boolean consume(int requiredSize,
                                KeyHistograms.HistogramTree tree,
-                               MailboxKeyAggregation.ReducedSize reducedSize,
+                               MailboxKelp.ReducedSize reducedSize,
                                BiFunction<Object, List<Object>, Iterable<Object>> keyValuesReducer,
                                BiConsumer<Object, List<Object>> handler) {
             if (completed(requiredSize)) {
@@ -984,7 +992,7 @@ public class ActorBehaviorKeyAggregation {
             }
         }
 
-        protected List<Object> poll(int requiredSize, KeyHistograms.HistogramTree tree, MailboxKeyAggregation.ReducedSize reducedSize) {
+        protected List<Object> poll(int requiredSize, KeyHistograms.HistogramTree tree, MailboxKelp.ReducedSize reducedSize) {
             int consuming = Math.max(requiredSize, reducedSize.nextReducedSize(size()));
             List<Object> vs = new ArrayList<>(consuming);
             try {
@@ -999,7 +1007,7 @@ public class ActorBehaviorKeyAggregation {
 
         protected int reduceAndHandle(int requiredSize,
                                       KeyHistograms.HistogramTree tree,
-                                      MailboxKeyAggregation.ReducedSize reducedSize,
+                                      MailboxKelp.ReducedSize reducedSize,
                                       BiFunction<Object, List<Object>, Iterable<Object>> keyValuesReducer,
                                       BiConsumer<Object, List<Object>> handler,
                                       List<Object> vs) {
@@ -1030,7 +1038,7 @@ public class ActorBehaviorKeyAggregation {
 
         public ActorBehaviorMatchKeyListFuturePhase(int matchKeyEntryId, int requiredSize, KeyHistograms.KeyComparator<KeyType> keyComparator,
                                                     BiFunction<KeyType, List<ValueType>, Iterable<ValueType>> keyValuesReducer,
-                                                    ActorBehaviorBuilderKeyAggregation.KeyExtractor<KeyType, ParamType> keyExtractorFromValue,
+                                                    ActorBehaviorBuilderKelp.KeyExtractor<KeyType, ParamType> keyExtractorFromValue,
                                                     Function<ParamType, ValueType> valueExtractorFromValue,
                                                     BiConsumer<KeyType, List<ValueType>> handler) {
             super(matchKeyEntryId, requiredSize, keyComparator, keyValuesReducer, keyExtractorFromValue, valueExtractorFromValue, handler);
@@ -1043,10 +1051,10 @@ public class ActorBehaviorKeyAggregation {
 
         @SuppressWarnings({"unchecked", "rawtypes"})
         @Override
-        public void processTraversal(Actor self, MailboxKeyAggregation.ReducedSize reducedSize, KeyHistograms.HistogramNodeLeaf leaf) {
+        public void processTraversal(Actor self, MailboxKelp.ReducedSize reducedSize, KeyHistograms.HistogramNodeLeaf leaf) {
             HistogramNodeLeafListReducible list = completedLeaf(putRequiredSize + 1, HistogramNodeLeafListReducible.class, leaf);
             if (list != null && list.consume(putRequiredSize + 1, putTree, reducedSize, (BiFunction) keyValuesReducer, (BiConsumer) handler)) {
-                self.tell(new MailboxKeyAggregation.TraversalProcess(matchKeyEntryId), self);
+                self.tell(new MailboxKelp.TraversalProcess(matchKeyEntryId), self);
             }
         }
 
@@ -1058,7 +1066,7 @@ public class ActorBehaviorKeyAggregation {
 
         @SuppressWarnings({"unchecked", "rawtypes"})
         @Override
-        public void processPhase(Actor self, Object phaseKey, MailboxKeyAggregation.ReducedSize reducedSize, KeyHistograms.HistogramNodeLeaf leaf) {
+        public void processPhase(Actor self, Object phaseKey, MailboxKelp.ReducedSize reducedSize, KeyHistograms.HistogramNodeLeaf leaf) {
             long prevSize = leaf.size();
             HistogramNodeLeafListReducibleForPhase list = completedLeaf(putRequiredSize, HistogramNodeLeafListReducibleForPhase.class, leaf);
             if (list != null) {
@@ -1072,12 +1080,13 @@ public class ActorBehaviorKeyAggregation {
     }
 
     public static class HistogramNodeLeafListReducibleForPhase extends HistogramNodeLeafListReducible {
+        public static final long serialVersionUID = 1L;
         public HistogramNodeLeafListReducibleForPhase(Object key, KeyHistograms.HistogramPutContext context, int height) {
             super(key, context, height);
         }
 
         @Override
-        protected int reduceAndHandle(int requiredSize, KeyHistograms.HistogramTree tree, MailboxKeyAggregation.ReducedSize reducedSize,
+        protected int reduceAndHandle(int requiredSize, KeyHistograms.HistogramTree tree, MailboxKelp.ReducedSize reducedSize,
                                       BiFunction<Object, List<Object>, Iterable<Object>> keyValuesReducer,
                                       BiConsumer<Object, List<Object>> handler, List<Object> vs) {
             Object key = getKey();
@@ -1092,7 +1101,7 @@ public class ActorBehaviorKeyAggregation {
 
         public boolean consumePhase(int requiredSize,
                                KeyHistograms.HistogramTree tree,
-                               MailboxKeyAggregation.ReducedSize reducedSize,
+                               MailboxKelp.ReducedSize reducedSize,
                                BiFunction<Object, List<Object>, Iterable<Object>> keyValuesReducer,
                                BiConsumer<Object, List<Object>> handler) {
             if (completed(requiredSize)) {

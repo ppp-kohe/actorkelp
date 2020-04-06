@@ -1,4 +1,4 @@
-package csl.actor.keyaggregate;
+package csl.actor.kelp;
 
 import csl.actor.*;
 
@@ -13,7 +13,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
-public class MailboxKeyAggregation implements Mailbox, Cloneable {
+public class MailboxKelp implements Mailbox, Cloneable {
     protected MailboxDefault mailbox;
     protected int treeSize;
     protected HistogramEntry[] entries;
@@ -24,20 +24,20 @@ public class MailboxKeyAggregation implements Mailbox, Cloneable {
     //private volatile int size;
     private AtomicInteger size = new AtomicInteger();
 
-    public MailboxKeyAggregation() {
+    public MailboxKelp() {
         this(1000, 32);
     }
 
-    public MailboxKeyAggregation(int threshold, int treeSize) {
+    public MailboxKelp(int threshold, int treeSize) {
         this(threshold, treeSize, new MailboxDefault());
     }
 
-    public MailboxKeyAggregation(int threshold, int treeSize, MailboxDefault mailbox) {
+    public MailboxKelp(int threshold, int treeSize, MailboxDefault mailbox) {
         this(threshold, treeSize, mailbox, new KeyHistograms());
     }
 
-    public MailboxKeyAggregation(int threshold, int treeSize, MailboxDefault mailbox,
-                                 KeyHistograms treeFactory) {
+    public MailboxKelp(int threshold, int treeSize, MailboxDefault mailbox,
+                       KeyHistograms treeFactory) {
         this.threshold = threshold;
         this.treeSize = treeSize;
         this.mailbox = mailbox;
@@ -102,9 +102,9 @@ public class MailboxKeyAggregation implements Mailbox, Cloneable {
 
 
     @Override
-    public MailboxKeyAggregation create() {
+    public MailboxKelp create() {
         try {
-            MailboxKeyAggregation m = (MailboxKeyAggregation) super.clone();
+            MailboxKelp m = (MailboxKelp) super.clone();
             m.remainingProcessesLock = false;
             m.mailbox = mailbox.create();
             int size = entries.length;
@@ -192,7 +192,7 @@ public class MailboxKeyAggregation implements Mailbox, Cloneable {
 
     public interface HistogramProcessor extends ActorBehavior {
         KeyHistograms.KeyComparator<?> getKeyComparator();
-        boolean processHistogram(Actor self, MailboxKeyAggregation m);
+        boolean processHistogram(Actor self, MailboxKelp m);
         Object selectFromValue(Object value);
         Object extractKeyFromValue(Object value, Object position);
 
@@ -252,7 +252,7 @@ public class MailboxKeyAggregation implements Mailbox, Cloneable {
             this.tree = tree;
         }
 
-        public boolean processHistogram(Actor self, MailboxKeyAggregation m) {
+        public boolean processHistogram(Actor self, MailboxKelp m) {
             if (remainingProcessesLock) {
                 return false;
             } else {
@@ -290,8 +290,8 @@ public class MailboxKeyAggregation implements Mailbox, Cloneable {
         }
 
         public long traversalDelayTimeMs(Actor self) {
-            if (self instanceof ActorKeyAggregation) {
-                return ((ActorKeyAggregation) self).traverseDelayTimeMs();
+            if (self instanceof ActorKelp) {
+                return ((ActorKelp) self).traverseDelayTimeMs();
             } else {
                 return 300;
             }
@@ -386,8 +386,8 @@ public class MailboxKeyAggregation implements Mailbox, Cloneable {
 
         public void processPersistableTraversalBeforePut(Actor self) {
             ReducedSize rs;
-            if (self instanceof ActorKeyAggregation) {
-                rs = ((ActorKeyAggregation) self).reducedSize();
+            if (self instanceof ActorKelp) {
+                rs = ((ActorKelp) self).reducedSize();
             } else {
                 rs = new ReducedSizeDefault();
             }
@@ -570,7 +570,7 @@ public class MailboxKeyAggregation implements Mailbox, Cloneable {
         return false;
     }
 
-    public List<Object> splitMessageHistogramIntoReplicas(MailboxKeyAggregation m1, MailboxKeyAggregation m2) {
+    public List<Object> splitMessageHistogramIntoReplicas(MailboxKelp m1, MailboxKelp m2) {
         int size = entries.length;
         List<Object> splitPoints = new ArrayList<>(size);
         for (int i = 0; i < size; ++i) {
@@ -599,7 +599,7 @@ public class MailboxKeyAggregation implements Mailbox, Cloneable {
         return ((KeyHistograms.KeyComparator<Object>) p.getKeyComparator()).compare(key, point);
     }
 
-    public void merge(MailboxKeyAggregation m) {
+    public void merge(MailboxKelp m) {
         /*size += m.size;
         if (size < 0) { //overflow
             size = Integer.MAX_VALUE;
@@ -618,14 +618,15 @@ public class MailboxKeyAggregation implements Mailbox, Cloneable {
         }
     }
 
-    public void serializeTo(ActorKeyAggregation.ActorKeyAggregationSerializable state) {
+    @SuppressWarnings("rawtypes")
+    public void serializeTo(ActorKelp.ActorKelpSerializable state) {
         state.messages = mailbox.getQueue().toArray(new Message[0]);
         state.histograms = Arrays.stream(entries)
                 .map(HistogramEntry::getTree)
                 .collect(Collectors.toList());
     }
 
-    public void deserializeFrom(ActorKeyAggregation.ActorKeyAggregationSerializable state) {
+    public void deserializeFrom(ActorKelp.ActorKelpSerializable state) {
         mailbox.getQueue().addAll(Arrays.asList(state.messages));
         int i = 0;
         for (KeyHistograms.HistogramTree t : state.histograms) {

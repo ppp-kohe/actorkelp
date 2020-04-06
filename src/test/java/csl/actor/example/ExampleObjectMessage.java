@@ -60,6 +60,7 @@ public class ExampleObjectMessage {
     }
 
     static class ExampleData implements Serializable {
+        public static final long serialVersionUID = 1L;
         public long n;
         public double[] data;
 

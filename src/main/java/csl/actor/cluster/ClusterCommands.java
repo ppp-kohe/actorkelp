@@ -261,6 +261,7 @@ public class ClusterCommands<AppConfType extends ConfigBase> {
     }
 
     public static class CommandToken implements Serializable {
+        public static final long serialVersionUID = 1L;
         protected CommandTokenType type;
         protected String data;
 
@@ -339,6 +340,7 @@ public class ClusterCommands<AppConfType extends ConfigBase> {
     }
 
     public static class CommandBlockRoot extends CommandBlock {
+        public static final long serialVersionUID = 1L;
         protected Map<String, CommandBlockNamed> nameToBlock = new LinkedHashMap<>();
         protected List<CommandBlock> blocksAll = new ArrayList<>();
 
@@ -425,6 +427,7 @@ public class ClusterCommands<AppConfType extends ConfigBase> {
     }
 
     public static class CommandBlock  implements Serializable {
+        public static final long serialVersionUID = 1L;
         protected List<List<CommandToken>> clusterLines = new ArrayList<>();
         protected List<List<CommandToken>> configLines = new ArrayList<>();
         protected List<CommandBlock> blocks = new ArrayList<>();
@@ -568,6 +571,7 @@ public class ClusterCommands<AppConfType extends ConfigBase> {
     }
 
     public static class CommandBlockLineContinue extends CommandBlock {
+        public static final long serialVersionUID = 1L;
         protected CommandBlock base;
         protected List<CommandToken> commands;
 
@@ -598,6 +602,7 @@ public class ClusterCommands<AppConfType extends ConfigBase> {
     }
 
     public static class CommandBlockNamed extends CommandBlock {
+        public static final long serialVersionUID = 1L;
         protected int indentLevel;
         protected boolean isClass;
         protected CommandToken name;
@@ -664,6 +669,7 @@ public class ClusterCommands<AppConfType extends ConfigBase> {
     }
 
     public static class ClusterUnit<AppConfType extends ConfigBase> implements Serializable, ClusterHttp.ToJson {
+        public static final long serialVersionUID = 1L;
         protected String name;
         protected ConfigDeployment deploymentConfig;
         protected AppConfType appConfig;

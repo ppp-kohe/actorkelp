@@ -1,10 +1,9 @@
 package csl.actor.example.cluster;
 
 import csl.actor.ActorBehavior;
-import csl.actor.ActorRef;
 import csl.actor.ActorSystem;
 import csl.actor.ActorSystemDefault;
-import csl.actor.keyaggregate.ActorKeyAggregation;
+import csl.actor.kelp.ActorKelp;
 import csl.actor.cluster.PhaseShift;
 
 import java.time.Instant;
@@ -45,7 +44,7 @@ public class ExamplePhase {
         system.close();
     }
 
-    public static class MyActor extends ActorKeyAggregation {
+    public static class MyActor extends ActorKelp<MyActor> {
         public MyActor(ActorSystem system) {
             super(system);
         }
@@ -61,7 +60,7 @@ public class ExamplePhase {
     }
 
 
-    public static class MyActor2 extends ActorKeyAggregation {
+    public static class MyActor2 extends ActorKelp<MyActor2> {
         public MyActor2(ActorSystem system) {
             super(system);
         }

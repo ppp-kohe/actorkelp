@@ -1,4 +1,4 @@
-package csl.actor.keyaggregate;
+package csl.actor.kelp;
 
 import csl.actor.Actor;
 import csl.actor.ActorRef;
@@ -8,14 +8,15 @@ import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
-public class KeyAggregationPhaseEntry {
+@SuppressWarnings("rawtypes")
+public class KelpPhaseEntry {
     protected Object key;
     protected PhaseShift origin;
     protected ActorRef sender;
     protected Map<ActorRef, Boolean> finished = new ConcurrentHashMap<>();
     protected Instant completedTime;
 
-    public KeyAggregationPhaseEntry(Object key) {
+    public KelpPhaseEntry(Object key) {
         this.key = key;
     }
 
@@ -40,18 +41,18 @@ public class KeyAggregationPhaseEntry {
         this.sender = sender;
     }
 
-    public void startRouter(ActorKeyAggregation router) {
+    public void startRouter(ActorKelp router) {
         router.tell(origin.createIntermediate(router,
                 PhaseShift.PhaseShiftIntermediateType.PhaseIntermediateRouterStart), router);
     }
 
-    public boolean processIntermediate(ActorKeyAggregation self, PhaseShift.PhaseShiftIntermediate ps) {
+    public boolean processIntermediate(ActorKelp self, PhaseShift.PhaseShiftIntermediate ps) {
         if (ps.getType().equals(PhaseShift.PhaseShiftIntermediateType.PhaseIntermediateRouterStart)) {
-            if (self.getMailboxAsKeyAggregation().hasRemainingProcesses()) {
+            if (self.getMailboxAsKelp().hasRemainingProcesses()) {
                 self.tell(ps);
                 return false;
             } else {
-                Collection<ActorRef> canceled = ((KeyAggregationStateRouter) self.getState()).getCanceled();
+                Collection<ActorRef> canceled = ((KelpStateRouter) self.getState()).getCanceled();
                 if (startCancel(self, canceled)) { //delivers to canceled actors: if true, empty canceled, go to next step
                     return startRouterSplits(self);
                 } else {
@@ -91,7 +92,7 @@ public class KeyAggregationPhaseEntry {
         }
     }
 
-    public boolean startRouterSplits(ActorKeyAggregation router) {
+    public boolean startRouterSplits(ActorKelp router) {
         new VisitorIncompleteLeaf(this).accept(router, null); //no delayed message for router
         if (completed(router, "SPLITS")) {
             origin.completed(router, sender);
@@ -101,10 +102,11 @@ public class KeyAggregationPhaseEntry {
         }
     }
 
-    public static class VisitorIncompleteLeaf implements KeyAggregationVisitor.VisitorNoSender<Actor> {
-        protected KeyAggregationPhaseEntry entry; //never a remote message
+    public static class VisitorIncompleteLeaf implements KelpVisitor.VisitorNoSender<Actor> {
+        public static final long serialVersionUID = 1L;
+        protected KelpPhaseEntry entry; //never a remote message
 
-        public VisitorIncompleteLeaf(KeyAggregationPhaseEntry entry) {
+        public VisitorIncompleteLeaf(KelpPhaseEntry entry) {
             this.entry = entry;
         }
 
@@ -114,7 +116,7 @@ public class KeyAggregationPhaseEntry {
         }
 
         @Override
-        public void visitRouterLeaf(Actor actor, ActorRef sender, KeyAggregationRoutingSplit.RoutingSplitLeaf leaf) {
+        public void visitRouterLeaf(Actor actor, ActorRef sender, KelpRoutingSplit.RoutingSplitLeaf leaf) {
             entry.incompleteLeaf(actor, leaf.getActor());
         }
     }
@@ -124,12 +126,12 @@ public class KeyAggregationPhaseEntry {
         a.tell(origin.createIntermediate(a, PhaseShift.PhaseShiftIntermediateType.PhaseIntermediateFinishLeaf), router);
     }
 
-    public boolean completedCancel(ActorKeyAggregation router, ActorRef canceled) {
+    public boolean completedCancel(ActorKelp router, ActorRef canceled) {
         finished.put(canceled, true);
         return completed(router, String.format("%s : CANCEL", canceled));
     }
 
-    public boolean completed(ActorKeyAggregation router, ActorRef a) {
+    public boolean completed(ActorKelp router, ActorRef a) {
         finished.put(a, true);
         Set<ActorRef> currentSplits = collect(router);
         currentSplits.removeAll(finished.keySet());
@@ -145,7 +147,7 @@ public class KeyAggregationPhaseEntry {
         }
     }
 
-    public boolean completed(ActorKeyAggregation router, String msg) {
+    public boolean completed(ActorKelp router, String msg) {
         int ok = (int) finished.values().stream()
                 .filter(b -> b)
                 .count();
@@ -161,21 +163,21 @@ public class KeyAggregationPhaseEntry {
         return completedTime;
     }
 
-    public Set<ActorRef> collect(ActorKeyAggregation router) {
+    public Set<ActorRef> collect(ActorKelp router) {
         Set<ActorRef> result = new HashSet<>();
         result.add(router);
-        KeyAggregationStateRouter stateRouter = (KeyAggregationStateRouter) router.getState();
+        KelpStateRouter stateRouter = (KelpStateRouter) router.getState();
         result.addAll(stateRouter.getCanceled());
         collect(router, result, stateRouter.getSplit());
         return result;
 
     }
 
-    public void collect(ActorKeyAggregation router, Set<ActorRef> result, KeyAggregationRoutingSplit split) {
-        if (split instanceof KeyAggregationRoutingSplit.RoutingSplitLeaf) {
-            result.add(((KeyAggregationRoutingSplit.RoutingSplitLeaf) split).getActor());
-        } else if (split instanceof KeyAggregationRoutingSplit.RoutingSplitNode) {
-            KeyAggregationRoutingSplit.RoutingSplitNode n = (KeyAggregationRoutingSplit.RoutingSplitNode) split;
+    public void collect(ActorKelp router, Set<ActorRef> result, KelpRoutingSplit split) {
+        if (split instanceof KelpRoutingSplit.RoutingSplitLeaf) {
+            result.add(((KelpRoutingSplit.RoutingSplitLeaf) split).getActor());
+        } else if (split instanceof KelpRoutingSplit.RoutingSplitNode) {
+            KelpRoutingSplit.RoutingSplitNode n = (KelpRoutingSplit.RoutingSplitNode) split;
             collect(router, result, n.getLeft());
             collect(router, result, n.getRight());
         }

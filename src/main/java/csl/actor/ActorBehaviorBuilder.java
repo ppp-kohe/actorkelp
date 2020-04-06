@@ -40,6 +40,7 @@ public class ActorBehaviorBuilder {
         return this;
     }
 
+    @SuppressWarnings("unchecked")
     public ActorBehavior build() {
         return with(new ActorBehaviorCallable<>(CallableMessage.class))
                 .buildWithoutDefault();

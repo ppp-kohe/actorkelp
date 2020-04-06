@@ -18,11 +18,12 @@ import java.util.WeakHashMap;
 import java.util.regex.Pattern;
 
 public class ConfigDeployment extends ConfigBase {
+    public static final long serialVersionUID = 1L;
     public String ssh = "ssh %s"; //host
     public String java = "java %s %s %s"; //option mainClass args
     public String host = "localhost";
     public int port = 38888;
-    public String configType = "csl.actor.keyaggregate.Config";
+    public String configType = "csl.actor.kelp.Config";
     public String baseDir = "target/debug";
     public boolean master = false;
     public boolean sharedDeploy = true;

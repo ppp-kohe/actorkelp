@@ -1,4 +1,4 @@
-package csl.actor.keyaggregate;
+package csl.actor.kelp;
 
 import csl.actor.ActorBehavior;
 import csl.actor.ActorRef;
@@ -9,7 +9,7 @@ import csl.actor.cluster.PhaseShift;
 
 import java.util.concurrent.CompletableFuture;
 
-public class FileMapper extends ActorKeyAggregation<FileMapper> {
+public class FileMapper extends ActorKelp<FileMapper> {
     protected FileSplitter splitter;
     protected long splitCount;
 

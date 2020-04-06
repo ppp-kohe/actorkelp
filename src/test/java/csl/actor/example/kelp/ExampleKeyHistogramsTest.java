@@ -1,7 +1,7 @@
-package csl.actor.example.keyaggregate;
+package csl.actor.example.kelp;
 
 import csl.actor.ActorSystemDefault;
-import csl.actor.keyaggregate.KeyHistograms;
+import csl.actor.kelp.KeyHistograms;
 
 import java.io.File;
 import java.util.*;

@@ -1,9 +1,9 @@
 package csl.actor.example.exp.wordcount;
 
 import com.esotericsoftware.kryo.Kryo;
-import csl.actor.keyaggregate.ActorPlacementKeyAggregation;
-import csl.actor.keyaggregate.ClusterKeyAggregation;
-import csl.actor.keyaggregate.FileMapper;
+import csl.actor.kelp.ActorPlacementKelp;
+import csl.actor.kelp.ClusterKelp;
+import csl.actor.kelp.FileMapper;
 import csl.actor.remote.KryoBuilder;
 
 import java.nio.file.Files;
@@ -22,8 +22,8 @@ public class WordCountCluster {
             inputFile = args[0];
             confFile = args[1];
         }
-        ClusterKeyAggregation c = ClusterKeyAggregation.create();
-        ActorPlacementKeyAggregation place = c.deploy(confFile);
+        ClusterKelp c = ClusterKelp.create();
+        ActorPlacementKelp place = c.deploy(confFile);
 
         FileMapper fileReader = place.fileMapperWithSplitCount(10);
         WordCount.WordCountMapper mapper = place.actor((system, conf) -> new WordCount.WordCountMapper(system, "mapper", conf));

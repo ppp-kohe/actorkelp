@@ -107,6 +107,7 @@ public class FileSplitter {
     }
 
     public static class FileSplit implements Serializable {
+        public static final long serialVersionUID = 1L;
         String path;
         long fileLength;
         long splitIndex;

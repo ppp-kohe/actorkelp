@@ -1,4 +1,4 @@
-package csl.actor.keyaggregate;
+package csl.actor.kelp;
 
 import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.io.Input;
@@ -176,6 +176,7 @@ public class KeyHistogramsPersistable extends KeyHistograms {
     }
 
     public static class HistogramTreePersistable extends KeyHistograms.HistogramTree implements HistogramTreePersistableConfig {
+        public static final long serialVersionUID = 1L;
         protected PutIndexHistory history;
         protected int historyEntrySize;
         protected int historyEntryLimit;
@@ -825,6 +826,7 @@ public class KeyHistogramsPersistable extends KeyHistograms {
     }
 
     public static class PutIndexHistory implements Serializable {
+        public static final long serialVersionUID = 1L;
         public int count;
         public int[] indexHistogram = new int[10];
         public PutIndexHistory next;
@@ -866,6 +868,7 @@ public class KeyHistogramsPersistable extends KeyHistograms {
     }
 
     public static class HistogramLeafListPersistable extends HistogramLeafList { //does not override iterator()
+        public static final long serialVersionUID = 1L;
 
         @Override
         public Object poll(HistogramTree tree) {
@@ -913,6 +916,7 @@ public class KeyHistogramsPersistable extends KeyHistograms {
     }
 
     public static abstract class HistogramLeafCellOnStorage extends HistogramLeafCell {
+        public static final long serialVersionUID = 1L;
         public HistogramLeafCellOnStorage() {
             super(null);
         }
@@ -922,6 +926,7 @@ public class KeyHistogramsPersistable extends KeyHistograms {
     }
 
     public static class HistogramLeafCellOnStorageFile extends HistogramLeafCellOnStorage {
+        public static final long serialVersionUID = 1L;
         protected PersistentFileReaderSourceWithSize source; //offset: listPointer
         protected transient MailboxPersistable.PersistentFileReader reader;
         protected HistogramLeafCellOnStorageFile current;
@@ -1044,6 +1049,7 @@ public class KeyHistogramsPersistable extends KeyHistograms {
     }
 
     public static class PersistentFileReaderSourceWithSize implements Serializable {
+        public static final long serialVersionUID = 1L;
         public PersistentFileReaderSource source;
         public long remainingSize;
 
@@ -1080,6 +1086,7 @@ public class KeyHistogramsPersistable extends KeyHistograms {
     }
 
     public static class HistogramNodeTreeOnStorage extends HistogramNodeTree implements HistogramNodeOnStorage {
+        public static final long serialVersionUID = 1L;
         protected PersistentFileReaderSource source;
         protected boolean loaded;
 
@@ -1238,6 +1245,7 @@ public class KeyHistogramsPersistable extends KeyHistograms {
     }
 
     public static class HistogramNodeLeafOnStorage extends HistogramNodeLeaf implements HistogramNodeOnStorage {
+        public static final long serialVersionUID = 1L;
         protected PersistentFileReaderSource source;
         public HistogramNodeLeafOnStorage(NodeTreeData data, PersistentFileReaderSource source) {
             super(data.keyStart, null, data.height);
@@ -1404,6 +1412,7 @@ public class KeyHistogramsPersistable extends KeyHistograms {
      *  </pre>
      */
     public static class NodeTreeData implements Serializable {
+        public static final long serialVersionUID = 1L;
         public boolean leaf;
         public int height;
         public long size;

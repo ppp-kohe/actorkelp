@@ -1,8 +1,9 @@
-package csl.actor.keyaggregate;
+package csl.actor.kelp;
 
 import csl.actor.cluster.ConfigBase;
 
 public class Config extends ConfigBase {
+    public static final long serialVersionUID = 1L;
     public static final Config CONFIG_DEFAULT = new Config();
 
     public boolean routerAutoSplit = true;

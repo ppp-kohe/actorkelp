@@ -239,6 +239,7 @@ public class ActorSystemDefault implements ActorSystem {
     }
 
     public static class DeadLetter implements Serializable {
+        public static final long serialVersionUID = 1L;
         protected Message<?> message;
 
         public DeadLetter(Message<?> message) {

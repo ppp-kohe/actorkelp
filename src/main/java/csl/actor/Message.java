@@ -4,6 +4,7 @@ import java.io.Serializable;
 import java.util.function.Function;
 
 public class Message<DataType> implements Serializable {
+    public static final long serialVersionUID = 1L;
 
     protected ActorRef target;
     protected ActorRef sender;
@@ -40,6 +41,7 @@ public class Message<DataType> implements Serializable {
      * the special message intended to start processing of the target
      */
     public static class MessageNone extends Message<Void> {
+        public static final long serialVersionUID = 1L;
         public MessageNone(ActorRef target) {
             super(target, null, null);
         }

@@ -1,11 +1,11 @@
-package csl.actor.example.keyaggregate;
+package csl.actor.example.kelp;
 
 import csl.actor.ActorSystemDefault;
 import csl.actor.cluster.FileSplitter;
 import csl.actor.cluster.PhaseShift;
 import csl.actor.example.exp.thread.ExpLock;
-import csl.actor.keyaggregate.Config;
-import csl.actor.keyaggregate.FileMapper;
+import csl.actor.kelp.Config;
+import csl.actor.kelp.FileMapper;
 
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;

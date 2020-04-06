@@ -2,7 +2,7 @@ package csl.actor.example;
 
 import csl.actor.*;
 import csl.actor.cluster.MailboxPersistable;
-import csl.actor.keyaggregate.*;
+import csl.actor.kelp.*;
 import csl.actor.remote.ActorAddress;
 import csl.actor.remote.KryoBuilder;
 
@@ -55,7 +55,7 @@ public class ExampleSerialize2 extends ExampleSerialize {
 
     private void runStateLeaf() {
         ExampleActor a = new ExampleActor(system, "a");
-        ActorKeyAggregation.StateUnit leaf = new ActorKeyAggregation.StateUnit(a);
+        ActorKelp.StateUnit leaf = new ActorKelp.StateUnit(a);
         writeRead(p, leaf, (s,c) -> c.getRouter().asLocal().equals(a));
     }
 
@@ -101,7 +101,7 @@ public class ExampleSerialize2 extends ExampleSerialize {
 
     private void runHistogramTree() {
         KeyHistograms.HistogramTree tree = new KeyHistograms.HistogramTree(null,
-                new ActorBehaviorBuilderKeyAggregation.KeyComparatorDefault<>(), 10,
+                new ActorBehaviorBuilderKelp.KeyComparatorDefault<>(), 10,
                 MailboxPersistable.getPersistentFile(null, () -> ""));
 
         List<Object> os = values();
@@ -219,7 +219,7 @@ public class ExampleSerialize2 extends ExampleSerialize {
         a.getMailbox().offer(new Message<>(a, null, "msg1"));
         a.getMailbox().offer(new Message<>(a, null, "msg2"));
         a.getMailbox().offer(new Message<>(a, null, "msg3"));
-        MailboxKeyAggregation.HistogramEntry e = a.getMailboxAsKeyAggregation().getEntries().get(0);
+        MailboxKelp.HistogramEntry e = a.getMailboxAsKelp().getEntries().get(0);
 
 
         for (Object o : values()) {
@@ -227,7 +227,7 @@ public class ExampleSerialize2 extends ExampleSerialize {
         }
         checkTree(e.getTree(), "actor-construction");
 
-        ActorKeyAggregation.ActorKeyAggregationSerializable s = a.toSerializable(123);
+        ActorKelp.ActorKelpSerializable s = a.toSerializable(123);
         writeRead(p, s, false, (pre,post) ->
                 check("post.name", MyActor.class, post.actorType) &&
                 check("post.name", "hello", post.name) &&
@@ -242,7 +242,7 @@ public class ExampleSerialize2 extends ExampleSerialize {
                 check("post.config", 123456, post.config.mailboxThreshold));
     }
 
-    public static class MyActor extends ActorKeyAggregation {
+    public static class MyActor extends ActorKelp<MyActor> {
         public MyActor(ActorSystem system, String name, Config config) {
             super(system, name, config);
         }

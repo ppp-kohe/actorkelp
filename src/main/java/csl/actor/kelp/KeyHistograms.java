@@ -1,4 +1,4 @@
-package csl.actor.keyaggregate;
+package csl.actor.kelp;
 
 import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.KryoSerializable;
@@ -34,6 +34,7 @@ public class KeyHistograms {
     }
 
     public static class HistogramTree implements Serializable, KryoSerializable {
+        public static final long serialVersionUID = 1L;
         protected HistogramNode root;
         protected KeyComparator<?> comparator;
 
@@ -430,6 +431,7 @@ public class KeyHistograms {
     }
 
     public static class HistogramNodeTree implements HistogramNode {
+        public static final long serialVersionUID = 1L;
         protected HistogramNodeTree parent;
         protected List<HistogramNode> children;
         protected long size;
@@ -781,6 +783,7 @@ public class KeyHistograms {
 
 
     public static abstract class HistogramNodeLeaf implements HistogramNode {
+        public static final long serialVersionUID = 1L;
         protected HistogramNodeTree parent;
         protected Object key;
         protected long size;
@@ -919,6 +922,7 @@ public class KeyHistograms {
     }
 
     public static class HistogramNodeLeafMap extends HistogramNodeLeaf {
+        public static final long serialVersionUID = 1L;
         protected TreeMap<Comparable<?>, HistogramLeafList> values;
         protected int nextPosition;
 
@@ -1025,6 +1029,7 @@ public class KeyHistograms {
     }
 
     public static class HistogramLeafList implements /*Iterable<Object>, */Serializable, KryoSerializable {
+        public static final long serialVersionUID = 1L;
         public HistogramLeafCell head;
         public HistogramLeafCell tail;
 
@@ -1116,9 +1121,12 @@ public class KeyHistograms {
         }
     }
 
-    public static class HistogramLeafCellSerializedEnd implements Serializable {}
+    public static class HistogramLeafCellSerializedEnd implements Serializable {
+        public static final long serialVersionUID = 1L;
+    }
 
     public static class HistogramLeafCell implements Serializable, KryoSerializable {
+        public static final long serialVersionUID = 1L;
         public Object value;
         public HistogramLeafCell next;
 

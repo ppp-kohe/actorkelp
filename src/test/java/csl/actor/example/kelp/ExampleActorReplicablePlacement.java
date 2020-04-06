@@ -1,4 +1,4 @@
-package csl.actor.example.keyaggregate;
+package csl.actor.example.kelp;
 
 import csl.actor.ActorBehavior;
 import csl.actor.ActorDefault;
@@ -8,7 +8,7 @@ import csl.actor.cluster.ActorPlacement;
 import csl.actor.cluster.PhaseShift;
 import csl.actor.cluster.ResponsiveCalls;
 import csl.actor.example.ExampleRemote;
-import csl.actor.keyaggregate.*;
+import csl.actor.kelp.*;
 import csl.actor.remote.ActorAddress;
 import csl.actor.remote.ActorRefRemote;
 import csl.actor.remote.ActorSystemRemote;
@@ -22,7 +22,7 @@ public class ExampleActorReplicablePlacement {
         int serverPort = 10000;
         system.startWithoutWait(serverPort);
 
-        ActorPlacementKeyAggregation p = new ActorPlacementKeyAggregation(system,
+        ActorPlacementKelp p = new ActorPlacementKelp(system,
                 new ActorPlacement.PlacementStrategyRoundRobin(0));
 
         ExampleRemote.setMvnClasspath();
@@ -49,7 +49,7 @@ public class ExampleActorReplicablePlacement {
         system.close();
     }
 
-    public static class TestActor extends ActorKeyAggregation {
+    public static class TestActor extends ActorKelp<TestActor> {
         long[] model;
         public TestActor(ActorSystem system, String name, Config config) {
             super(system, name, config);
@@ -64,7 +64,7 @@ public class ExampleActorReplicablePlacement {
         }
 
         @Override
-        protected void initClone(ActorKeyAggregation original) {
+        protected void initClone(TestActor original) {
             super.initClone(original);
             System.err.println("clone");
         }
@@ -79,13 +79,13 @@ public class ExampleActorReplicablePlacement {
         }
 
         @Override
-        public ActorKeyAggregationSerializable toSerializable(long num) {
+        public ActorKelpSerializable toSerializable(long num) {
             System.err.println("toSerializable");
             return super.toSerializable(num);
         }
 
         @Override
-        protected ActorKeyAggregationSerializable newSerializableState() {
+        protected ActorKelpSerializable newSerializableState() {
             return new ExampleActorReplicablePlacement.State(model);
         }
 
@@ -100,7 +100,8 @@ public class ExampleActorReplicablePlacement {
         }
     }
 
-    static class State extends ActorKeyAggregation.ActorKeyAggregationSerializable {
+    static class State extends ActorKelp.ActorKelpSerializable {
+        public static final long serialVersionUID = 1L;
         long[] model;
 
         public State(long[] model) {
@@ -119,7 +120,7 @@ public class ExampleActorReplicablePlacement {
 
             new RecvActor(system, "recv");
 
-            ActorPlacementKeyAggregation p = new ActorPlacementKeyAggregation(system,
+            ActorPlacementKelp p = new ActorPlacementKelp(system,
                     new ActorPlacement.PlacementStrategyUndertaker());
             Thread.sleep(3000);
             p.join(ActorAddress.get("localhost", joinPort));

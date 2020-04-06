@@ -1,8 +1,8 @@
-package csl.actor.example.keyaggregate;
+package csl.actor.example.kelp;
 
 import csl.actor.*;
 import csl.actor.example.ExampleSerialize2;
-import csl.actor.keyaggregate.Config;
+import csl.actor.kelp.Config;
 import csl.actor.cluster.MailboxPersistable;
 import csl.actor.cluster.PhaseShift;
 import csl.actor.cluster.ResponsiveCalls;

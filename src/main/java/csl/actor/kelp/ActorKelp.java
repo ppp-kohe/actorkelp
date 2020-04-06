@@ -1,8 +1,8 @@
-package csl.actor.keyaggregate;
+package csl.actor.kelp;
 
 import csl.actor.*;
 import csl.actor.cluster.*;
-import csl.actor.keyaggregate.KeyAggregationRoutingSplit.SplitPath;
+import csl.actor.kelp.KelpRoutingSplit.SplitPath;
 
 import java.io.Serializable;
 import java.time.Duration;
@@ -14,7 +14,8 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
-public abstract class ActorKeyAggregation<SelfType extends ActorKeyAggregation<SelfType>> extends ActorDefault
+@SuppressWarnings("rawtypes")
+public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends ActorDefault
         implements KeyHistogramsPersistable.HistogramTreePersistableConfig, PhaseShift.StageSupported, Cloneable {
     protected Config config;
     protected volatile ActorRef nextStage;
@@ -23,7 +24,7 @@ public abstract class ActorKeyAggregation<SelfType extends ActorKeyAggregation<S
 
     public static boolean logSkipTimeout = System.getProperty("csl.actor.logSkipTimeout", "true").equals("true");
 
-    public ActorKeyAggregation(ActorSystem system, String name, MailboxKeyAggregation mailbox, ActorBehavior behavior, Config config, State state) {
+    public ActorKelp(ActorSystem system, String name, MailboxKelp mailbox, ActorBehavior behavior, Config config, State state) {
         super(system, name, mailbox, behavior);
         if (config == null) {
             this.config = Config.CONFIG_DEFAULT;
@@ -40,27 +41,27 @@ public abstract class ActorKeyAggregation<SelfType extends ActorKeyAggregation<S
      * @param config a config object, or null for {@link Config#CONFIG_DEFAULT}
      * @param state the internal state
      */
-    public ActorKeyAggregation(ActorSystem system, String name, Config config, State state) {
+    public ActorKelp(ActorSystem system, String name, Config config, State state) {
         this(system, name, null, null, config, state);
         this.state = state;
         mailbox = initMailbox();
         behavior = initBehavior();
     }
 
-    public ActorKeyAggregation(ActorSystem system, String name, Config config) {
+    public ActorKelp(ActorSystem system, String name, Config config) {
         this(system, name, config, (State) null);
         state = initStateRouter();
     }
 
-    public ActorKeyAggregation(ActorSystem system, String name) {
+    public ActorKelp(ActorSystem system, String name) {
         this(system, name, (Config) null);
     }
 
-    public ActorKeyAggregation(ActorSystem system, Config config) {
+    public ActorKelp(ActorSystem system, Config config) {
         this(system, null, config);
     }
 
-    public ActorKeyAggregation(ActorSystem system) {
+    public ActorKelp(ActorSystem system) {
         this(system, null, (Config) null);
     }
 
@@ -179,8 +180,8 @@ public abstract class ActorKeyAggregation<SelfType extends ActorKeyAggregation<S
 
     //////////////////////// init
 
-    protected KeyAggregationStateRouter initStateRouter() {
-        return new KeyAggregationStateRouter();
+    protected KelpStateRouter initStateRouter() {
+        return new KelpStateRouter();
     }
 
     protected StateUnit initStateUnit(ActorRef router) {
@@ -191,7 +192,7 @@ public abstract class ActorKeyAggregation<SelfType extends ActorKeyAggregation<S
     protected Mailbox initMailbox() {
         MailboxPersistable.PersistentFileManager m = getPersistentFile();
         MailboxDefault mailbox = initMailboxDefault(m);
-        return new MailboxKeyAggregation(mailboxThreshold(), mailboxTreeSize(),
+        return new MailboxKelp(mailboxThreshold(), mailboxTreeSize(),
                 mailbox, initTreeFactory(mailbox, m));
     }
 
@@ -239,7 +240,7 @@ public abstract class ActorKeyAggregation<SelfType extends ActorKeyAggregation<S
     }
 
     protected Mailbox initMailboxForClone() {
-        return getMailboxAsKeyAggregation().create();
+        return getMailboxAsKelp().create();
     }
 
     protected void initMerged(SelfType m) { }
@@ -247,8 +248,8 @@ public abstract class ActorKeyAggregation<SelfType extends ActorKeyAggregation<S
     protected void initClone(SelfType original) { }
 
     @Override
-    protected ActorBehaviorBuilderKeyAggregation behaviorBuilder() {
-        return new ActorBehaviorBuilderKeyAggregation((ps) -> getMailboxAsKeyAggregation().initMessageEntries(ps));
+    protected ActorBehaviorBuilderKelp behaviorBuilder() {
+        return new ActorBehaviorBuilderKelp((ps) -> getMailboxAsKelp().initMessageEntries(ps));
     }
 
     @SuppressWarnings("unchecked")
@@ -259,12 +260,12 @@ public abstract class ActorKeyAggregation<SelfType extends ActorKeyAggregation<S
 
     ////////////////////////
 
-    public MailboxKeyAggregation getMailboxAsKeyAggregation() {
-        return (MailboxKeyAggregation) mailbox;
+    public MailboxKelp getMailboxAsKelp() {
+        return (MailboxKelp) mailbox;
     }
 
     public ActorRef router() {
-        if (state instanceof KeyAggregationStateRouter) {
+        if (state instanceof KelpStateRouter) {
             return this;
         } else if (state instanceof StateUnit) {
             return routerOrThis(((StateUnit) state).getRouter());
@@ -284,11 +285,11 @@ public abstract class ActorKeyAggregation<SelfType extends ActorKeyAggregation<S
     }
 
     public boolean hasRemainingProcesses() {
-        return isRouterParallelRouting() || getMailboxAsKeyAggregation().hasRemainingProcesses();
+        return isRouterParallelRouting() || getMailboxAsKelp().hasRemainingProcesses();
     }
 
     public boolean isRouterParallelRouting() {
-        return state instanceof KeyAggregationStateRouter && !((KeyAggregationStateRouter) state).isNonParallelRouting();
+        return state instanceof KelpStateRouter && !((KelpStateRouter) state).isNonParallelRouting();
     }
 
     //////////////////////// internal state
@@ -299,11 +300,12 @@ public abstract class ActorKeyAggregation<SelfType extends ActorKeyAggregation<S
 
     public interface State {
         long getProcessCount();
-        void processMessage(ActorKeyAggregation self, Message<?> message);
-        boolean processMessagePhase(ActorKeyAggregation self, Message<?> message);
+        void processMessage(ActorKelp self, Message<?> message);
+        boolean processMessagePhase(ActorKelp self, Message<?> message);
     }
 
     public static class StateUnit implements State, Serializable {
+        public static final long serialVersionUID = 1L;
         protected ActorRef router;
         protected long processCount;
 
@@ -320,14 +322,15 @@ public abstract class ActorKeyAggregation<SelfType extends ActorKeyAggregation<S
             return processCount;
         }
 
+        @SuppressWarnings("unchecked")
         @Override
-        public void processMessage(ActorKeyAggregation self, Message<?> message) {
+        public void processMessage(ActorKelp self, Message<?> message) {
             processCount++;
             self.processMessageBehavior(message);
         }
 
         @Override
-        public boolean processMessagePhase(ActorKeyAggregation self, Message<?> message) {
+        public boolean processMessagePhase(ActorKelp self, Message<?> message) {
             Object val = message.getData();
             if (val instanceof PhaseShift) {
                 ((PhaseShift) val).accept(self, message.getSender());
@@ -347,7 +350,7 @@ public abstract class ActorKeyAggregation<SelfType extends ActorKeyAggregation<S
             }
         }
 
-        ActorRef phaseTarget(ActorKeyAggregation self) {
+        ActorRef phaseTarget(ActorKelp self) {
             return router == null ? self : router;
         }
 
@@ -376,13 +379,13 @@ public abstract class ActorKeyAggregation<SelfType extends ActorKeyAggregation<S
         }
 
         @Override
-        public void processMessage(ActorKeyAggregation self, Message<?> message) {
+        public void processMessage(ActorKelp self, Message<?> message) {
             processCount++;
             router.tell(message.getData(), message.getSender());
         }
 
         @Override
-        public boolean processMessagePhase(ActorKeyAggregation self, Message<?> message) {
+        public boolean processMessagePhase(ActorKelp self, Message<?> message) {
             Object val = message.getData();
             if (val instanceof PhaseShift) {
                 ((PhaseShift) val).accept(self, message.getSender());
@@ -406,7 +409,7 @@ public abstract class ActorKeyAggregation<SelfType extends ActorKeyAggregation<S
     public boolean processMessageNext() {
         boolean pr = isRouterParallelRouting();
         try {
-            if (!pr && getMailboxAsKeyAggregation().processHistogram(this)) {
+            if (!pr && getMailboxAsKelp().processHistogram(this)) {
                 return true;
             }
             return super.processMessageNext();
@@ -437,10 +440,10 @@ public abstract class ActorKeyAggregation<SelfType extends ActorKeyAggregation<S
         }
         processPrune();
         Object data = message.getData();
-        if (data instanceof MailboxKeyAggregation.TraversalProcess) {
-            getMailboxAsKeyAggregation()
+        if (data instanceof MailboxKelp.TraversalProcess) {
+            getMailboxAsKelp()
                     .processTraversal(this,
-                            ((MailboxKeyAggregation.TraversalProcess) data).entryId,
+                            ((MailboxKelp.TraversalProcess) data).entryId,
                             reducedSize());
         } else {
             super.processMessage(message);
@@ -458,7 +461,7 @@ public abstract class ActorKeyAggregation<SelfType extends ActorKeyAggregation<S
     protected boolean isNoRoutingMessage(Message<?> message) {
         Object data = message.getData();
         return data instanceof MessageNoRouting ||
-                data instanceof MailboxKeyAggregation.TraversalProcess ||
+                data instanceof MailboxKelp.TraversalProcess ||
                 isNoRoutingMessagePhase(message) ||
                 (data instanceof CallableMessage<?,?> &&
                         !(data instanceof MessageNoRouting.Routing));
@@ -481,8 +484,8 @@ public abstract class ActorKeyAggregation<SelfType extends ActorKeyAggregation<S
         return ResponsiveCalls.sendTaskConsumer(this, (a) -> a.nextStage = nextStage);
     }
 
-    public MailboxKeyAggregation.ReducedSize reducedSize() {
-        return new MailboxKeyAggregation.ReducedSizeDefault(reduceRuntimeCheckingThreshold(), reduceRuntimeRemainingBytesToSizeRatio()) {
+    public MailboxKelp.ReducedSize reducedSize() {
+        return new MailboxKelp.ReducedSizeDefault(reduceRuntimeCheckingThreshold(), reduceRuntimeRemainingBytesToSizeRatio()) {
             @Override
             protected void logReducedSize(long size, long availableOnMemoryMessages, int consuming) {
                 if (config.logSplit) {
@@ -502,50 +505,50 @@ public abstract class ActorKeyAggregation<SelfType extends ActorKeyAggregation<S
 
 
     public void processPrune() {
-        getMailboxAsKeyAggregation().prune(
+        getMailboxAsKelp().prune(
                 pruneGreaterThanLeaf(),
                 pruneLessThanNonZeroLeafRate());
     }
 
     public void processPhaseEnd(Object phaseKey) {
-        getMailboxAsKeyAggregation()
+        getMailboxAsKelp()
                 .processPhase(this, phaseKey, reducedSize());
     }
 
     /////////////////////////// methods for state
 
-    public KeyAggregationRoutingSplit internalCreateSplitNode(KeyAggregationRoutingSplit.SplitOrMergeContext context,
-                                                              KeyAggregationRoutingSplit old,
-                                                              ActorKeyAggregation target, SplitPath path, int height) {
+    public KelpRoutingSplit internalCreateSplitNode(KelpRoutingSplit.SplitOrMergeContext context,
+                                                    KelpRoutingSplit old,
+                                                    ActorKelp target, SplitPath path, int height) {
         try {
-            target.getMailboxAsKeyAggregation().lockRemainingProcesses();
+            target.getMailboxAsKelp().lockRemainingProcesses();
 
             ActorRef routerRef = router();
-            ActorKeyAggregation a1 = target.internalCreateClone(routerRef);
-            ActorKeyAggregation a2 = target.internalCreateClone(routerRef);
-            List<Object> splitPoints = target.getMailboxAsKeyAggregation()
-                    .splitMessageHistogramIntoReplicas(a1.getMailboxAsKeyAggregation(), a2.getMailboxAsKeyAggregation());
+            ActorKelp a1 = target.internalCreateClone(routerRef);
+            ActorKelp a2 = target.internalCreateClone(routerRef);
+            List<Object> splitPoints = target.getMailboxAsKelp()
+                    .splitMessageHistogramIntoReplicas(a1.getMailboxAsKelp(), a2.getMailboxAsKelp());
             if (routerRef != target) {
                 target.internalCancel();
             }
             return internalCreateSplitNode(context, old, splitPoints, a1, a2, path, height);
         } finally {
-            target.getMailboxAsKeyAggregation().unlockRemainingProcesses(target);
+            target.getMailboxAsKelp().unlockRemainingProcesses(target);
         }
     }
 
-    public KeyAggregationRoutingSplit internalCreateSplitNode(KeyAggregationRoutingSplit.SplitOrMergeContext context,
-                                                              KeyAggregationRoutingSplit old,
-                                                              List<Object> splitPoints, ActorKeyAggregation a1, ActorKeyAggregation a2, SplitPath path, int height) {
-        KeyAggregationRoutingSplit s1 = internalCreateSplitLeaf(context, old, a1, path.add(true), height);
-        KeyAggregationRoutingSplit s2 = internalCreateSplitLeaf(context, old, a2, path.add(false), height);
+    public KelpRoutingSplit internalCreateSplitNode(KelpRoutingSplit.SplitOrMergeContext context,
+                                                    KelpRoutingSplit old,
+                                                    List<Object> splitPoints, ActorKelp a1, ActorKelp a2, SplitPath path, int height) {
+        KelpRoutingSplit s1 = internalCreateSplitLeaf(context, old, a1, path.add(true), height);
+        KelpRoutingSplit s2 = internalCreateSplitLeaf(context, old, a2, path.add(false), height);
 
         return newSplitNode(splitPoints, s1, s2, path);
     }
 
-    public KeyAggregationRoutingSplit internalCreateSplitLeaf(KeyAggregationRoutingSplit.SplitOrMergeContext context,
-                                                              KeyAggregationRoutingSplit old,
-                                                              ActorKeyAggregation actor, SplitPath path, int height) {
+    public KelpRoutingSplit internalCreateSplitLeaf(KelpRoutingSplit.SplitOrMergeContext context,
+                                                    KelpRoutingSplit old,
+                                                    ActorKelp actor, SplitPath path, int height) {
         if (path.depth() >= height) {
             internalCreateSplitLeafNewName(actor, path);
             ActorRef a = place(actor.getPlacement(), actor);
@@ -564,7 +567,7 @@ public abstract class ActorKeyAggregation<SelfType extends ActorKeyAggregation<S
         }
     }
 
-    public void internalCreateSplitLeafNewName(ActorKeyAggregation actor, SplitPath path) {
+    public void internalCreateSplitLeafNewName(ActorKelp actor, SplitPath path) {
         String name = actor.name;
         if (name != null) {
             int ni = name.lastIndexOf("#");
@@ -572,27 +575,27 @@ public abstract class ActorKeyAggregation<SelfType extends ActorKeyAggregation<S
                 name = name.substring(0, ni);
             }
             name += "#" + path.toBinaryString();
-            if (!(actor.state instanceof KeyAggregationStateRouter)) { //router
+            if (!(actor.state instanceof KelpStateRouter)) { //router
                 actor.name = name;
                 actor.getSystem().register(actor);
             }
         }
     }
 
-    private KeyAggregationRoutingSplit newSplitLeaf(KeyAggregationRoutingSplit.SplitOrMergeContext context,
-                                                KeyAggregationRoutingSplit old,
-                                                ActorRef actor, SplitPath path) {
-        KeyAggregationRoutingSplit s = newSplitLeaf(actor, path);
+    private KelpRoutingSplit newSplitLeaf(KelpRoutingSplit.SplitOrMergeContext context,
+                                          KelpRoutingSplit old,
+                                          ActorRef actor, SplitPath path) {
+        KelpRoutingSplit s = newSplitLeaf(actor, path);
         context.split(s, old);
         return s;
     }
 
-    public KeyAggregationRoutingSplit newSplitNode(List<Object> splitPoints, KeyAggregationRoutingSplit s1, KeyAggregationRoutingSplit s2, SplitPath path) {
-        return new KeyAggregationRoutingSplit.RoutingSplitNode(splitPoints, s1, s2, path, historyEntrySize());
+    public KelpRoutingSplit newSplitNode(List<Object> splitPoints, KelpRoutingSplit s1, KelpRoutingSplit s2, SplitPath path) {
+        return new KelpRoutingSplit.RoutingSplitNode(splitPoints, s1, s2, path, historyEntrySize());
     }
 
-    public KeyAggregationRoutingSplit.RoutingSplitLeaf newSplitLeaf(ActorRef actor, SplitPath path) {
-        return new KeyAggregationRoutingSplit.RoutingSplitLeaf(actor, path);
+    public KelpRoutingSplit.RoutingSplitLeaf newSplitLeaf(ActorRef actor, SplitPath path) {
+        return new KelpRoutingSplit.RoutingSplitLeaf(actor, path);
     }
 
 
@@ -601,10 +604,10 @@ public abstract class ActorKeyAggregation<SelfType extends ActorKeyAggregation<S
     }
 
     public void internalMerge(SelfType merged) {
-        getMailboxAsKeyAggregation().lockRemainingProcesses();
-        merged.getMailboxAsKeyAggregation().lockRemainingProcesses();
-        getMailboxAsKeyAggregation()
-                .merge(merged.getMailboxAsKeyAggregation());
+        getMailboxAsKelp().lockRemainingProcesses();
+        merged.getMailboxAsKelp().lockRemainingProcesses();
+        getMailboxAsKelp()
+                .merge(merged.getMailboxAsKelp());
         if (this.name != null) {
             getSystem().register(this); //re-register this for this.name == merged.name
         }
@@ -612,14 +615,15 @@ public abstract class ActorKeyAggregation<SelfType extends ActorKeyAggregation<S
         try {
             initMerged(merged);
         } finally {
-            merged.getMailboxAsKeyAggregation().unlockRemainingProcesses(merged);
-            getMailboxAsKeyAggregation().unlockRemainingProcesses(this);
+            merged.getMailboxAsKelp().unlockRemainingProcesses(merged);
+            getMailboxAsKelp().unlockRemainingProcesses(this);
         }
     }
 
-    public ActorKeyAggregation internalCreateClone(ActorRef router) {
+    @SuppressWarnings("unchecked")
+    public ActorKelp internalCreateClone(ActorRef router) {
         try {
-            ActorKeyAggregation a = (ActorKeyAggregation) super.clone();
+            ActorKelp a = (ActorKelp) super.clone();
             //if the actor has the name, it copies the reference to the name,
             // but it does not register the actor
             a.processLock = new AtomicBoolean(false);
@@ -633,12 +637,12 @@ public abstract class ActorKeyAggregation<SelfType extends ActorKeyAggregation<S
         }
     }
 
-    public ActorKeyAggregation toLocal(ActorRef ref) {
-        if (ref instanceof ActorKeyAggregation) {
-            return (ActorKeyAggregation) ref;
+    public ActorKelp toLocal(ActorRef ref) {
+        if (ref instanceof ActorKelp) {
+            return (ActorKelp) ref;
         }
         try {
-            ActorKeyAggregationSerializable state = ResponsiveCalls.sendTask(system, ref,
+            ActorKelpSerializable state = ResponsiveCalls.sendTask(system, ref,
                     new CallableToLocalSerializable())
                     .get(toLocalWaitMs(), TimeUnit.MILLISECONDS);
             return state.create(system, -1);
@@ -665,16 +669,17 @@ public abstract class ActorKeyAggregation<SelfType extends ActorKeyAggregation<S
         }
     }
 
-    public static class CallableToLocalSerializable implements CallableMessage<ActorKeyAggregation, ActorKeyAggregationSerializable> {
+    public static class CallableToLocalSerializable implements CallableMessage<ActorKelp, ActorKelpSerializable> {
+        public static final long serialVersionUID = 1L;
         @Override
-        public ActorKeyAggregationSerializable call(ActorKeyAggregation self) {
-            self.getMailboxAsKeyAggregation().lockRemainingProcesses();
+        public ActorKelpSerializable call(ActorKelp self) {
+            self.getMailboxAsKelp().lockRemainingProcesses();
             try {
                 return self.toSerializable(-1);
             } finally {
-                self.getMailboxAsKeyAggregation().terminateAfterSerialized();
+                self.getMailboxAsKelp().terminateAfterSerialized();
                 self.internalCancel();
-                self.getMailboxAsKeyAggregation().unlockRemainingProcesses(self);
+                self.getMailboxAsKelp().unlockRemainingProcesses(self);
             }
         }
     }
@@ -687,6 +692,7 @@ public abstract class ActorKeyAggregation<SelfType extends ActorKeyAggregation<S
     }
 
     public static class CancelChange implements Serializable, MessageNoRouting {
+        public static final long serialVersionUID = 1L;
         protected ActorRef canceledActor;
         protected Object data;
 
@@ -717,10 +723,10 @@ public abstract class ActorKeyAggregation<SelfType extends ActorKeyAggregation<S
     /////////////////////////// split or merge APIs
 
     public CompletableFuture<Integer> routerGetMaxHeight() {
-        return ResponsiveCalls.<ActorKeyAggregation, Integer>sendTask(getSystem(), router(), (a) -> {
+        return ResponsiveCalls.<ActorKelp, Integer>sendTask(getSystem(), router(), (a) -> {
             State state = a.getState();
-            if (state instanceof KeyAggregationStateRouter) {
-                return ((KeyAggregationStateRouter) state).getMaxHeight(a);
+            if (state instanceof KelpStateRouter) {
+                return ((KelpStateRouter) state).getMaxHeight(a);
             } else {
                 return 1;
             }
@@ -728,33 +734,33 @@ public abstract class ActorKeyAggregation<SelfType extends ActorKeyAggregation<S
     }
 
     public CompletableFuture<CallableMessage.CallableResponseVoid> routerSplit(int height) {
-        return ResponsiveCalls.<ActorKeyAggregation>sendTaskConsumer(getSystem(), router(), (a) -> {
+        return ResponsiveCalls.<ActorKelp>sendTaskConsumer(getSystem(), router(), (a) -> {
             State state = a.state;
-            if (state instanceof KeyAggregationStateRouter) {
-                ((KeyAggregationStateRouter) state).split(a, height);
+            if (state instanceof KelpStateRouter) {
+                ((KelpStateRouter) state).split(a, height);
             }
         });
     }
 
     public CompletableFuture<CallableMessage.CallableResponseVoid> routerMergeInactive() {
-        return ResponsiveCalls.<ActorKeyAggregation>sendTaskConsumer(getSystem(), router(), (a) -> {
+        return ResponsiveCalls.<ActorKelp>sendTaskConsumer(getSystem(), router(), (a) -> {
             State state = a.state;
-            if (state instanceof KeyAggregationStateRouter) {
-                ((KeyAggregationStateRouter) state).mergeInactive(a);
+            if (state instanceof KelpStateRouter) {
+                ((KelpStateRouter) state).mergeInactive(a);
             }
         });
     }
 
     public CompletableFuture<CallableMessage.CallableResponseVoid> routerSplitOrMerge(int height) {
-        return ResponsiveCalls.<ActorKeyAggregation>sendTaskConsumer(getSystem(), router(), (a) -> {
+        return ResponsiveCalls.<ActorKelp>sendTaskConsumer(getSystem(), router(), (a) -> {
             State state = a.state;
-            if (state instanceof KeyAggregationStateRouter) {
-                ((KeyAggregationStateRouter) state).splitOrMerge(a, height);
+            if (state instanceof KelpStateRouter) {
+                ((KelpStateRouter) state).splitOrMerge(a, height);
             }
         });
     }
 
-    protected void afterSplitOrMerge(KeyAggregationRoutingSplit.SplitOrMergeContextDefault context) {
+    protected void afterSplitOrMerge(KelpRoutingSplit.SplitOrMergeContextDefault context) {
         if (logSplit() && context.hasChanges()) {
             String msg = context.getMessage();
             if (context.isMergedToRoot() || context.isSplitFromRoot()) {
@@ -768,7 +774,7 @@ public abstract class ActorKeyAggregation<SelfType extends ActorKeyAggregation<S
 
     /////////////////////////// remote placement and serialization
 
-    public static ActorRef place(ActorPlacement placement, ActorKeyAggregation a) {
+    public static ActorRef place(ActorPlacement placement, ActorKelp a) {
         if (placement != null) {
             return placement.place(a);
         } else {
@@ -787,15 +793,15 @@ public abstract class ActorKeyAggregation<SelfType extends ActorKeyAggregation<S
         }
     }
 
-    public ActorKeyAggregationSerializable toSerializable(long num) {
+    public ActorKelpSerializable toSerializable(long num) {
         return initSerializableState(newSerializableState(), num);
     }
 
-    protected ActorKeyAggregationSerializable newSerializableState() {
-        return new ActorKeyAggregationSerializable();
+    protected ActorKelpSerializable newSerializableState() {
+        return new ActorKelpSerializable();
     }
 
-    protected ActorKeyAggregationSerializable initSerializableState(ActorKeyAggregationSerializable state, long num) {
+    protected ActorKelpSerializable initSerializableState(ActorKelpSerializable state, long num) {
         state.actorType = getClass();
         String n = getName();
         if (n == null) {
@@ -805,7 +811,7 @@ public abstract class ActorKeyAggregation<SelfType extends ActorKeyAggregation<S
         state.config = config;
         state.router = router();
         state.nextStage = nextStage;
-        MailboxKeyAggregation r = getMailboxAsKeyAggregation();
+        MailboxKelp r = getMailboxAsKelp();
         r.serializeTo(state);
         state.internalState = toSerializableInternalState();
         return state;
@@ -826,8 +832,9 @@ public abstract class ActorKeyAggregation<SelfType extends ActorKeyAggregation<S
     }
 
 
-    public static class ActorKeyAggregationSerializable implements Serializable {
-        public Class<? extends ActorKeyAggregation> actorType;
+    public static class ActorKelpSerializable implements Serializable {
+        public static final long serialVersionUID = 1L;
+        public Class<? extends ActorKelp> actorType;
         public String name;
         public Message<?>[] messages;
         public List<KeyHistograms.HistogramTree> histograms;
@@ -836,7 +843,7 @@ public abstract class ActorKeyAggregation<SelfType extends ActorKeyAggregation<S
         public Serializable internalState;
         public ActorRef nextStage;
 
-        public ActorKeyAggregation create(ActorSystem system, long num) throws Exception {
+        public ActorKelp create(ActorSystem system, long num) throws Exception {
             return init(create(system, name(num), config(), state(router)));
         }
 
@@ -852,14 +859,14 @@ public abstract class ActorKeyAggregation<SelfType extends ActorKeyAggregation<S
             return new StateUnit(router);
         }
 
-        protected ActorKeyAggregation init(ActorKeyAggregation a) {
-            a.getMailboxAsKeyAggregation().deserializeFrom(this);
+        protected ActorKelp init(ActorKelp a) {
+            a.getMailboxAsKelp().deserializeFrom(this);
             a.initSerializedInternalState(internalState);
             a.setNextStage(nextStage);
             return a;
         }
 
-        protected ActorKeyAggregation create(ActorSystem system, String name, Config config, State state) throws Exception {
+        protected ActorKelp create(ActorSystem system, String name, Config config, State state) throws Exception {
             return actorType.getConstructor(ActorSystem.class, String.class, Config.class, State.class)
                     .newInstance(system, name, config, state);
         }
@@ -875,7 +882,7 @@ public abstract class ActorKeyAggregation<SelfType extends ActorKeyAggregation<S
         printStatus(config.getLogger(), head);
     }
 
-    public void printStatus(String head, List<KeyAggregationRoutingSplit> newSplits) {
+    public void printStatus(String head, List<KelpRoutingSplit> newSplits) {
         printStatus(config.getLogger(), head, newSplits);
     }
 
@@ -908,20 +915,20 @@ public abstract class ActorKeyAggregation<SelfType extends ActorKeyAggregation<S
         ConfigBase.FormatAndArgs fa = toStringStatus(head);
         int color = config.getLogColorDefault();
         out.log(true, color, fa.format, fa.args);
-        if (state instanceof KeyAggregationStateRouter) {
-            KeyAggregationStateRouter sr = (KeyAggregationStateRouter) state;
+        if (state instanceof KelpStateRouter) {
+            KelpStateRouter sr = (KelpStateRouter) state;
             printStatus(sr.getSplit(), out);
         }
     }
 
-    public void printStatus(ActorSystem.SystemLogger out, String head, List<KeyAggregationRoutingSplit> newSplits) {
+    public void printStatus(ActorSystem.SystemLogger out, String head, List<KelpRoutingSplit> newSplits) {
         ConfigBase.FormatAndArgs fa = toStringStatus(head);
         int color = config.getLogColorDefault();
         out.log(true, color, fa.format, fa.args);
         int i = 0;
-        for (KeyAggregationRoutingSplit s : newSplits) {
-            if (s instanceof KeyAggregationRoutingSplit.RoutingSplitLeaf) {
-                ActorRef r = ((KeyAggregationRoutingSplit.RoutingSplitLeaf) s).getActor();
+        for (KelpRoutingSplit s : newSplits) {
+            if (s instanceof KelpRoutingSplit.RoutingSplitLeaf) {
+                ActorRef r = ((KelpRoutingSplit.RoutingSplitLeaf) s).getActor();
                 out.log(true, color, " %d: %s %d:leaf: %s", i, s.getPath(), s.getDepth(), r);
                 ++i;
             }
@@ -930,8 +937,8 @@ public abstract class ActorKeyAggregation<SelfType extends ActorKeyAggregation<S
 
     public ConfigBase.FormatAndArgs toStringStatus(String head) {
         String str = toString();
-        if (state instanceof KeyAggregationStateRouter) {
-            KeyAggregationStateRouter sr = (KeyAggregationStateRouter) state;
+        if (state instanceof KelpStateRouter) {
+            KelpStateRouter sr = (KelpStateRouter) state;
             return logMessage("%s router %s \n" +
                             "   threshold=%,d height=%,d/%,d parallelRouting=%s",
                     head,
@@ -958,7 +965,7 @@ public abstract class ActorKeyAggregation<SelfType extends ActorKeyAggregation<S
     }
 
     public String toStringState() {
-        if (state instanceof KeyAggregationStateRouter) {
+        if (state instanceof KelpStateRouter) {
             return "router";
         } else if (state instanceof StateUnit) {
             return "leaf";
@@ -973,9 +980,9 @@ public abstract class ActorKeyAggregation<SelfType extends ActorKeyAggregation<S
 
     public String toStringMailboxStatus() {
         return String.format("queue=%,d %s",
-                getMailboxAsKeyAggregation().size(),
-                getMailboxAsKeyAggregation().getEntries().stream()
-                        .map(MailboxKeyAggregation.HistogramEntry::getTree)
+                getMailboxAsKelp().size(),
+                getMailboxAsKelp().getEntries().stream()
+                        .map(MailboxKelp.HistogramEntry::getTree)
                         .map(t -> String.format("leaf=%,d nonZeroLeaf=%,d valuesInTree=%,d treeHeight=%,d completed=%,d",
                                 t.getLeafSize(),
                                 t.getLeafSizeNonZero(),
@@ -985,7 +992,7 @@ public abstract class ActorKeyAggregation<SelfType extends ActorKeyAggregation<S
                         .collect(Collectors.joining(", ", "[", "]")));
     }
 
-    protected void printStatus(KeyAggregationRoutingSplit s, ActorSystem.SystemLogger out) {
+    protected void printStatus(KelpRoutingSplit s, ActorSystem.SystemLogger out) {
         String idt = "  ";
         if (s != null) {
             for (int i = 0; i < s.getDepth(); ++i) {
@@ -995,8 +1002,8 @@ public abstract class ActorKeyAggregation<SelfType extends ActorKeyAggregation<S
         int color = config.getLogColorDefault();
         if (s == null) {
             out.log(true, color, "%s null", idt);
-        } else if (s instanceof KeyAggregationRoutingSplit.RoutingSplitNode) {
-            KeyAggregationRoutingSplit.RoutingSplitNode sn = (KeyAggregationRoutingSplit.RoutingSplitNode) s;
+        } else if (s instanceof KelpRoutingSplit.RoutingSplitNode) {
+            KelpRoutingSplit.RoutingSplitNode sn = (KelpRoutingSplit.RoutingSplitNode) s;
             out.log(true, color, "%s %d:node: %s proced=%,d history=%s", idt, sn.getDepth(), Arrays.stream(sn.getSplitPoints())
                 .map(Objects::toString)
                 .map(l -> l.length() > 100 ? l.substring(0, 100) + "..." : l)
@@ -1007,8 +1014,8 @@ public abstract class ActorKeyAggregation<SelfType extends ActorKeyAggregation<S
                     .collect(Collectors.joining(", ", "{", "}")));
             printStatus(sn.getLeft(), out);
             printStatus(sn.getRight(), out);
-        } else if (s instanceof KeyAggregationRoutingSplit.RoutingSplitLeaf) {
-            ActorRef r = ((KeyAggregationRoutingSplit.RoutingSplitLeaf) s).getActor();
+        } else if (s instanceof KelpRoutingSplit.RoutingSplitLeaf) {
+            ActorRef r = ((KelpRoutingSplit.RoutingSplitLeaf) s).getActor();
             out.log(true, color, "%s %d:leaf: proced=%,d %s", idt, s.getDepth(), s.getProcessCount(), r);
         }
     }

@@ -3,7 +3,7 @@ package csl.actor.example.exp.wordcount;
 import csl.actor.ActorSystemDefault;
 import csl.actor.cluster.ConfigDeployment;
 import csl.actor.cluster.MailboxPersistable;
-import csl.actor.keyaggregate.*;
+import csl.actor.kelp.*;
 import csl.actor.remote.ActorSystemRemote;
 import csl.actor.remote.KryoBuilder;
 
@@ -79,7 +79,7 @@ public class KeyHistogramsPersistableLoadTest {
                             src.newSource(pos));
                 }
                 tree = new KeyHistogramsPersistable.HistogramTreePersistable(h,
-                        new ActorBehaviorBuilderKeyAggregation.KeyComparatorDefault<>(), 1000,
+                        new ActorBehaviorBuilderKelp.KeyComparatorDefault<>(), 1000,
                         new KeyHistogramsPersistable.HistogramTreePersistableConfig() {}, pm,
                         new KeyHistogramsPersistable.PersistentConditionHistogramSizeLimit(1, 1));
                 long c = run(h);
@@ -116,8 +116,7 @@ public class KeyHistogramsPersistableLoadTest {
         if (l instanceof KeyHistogramsPersistable.HistogramNodeLeafOnStorage) {
             KeyHistograms.HistogramPutContextMap ctx = new KeyHistograms.HistogramPutContextMap();
             ctx.putTree = tree;
-            al = (KeyHistograms.HistogramNodeLeaf)
-                    ((KeyHistogramsPersistable.HistogramNodeLeafOnStorage) l).load(ctx);
+            al = l.load(ctx);
         }
         long n = l.size();
         long count = 0;

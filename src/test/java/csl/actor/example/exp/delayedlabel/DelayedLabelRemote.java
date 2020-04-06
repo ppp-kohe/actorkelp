@@ -7,7 +7,7 @@ import csl.actor.cluster.ActorPlacement;
 import csl.actor.cluster.PhaseShift;
 import csl.actor.cluster.ResponsiveCalls;
 import csl.actor.example.ExampleRemote;
-import csl.actor.keyaggregate.*;
+import csl.actor.kelp.*;
 import csl.actor.remote.ActorAddress;
 import csl.actor.remote.ActorSystemRemote;
 
@@ -15,7 +15,6 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 
 public class DelayedLabelRemote extends DelayedLabelAggregationReplicable {
     public static void main(String[] args) {
@@ -33,7 +32,7 @@ public class DelayedLabelRemote extends DelayedLabelAggregationReplicable {
         int serverPort = 10000;
         system.startWithoutWait(serverPort);
 
-        ActorPlacementKeyAggregation place = new ActorPlacementKeyAggregation(system,
+        ActorPlacementKelp place = new ActorPlacementKelp(system,
                 new ActorPlacement.PlacementStrategyRoundRobin(0));
 
         List<Process> ps = new ArrayList<>();
@@ -70,7 +69,7 @@ public class DelayedLabelRemote extends DelayedLabelAggregationReplicable {
         LearnerActorAggregationReplicable r = new LearnerRemote(system, out, resultActor, config);
         root = r;
         ResponsiveCalls.sendTask(system, r,
-                CallableMessage.callableMessageConsumer((a) -> ((ActorKeyAggregation) a).routerSplit(3)));
+                CallableMessage.callableMessageConsumer((a) -> ((ActorKelp) a).routerSplit(3)));
         return r;
     }
 
@@ -96,7 +95,7 @@ public class DelayedLabelRemote extends DelayedLabelAggregationReplicable {
             int joinPort = Integer.parseInt(args[1]);
             system.startWithoutWait(port);
 
-            ActorPlacementKeyAggregation p = new ActorPlacementKeyAggregation(system,
+            ActorPlacementKelp p = new ActorPlacementKelp(system,
                 new ActorPlacement.PlacementStrategyUndertaker());
 
             p.join(ActorAddress.get("localhost", joinPort));

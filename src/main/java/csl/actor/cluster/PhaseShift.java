@@ -13,6 +13,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiConsumer;
 
 public class PhaseShift implements CallableMessage.CallableMessageConsumer<Actor> {
+    public static final long serialVersionUID = 1L;
     protected Instant startTime;
     protected Object key;
     protected ActorRef target;
@@ -132,6 +133,7 @@ public class PhaseShift implements CallableMessage.CallableMessageConsumer<Actor
     }
 
     public static class PhaseShiftIntermediate implements CallableMessageConsumer<Actor> {
+        public static final long serialVersionUID = 1L;
         protected Object key;
         protected ActorRef actor;
         protected PhaseShiftIntermediateType type;
@@ -195,6 +197,7 @@ public class PhaseShift implements CallableMessage.CallableMessageConsumer<Actor
     }
 
     public static class PhaseCompleted implements Serializable, CallableMessageConsumer<Actor> {
+        public static final long serialVersionUID = 1L;
         protected Object key;
         protected ActorRef actor;
         protected PhaseShift origin;

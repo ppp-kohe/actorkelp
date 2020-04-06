@@ -1,7 +1,7 @@
-package csl.actor.example.keyaggregate;
+package csl.actor.example.kelp;
 
-import csl.actor.keyaggregate.ActorPlacementKeyAggregation;
-import csl.actor.keyaggregate.ClusterKeyAggregation;
+import csl.actor.kelp.ActorPlacementKelp;
+import csl.actor.kelp.ClusterKelp;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -11,7 +11,7 @@ import java.util.Arrays;
 public class ExampleClusterRemoteDriver {
     public static void main(String[] args) throws Exception {
         String[] path = createConf("target/debug-remote-driver");
-        ClusterKeyAggregation.run(path[1], TestMain.class.getName(), "hello", "world");
+        ClusterKelp.run(path[1], TestMain.class.getName(), "hello", "world");
     }
 
     static String[] createConf(String inputFile) throws Exception {
@@ -68,8 +68,8 @@ public class ExampleClusterRemoteDriver {
 
     public static class TestMain {
         public static void main(String[] args) throws Exception {
-            ClusterKeyAggregation cluster = ClusterKeyAggregation.create();
-            ActorPlacementKeyAggregation place = cluster.deploy(args[0]);
+            ClusterKelp cluster = ClusterKelp.create();
+            ActorPlacementKelp place = cluster.deploy(args[0]);
             System.out.println(place + " : " + Arrays.toString(args));
             Thread.sleep(10_000);
             cluster.shutdownAll();

@@ -41,6 +41,7 @@ public class WordCountStream {
     }
 
     public static class Count implements Serializable {
+        public static final long serialVersionUID = 1L;
         public String word;
         public long count;
 

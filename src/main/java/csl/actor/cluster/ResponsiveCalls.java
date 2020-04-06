@@ -272,6 +272,7 @@ public class ResponsiveCalls {
     }
 
     public static class DeadLetterException extends RuntimeException {
+        public static final long serialVersionUID = 1L;
         protected ActorSystemDefault.DeadLetter letter;
 
         public DeadLetterException(ActorSystemDefault.DeadLetter letter) {

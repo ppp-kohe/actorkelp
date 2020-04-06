@@ -1,9 +1,9 @@
 package csl.actor.example.exp.thread;
 
 import csl.actor.*;
-import csl.actor.example.keyaggregate.DebugBehavior;
-import csl.actor.keyaggregate.ActorBehaviorBuilderKeyAggregation;
-import csl.actor.keyaggregate.KeyHistograms;
+import csl.actor.example.kelp.DebugBehavior;
+import csl.actor.kelp.ActorBehaviorBuilderKelp;
+import csl.actor.kelp.KeyHistograms;
 import csl.actor.cluster.PhaseShift;
 
 import java.util.*;
@@ -238,7 +238,7 @@ public class ExpLock {
         public MapActor(ActorSystem system, ActorRef end) {
             super(system);
             this.end = end;
-            tree = new KeyHistograms.HistogramTree(new ActorBehaviorBuilderKeyAggregation.KeyComparatorDefault<>());
+            tree = new KeyHistograms.HistogramTree(new ActorBehaviorBuilderKelp.KeyComparatorDefault<>());
         }
 
         @Override
@@ -282,7 +282,7 @@ public class ExpLock {
         public LeafActor(ActorSystem system, ActorRef end) {
             super(system);
             this.end = end;
-            tree = new KeyHistograms.HistogramTree(new ActorBehaviorBuilderKeyAggregation.KeyComparatorDefault<>());
+            tree = new KeyHistograms.HistogramTree(new ActorBehaviorBuilderKelp.KeyComparatorDefault<>());
         }
 
         @Override

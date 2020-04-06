@@ -1,8 +1,8 @@
-package csl.actor.example.keyaggregate;
+package csl.actor.example.kelp;
 
 import csl.actor.Actor;
 import csl.actor.cluster.ResponsiveCalls;
-import csl.actor.keyaggregate.*;
+import csl.actor.kelp.*;
 
 import java.io.Serializable;
 import java.util.ArrayList;
@@ -28,15 +28,15 @@ public class KeyHistogramSizeChecker {
         }
     }
 
-    public static KeyHistogramSizeChecker.SizeInfo checkSize(Actor self, KeyAggregationRoutingSplit sp, String path) {
-        if (sp instanceof KeyAggregationRoutingSplit.RoutingSplitNode) {
+    public static KeyHistogramSizeChecker.SizeInfo checkSize(Actor self, KelpRoutingSplit sp, String path) {
+        if (sp instanceof KelpRoutingSplit.RoutingSplitNode) {
             return new KeyHistogramSizeChecker.SizeInfo(path,
-                    checkSize(self, ((KeyAggregationRoutingSplit.RoutingSplitNode) sp).getLeft(), path + "/l"),
-                    checkSize(self, ((KeyAggregationRoutingSplit.RoutingSplitNode) sp).getRight(), path + "/r"));
-        } else if (sp instanceof KeyAggregationRoutingSplit.RoutingSplitLeaf) {
+                    checkSize(self, ((KelpRoutingSplit.RoutingSplitNode) sp).getLeft(), path + "/l"),
+                    checkSize(self, ((KelpRoutingSplit.RoutingSplitNode) sp).getRight(), path + "/r"));
+        } else if (sp instanceof KelpRoutingSplit.RoutingSplitLeaf) {
             try {
                 return ResponsiveCalls.sendTask(self.getSystem(),
-                        ((KeyAggregationRoutingSplit.RoutingSplitLeaf) sp).getActor(),
+                        ((KelpRoutingSplit.RoutingSplitLeaf) sp).getActor(),
                         (a) -> checkSize(a, path)).get(10, TimeUnit.SECONDS);
             } catch (Exception ex) {
                 return new KeyHistogramSizeChecker.SizeInfo(path + "<ERROR:" + ex + ">");
@@ -46,7 +46,7 @@ public class KeyHistogramSizeChecker {
         }
     }
 
-    public static KeyHistogramSizeChecker.SizeInfo checkSizeStart(ActorKeyAggregation self) {
+    public static KeyHistogramSizeChecker.SizeInfo checkSizeStart(ActorKelp<?> self) {
         try {
             Thread.sleep(self.traverseDelayTimeMs() + 100);
         } catch (Exception ex) {
@@ -56,16 +56,16 @@ public class KeyHistogramSizeChecker {
     }
 
     static KeyHistogramSizeChecker.SizeInfo checkSize(Actor a, String path) {
-        if (a instanceof ActorKeyAggregation) {
+        if (a instanceof ActorKelp) {
             List<KeyHistogramSizeChecker.SizeInfo> cs = new ArrayList<>();
 
-            List<MailboxKeyAggregation.HistogramEntry> es = ((ActorKeyAggregation) a).getMailboxAsKeyAggregation().getEntries();
+            List<MailboxKelp.HistogramEntry> es = ((ActorKelp<?>) a).getMailboxAsKelp().getEntries();
             IntStream.range(0, es.size()).mapToObj(i ->
                     checkSize(es.get(i).getTree(), path + "/sp" + i))
                     .forEach(cs::add);
 
-            if (((ActorKeyAggregation) a).getState() instanceof KeyAggregationStateRouter) {
-                KeyAggregationStateRouter r = (KeyAggregationStateRouter) ((ActorKeyAggregation) a).getState();
+            if (((ActorKelp<?>) a).getState() instanceof KelpStateRouter) {
+                KelpStateRouter r = (KelpStateRouter) ((ActorKelp<?>) a).getState();
                 cs.add(checkSize(a, r.getSplit(), path + "/state"));
             }
 
@@ -107,6 +107,7 @@ public class KeyHistogramSizeChecker {
     }
 
     public static class SizeInfo implements Serializable {
+        public static final long serialVersionUID = 1L;
         public String key;
         public long size;
         public List<SizeInfo> children;
@@ -160,9 +161,10 @@ public class KeyHistogramSizeChecker {
         }
     }
 
-    public static class StateSplitRouterSizeDebug extends KeyAggregationStateRouter {
+    @SuppressWarnings("rawtypes")
+    public static class StateSplitRouterSizeDebug extends KelpStateRouter {
         @Override
-        public void split(ActorKeyAggregation self, int height) {
+        public void split(ActorKelp self, int height) {
             SizeInfo before = checkSizeStart(self);
             super.split(self, height);
             SizeInfo after = checkSizeStart(self);
@@ -170,7 +172,7 @@ public class KeyHistogramSizeChecker {
         }
 
         @Override
-        public void splitOrMerge(ActorKeyAggregation self, int height) {
+        public void splitOrMerge(ActorKelp self, int height) {
             SizeInfo before = checkSizeStart(self);
             super.splitOrMerge(self, height);
             SizeInfo after = checkSizeStart(self);
@@ -178,7 +180,7 @@ public class KeyHistogramSizeChecker {
         }
 
         @Override
-        public void mergeInactive(ActorKeyAggregation self) {
+        public void mergeInactive(ActorKelp self) {
             SizeInfo before = checkSizeStart(self);
             super.mergeInactive(self);
             SizeInfo after = checkSizeStart(self);

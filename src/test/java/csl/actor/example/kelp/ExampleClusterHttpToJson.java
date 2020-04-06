@@ -1,4 +1,4 @@
-package csl.actor.example.keyaggregate;
+package csl.actor.example.kelp;
 
 import csl.actor.ActorSystem;
 import csl.actor.ActorSystemDefault;
@@ -6,10 +6,11 @@ import csl.actor.cluster.ClusterCommands;
 import csl.actor.cluster.ClusterDeployment;
 import csl.actor.cluster.ClusterHttp;
 import csl.actor.example.exp.wordcount.WordCount;
-import csl.actor.keyaggregate.ClusterKeyAggregation;
-import csl.actor.keyaggregate.Config;
+import csl.actor.kelp.ClusterKelp;
+import csl.actor.kelp.Config;
 
 public class ExampleClusterHttpToJson {
+    @SuppressWarnings("unchecked")
     public static void main(String[] args) throws Exception {
         ClusterHttp c = new ClusterHttp(new ClusterDeployment<>(
                 Config.class, ClusterDeployment.ActorPlacementForCluster.class));
@@ -22,7 +23,7 @@ public class ExampleClusterHttpToJson {
         WordCount.WordCountMapper m = new WordCount.WordCountMapper(s, "mapper", new Config());
         m.routerSplit(2);
         Thread.sleep(1000);
-        o = c.jsonConverter(Object.class).apply(ClusterKeyAggregation.toStatTree(m));
+        o = c.jsonConverter(Object.class).apply(ClusterKelp.toStatTree(m));
 
         System.err.println(o);
 

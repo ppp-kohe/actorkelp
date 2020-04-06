@@ -1,10 +1,10 @@
-package csl.actor.keyaggregate;
+package csl.actor.kelp;
 
 import csl.actor.ActorRef;
 import csl.actor.Message;
 import csl.actor.cluster.ActorPlacement;
 import csl.actor.cluster.PhaseShift;
-import csl.actor.keyaggregate.KeyAggregationRoutingSplit.SplitOrMergeContextDefault;
+import csl.actor.kelp.KelpRoutingSplit.SplitOrMergeContextDefault;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -12,8 +12,9 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
-public class KeyAggregationStateRouter implements ActorKeyAggregation.State {
-    protected volatile KeyAggregationRoutingSplit split;
+@SuppressWarnings("rawtypes")
+public class KelpStateRouter implements ActorKelp.State {
+    protected volatile KelpRoutingSplit split;
     protected Random random = new Random();
     protected int height = 0;
     protected int maxHeight = -1;
@@ -23,17 +24,17 @@ public class KeyAggregationStateRouter implements ActorKeyAggregation.State {
     protected volatile boolean needClearHistory;
     protected volatile boolean logAfterParallelRouting;
 
-    protected Map<Object, KeyAggregationPhaseEntry> phase = new ConcurrentHashMap<>();
+    protected Map<Object, KelpPhaseEntry> phase = new ConcurrentHashMap<>();
     protected Set<ActorRef> canceled = Collections.synchronizedSet(new HashSet<>());
 
     protected AtomicLong processCount = new AtomicLong();
 
-    public void split(ActorKeyAggregation self, int height) {
+    public void split(ActorKelp self, int height) {
         this.height = height;
         SplitOrMergeContextDefault ctx = new SplitOrMergeContextDefault("split: height=" + height, self);
         if (split == null) { //root
             if (height > 0) {
-                split = self.internalCreateSplitLeaf(ctx, null, self, new KeyAggregationRoutingSplit.SplitPath(), height);
+                split = self.internalCreateSplitLeaf(ctx, null, self, new KelpRoutingSplit.SplitPath(), height);
             }
         } else {
             split = split.split(ctx, height);
@@ -42,7 +43,7 @@ public class KeyAggregationStateRouter implements ActorKeyAggregation.State {
         self.afterSplitOrMerge(ctx);
     }
 
-    public void mergeInactive(ActorKeyAggregation self) {
+    public void mergeInactive(ActorKelp self) {
         SplitOrMergeContextDefault ctx = new SplitOrMergeContextDefault("mergeInactive", self);
         if (split != null) {
             split = split.mergeInactive(ctx);
@@ -52,12 +53,12 @@ public class KeyAggregationStateRouter implements ActorKeyAggregation.State {
         self.afterSplitOrMerge(ctx);
     }
 
-    public void splitOrMerge(ActorKeyAggregation self, int height) {
+    public void splitOrMerge(ActorKelp self, int height) {
         SplitOrMergeContextDefault ctx = new SplitOrMergeContextDefault("splitOrMerge: height=" + height, self);
         this.height = height;
         if (split == null) {
             if (height > 0) {
-                split = self.internalCreateSplitLeaf(ctx, null, self, new KeyAggregationRoutingSplit.SplitPath(), height);
+                split = self.internalCreateSplitLeaf(ctx, null, self, new KelpRoutingSplit.SplitPath(), height);
             }
         } else {
             split = split.splitOrMerge(ctx, height);
@@ -66,11 +67,12 @@ public class KeyAggregationStateRouter implements ActorKeyAggregation.State {
         self.afterSplitOrMerge(ctx);
     }
 
-    protected void mergeSingleRoot(SplitOrMergeContextDefault context, ActorKeyAggregation self) {
-        if (this.height == 0 && split instanceof KeyAggregationRoutingSplit.RoutingSplitLeaf) { //merge single root to the router
-            ActorRef root = ((KeyAggregationRoutingSplit.RoutingSplitLeaf) split).getActor();
-            if (root instanceof ActorKeyAggregation) { //local actor
-                ActorKeyAggregation singleRoot = (ActorKeyAggregation) root;
+    @SuppressWarnings("unchecked")
+    protected void mergeSingleRoot(SplitOrMergeContextDefault context, ActorKelp self) {
+        if (this.height == 0 && split instanceof KelpRoutingSplit.RoutingSplitLeaf) { //merge single root to the router
+            ActorRef root = ((KelpRoutingSplit.RoutingSplitLeaf) split).getActor();
+            if (root instanceof ActorKelp) { //local actor
+                ActorKelp singleRoot = (ActorKelp) root;
                 if (!self.hasRemainingProcesses() && !singleRoot.hasRemainingProcesses()) {
                     self.internalMerge(singleRoot);
                     context.merged(null, split, null);
@@ -81,20 +83,20 @@ public class KeyAggregationStateRouter implements ActorKeyAggregation.State {
     }
 
     @Override
-    public void processMessage(ActorKeyAggregation self, Message<?> message) {
-        MailboxKeyAggregation.MailboxStatus status;
+    public void processMessage(ActorKelp self, Message<?> message) {
+        MailboxKelp.MailboxStatus status;
         if (isNonParallelRouting() &&
-                (status = self.getMailboxAsKeyAggregation().getStatus(self.lowerBoundThresholdFactor())).isExcessive()) {
+                (status = self.getMailboxAsKelp().getStatus(self.lowerBoundThresholdFactor())).isExcessive()) {
 
             int maxHeight = getMaxHeight(self);
-            MailboxKeyAggregation m = self.getMailboxAsKeyAggregation();
+            MailboxKelp m = self.getMailboxAsKelp();
             int size = m.size();
 
-            if (self.routerAutoSplit() && status.equals(MailboxKeyAggregation.MailboxStatus.Exceeded)) {
+            if (self.routerAutoSplit() && status.equals(MailboxKelp.MailboxStatus.Exceeded)) {
                 int h = nextHeight(maxHeight, size, self.minSizeOfEachMailboxSplit());
                 splitAndParallelRouting(self, m, message, h);
-            } else if (self.routerAutoMerge() && split != null && status.equals(MailboxKeyAggregation.MailboxStatus.Few) &&
-                    split.isHistoryExceeded((int) (self.historyExceededLimit()))) {
+            } else if (self.routerAutoMerge() && split != null && status.equals(MailboxKelp.MailboxStatus.Few) &&
+                    split.isHistoryExceeded((self.historyExceededLimit()))) {
                 mergeInactive(self, m, message);
             } else {
                 route(self, m, message, false);
@@ -112,7 +114,7 @@ public class KeyAggregationStateRouter implements ActorKeyAggregation.State {
                     self.printStatus("after parallelRouting");
                 }
             }
-            route(self, self.getMailboxAsKeyAggregation(), message, false);
+            route(self, self.getMailboxAsKelp(), message, false);
         }
     }
 
@@ -120,19 +122,19 @@ public class KeyAggregationStateRouter implements ActorKeyAggregation.State {
         return maxHeight;
     }
 
-    public int getMaxHeight(ActorKeyAggregation self) {
+    public int getMaxHeight(ActorKelp self) {
         if (maxHeight < 0) {
             maxHeight = initMaxHeight(self);
         }
         return maxHeight;
     }
 
-    protected int initMaxHeight(ActorKeyAggregation self) {
+    protected int initMaxHeight(ActorKelp self) {
         int th = getTotalThreads(self, self.getPlacement());
         return Math.max(1, (int) (Math.log(th) / Math.log(2)));
     }
 
-    protected int getTotalThreads(ActorKeyAggregation self, ActorPlacement placement) {
+    protected int getTotalThreads(ActorKelp self, ActorPlacement placement) {
         if (placement instanceof ActorPlacement.ActorPlacementDefault) {
             return ((ActorPlacement.ActorPlacementDefault) placement).getTotalThreads();
         } else {
@@ -152,7 +154,7 @@ public class KeyAggregationStateRouter implements ActorKeyAggregation.State {
         return Math.min(Math.max(height, h), maxHeight);
     }
 
-    protected void splitAndParallelRouting(ActorKeyAggregation self, MailboxKeyAggregation m, Message<?> message,
+    protected void splitAndParallelRouting(ActorKelp self, MailboxKelp m, Message<?> message,
                                            int height) {
         if (m.hasSufficientPoints()) {
             split(self, height);
@@ -163,8 +165,8 @@ public class KeyAggregationStateRouter implements ActorKeyAggregation.State {
         }
     }
 
-    public void startParallelRouting(ActorKeyAggregation self) {
-        int max = Math.min(self.getMailboxAsKeyAggregation().size(), self.maxParallelRouting());
+    public void startParallelRouting(ActorKelp self) {
+        int max = Math.min(self.getMailboxAsKelp().size(), self.maxParallelRouting());
 
         needClearHistory = true;
         logAfterParallelRouting = self.logSplit();
@@ -188,13 +190,14 @@ public class KeyAggregationStateRouter implements ActorKeyAggregation.State {
         }
     }
 
-    protected void mergeInactive(ActorKeyAggregation self, MailboxKeyAggregation m, Message<?> message) {
+    protected void mergeInactive(ActorKelp self, MailboxKelp m, Message<?> message) {
         mergeInactive(self);
         route(self, m, message, false);
     }
 
-    protected void routeRemaining(ActorKeyAggregation self, int max) {
-        MailboxKeyAggregation m = self.getMailboxAsKeyAggregation();
+    @SuppressWarnings("unchecked")
+    protected void routeRemaining(ActorKelp self, int max) {
+        MailboxKelp m = self.getMailboxAsKelp();
         int i = 0;
         List<Message<?>> noRoutingTops = new ArrayList<>(16);
         while (!m.isEmpty() && i < max) {
@@ -215,7 +218,8 @@ public class KeyAggregationStateRouter implements ActorKeyAggregation.State {
         }
     }
 
-    protected void route(ActorKeyAggregation self, MailboxKeyAggregation m, Message<?> message, boolean fromParallelRouting) {
+    @SuppressWarnings("unchecked")
+    protected void route(ActorKelp self, MailboxKelp m, Message<?> message, boolean fromParallelRouting) {
         if (split == null) {
             if (fromParallelRouting) {
                 self.getSystem().send(message);
@@ -224,9 +228,9 @@ public class KeyAggregationStateRouter implements ActorKeyAggregation.State {
                 self.processMessageBehavior(message);
             }
         } else {
-            MailboxKeyAggregation.HistogramSelection selection = m.selectHistogram(message.getData());
+            MailboxKelp.HistogramSelection selection = m.selectHistogram(message.getData());
             Object key = m.extractKey(selection, message);
-            split.process(self, this, key, selection, message, KeyAggregationRoutingSplit.ProcessGuide.InitToLeft);
+            split.process(self, this, key, selection, message, KelpRoutingSplit.ProcessGuide.InitToLeft);
         }
     }
 
@@ -240,7 +244,7 @@ public class KeyAggregationStateRouter implements ActorKeyAggregation.State {
     }
 
     /** @return implementation field getter */
-    public KeyAggregationRoutingSplit getSplit() {
+    public KelpRoutingSplit getSplit() {
         return split;
     }
 
@@ -260,7 +264,7 @@ public class KeyAggregationStateRouter implements ActorKeyAggregation.State {
     }
 
     @Override
-    public boolean processMessagePhase(ActorKeyAggregation self, Message<?> message) {
+    public boolean processMessagePhase(ActorKelp self, Message<?> message) {
         Object val = message.getData();
         if (val instanceof PhaseShift) {
             processMessagePhaseShift(self, message, (PhaseShift) val);
@@ -268,23 +272,23 @@ public class KeyAggregationStateRouter implements ActorKeyAggregation.State {
         } else if (val instanceof PhaseShift.PhaseShiftIntermediate) {
             processMessagePhaseShiftIntermediate(self, message, (PhaseShift.PhaseShiftIntermediate) val);
             return true;
-        } else if (val instanceof ActorKeyAggregation.CancelChange) {
-            processMessageCanceledChange(self, message, (ActorKeyAggregation.CancelChange) val);
+        } else if (val instanceof ActorKelp.CancelChange) {
+            processMessageCanceledChange(self, message, (ActorKelp.CancelChange) val);
             return true;
         } else {
             return false;
         }
     }
 
-    protected void processMessagePhaseShift(ActorKeyAggregation self, Message<?> message, PhaseShift ps) {
+    protected void processMessagePhaseShift(ActorKelp self, Message<?> message, PhaseShift ps) {
         self.logPhase("#phase        start: %s : %s : target=%s", ps.getKey(), self, ps.getTarget());
-        KeyAggregationPhaseEntry e = phase.computeIfAbsent(ps.getKey(), KeyAggregationPhaseEntry::new);
+        KelpPhaseEntry e = phase.computeIfAbsent(ps.getKey(), KelpPhaseEntry::new);
         e.setOriginAndSender(ps, message.getSender());
         e.startRouter(self); //router only delivers to canceled actors without traversal
     }
 
-    protected void processMessagePhaseShiftIntermediate(ActorKeyAggregation self, Message<?> message, PhaseShift.PhaseShiftIntermediate ps) {
-        KeyAggregationPhaseEntry finish = phase.computeIfAbsent(ps.getKey(), KeyAggregationPhaseEntry::new);
+    protected void processMessagePhaseShiftIntermediate(ActorKelp self, Message<?> message, PhaseShift.PhaseShiftIntermediate ps) {
+        KelpPhaseEntry finish = phase.computeIfAbsent(ps.getKey(), KelpPhaseEntry::new);
         if (ps.getActor() == self && ps.getType().equals(PhaseShift.PhaseShiftIntermediateType.PhaseIntermediateFinishLeaf)) {
             self.processPhaseEnd(ps.getKey());
         }
@@ -293,13 +297,13 @@ public class KeyAggregationStateRouter implements ActorKeyAggregation.State {
         }
     }
 
-    protected void processMessagePhaseCleanUp(ActorKeyAggregation self) {
+    protected void processMessagePhaseCleanUp(ActorKelp self) {
         int size = phase.size();
         if (size > 30) {
             List<Object> keys = phase.values().stream()
                     .filter(e -> e.getCompletedTime() != null)
-                    .sorted(Comparator.comparing(KeyAggregationPhaseEntry::getCompletedTime))
-                    .map(KeyAggregationPhaseEntry::getKey)
+                    .sorted(Comparator.comparing(KelpPhaseEntry::getCompletedTime))
+                    .map(KelpPhaseEntry::getKey)
                     .collect(Collectors.toList());
             IntStream.range(0, Math.max(size - 30, 0))
                     .mapToObj(keys::get)
@@ -307,18 +311,18 @@ public class KeyAggregationStateRouter implements ActorKeyAggregation.State {
         }
     }
 
-    protected void processMessageCanceledChange(ActorKeyAggregation self, Message<?> message, ActorKeyAggregation.CancelChange changed) {
+    protected void processMessageCanceledChange(ActorKelp self, Message<?> message, ActorKelp.CancelChange changed) {
         Object data = changed.getData();
         ActorRef canceledActor = changed.getCanceledActor();
-        if (data.equals(ActorKeyAggregation.CanceledChangeType.CancelAdded)) {
+        if (data.equals(ActorKelp.CanceledChangeType.CancelAdded)) {
             canceled.add(canceledActor);
-            canceledActor.tell(new ActorKeyAggregation.CancelChange(canceledActor, ActorKeyAggregation.CanceledChangeType.CancelFinished), self);
-        } else if (data.equals(ActorKeyAggregation.CanceledChangeType.CancelFinished)) {
+            canceledActor.tell(new ActorKelp.CancelChange(canceledActor, ActorKelp.CanceledChangeType.CancelFinished), self);
+        } else if (data.equals(ActorKelp.CanceledChangeType.CancelFinished)) {
             canceled.remove(canceledActor);
         }
     }
 
-    public Map<Object, KeyAggregationPhaseEntry> getPhase() {
+    public Map<Object, KelpPhaseEntry> getPhase() {
         return new HashMap<>(phase);
     }
 

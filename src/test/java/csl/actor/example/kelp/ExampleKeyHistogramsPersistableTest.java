@@ -1,11 +1,11 @@
-package csl.actor.example.keyaggregate;
+package csl.actor.example.kelp;
 
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 import csl.actor.ActorSystemDefault;
-import csl.actor.keyaggregate.ActorBehaviorBuilderKeyAggregation;
-import csl.actor.keyaggregate.KeyHistograms;
-import csl.actor.keyaggregate.KeyHistogramsPersistable;
+import csl.actor.kelp.ActorBehaviorBuilderKelp;
+import csl.actor.kelp.KeyHistograms;
+import csl.actor.kelp.KeyHistogramsPersistable;
 import csl.actor.cluster.MailboxPersistable;
 import csl.actor.remote.KryoBuilder;
 
@@ -61,7 +61,7 @@ public class ExampleKeyHistogramsPersistableTest {
         System.err.println("------------- runPersistTree");
         KeyHistogramsPersistable kh = new KeyHistogramsPersistable(new Conf(Long.MAX_VALUE), new MailboxPersistable.PersistentFileManager("target/debug-persist",
                 new KryoBuilder.SerializerPoolDefault(null), Paths::get, new ActorSystemDefault.SystemLoggerErr()));
-        KeyHistogramsPersistable.HistogramTreePersistable tree = kh.create(new ActorBehaviorBuilderKeyAggregation.KeyComparatorDefault<>(), 3);
+        KeyHistogramsPersistable.HistogramTreePersistable tree = kh.create(new ActorBehaviorBuilderKelp.KeyComparatorDefault<>(), 3);
 
         KeyHistograms.HistogramPutContextMap ctx = new KeyHistograms.HistogramPutContextMap();
         input(tree, ctx);
@@ -81,7 +81,7 @@ public class ExampleKeyHistogramsPersistableTest {
         System.err.println("------------- runPersistLargeLeaves");
         KeyHistogramsPersistable kh = new KeyHistogramsPersistable(new Conf(Long.MAX_VALUE), new MailboxPersistable.PersistentFileManager("target/debug-persist",
                 new KryoBuilder.SerializerPoolDefault(null), Paths::get, new ActorSystemDefault.SystemLoggerErr()));
-        KeyHistogramsPersistable.HistogramTreePersistable tree = kh.create(new ActorBehaviorBuilderKeyAggregation.KeyComparatorDefault<>(), 3);
+        KeyHistogramsPersistable.HistogramTreePersistable tree = kh.create(new ActorBehaviorBuilderKelp.KeyComparatorDefault<>(), 3);
 
         KeyHistograms.HistogramPutContextMap ctx = new KeyHistograms.HistogramPutContextMap();
         input(tree, ctx);
@@ -94,7 +94,7 @@ public class ExampleKeyHistogramsPersistableTest {
         System.err.println("------------- runAuto");
         KeyHistogramsPersistable kh = new KeyHistogramsPersistable(new Conf(1000), new MailboxPersistable.PersistentFileManager("target/debug-persist",
                 new KryoBuilder.SerializerPoolDefault(null), Paths::get, new ActorSystemDefault.SystemLoggerErr()));
-        KeyHistogramsPersistable.HistogramTreePersistable tree = kh.create(new ActorBehaviorBuilderKeyAggregation.KeyComparatorDefault<>(), 3);
+        KeyHistogramsPersistable.HistogramTreePersistable tree = kh.create(new ActorBehaviorBuilderKelp.KeyComparatorDefault<>(), 3);
 
         KeyHistograms.HistogramPutContextMap ctx = new KeyHistograms.HistogramPutContextMap();
         input(tree, ctx);
@@ -115,7 +115,7 @@ public class ExampleKeyHistogramsPersistableTest {
         KryoBuilder.SerializerPool sp = new KryoBuilder.SerializerPoolDefault(null);
         KeyHistogramsPersistable kh = new KeyHistogramsPersistable(new Conf(1000), new MailboxPersistable.PersistentFileManager("target/debug-persist",
                 sp, Paths::get, new ActorSystemDefault.SystemLoggerErr()));
-        KeyHistogramsPersistable.HistogramTreePersistable tree = kh.create(new ActorBehaviorBuilderKeyAggregation.KeyComparatorDefault<>(), 3);
+        KeyHistogramsPersistable.HistogramTreePersistable tree = kh.create(new ActorBehaviorBuilderKelp.KeyComparatorDefault<>(), 3);
 
         KeyHistograms.HistogramPutContextMap ctx = new KeyHistograms.HistogramPutContextMap();
         input(tree, ctx);

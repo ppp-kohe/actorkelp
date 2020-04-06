@@ -1,4 +1,4 @@
-package csl.actor.keyaggregate;
+package csl.actor.kelp;
 
 import csl.actor.*;
 import csl.actor.cluster.ClusterDeployment;
@@ -17,21 +17,22 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
-public class ActorPlacementKeyAggregation extends ClusterDeployment.ActorPlacementForCluster<Config> {
+@SuppressWarnings("rawtypes")
+public class ActorPlacementKelp extends ClusterDeployment.ActorPlacementForCluster<Config> {
 
-    public ActorPlacementKeyAggregation(ActorSystem system, String name) {
+    public ActorPlacementKelp(ActorSystem system, String name) {
         super(system, name);
     }
 
-    public ActorPlacementKeyAggregation(ActorSystem system) {
+    public ActorPlacementKelp(ActorSystem system) {
         super(system);
     }
 
-    public ActorPlacementKeyAggregation(ActorSystem system, String name, PlacementStrategy strategy) {
+    public ActorPlacementKelp(ActorSystem system, String name, PlacementStrategy strategy) {
         super(system, name, strategy);
     }
 
-    public ActorPlacementKeyAggregation(ActorSystem system, PlacementStrategy strategy) {
+    public ActorPlacementKelp(ActorSystem system, PlacementStrategy strategy) {
         super(system, strategy);
     }
 
@@ -44,23 +45,23 @@ public class ActorPlacementKeyAggregation extends ClusterDeployment.ActorPlaceme
     public Serializable toSerializable(Actor a, long num, Serializable previous, ActorAddress.ActorAddressRemoteActor target) {
         if (previous != null) {
             return previous;
-        } else if (a instanceof ActorKeyAggregation) {
-             return ((ActorKeyAggregation) a).toSerializable(num);
+        } else if (a instanceof ActorKelp) {
+             return ((ActorKelp) a).toSerializable(num);
         } else {
             return null;
         }
     }
 
-    protected ActorKeyAggregation.ActorKeyAggregationSerializable withConfig(ActorAddress target, ActorKeyAggregation.ActorKeyAggregationSerializable s) {
+    protected ActorKelp.ActorKelpSerializable withConfig(ActorAddress target, ActorKelp.ActorKelpSerializable s) {
         s.config = remoteConfig.getOrDefault(target.getHostAddress(), s.config);
         return s;
     }
 
     @Override
     public Actor fromSerializable(Serializable s, long num) {
-        if (s instanceof ActorKeyAggregation.ActorKeyAggregationSerializable) {
+        if (s instanceof ActorKelp.ActorKelpSerializable) {
             try {
-                ActorKeyAggregation.ActorKeyAggregationSerializable state = (ActorKeyAggregation.ActorKeyAggregationSerializable) s;
+                ActorKelp.ActorKelpSerializable state = (ActorKelp.ActorKelpSerializable) s;
                 state = withConfig(getSelfAddress().getHostAddress(), state);
                 Actor a = state.create(getSystem(), num);
                 getSystem().send(new Message.MessageNone(a));
@@ -85,7 +86,7 @@ public class ActorPlacementKeyAggregation extends ClusterDeployment.ActorPlaceme
     }
 
     public CompletableFuture<?> connectStage(ActorRef... stageActors) {
-        return composeChain(null, ActorKeyAggregation::setNextStage, stageActors);
+        return composeChain(null, ActorKelp::setNextStage, stageActors);
     }
 
     public CompletableFuture<?> splitStage(CompletableFuture<?> prevTask, ActorRef... stageActors) {
@@ -103,12 +104,12 @@ public class ActorPlacementKeyAggregation extends ClusterDeployment.ActorPlaceme
         CompletableFuture<?> f = prevTask;
         for (ActorRef next : actors) {
             if (f != null) {
-                if (next instanceof ActorKeyAggregation) {
-                    ActorKeyAggregation nextActor = (ActorKeyAggregation) next;
+                if (next instanceof ActorKelp) {
+                    ActorKelp nextActor = (ActorKelp) next;
                     f = f.thenCompose((_v) -> task.apply(nextActor));
                 } else {
                     ActorSystem system = getSystem();
-                    f = f.thenCompose((_v) -> ResponsiveCalls.<ActorKeyAggregation>sendTaskConsumer(system, next, (a) -> {
+                    f = f.thenCompose((_v) -> ResponsiveCalls.<ActorKelp>sendTaskConsumer(system, next, (a) -> {
                         try {
                             task.apply(a).get();
                         } catch (Exception ex) {
@@ -126,8 +127,8 @@ public class ActorPlacementKeyAggregation extends ClusterDeployment.ActorPlaceme
         CompletableFuture<?> f = prevTask;
         for (ActorRef next : stageActors) {
             if (prev != null) {
-                if (prev instanceof ActorKeyAggregation) {
-                    ActorKeyAggregation prevActor = (ActorKeyAggregation) prev;
+                if (prev instanceof ActorKelp) {
+                    ActorKelp prevActor = (ActorKelp) prev;
                     if (f != null) {
                         f = f.thenCompose((_v) -> task.apply(prevActor, next));
                     } else {
@@ -138,10 +139,10 @@ public class ActorPlacementKeyAggregation extends ClusterDeployment.ActorPlaceme
                     ActorRef prevActor = prev;
                     if (f != null) {
                         f = f.thenCompose((_v) -> ResponsiveCalls.sendTask(system, prevActor, (a) ->
-                                task.apply((ActorKeyAggregation) a, next)));
+                                task.apply((ActorKelp) a, next)));
                     } else {
                         f = ResponsiveCalls.sendTask(system, prevActor, (a) ->
-                                task.apply((ActorKeyAggregation) a, next));
+                                task.apply((ActorKelp) a, next));
                     }
                 }
             }
@@ -152,12 +153,12 @@ public class ActorPlacementKeyAggregation extends ClusterDeployment.ActorPlaceme
 
     @FunctionalInterface
     public interface Task extends Serializable {
-        CompletableFuture<?> apply(ActorKeyAggregation prev);
+        CompletableFuture<?> apply(ActorKelp prev);
     }
 
     @FunctionalInterface
     public interface TaskChain extends Serializable {
-        CompletableFuture<?> apply(ActorKeyAggregation prev, ActorRef next);
+        CompletableFuture<?> apply(ActorKelp prev, ActorRef next);
     }
 
     public FileMapper fileMapper(FileSplitter splitter) {
@@ -174,23 +175,23 @@ public class ActorPlacementKeyAggregation extends ClusterDeployment.ActorPlaceme
                 ConfigDeployment.getPathModifier(getSystem())));
     }
 
-    public ActorKeyAggregationOneShot actor(String name, InitBuilder builderFunction) {
-        return new ActorKeyAggregationOneShot(getSystem(), name, getMasterConfig(), builderFunction);
+    public ActorKelpOneShot actor(String name, InitBuilder builderFunction) {
+        return new ActorKelpOneShot(getSystem(), name, getMasterConfig(), builderFunction);
     }
 
     public interface InitBuilder extends Serializable {
-        void build(ActorKeyAggregationOneShot self, ActorBehaviorBuilderKeyAggregation builder);
+        void build(ActorKelpOneShot self, ActorBehaviorBuilderKelp builder);
     }
 
-    public static class ActorKeyAggregationOneShot extends ActorKeyAggregation<ActorKeyAggregationOneShot> {
+    public static class ActorKelpOneShot extends ActorKelp<ActorKelpOneShot> {
         protected InitBuilder builder;
         protected LineWriter writer;
 
-        public ActorKeyAggregationOneShot(ActorSystem system, String name, Config config) {
+        public ActorKelpOneShot(ActorSystem system, String name, Config config) {
             super(system, name, config);
         }
 
-        public ActorKeyAggregationOneShot(ActorSystem system, String name, Config config, InitBuilder builder) {
+        public ActorKelpOneShot(ActorSystem system, String name, Config config, InitBuilder builder) {
             super(system, name, config);
             this.builder = builder;
             initBuilderFromBuilder();
@@ -210,7 +211,7 @@ public class ActorPlacementKeyAggregation extends ClusterDeployment.ActorPlaceme
         }
 
         protected void initBuilderFromBuilder() {
-            ActorBehaviorBuilderKeyAggregation b = behaviorBuilder();
+            ActorBehaviorBuilderKelp b = behaviorBuilder();
             builder.build(this, b);
             behavior = b.build();
         }
@@ -226,7 +227,7 @@ public class ActorPlacementKeyAggregation extends ClusterDeployment.ActorPlaceme
         }
 
         @Override
-        protected void initClone(ActorKeyAggregationOneShot original) {
+        protected void initClone(ActorKelpOneShot original) {
             super.initClone(original);
             initBuilderFromBuilder();
             LineWriter w = original.writer;
@@ -251,6 +252,7 @@ public class ActorPlacementKeyAggregation extends ClusterDeployment.ActorPlaceme
     }
 
     public static class OneShotState implements Serializable {
+        public static final long serialVersionUID = 1L;
         public InitBuilder builder;
         public LineWriter writer;
 
@@ -269,33 +271,34 @@ public class ActorPlacementKeyAggregation extends ClusterDeployment.ActorPlaceme
     public static String DEFAULT_SUFFIX = ".txt";
 
     public static class LineWriter implements Serializable {
+        public static final long serialVersionUID = 1L;
         protected String prefix;
         protected String suffix;
         protected transient String path;
         protected transient Path expandedPath;
         protected transient PrintWriter writer;
         protected transient ScheduledFuture<?> flushTask;
-        protected transient ActorKeyAggregation owner;
+        protected transient ActorKelp owner;
 
-        public LineWriter(ActorKeyAggregation owner) {
+        public LineWriter(ActorKelp owner) {
             this(DEFAULT_PREFIX, DEFAULT_SUFFIX, owner);
         }
 
-        public LineWriter(String prefix, String suffix, ActorKeyAggregation owner) {
+        public LineWriter(String prefix, String suffix, ActorKelp owner) {
             this.prefix = prefix;
             this.suffix = suffix;
             this.owner = owner;
         }
 
-        public LineWriter copy(ActorKeyAggregation owner) {
+        public LineWriter copy(ActorKelp owner) {
             return new LineWriter(prefix, suffix, owner);
         }
 
-        public void setOwner(ActorKeyAggregation owner) {
+        public void setOwner(ActorKelp owner) {
             this.owner = owner;
         }
 
-        public ActorKeyAggregation getOwner() {
+        public ActorKelp getOwner() {
             return owner;
         }
 
@@ -336,7 +339,7 @@ public class ActorPlacementKeyAggregation extends ClusterDeployment.ActorPlaceme
         }
 
         protected void init() throws Exception {
-            ActorKeyAggregation self = owner;
+            ActorKelp self = owner;
             path = getPath(self);
             expandedPath = ConfigDeployment.getPathModifier(self.getSystem()).getExpanded(path);
             Path parent = expandedPath.getParent();
@@ -352,7 +355,7 @@ public class ActorPlacementKeyAggregation extends ClusterDeployment.ActorPlaceme
 
         }
 
-        protected ScheduledFuture<?> initFlushTask(ActorKeyAggregation self) {
+        protected ScheduledFuture<?> initFlushTask(ActorKelp self) {
             return self.getSystem().getScheduledExecutor().scheduleAtFixedRate(() ->
                     self.tell(CallableMessage.callableMessageConsumer((a) -> this.flush())), 3, 3, TimeUnit.SECONDS);
         }
@@ -363,7 +366,7 @@ public class ActorPlacementKeyAggregation extends ClusterDeployment.ActorPlaceme
             }
         }
 
-        public String getPath(ActorKeyAggregation self) {
+        public String getPath(ActorKelp self) {
             return prefix + self.getOutputFileHeader() + suffix;
         }
 

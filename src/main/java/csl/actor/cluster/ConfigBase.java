@@ -18,6 +18,7 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 public class ConfigBase implements Serializable, ClusterHttp.ToJson {
+    public static final long serialVersionUID = 1L;
     protected transient ActorSystem.SystemLogger logger;
 
     public static <ConfType extends ConfigBase> ConfType readConfig(Class<ConfType> type, Map<Object, Object> properties) {

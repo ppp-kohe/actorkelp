@@ -1,8 +1,8 @@
 package csl.actor.example.exp.wordcount;
 
-import csl.actor.keyaggregate.ActorPlacementKeyAggregation;
-import csl.actor.keyaggregate.ClusterKeyAggregation;
-import csl.actor.keyaggregate.FileMapper;
+import csl.actor.kelp.ActorPlacementKelp;
+import csl.actor.kelp.ClusterKelp;
+import csl.actor.kelp.FileMapper;
 
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -11,11 +11,11 @@ import java.util.function.Function;
 
 public class WordCountOneShot {
     public static void main(String[] args) throws Exception {
-        ClusterKeyAggregation cluster = ClusterKeyAggregation.create();
-        ActorPlacementKeyAggregation place = cluster.deploy(args[0]);
+        ClusterKelp cluster = ClusterKelp.create();
+        ActorPlacementKelp place = cluster.deploy(args[0]);
         FileMapper fileMapper = place.fileMapperWithSplitCount(10);
 
-        ActorPlacementKeyAggregation.ActorKeyAggregationOneShot reducer;
+        ActorPlacementKelp.ActorKelpOneShot reducer;
         place.connectStage(fileMapper,
                 place.actor("mapper", (self, builder) ->
                         builder.match(String.class, line -> Arrays.stream(line.split("\\W+"))
@@ -56,8 +56,8 @@ public class WordCountOneShot {
             String dir = inFile.getParent().toString();
             String debugFlag = "false";
 
-            ClusterKeyAggregation d = ClusterKeyAggregation.create();
-            ClusterKeyAggregation.run(Arrays.asList(d.master()
+            ClusterKelp d = ClusterKelp.create();
+            ClusterKelp.run(Arrays.asList(d.master()
                             .edit(c -> c.getDeploymentConfig().baseDir = dir)
                             .edit(c -> c.getAppConfig().routerAutoMerge = false)
                             .edit(c -> c.getDeploymentConfig().httpHost = "0.0.0.0"),

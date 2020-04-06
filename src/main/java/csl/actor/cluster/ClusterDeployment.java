@@ -67,6 +67,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
      * starts cluster as remote-driver mode
      * @param args {configFilePath, masterMainType, masterMainArgs}
      */
+    @SuppressWarnings("unchecked")
     public static void main(String[] args) throws Exception {
         new ClusterDeployment<>(ConfigBase.class, ActorPlacementForCluster.class)
                 .runAsRemoteDriver(args);
@@ -268,6 +269,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
     }
 
     @SafeVarargs
+    @SuppressWarnings("varargs")
     public final PlaceType deploy(ClusterCommands.ClusterUnit<AppConfType>... units) {
         try {
             return deploy(Arrays.asList(units));
@@ -868,6 +870,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
     }
 
     public static class ConfigSet implements Serializable, KryoSerializable {
+        public static final long serialVersionUID = 1L;
         public Map<ActorAddress, ? extends ConfigBase> remoteConfig;
 
         public ConfigSet() {}
@@ -901,6 +904,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
     }
 
     public static class ClusterStats implements Serializable, ClusterHttp.ToJson {
+        public static final long serialVersionUID = 1L;
         public String appName;
         public Class<? extends ConfigBase> defaultConfType;
         public Class<?> nodeMainType;
@@ -981,6 +985,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
     }
 
     public static class ShutdownTask implements CallableMessage<ActorPlacement.ActorPlacementDefault, String> {
+        public static final long serialVersionUID = 1L;
         @Override
         public String call(ActorPlacement.ActorPlacementDefault self) {
             self.close();
@@ -1205,6 +1210,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
     }
 
     public static class SystemStats implements Serializable, ClusterHttp.ToJson {
+        public static final long serialVersionUID = 1L;
         public int throughput;
         public int threads;
         public String systemToString;
@@ -1231,6 +1237,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
     }
 
     public static class NetworkStats implements Serializable, ClusterHttp.ToJson {
+        public static final long serialVersionUID = 1L;
         public ActorAddress address;
         public long count;
         public long messages;

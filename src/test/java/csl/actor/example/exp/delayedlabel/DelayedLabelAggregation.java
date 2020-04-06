@@ -2,8 +2,8 @@ package csl.actor.example.exp.delayedlabel;
 
 import csl.actor.*;
 import csl.actor.cluster.PhaseShift;
-import csl.actor.example.keyaggregate.ActorToGraph;
-import csl.actor.keyaggregate.*;
+import csl.actor.example.kelp.ActorToGraph;
+import csl.actor.kelp.*;
 
 import java.io.File;
 import java.util.HashMap;
@@ -19,7 +19,7 @@ public class DelayedLabelAggregation extends DelayedLabelManual {
         return new LernerActorAggregation(system, out, resultActor, config.instances);
     }
 
-    public static class LernerActorAggregation extends ActorKeyAggregation<LernerActorAggregation> {
+    public static class LernerActorAggregation extends ActorKelp<LernerActorAggregation> {
         LearnerAggregationSupport support;
 
         public LernerActorAggregation(ActorSystem system, String name, ActorSystem.SystemLogger out, ActorRef resultActor, int numInstances) {
@@ -71,10 +71,10 @@ public class DelayedLabelAggregation extends DelayedLabelManual {
         public long count = 0;
         public static AtomicLong pruneCount = new AtomicLong();
 
-        public ActorKeyAggregation self;
-        public ActorKeyAggregation root;
+        public ActorKelp<?> self;
+        public ActorKelp<?> root;
 
-        public LearnerAggregationSupport(ActorKeyAggregation self, ActorSystem.SystemLogger out, ActorRef resultActor, int numInstances) {
+        public LearnerAggregationSupport(ActorKelp<?> self, ActorSystem.SystemLogger out, ActorRef resultActor, int numInstances) {
             this.self = self;
             this.root = self;
             model = new LearnerModel(resultActor);
@@ -82,7 +82,7 @@ public class DelayedLabelAggregation extends DelayedLabelManual {
             this.out = out;
         }
 
-        public LearnerAggregationSupport createClone(ActorKeyAggregation self) {
+        public LearnerAggregationSupport createClone(ActorKelp<?> self) {
             LearnerAggregationSupport l = new LearnerAggregationSupport(self, out, model.resultActor, numInstances);
             l.model.model = new HashMap<>(model.model);
             l.model.numSamples = model.numSamples;
@@ -95,7 +95,7 @@ public class DelayedLabelAggregation extends DelayedLabelManual {
         }
 
         public void processMessageBefore(Message<?> message) {
-            pruneCount.addAndGet(self.getMailboxAsKeyAggregation().prune(32, 0.5));
+            pruneCount.addAndGet(self.getMailboxAsKelp().prune(32, 0.5));
             process();
         }
 
@@ -117,7 +117,7 @@ public class DelayedLabelAggregation extends DelayedLabelManual {
         }
 
         public void finish() {
-            KeyHistograms.HistogramTree tree = self.getMailboxAsKeyAggregation().getHistogram(0);
+            KeyHistograms.HistogramTree tree = self.getMailboxAsKelp().getHistogram(0);
             out.log(String.format("#prune-count: %,d : leaf=%,d, non-zero-leaf=%,d : %04f",
                     pruneCount.get(), tree.getLeafSize(), tree.getLeafSizeNonZero(), tree.getLeafSizeNonZeroRate()));
             out.log(String.format("#debug-free-memory: %,d bytes",

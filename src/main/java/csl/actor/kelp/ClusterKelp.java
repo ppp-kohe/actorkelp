@@ -1,4 +1,4 @@
-package csl.actor.keyaggregate;
+package csl.actor.kelp;
 
 import csl.actor.Actor;
 import csl.actor.ActorRef;
@@ -15,42 +15,43 @@ import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-public class ClusterKeyAggregation extends ClusterDeployment<Config, ActorPlacementKeyAggregation> {
+@SuppressWarnings("rawtypes")
+public class ClusterKelp extends ClusterDeployment<Config, ActorPlacementKelp> {
 
     public static void main(String[] args) throws Exception {
-        ClusterKeyAggregation.create()
+        ClusterKelp.create()
                 .runAsRemoteDriver(args);
     }
 
     public static void run(String configFile, String mainType, String... args) throws Exception {
-        ClusterKeyAggregation.create()
+        ClusterKelp.create()
                 .runAsRemoteDriver(configFile, mainType, Arrays.asList(args));
     }
 
     public static void run(List<ClusterCommands.ClusterUnit<Config>> units, String mainType, String... args) throws Exception {
-        ClusterKeyAggregation.create()
+        ClusterKelp.create()
                 .runAsRemoteDriver(units, mainType, Arrays.asList(args));
     }
 
-    public static ClusterKeyAggregation create() {
-        return new ClusterKeyAggregation();
+    public static ClusterKelp create() {
+        return new ClusterKelp();
     }
 
-    public static ClusterKeyAggregation createWithAttachKryoBuilderType(Class<? extends KryoBuilder> cls) {
-        ClusterKeyAggregation c = create();
+    public static ClusterKelp createWithAttachKryoBuilderType(Class<? extends KryoBuilder> cls) {
+        ClusterKelp c = create();
         c.setAttachKryoBuilderType(cls.getName());
         return c;
     }
 
-    public ClusterKeyAggregation() {
-        super(Config.class, ActorPlacementKeyAggregation.class);
+    public ClusterKelp() {
+        super(Config.class, ActorPlacementKelp.class);
     }
 
-    public ClusterKeyAggregation(Class<Config> defaultConfType, Class<ActorPlacementKeyAggregation> placeType) {
+    public ClusterKelp(Class<Config> defaultConfType, Class<ActorPlacementKelp> placeType) {
         super(defaultConfType, placeType);
     }
 
-    public <T> T placeGetForActor(ActorRef actor, CallableMessage<ActorPlacementKeyAggregation, T> getter) {
+    public <T> T placeGetForActor(ActorRef actor, CallableMessage<ActorPlacementKelp, T> getter) {
         if (actor instanceof ActorRefRemote) {
             ActorAddress.ActorAddressRemote host = ((ActorRefRemote) actor).getAddress().getHostAddress();
             return placeGet(host, getter);
@@ -69,8 +70,8 @@ public class ClusterKeyAggregation extends ClusterDeployment<Config, ActorPlacem
         return getSplit(actor, parsePath(path));
     }
 
-    public KeyAggregationRoutingSplit.SplitPath parsePath(String path) {
-        KeyAggregationRoutingSplit.SplitPath p = new KeyAggregationRoutingSplit.SplitPath();
+    public KelpRoutingSplit.SplitPath parsePath(String path) {
+        KelpRoutingSplit.SplitPath p = new KelpRoutingSplit.SplitPath();
         for (char c : path.toCharArray()) {
             boolean b = (c == '1');
             p = p.add(b);
@@ -78,7 +79,7 @@ public class ClusterKeyAggregation extends ClusterDeployment<Config, ActorPlacem
         return p;
     }
 
-    public RouterSplitStat getSplit(ActorRef actor, KeyAggregationRoutingSplit.SplitPath path) {
+    public RouterSplitStat getSplit(ActorRef actor, KelpRoutingSplit.SplitPath path) {
         return placeGetForActor(actor, a -> new RouterSplitStat().set(actor.asLocal(), path));
     }
 
@@ -89,22 +90,22 @@ public class ClusterKeyAggregation extends ClusterDeployment<Config, ActorPlacem
 
     public static Map<String, RouterSplitStat> toStatTree(Actor a) {
         Map<String, RouterSplitStat> router = new LinkedHashMap<>();
-        if (a instanceof ActorKeyAggregation) {
-            ActorKeyAggregation.State state = ((ActorKeyAggregation) a).getState();
-            if (state instanceof KeyAggregationStateRouter) {
-                toStatTree(router, ((KeyAggregationStateRouter) state).getSplit(),
-                        new KeyAggregationRoutingSplit.SplitPath());
+        if (a instanceof ActorKelp) {
+            ActorKelp.State state = ((ActorKelp) a).getState();
+            if (state instanceof KelpStateRouter) {
+                toStatTree(router, ((KelpStateRouter) state).getSplit(),
+                        new KelpRoutingSplit.SplitPath());
             }
         }
         return router;
     }
 
-    public static void toStatTree(Map<String, RouterSplitStat> map, KeyAggregationRoutingSplit split, KeyAggregationRoutingSplit.SplitPath path) {
+    public static void toStatTree(Map<String, RouterSplitStat> map, KelpRoutingSplit split, KelpRoutingSplit.SplitPath path) {
         if (split != null) {
             RouterSplitStat s = new RouterSplitStat().setSplit(split, path);
             map.put(s.getPathString(), s);
-            if (split instanceof KeyAggregationRoutingSplit.RoutingSplitNode) {
-                KeyAggregationRoutingSplit.RoutingSplitNode node = (KeyAggregationRoutingSplit.RoutingSplitNode) split;
+            if (split instanceof KelpRoutingSplit.RoutingSplitNode) {
+                KelpRoutingSplit.RoutingSplitNode node = (KelpRoutingSplit.RoutingSplitNode) split;
                 toStatTree(map, node.getLeft(), path.add(true));
                 toStatTree(map, node.getRight(), path.add(false));
             }
@@ -113,7 +114,7 @@ public class ClusterKeyAggregation extends ClusterDeployment<Config, ActorPlacem
 
     @PropertyInterface("router-split")
     public CompletableFuture<?> routerSplit(ActorRef actor, int height) {
-        return ResponsiveCalls.<ActorKeyAggregation>sendTaskConsumer(getSystem(), actor,
+        return ResponsiveCalls.<ActorKelp>sendTaskConsumer(getSystem(), actor,
                 a -> awaits(a.routerSplit(height)));
     }
 
@@ -127,18 +128,19 @@ public class ClusterKeyAggregation extends ClusterDeployment<Config, ActorPlacem
 
     @PropertyInterface("router-merge-inactive")
     public CompletableFuture<?> routerMergeInactive(ActorRef actor) {
-        return ResponsiveCalls.<ActorKeyAggregation>sendTaskConsumer(getSystem(), actor,
+        return ResponsiveCalls.<ActorKelp>sendTaskConsumer(getSystem(), actor,
                 a -> awaits(a.routerMergeInactive()));
     }
 
     @PropertyInterface("router-split-or-merge")
     public CompletableFuture<?> routerSplitOrMerge(ActorRef actor, int height) {
-        return ResponsiveCalls.<ActorKeyAggregation>sendTaskConsumer(getSystem(), actor,
+        return ResponsiveCalls.<ActorKelp>sendTaskConsumer(getSystem(), actor,
                 a -> awaits(a.routerSplitOrMerge(height)));
     }
 
 
     public static class ActorStat implements Serializable, ClusterHttp.ToJson {
+        public static final long serialVersionUID = 1L;
         public ActorRef ref;
         public String name;
         public String className;
@@ -166,13 +168,13 @@ public class ClusterKeyAggregation extends ClusterDeployment<Config, ActorPlacem
             if (actor != null) {
                 name = actor.getName();
                 className = actor.getClass().getName();
-                if (actor instanceof ActorKeyAggregation) {
-                    ActorKeyAggregation a = (ActorKeyAggregation) actor;
+                if (actor instanceof ActorKelp) {
+                    ActorKelp a = (ActorKelp) actor;
 
                     MailboxPersistable.PersistentFileManager m = MailboxPersistable.getPersistentFile(a.getSystem(), a::persistMailboxPath);
                     outputFileHeader = m.getPathModifier().expandPath(a.getOutputFileHeader());
 
-                    setMailbox(a, a.getMailboxAsKeyAggregation());
+                    setMailbox(a, a.getMailboxAsKelp());
                     setState(a.getState());
                 } else if (actor instanceof PhaseShift.PhaseTerminalActor) {
                     stateType = "phaseTerminal";
@@ -193,21 +195,21 @@ public class ClusterKeyAggregation extends ClusterDeployment<Config, ActorPlacem
             return this;
         }
 
-        public void setMailbox(ActorKeyAggregation actor, MailboxKeyAggregation mailbox) {
+        public void setMailbox(ActorKelp actor, MailboxKelp mailbox) {
             mailboxSize = mailbox.size();
             mailboxPersistable = mailbox.getMailbox() instanceof MailboxPersistable;
             mailboxThreshold = mailbox.getThreshold();
 
             histograms = new ArrayList<>(mailbox.getEntrySize());
-            for (MailboxKeyAggregation.HistogramEntry e : mailbox.getEntries()) {
+            for (MailboxKelp.HistogramEntry e : mailbox.getEntries()) {
                 histograms.add(new HistogramStat().set(actor, mailbox, e));
             }
         }
 
-        public void setState(ActorKeyAggregation.State state) {
-            if (state instanceof KeyAggregationStateRouter) {
+        public void setState(ActorKelp.State state) {
+            if (state instanceof KelpStateRouter) {
                 stateType = "router";
-                KeyAggregationStateRouter router = (KeyAggregationStateRouter) state;
+                KelpStateRouter router = (KelpStateRouter) state;
                 processCount = state.getProcessCount();
                 maxHeight = router.getMaxHeight();
                 height = router.getHeight();
@@ -217,11 +219,11 @@ public class ClusterKeyAggregation extends ClusterDeployment<Config, ActorPlacem
                     .map(v -> new PhaseStat().set(v))
                     .collect(Collectors.toList());
 
-            } else if (state instanceof ActorKeyAggregation.StateUnit) {
+            } else if (state instanceof ActorKelp.StateUnit) {
                 stateType = "unit";
                 processCount = state.getProcessCount();
 
-            } else if (state instanceof ActorKeyAggregation.StateCanceled) {
+            } else if (state instanceof ActorKelp.StateCanceled) {
                 stateType = "canceled";
                 processCount = state.getProcessCount();
 
@@ -252,13 +254,14 @@ public class ClusterKeyAggregation extends ClusterDeployment<Config, ActorPlacem
     }
 
     public static class PhaseStat implements Serializable, ClusterHttp.ToJson {
+        public static final long serialVersionUID = 1L;
         public Object key;
         public Instant startTime;
         public Instant endTime;
         public ActorRef target;
         public Map<ActorRef, Boolean> finished;
 
-        public PhaseStat set(KeyAggregationPhaseEntry e) {
+        public PhaseStat set(KelpPhaseEntry e) {
             key = e.getKey();
             startTime = e.getOrigin().getStartTime();
             target = e.getOrigin().getTarget();
@@ -296,39 +299,40 @@ public class ClusterKeyAggregation extends ClusterDeployment<Config, ActorPlacem
     }
 
     public static class RouterSplitStat implements Serializable, ClusterHttp.ToJson {
+        public static final long serialVersionUID = 1L;
         public String type = "";
-        public KeyAggregationRoutingSplit.SplitPath path;
+        public KelpRoutingSplit.SplitPath path;
         public int depth;
         public List<long[]> history;
         public long processCount;
         public List<Object> processPoints;
         public ActorRef actor;
 
-        public RouterSplitStat set(Actor actor, KeyAggregationRoutingSplit.SplitPath path)  {
-            if (actor instanceof ActorKeyAggregation) {
-                return set(((ActorKeyAggregation) actor).getState(), path);
+        public RouterSplitStat set(Actor actor, KelpRoutingSplit.SplitPath path)  {
+            if (actor instanceof ActorKelp) {
+                return set(((ActorKelp) actor).getState(), path);
             } else {
                 type = "";
                 return this;
             }
         }
 
-        public RouterSplitStat set(ActorKeyAggregation.State state, KeyAggregationRoutingSplit.SplitPath path) {
-            if (state instanceof KeyAggregationStateRouter) {
-                setRouter((KeyAggregationStateRouter) state, path);
+        public RouterSplitStat set(ActorKelp.State state, KelpRoutingSplit.SplitPath path) {
+            if (state instanceof KelpStateRouter) {
+                setRouter((KelpStateRouter) state, path);
             } else {
                 type = "";
             }
             return this;
         }
 
-        public void setRouter(KeyAggregationStateRouter router, KeyAggregationRoutingSplit.SplitPath path) {
-            KeyAggregationRoutingSplit split = router.getSplit();
+        public void setRouter(KelpStateRouter router, KelpRoutingSplit.SplitPath path) {
+            KelpRoutingSplit split = router.getSplit();
             for (boolean left : path.toFlags()) {
-                if (!(split instanceof KeyAggregationRoutingSplit.RoutingSplitNode)) {
+                if (!(split instanceof KelpRoutingSplit.RoutingSplitNode)) {
                     break;
                 }
-                KeyAggregationRoutingSplit.RoutingSplitNode node = (KeyAggregationRoutingSplit.RoutingSplitNode) split;
+                KelpRoutingSplit.RoutingSplitNode node = (KelpRoutingSplit.RoutingSplitNode) split;
                 if (left) {
                     split = node.getLeft();
                 } else {
@@ -337,9 +341,9 @@ public class ClusterKeyAggregation extends ClusterDeployment<Config, ActorPlacem
             }
             setSplit(split, path);
         }
-        public RouterSplitStat setSplit(KeyAggregationRoutingSplit split, KeyAggregationRoutingSplit.SplitPath path) {
-            if (split instanceof KeyAggregationRoutingSplit.RoutingSplitNode) {
-                KeyAggregationRoutingSplit.RoutingSplitNode node = (KeyAggregationRoutingSplit.RoutingSplitNode) split;
+        public RouterSplitStat setSplit(KelpRoutingSplit split, KelpRoutingSplit.SplitPath path) {
+            if (split instanceof KelpRoutingSplit.RoutingSplitNode) {
+                KelpRoutingSplit.RoutingSplitNode node = (KelpRoutingSplit.RoutingSplitNode) split;
                 type = "node";
                 depth = node.getDepth();
                 history = node.getHistory().toList().stream()
@@ -348,8 +352,8 @@ public class ClusterKeyAggregation extends ClusterDeployment<Config, ActorPlacem
                 this.path = node.getPath();
                 processCount = node.getProcessCount();
                 processPoints = Arrays.asList(Arrays.copyOf(node.getSplitPoints(), node.getSplitPoints().length));
-            } else if (split instanceof KeyAggregationRoutingSplit.RoutingSplitLeaf) {
-                KeyAggregationRoutingSplit.RoutingSplitLeaf leaf = (KeyAggregationRoutingSplit.RoutingSplitLeaf) split;
+            } else if (split instanceof KelpRoutingSplit.RoutingSplitLeaf) {
+                KelpRoutingSplit.RoutingSplitLeaf leaf = (KelpRoutingSplit.RoutingSplitLeaf) split;
                 type = "leaf";
                 this.path = path;
                 this.depth = leaf.getDepth();
@@ -379,7 +383,7 @@ public class ClusterKeyAggregation extends ClusterDeployment<Config, ActorPlacem
             return json;
         }
 
-        protected String toString(KeyAggregationRoutingSplit.SplitPath path) {
+        protected String toString(KelpRoutingSplit.SplitPath path) {
             if (path == null) {
                 return null;
             } else {
@@ -393,6 +397,7 @@ public class ClusterKeyAggregation extends ClusterDeployment<Config, ActorPlacem
     }
 
     public static class HistogramStat implements Serializable, ClusterHttp.ToJson {
+        public static final long serialVersionUID = 1L;
         public int entryId;
         public Instant nextSchedule;
         public Instant lastTraversal;
@@ -405,8 +410,8 @@ public class ClusterKeyAggregation extends ClusterDeployment<Config, ActorPlacem
         public long persistedSize;
         public float[] persistHistoryTotalMean;
 
-        public HistogramStat set(ActorKeyAggregation actor,
-                                 MailboxKeyAggregation mailbox, MailboxKeyAggregation.HistogramEntry e) {
+        public HistogramStat set(ActorKelp actor,
+                                 MailboxKelp mailbox, MailboxKelp.HistogramEntry e) {
             entryId = e.getEntryId();
             nextSchedule = e.getNextSchedule();
             lastTraversal = e.getLastTraversal();

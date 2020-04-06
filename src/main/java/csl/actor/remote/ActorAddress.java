@@ -39,6 +39,7 @@ public abstract class ActorAddress {
     public abstract ActorAddressRemoteActor getActor(String name);
 
     public static class ActorAddressRemote extends ActorAddress implements Serializable {
+        public static final long serialVersionUID = 1L;
         protected String host;
         protected int port;
 
@@ -128,6 +129,7 @@ public abstract class ActorAddress {
     }
 
     public static class ActorAddressRemoteActor extends ActorAddressRemote {
+        public static final long serialVersionUID = 1L;
         protected String actorName;
 
         public ActorAddressRemoteActor(String host, int port, String actorName) {
@@ -176,6 +178,7 @@ public abstract class ActorAddress {
     }
 
     public static class ActorAddressAnonymousActor extends ActorAddressRemoteActor {
+        public static final long serialVersionUID = 1L;
         protected String typeName;
         protected int identityHashCode;
 
@@ -197,6 +200,7 @@ public abstract class ActorAddress {
     }
 
     public static class ActorAddressError extends ActorAddressRemoteActor {
+        public static final long serialVersionUID = 1L;
         protected String info;
 
         public ActorAddressError(String host, int port, String info) {

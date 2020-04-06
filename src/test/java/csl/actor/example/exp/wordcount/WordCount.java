@@ -5,10 +5,10 @@ import csl.actor.*;
 import csl.actor.cluster.ConfigDeployment;
 import csl.actor.cluster.FileSplitter;
 import csl.actor.cluster.PhaseShift;
-import csl.actor.keyaggregate.ActorKeyAggregation;
-import csl.actor.keyaggregate.Config;
-import csl.actor.keyaggregate.FileMapper;
-import csl.actor.keyaggregate.KeyAggregationRoutingSplit;
+import csl.actor.kelp.ActorKelp;
+import csl.actor.kelp.Config;
+import csl.actor.kelp.FileMapper;
+import csl.actor.kelp.KelpRoutingSplit;
 import csl.actor.remote.KryoBuilder;
 
 import java.io.*;
@@ -20,7 +20,6 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.function.Function;
 
 public class WordCount {
     public static void main(String[] args) throws Exception {
@@ -61,7 +60,7 @@ public class WordCount {
 
     }
 
-    public static class WordCountMapper extends ActorKeyAggregation<WordCountMapper> {
+    public static class WordCountMapper extends ActorKelp<WordCountMapper> {
         public WordCountMapper(ActorSystem system, String name, Config config) {
             super(system, name, config);
         }
@@ -79,7 +78,7 @@ public class WordCount {
         }
     }
 
-    public static class DebugSplitLeaf extends KeyAggregationRoutingSplit.RoutingSplitLeaf {
+    public static class DebugSplitLeaf extends KelpRoutingSplit.RoutingSplitLeaf {
         public DebugSplitLeaf(ActorRef actor, SplitPath path) {
             super(actor, path);
             if (actor == null) {
@@ -93,7 +92,7 @@ public class WordCount {
         }
     }
 
-    public static class WordCountReducer extends ActorKeyAggregation<WordCountReducer> {
+    public static class WordCountReducer extends ActorKelp<WordCountReducer> {
         PrintWriter writer;
         String dst;
         ScheduledFuture<?> flushTask;
@@ -108,7 +107,7 @@ public class WordCount {
         }
         /*
         @Override
-        public KeyAggregationRoutingSplit.RoutingSplitLeaf newSplitLeaf(ActorRef actor, KeyAggregationRoutingSplit.SplitPath path) {
+        public KelpRoutingSplit.RoutingSplitLeaf newSplitLeaf(ActorRef actor, KelpRoutingSplit.SplitPath path) {
             return new DebugSplitLeaf(actor, path);
         }*/
 
@@ -170,7 +169,7 @@ public class WordCount {
             try {
                 long n = count.incrementAndGet();
                 if (n % 1000_000L == 0 && state instanceof StateUnit) {
-                    save(getMailboxAsKeyAggregation().getHistogram(0), String.format("%%05d-proc-%d.obj", n));
+                    save(getMailboxAsKelp().getHistogram(0), String.format("%%05d-proc-%d.obj", n));
                 }
 
                 super.processMessage(message);
@@ -220,7 +219,7 @@ public class WordCount {
 
         @Override
         protected void initMerged(WordCountReducer m) {
-            ((WordCountReducer) m).close();
+            m.close();
             initDebug();
         }
 
@@ -263,21 +262,21 @@ public class WordCount {
         }
         /*
         @Override
-        public KeyAggregationRoutingSplit internalCreateSplitNode(KeyAggregationRoutingSplit.SplitOrMergeContext context,
-                                                                  KeyAggregationRoutingSplit old,
-                                                                  ActorKeyAggregation target, KeyAggregationRoutingSplit.SplitPath path, int height) {
+        public KelpRoutingSplit internalCreateSplitNode(KelpRoutingSplit.SplitOrMergeContext context,
+                                                                  KelpSplit old,
+                                                                  ActorKelp target, KelpRoutingSplit.SplitPath path, int height) {
             try {
-                target.getMailboxAsKeyAggregation().lockRemainingProcesses();
-                save(target.getMailboxAsKeyAggregation().getHistogram(0), "%05d-split-A.obj");
+                target.getMailboxAsKelp().lockRemainingProcesses();
+                save(target.getMailboxAsKelp().getHistogram(0), "%05d-split-A.obj");
 
                 ActorRef routerRef = router();
-                ActorKeyAggregation a1 = target.internalCreateClone(routerRef);
-                ActorKeyAggregation a2 = target.internalCreateClone(routerRef);
-                List<Object> splitPoints = target.getMailboxAsKeyAggregation()
-                        .splitMessageHistogramIntoReplicas(getSystem(), a1.getMailboxAsKeyAggregation(), a2.getMailboxAsKeyAggregation());
+                ActorKelp a1 = target.internalCreateClone(routerRef);
+                ActorKelp a2 = target.internalCreateClone(routerRef);
+                List<Object> splitPoints = target.getMailboxAsKelp()
+                        .splitMessageHistogramIntoReplicas(getSystem(), a1.getMailboxAsKelp(), a2.getMailboxAsKelp());
 
-                save(new Object[]{a1.getMailboxAsKeyAggregation().getHistogram(0),
-                                a2.getMailboxAsKeyAggregation().getHistogram(0)},
+                save(new Object[]{a1.getMailboxAsKelp().getHistogram(0),
+                                a2.getMailboxAsKelp().getHistogram(0)},
                         "%05d-split-B.obj");
 
 
@@ -286,30 +285,30 @@ public class WordCount {
                 }
                 return internalCreateSplitNode(context, old, splitPoints, a1, a2, path, height);
             } finally {
-                target.getMailboxAsKeyAggregation().unlockRemainingProcesses(target);
+                target.getMailboxAsKelp().unlockRemainingProcesses(target);
             }
         }
 
         @Override
-        public void internalMerge(ActorKeyAggregation merged) {
-            getMailboxAsKeyAggregation().lockRemainingProcesses();
-            merged.getMailboxAsKeyAggregation().lockRemainingProcesses();
+        public void internalMerge(ActorKelp merged) {
+            getMailboxAsKelp().lockRemainingProcesses();
+            merged.getMailboxAsKelp().lockRemainingProcesses();
 
             save(new Object[] {
-                    getMailboxAsKeyAggregation().getHistogram(0),
-                    merged.getMailboxAsKeyAggregation().getHistogram(0)}, "%05d-merge-A.obj");
+                    getMailboxAsKelp().getHistogram(0),
+                    merged.getMailboxAsKelp().getHistogram(0)}, "%05d-merge-A.obj");
 
-            getMailboxAsKeyAggregation()
-                    .merge(merged.getMailboxAsKeyAggregation());
+            getMailboxAsKelp()
+                    .merge(merged.getMailboxAsKelp());
 
-            save(getMailboxAsKeyAggregation().getHistogram(0), "%05d-merge-B.obj");
+            save(getMailboxAsKelp().getHistogram(0), "%05d-merge-B.obj");
 
             merged.internalCancel();
             try {
                 initMerged(merged);
             } finally {
-                merged.getMailboxAsKeyAggregation().unlockRemainingProcesses(merged);
-                getMailboxAsKeyAggregation().unlockRemainingProcesses(this);
+                merged.getMailboxAsKelp().unlockRemainingProcesses(merged);
+                getMailboxAsKelp().unlockRemainingProcesses(this);
             }
         }*/
 
@@ -325,6 +324,7 @@ public class WordCount {
     }
 
     public static class Count implements Serializable {
+        public static final long serialVersionUID = 1L;
         public String word;
         public long count;
 

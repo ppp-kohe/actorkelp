@@ -529,6 +529,7 @@ public class ActorSystemRemote implements ActorSystem {
     public static final String NAME_CONNECTION_ACTOR = "$ConnectionClose";
 
     public static class ConnectionCloseNotice implements Serializable {
+        public static final long serialVersionUID = 1L;
         protected ActorAddress address;
 
         public ConnectionCloseNotice(ActorAddress address) {
@@ -646,6 +647,7 @@ public class ActorSystemRemote implements ActorSystem {
     }
 
     public static class TransferredMessage implements Serializable {
+        public static final long serialVersionUID = 1L;
         public int id;
         public Object body;
 

@@ -13,7 +13,7 @@ import com.esotericsoftware.kryo.util.DefaultInstantiatorStrategy;
 import com.esotericsoftware.kryo.util.Pool;
 import csl.actor.*;
 import csl.actor.cluster.*;
-import csl.actor.keyaggregate.*;
+import csl.actor.kelp.*;
 import org.objenesis.instantiator.basic.ObjectStreamClassInstantiator;
 import org.objenesis.strategy.StdInstantiatorStrategy;
 
@@ -260,30 +260,30 @@ public class KryoBuilder {
                 ActorPlacement.ActorCreationRequest.class,
                 ActorPlacement.CallableMasterThreads.class,
                 ActorPlacement.LeaveEntry.class,
-                ActorPlacementKeyAggregation.Task.class,
-                ActorPlacementKeyAggregation.TaskChain.class,
-                ActorPlacementKeyAggregation.InitBuilder.class,
-                ActorPlacementKeyAggregation.OneShotState.class,
-                ActorKeyAggregation.StateUnit.class,
-                ActorKeyAggregation.ActorKeyAggregationSerializable.class,
-                ActorKeyAggregation.CallableToLocalSerializable.class,
-                KeyAggregationRoutingSplit.SplitPath.class,
+                ActorPlacementKelp.Task.class,
+                ActorPlacementKelp.TaskChain.class,
+                ActorPlacementKelp.InitBuilder.class,
+                ActorPlacementKelp.OneShotState.class,
+                ActorKelp.StateUnit.class,
+                ActorKelp.ActorKelpSerializable.class,
+                ActorKelp.CallableToLocalSerializable.class,
+                KelpRoutingSplit.SplitPath.class,
                 KeyHistograms.HistogramTree.class,
                 KeyHistograms.HistogramNodeTree.class,
                 KeyHistograms.HistogramNodeLeaf.class,
                 KeyHistograms.HistogramLeafList.class,
                 KeyHistograms.HistogramLeafCell.class,
-                ActorBehaviorKeyAggregation.HistogramNodeLeaf1.class,
-                ActorBehaviorKeyAggregation.HistogramNodeLeaf2.class,
-                ActorBehaviorKeyAggregation.HistogramNodeLeaf3.class,
-                ActorBehaviorKeyAggregation.HistogramNodeLeaf4.class,
-                ActorBehaviorKeyAggregation.HistogramNodeLeafList.class,
-                ActorBehaviorKeyAggregation.HistogramNodeLeafListReducible.class,
-                ActorBehaviorKeyAggregation.HistogramNodeLeafListReducibleForPhase.class,
+                ActorBehaviorKelp.HistogramNodeLeaf1.class,
+                ActorBehaviorKelp.HistogramNodeLeaf2.class,
+                ActorBehaviorKelp.HistogramNodeLeaf3.class,
+                ActorBehaviorKelp.HistogramNodeLeaf4.class,
+                ActorBehaviorKelp.HistogramNodeLeafList.class,
+                ActorBehaviorKelp.HistogramNodeLeafListReducible.class,
+                ActorBehaviorKelp.HistogramNodeLeafListReducibleForPhase.class,
                 KeyHistograms.HistogramNodeLeafMap.class,
                 KeyHistograms.HistogramLeafCellSerializedEnd.class,
                 ConfigBase.class,
-                csl.actor.keyaggregate.Config.class,
+                csl.actor.kelp.Config.class,
                 MailboxPersistable.MessageOnStorage.class,
                 MailboxPersistable.PersistentFileEnd.class,
                 MailboxPersistable.PersistentFileReaderSource.class,
@@ -297,15 +297,15 @@ public class KryoBuilder {
                 KeyHistogramsPersistable.HistogramNodeLeafOnStorage.class,
                 KeyHistogramsPersistable.NodeTreeData.class,
 
-                KeyAggregationVisitor.class,
-                KeyAggregationVisitor.VisitorNoSender.class,
+                KelpVisitor.class,
+                KelpVisitor.VisitorNoSender.class,
                 PhaseShift.class,
                 PhaseShift.PhaseCompleted.class,
                 PhaseShift.PhaseShiftIntermediate.class,
                 PhaseShift.PhaseShiftIntermediateType.class,
-                KeyAggregationPhaseEntry.VisitorIncompleteLeaf.class,
-                ActorKeyAggregation.CancelChange.class,
-                ActorKeyAggregation.CanceledChangeType.class,
+                KelpPhaseEntry.VisitorIncompleteLeaf.class,
+                ActorKelp.CancelChange.class,
+                ActorKelp.CanceledChangeType.class,
 
                 ClusterDeployment.ConfigSet.class,
                 ClusterDeployment.ShutdownTask.class,
@@ -321,10 +321,10 @@ public class KryoBuilder {
                 ClusterCommands.CommandBlockLineContinue.class,
                 ConfigDeployment.class,
                 FileSplitter.FileSplit.class,
-                ClusterKeyAggregation.RouterSplitStat.class,
-                ClusterKeyAggregation.HistogramStat.class,
-                ClusterKeyAggregation.ActorStat.class,
-                ClusterKeyAggregation.PhaseStat.class);
+                ClusterKelp.RouterSplitStat.class,
+                ClusterKelp.HistogramStat.class,
+                ClusterKelp.ActorStat.class,
+                ClusterKelp.PhaseStat.class);
     }
 
     public interface SerializerFunction {

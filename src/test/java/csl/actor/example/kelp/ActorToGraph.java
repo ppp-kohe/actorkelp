@@ -1,9 +1,9 @@
-package csl.actor.example.keyaggregate;
+package csl.actor.example.kelp;
 
 import csl.actor.*;
 import csl.actor.cluster.PhaseShift;
 import csl.actor.cluster.ResponsiveCalls;
-import csl.actor.keyaggregate.*;
+import csl.actor.kelp.*;
 import csl.actor.remote.ActorRefRemote;
 import csl.actor.remote.ActorSystemRemote;
 
@@ -135,6 +135,7 @@ public class ActorToGraph extends ActorDefault {
     }
 
     public static class GraphGen implements Serializable {
+        public static final long serialVersionUID = 1L;
         protected ActorRef actorToGraph;
         protected boolean saveLeafNode;
         public List<GraphNode> nodes = new ArrayList<>();
@@ -196,8 +197,8 @@ public class ActorToGraph extends ActorDefault {
             createNodeMailbox(table, a.getMailbox());
             n.tableLabel = table;
 
-            if (a instanceof ActorKeyAggregation) {
-                createNodeKeyAgg(n, (ActorKeyAggregation) a);
+            if (a instanceof ActorKelp) {
+                createNodeKelp(n, (ActorKelp) a);
             }
             return n;
         }
@@ -205,32 +206,32 @@ public class ActorToGraph extends ActorDefault {
         public void createNodeMailbox(List<List<String>> table, Mailbox mailbox) {
             if (mailbox instanceof MailboxDefault) {
                 table.add(Arrays.asList("queue", String.format("%,d", ((MailboxDefault) mailbox).getQueue().size())));
-            } else if (mailbox instanceof MailboxKeyAggregation) {
-                createNodeMailbox(table, ((MailboxKeyAggregation) mailbox).getMailbox());
+            } else if (mailbox instanceof MailboxKelp) {
+                createNodeMailbox(table, ((MailboxKelp) mailbox).getMailbox());
             }
         }
 
-        public void createNodeKeyAgg(GraphNode n, ActorKeyAggregation ag) {
+        public void createNodeKelp(GraphNode n, ActorKelp<?> ag) {
             List<List<String>> table = n.tableLabel;
-            for (int i = 0, size = ag.getMailboxAsKeyAggregation().getEntrySize(); i < size; ++i) {
-                MailboxKeyAggregation.HistogramEntry e = ag.getMailboxAsKeyAggregation().getEntries().get(i);
+            for (int i = 0, size = ag.getMailboxAsKelp().getEntrySize(); i < size; ++i) {
+                MailboxKelp.HistogramEntry e = ag.getMailboxAsKelp().getEntries().get(i);
                 table.add(Arrays.asList("t" + i + ".processor", idStr(e.getProcessor())));
 
                 createNodeHistTree(n, e.getTree(), i);
             }
 
-            ActorKeyAggregation.State s = ag.getState();
+            ActorKelp.State s = ag.getState();
             n.tableLabel.add(Arrays.asList("state", s.getClass().getSimpleName()));
             n.tableLabel.add(Arrays.asList("state.procs", String.format("%,d", s.getProcessCount())));
-            if (s instanceof KeyAggregationStateRouter) {
-                KeyAggregationStateRouter sr = (KeyAggregationStateRouter) s;
+            if (s instanceof KelpStateRouter) {
+                KelpStateRouter sr = (KelpStateRouter) s;
                 n.tableLabel.add(Arrays.asList("height", String.format("%,d", sr.getHeight())));
                 n.tableLabel.add(Arrays.asList("maxHeight", String.format("%,d", sr.getMaxHeight())));
                 createNodeSplit(n, sr.getSplit(), "");
-            } else if (s instanceof ActorKeyAggregation.StateUnit) {
-                n.tableLabel.add(Arrays.asList("router", actorStr(((ActorKeyAggregation.StateUnit) s).getRouter())));
-            } else if (s instanceof ActorKeyAggregation.StateCanceled) {
-                n.tableLabel.add(Arrays.asList("router", actorStr(((ActorKeyAggregation.StateCanceled) s).getRouter())));
+            } else if (s instanceof ActorKelp.StateUnit) {
+                n.tableLabel.add(Arrays.asList("router", actorStr(((ActorKelp.StateUnit) s).getRouter())));
+            } else if (s instanceof ActorKelp.StateCanceled) {
+                n.tableLabel.add(Arrays.asList("router", actorStr(((ActorKelp.StateCanceled) s).getRouter())));
             }
         }
 
@@ -321,8 +322,8 @@ public class ActorToGraph extends ActorDefault {
             }
             table.add(Arrays.asList("key", Objects.toString(l.getKey())));
             table.add(Arrays.asList("size", String.format("%,d", l.size())));
-            if (l instanceof ActorBehaviorKeyAggregation.HistogramNodeLeafN) {
-                for (KeyHistograms.HistogramLeafList list : ((ActorBehaviorKeyAggregation.HistogramNodeLeafN) l).getStructList()) {
+            if (l instanceof ActorBehaviorKelp.HistogramNodeLeafN) {
+                for (KeyHistograms.HistogramLeafList list : ((ActorBehaviorKelp.HistogramNodeLeafN) l).getStructList()) {
                     long n = list.count();
                     table.add(Arrays.asList("v" + vi + ".count", String.format("%,d", n)));
                     ++vi;
@@ -334,13 +335,13 @@ public class ActorToGraph extends ActorDefault {
             return createEdge(from, n);
         }
 
-        public void createNodeSplit(GraphNode from, KeyAggregationRoutingSplit s, String edgeLabel) {
+        public void createNodeSplit(GraphNode from, KelpRoutingSplit s, String edgeLabel) {
             if (s == null) {
                 GraphNode n = createNode("null:" + Instant.now());
                 n.label = "null";
                 createEdge(from, n);
-            } else if (s instanceof KeyAggregationRoutingSplit.RoutingSplitNode) {
-                KeyAggregationRoutingSplit.RoutingSplitNode st = (KeyAggregationRoutingSplit.RoutingSplitNode) s;
+            } else if (s instanceof KelpRoutingSplit.RoutingSplitNode) {
+                KelpRoutingSplit.RoutingSplitNode st = (KelpRoutingSplit.RoutingSplitNode) s;
                 GraphNode n = createNode("splitNode:" + Instant.now());
                 n.tableLabel = new ArrayList<>();
                 n.tableLabel.add(Arrays.asList("split.procs", String.format("%,d", st.getProcessCount())));
@@ -350,7 +351,7 @@ public class ActorToGraph extends ActorDefault {
                 n.tableLabel.add(Arrays.asList("ratioAll", String.format("%4.2f", st.getHistory().ratioAll())));
 
                 int hi = 0;
-                for (KeyAggregationRoutingSplit.RoutingHistory h : st.getHistory().toList()) {
+                for (KelpRoutingSplit.RoutingHistory h : st.getHistory().toList()) {
                     n.tableLabel.add(Arrays.asList("hist" + hi, String.format("%4.2f", h.ratio()), String.format("%,d", h.left.get()), String.format("%,d", h.right.get())));
                     ++hi;
                 }
@@ -359,8 +360,8 @@ public class ActorToGraph extends ActorDefault {
                 createNodeSplit(n, st.getRight(), "right");
 
                 createEdge(from, n).label = edgeLabel;
-            } else if (s instanceof KeyAggregationRoutingSplit.RoutingSplitLeaf) {
-                ActorRef ref = ((KeyAggregationRoutingSplit.RoutingSplitLeaf) s).getActor();
+            } else if (s instanceof KelpRoutingSplit.RoutingSplitLeaf) {
+                ActorRef ref = ((KelpRoutingSplit.RoutingSplitLeaf) s).getActor();
                 GraphNode n = createNode(getId(ref));
                 createEdge(from, n).label = edgeLabel + " dep:" + s.getDepth();
                 actorToGraph.tell(ref);
@@ -379,6 +380,7 @@ public class ActorToGraph extends ActorDefault {
 
 
     public static class GraphNode implements Serializable {
+        public static final long serialVersionUID = 1L;
         public int id;
         public String key;
         public String label;
@@ -390,6 +392,7 @@ public class ActorToGraph extends ActorDefault {
     }
 
     public static class GraphEdge implements Serializable {
+        public static final long serialVersionUID = 1L;
         public GraphNode from;
         public GraphNode to;
         public String label = "";

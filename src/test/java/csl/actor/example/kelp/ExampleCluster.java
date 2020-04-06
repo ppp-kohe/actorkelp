@@ -1,15 +1,14 @@
-package csl.actor.example.keyaggregate;
+package csl.actor.example.kelp;
 
 import csl.actor.ActorBehavior;
 import csl.actor.ActorSystem;
 import csl.actor.cluster.PhaseShift;
-import csl.actor.keyaggregate.ActorKeyAggregation;
-import csl.actor.keyaggregate.ActorPlacementKeyAggregation;
-import csl.actor.keyaggregate.ClusterKeyAggregation;
-import csl.actor.keyaggregate.Config;
+import csl.actor.kelp.ActorKelp;
+import csl.actor.kelp.ActorPlacementKelp;
+import csl.actor.kelp.ClusterKelp;
+import csl.actor.kelp.Config;
 
 import java.nio.file.Paths;
-import java.util.Random;
 import java.util.Scanner;
 import java.util.function.Function;
 
@@ -18,8 +17,8 @@ public class ExampleCluster {
         String dir = Paths.get("").toAbsolutePath().toString() + "/target/debug";
         String debugFlag = "false";
 
-        ClusterKeyAggregation d = ClusterKeyAggregation.create();
-        ActorPlacementKeyAggregation place = d.deploy(d.master()
+        ClusterKelp d = ClusterKelp.create();
+        ActorPlacementKelp place = d.deploy(d.master()
                     .edit(c -> c.getDeploymentConfig().baseDir = dir)
                     .edit(c -> c.getAppConfig().routerAutoMerge = false)
                     .edit(c -> c.getDeploymentConfig().httpHost = "0.0.0.0"),
@@ -61,8 +60,8 @@ public class ExampleCluster {
 
             } else if (line.startsWith("stats ")) {
                 String p = line.split(" ")[1];
-                ClusterKeyAggregation.RouterSplitStat o = d.getSplit(a, p);
-                ClusterKeyAggregation.ActorStat as = d.getActorStat(o.actor);
+                ClusterKelp.RouterSplitStat o = d.getSplit(a, p);
+                ClusterKelp.ActorStat as = d.getActorStat(o.actor);
                 Object json = d.getHttp().jsonConverter(Object.class).apply(as);
                 System.out.println(json);
             }
@@ -70,7 +69,7 @@ public class ExampleCluster {
         d.shutdownAll();
     }
 
-    public static class TestSource extends ActorKeyAggregation<TestSource> {
+    public static class TestSource extends ActorKelp<TestSource> {
         public TestSource(ActorSystem system, String name, Config config) {
             super(system, name, config);
         }
@@ -98,7 +97,7 @@ public class ExampleCluster {
         }
     }
 
-    public static class TestActor extends ActorKeyAggregation<TestActor> {
+    public static class TestActor extends ActorKelp<TestActor> {
         public TestActor(ActorSystem system, String name, Config config) {
             super(system, name, config);
         }

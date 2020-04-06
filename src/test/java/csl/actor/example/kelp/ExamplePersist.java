@@ -1,13 +1,13 @@
-package csl.actor.example.keyaggregate;
+package csl.actor.example.kelp;
 
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 import csl.actor.ActorBehavior;
 import csl.actor.ActorSystem;
 import csl.actor.cluster.PhaseShift;
-import csl.actor.keyaggregate.ActorKeyAggregation;
-import csl.actor.keyaggregate.Config;
-import csl.actor.keyaggregate.KeyHistogramsPersistable;
+import csl.actor.kelp.ActorKelp;
+import csl.actor.kelp.Config;
+import csl.actor.kelp.KeyHistogramsPersistable;
 import csl.actor.remote.ActorSystemRemote;
 
 import java.io.Serializable;
@@ -26,23 +26,23 @@ public class ExamplePersist {
         }
         PhaseShift.start(r, m).get();
 
-        ActorKeyAggregation.ActorKeyAggregationSerializable s = m.toSerializable(1);
+        ActorKelp.ActorKelpSerializable s = m.toSerializable(1);
 
         Output out = new Output(4096 * 1000);
         r.getSerializer().write(out, s);
 
         Input in = new Input(out.getBuffer());
-        ActorKeyAggregation.ActorKeyAggregationSerializable s2 = (ActorKeyAggregation.ActorKeyAggregationSerializable) r.getSerializer().read(in);
-        ActorKeyAggregation a = s2.create(r, 2);
+        ActorKelp.ActorKelpSerializable s2 = (ActorKelp.ActorKelpSerializable) r.getSerializer().read(in);
+        ActorKelp<?> a = s2.create(r, 2);
 
-        KeyHistogramsPersistable.HistogramTreePersistable p = (KeyHistogramsPersistable.HistogramTreePersistable) a.getMailboxAsKeyAggregation().getHistogram(0);
+        KeyHistogramsPersistable.HistogramTreePersistable p = (KeyHistogramsPersistable.HistogramTreePersistable) a.getMailboxAsKelp().getHistogram(0);
         System.out.println(Arrays.toString(p.getHistory().totalMean()));
 
         PhaseShift.start(r, a).get();
         r.close();
     }
 
-    public static class TestActor extends ActorKeyAggregation {
+    public static class TestActor extends ActorKelp<TestActor> {
         int value;
         public TestActor(ActorSystem system, String name, Config config) {
             super(system, name, config);
