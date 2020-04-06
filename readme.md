@@ -1,120 +1,111 @@
-# actorlib 
+# ActorKelp
 
-実験用actor実装
 
-## Implementation note
 
-* 基本的にakkaの単純化
+## Actor
 
-* `Actor`, `ActorRef`
+```java
+import csl.actor.*;
 
-    *   `Actor`が`ActorRef`を実装する
-    * `Actor`は`Mailbox`と`ActorSystem`を持ち、`tell(obj, sender)`の実行ごとに`Message`を作って`ActorSystem`に投げる
+public class ExampleActor extends ActorDefault {
+    public static void main(String[] args) {
+        ActorSystem system = new ActorSystemDefault();
+        ExampleActor a = new ExampleActor(system, "a");
+        a.tell("hello");
+    }
+    public ExampleActor(ActorSystem system, String name) {
+        super(system, name);
+    }
+    protected ActorBehavior initBehavior() {
+        return behaviorBuilder()
+                .match(String.class, this::receive)
+                .build();
+    }
+    void receive(String msg) {
+        System.out.println("receive " + msg + " @ " + getName());
+        getSystem().close();
+    }
+}
+```
 
-* `ActorSystem`: ローカル実装の`ActorSystemDefault`
+* `ActorDefault` is the base class for actors: you can define your actors as sub-classes of the base class.
+    * define a constructor with a super call of `(ActorSystem system)` or `(ActorSystem system, String name)`
+        * The string `name` is an optional parameter, which will be required for remote actors.
+    * override `protected ActorBehavior initBehavior()` and write a call chain like `return behaviorBuilder().match(...).build()`: The method sets up behaviors of the actor as `ActorBehavior`. You can use `ActorBehaviorBuilder` returned by `behaviorBuilder()` , which is a fluent API class for constructing the behaviors.
+        * `.match(T.class, Consumer<T> b)` : With the actor model, any type of object can be a message. A message is asynchronous invocation to an actor and the received actor synchronously processes each messages. To accept multiple messages, an actor internally has a concurrent queue called "mailbox". A dequeued message from the mailbox will be tested by the list of behaviors declared by `.match(T1.class, ...).match(T2.class,...)...`. A top matched behavior handles the message.
+* In the top of the main method, it creates `ActorSystemDefault` , which is a shared instance for managing message dispatching with thread-pools and named actors.
+    * The created system has a `ExecutorService` for hosting threads of executing message behaviors of actors.
+    * Any actors are associated with a system which can be obtained by `getSystem()`.
+    * So, the system needs to be explicitly `.close()` for shutting down.
+* In order to send a message to an actor, `.tell(msg)` can be used. The call is asynchronous and thus it immediately returns
+    * The method `tell` is declared in `ActorRef` which is the base interface of `ActorDefault`. The type is also used as the remote proxy for remote actors.
+    * In the library, an actor instance is ordinary object. So it can directly invoke a regular method  to the actor instance. However, it will collapse safety benefited from the actor model. 
 
-    * `send(Message)`で送られたメッセージを対象の`Actor`を解決し、 
-        * その`Actor` の`Mailbox`に`offer(msg)`で追加するとともに、
-        * スレッドプールに`processMessageSubsequently`で対象アクターの`Mailbox`にあるメッセージの一定数を実行するタスクを起動
-        * ローカルでメッセージが送られた分だけタスクが起動するので全てのメッセージが処理されるはず
+## Remote Actor
 
-* `Actor`の`processMessage(Message)`が実際のメッセージ処理
+The library supports remote actors. This can launch multiple processes on different hosts and communicates each other.
 
-    * `ActorDefault`が`Actor`のサブクラスで、`ActorBehavior`を持つ: receiveの処理をする
+```java
+import csl.actor.*;
+import csl.actor.remote.*;
 
-    * `ActorBehaviorBuilder`で`ActorBehavior`を作成できる
+public class ExampleRemote extends ActorDefault {
+    public static void main(String[] args) {
+        int port = Integer.parseInt(args[0]);
+        ActorSystemRemote system = new ActorSystemRemote();
+        system.startWithoutWait(port);
 
-        * `ActorDefault`では`initBehavior ` をoverrideし`behaviorBuilder()`で構築する
-
-    * ```java
-        class MyActor extends ActorDefault {
-            MyActor(ActorSystem system, String name) {
-                super(system, name);
-            }
-            @Override
-            protected ActorBehavior initBehavior() {
-                return behaviorBuilder()
-                    .match(String.class, this::recv)
-                    .build();
-            }
-            
-            void recv(String m) {
-                System.out.println(m);
-            }
+        if (port == 3000) {
+            new ExampleRemote(system, "a");
+        } else {
+            ExampleRemote b = new ExampleRemote(system, "b");
+            b.tell(ActorAddress.get("localhost", 3000, "a"));
         }
-        ```
+    }
 
-* `Actor`にはStringの名前を設定可能: `ActorSystem`の`register(Actor)`で登録し、 `ActorRef`である  ` ActorRefLocalNamed` により解決できる
+    public ExampleRemote(ActorSystem system, String name) {
+        super(system, name);
+    }
 
-    * remoteのためには名前をつける必要がある: `ActorDefault(system,name)`で`name`が設定されれば自動的に登録
-    * //TODO unregister, actor shutdown
+    protected ActorBehavior initBehavior() {
+        return behaviorBuilder()
+                .match(ActorAddress.class, this::start)
+                .matchWithSender(String.class, this::receive)
+                .build();
+    }
 
-* `remote`パッケージ
+    void start(ActorAddress target) {
+        ActorRefRemote.get(getSystem(), target)
+                .tell("hello", this);
+    }
 
-    * `ActorSystemRemote` : `ActorSystem`のリモート版で、`ActorSystemDefault`をラップ
+    void receive(String msg, ActorRef sender) {
+        System.out.println(this + " receive " + msg + " from " + sender);
+        if (sender != null) {
+            sender.tell(msg);
+        } else {
+            getSystem().close();
+        }
+    }
+}
+```
 
-    * 通信にはnettyを使う
+```bash
+ mvn exec:java -Dexec.mainClass=ExampleRemote -Dexec.args=3000 & 
+ mvn exec:java -Dexec.mainClass=ExampleRemote -Dexec.args=3001
+```
 
-        * `ObjectMessageServer ` : 受信
-            * `EventLoopGroup` やport番号, `receiver`を設定し`start()`により`ServerBootstrap`を作って起動する
-            * `start()`で`close`されるまでブロック
-            * `startWithoutWait()`で ノンブロッキングで起動 //TODO 要改善
-            * `childHandler`: `SeverInitializer`
-                * `ChannelPipleline`にハンドラを追加。 ドキュメントを見ると同じパイプラインに追加しているように見えて`Inbound`と`Outbound`の型により入出力を区別し、さらにOutboundだと処理順が逆になる
-                * `LoggingHandler`: `LogLevel`を設定しないとログが出ない
-                * `LengthFieldBasedFrameDecoder` : decorderは分割されて受信するパケットをまとめてくれる。このdecorderはヘッダとして4バイトの本体データのサイズを付加する
-                * `QueueServerHandler`: `Inbound`。nettyのバッファである`ByteBuf`のデータをオブジェクトとして復元。`receiver`を呼び出して渡す。 レスポンスとして`200`をintの値として書き込む
-                    * `exceptionCaught`のoverrideが重要な模様
-                    * //TODO releaseが必要?
-                    * 書き込みにはkryoの`Input`を`ByteBufInputStream`で`ByteBuf`をラップして作る
-        * `ObjectMessageClient ` : 送信
-            * サーバーと同様の起動方法だが、複数の接続先に`ObjectMessageConnection`で対応する。
-            * `connect().setHost(h).setPort(p)`で設定し、`write(Object)`で`ChannelFuture`をopenする。
-            * `LengthFieldPrepender`で4バイトの長さを読み取る。 encoder
-            * `QueueClientHandler`: encoder。書き込みには`Output`を`ByteBufOutputStream`でラップ
-            * `ResponseHandler`: 送信レスポンス `200`を読み取る
+* `ActorSystemRemote` is the remote version of `ActorSystem`
+    * `startWithoutWait(port)` starts listening TCP connections on the port.
+* `new ExampleRemote(system, "a")` is the actor creation with registering it as the name `"a"` , then another process can specify the actor as the address `localhost:3000/a`.
+* In another process, `ActorAddress.get("localhost", 3000, "a")` is the address specification for the remote actor. 
+    * In the above example, `localhost:3001/b` receives the target address `localhost:3000/a` and sends `"hello"` to the remote actor `"a"`. 
+        * The type `ActorAddress` is just an address representation of an actor without binding a system, and
+        * `ActorRefRemote` is a sub-type of `ActorRef` derived from the `ActorAddress`. 
+        * `.tell("hello", this)` can send the string `"hello"` as the message to the target actor with specifying `this` (`localhost:3001/b`) as the sender actor.
+    * The remote actor receiving `"hello"` can match with `.matchWithSender(String.class, this::receive)` pattern, and then the send parameter `sender` becomes `ActorRefRemote` of `localhost:3001/b`. 
+        * In the `receive` method, the sender is non null and thus send back to the string to the sender.
 
-    * `ActorSystemDefaultForRemote`: スレッド数を決める`ActorSystem`。 `ActorSystemRemote`はデフォルトではこれをラップする
+* Messages sent between remote actors must be `Serializable`. The library relies on [Kryo](https://github.com/EsotericSoftware/kryo) as serialization framework.
+    * The network transportation relies on [Netty](https://netty.io)
 
-        * プロセッサの約1.5倍のスレッド
-        * おそらくスレッドプールは共有しないほうがいい
-        * ローカルのプール数は procs / 2= availableProcessors() / 2
-        * 受信用の`EventLoopGroup`は1+procs/2
-        * 送信用の`EventLoopGroup`はprocs/2
-
-    * `ActorRemoteSystem#send(Message)`で送るときは、
-
-        * まず`message.getTarget()`で対象をとり`ActorRefRemote`だった場合、その`ActorAddress`に対応する`ConnectionActor`を作る
-            * これはキャッシュする
-            * 内部で`ObjectMessageConnection`を保持
-            * このactorに`tell(message, null)`をする: すると`Message(ConnectionActor,null,Message)`となる
-            * このactorの`processMessage(Message)`は中の`Message` を取り出し`ObjectMessageConnection`に書き込みを行う
-            * //TODO client自体でEventLoopGroupにより複数スレッド持つのでactorにするのは無駄か
-            * `ObjectMessageConnection`は`Channel`をconnectするが、これは一定期間でcloseする模様。//TODO 今の所, `isWritable()`でチェックして再取得しているが
-
-    * シリアライゼーションにはkryoを使う
-
-        * `KryoBuilder`: 利用すると思われるデータのクラスを片っ端から登録する
-            * 登録するとシリアライズした時にクラス名でなくint番号にできる
-        * `Kryo`はthread-safeでない。`ActorSystemRemote`では`Pool<Kryo>`としてスレッドごとにキャッシュ
-        * `ActorRefRemoteSerializer` : `ActorRef`のシリアライズ。`ActorAddress`としてシリアライズする。
-        * `ActorSystemRemote`の`serizlier`は`Function<ActorSystemRemote,Kryo>`で, デフォルトでは`KryoBuilder.builder()`だが追加クラスを書いた場合, これをすり替える
-
-    * `ActorRefRemote`は`ActorAddress`を持つ
-
-        * `ActorRefRemote.get(system,host,name,port)`で生成する
-            * ローカルのアクターの場合は`Actor`の実装クラスそのままが利用でき、
-            * リモートを参照する場合は`ActorRefRemote.get`を使い参照を得る。
-            * 未解決のローカルのアクターとして`ActorRefLocalNamed.get(system,name)`が使える。
-        * `ActorAddress`はホスト、ポートの`ActorAddressRemote`と、そのホスト、ポート、アクター名の`ActorAddressRemoteActor`どちらかで、`ActorRefRemote`は後者でないと意味がない
-            * `ActorAddressRemote`は`ActorRemoteSystem`が自身の名前として保持する
-        * シリアライズでは`Actor`、`ActorRefLocalNamed`は`ActorSystemRemote`から自身のアドレスを取り出してアクター名と組み合わせ`ActorAddress`として書き出す
-            * 復元は単に`ActorRefRemote`にする。転送された時点で別のホストなのでこれでよく、ローカルに戻すのは`ActorSystemRemote#localize`で明示的に行う
-
-    * `ActorSystemRemote#recieve(Object)`: 受信した場合に呼び出される。`ObjectMessageServer#receiver`としてセットされる
-
-        * `Message`に反応し、対象を`localize(ActorRef)`してメッセージを作り直してローカルで実行する。対象はこの`receive`した`ActorSystem`のローカルなアクターであるはず
-            * //TODO 結局、このやり方だと対象しかローカルにならないので、メッセージの中にローカルな参照が別にあってもそれはリモート参照として扱われる。シリアライズ復元時にチェックするかか`ActorRefRemote`にローカル判定を入れる必要がある
-        * `localze`は`ActorAddressRemoteActor`の名前から`ActorRefLocalNamed`を作る。host名は見ない
-
-        
