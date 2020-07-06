@@ -242,15 +242,17 @@ public class FileSplitter {
             }
             buffer.limit(0);
             this.file = f;
-            f.seek(split.splitStart);
+            f.seek(Math.max(split.splitStart - 2L, 0)); //-2 for readPreviousEnd
             filePosition = split.splitStart;
             bufferLineStart = 0;
             if (split.splitStart > 0) {
-                ByteBuffer last = readLine();
-                int ns = getNewLinesBeforeLineStart();
-                while (ns == 0 && last != null) {
-                    last = readLine();
-                    ns = getNewLinesBeforeLineStart();
+                if (readPreviousEndNewLine() == 0) { //otherwise, the previous split ends with the new line
+                    ByteBuffer last = readLine();
+                    int ns = getNewLinesBeforeLineStart();
+                    while (ns == 0 && last != null) {
+                        last = readLine();
+                        ns = getNewLinesBeforeLineStart();
+                    }
                 }
             }
         }
@@ -275,6 +277,29 @@ public class FileSplitter {
             return lineBuffer;
         }
 
+        public int readPreviousEndNewLine() throws IOException {
+            ByteBuffer buffer = ByteBuffer.allocate(2);
+            int len = file.read(buffer.array(), 0, split.splitStart >= 2 ? 2 : 1);
+            if (len <= 0) {
+                return 0;
+            } else {
+                buffer.position(0);
+                buffer.limit(len);
+                int n = bufferTopNewLine(buffer);
+                if (n >= 2) { //\n\r
+                    return n;
+                } else {
+                    buffer.get();
+                    if (buffer.hasRemaining()) {
+                        n = bufferTopNewLine(buffer); //\n
+                        return n;
+                    } else {
+                        return 0;
+                    }
+                }
+            }
+        }
+
         public ByteBuffer readLine() throws IOException {
             while (true) {
                 if (!buffer.hasRemaining()) {
@@ -287,7 +312,7 @@ public class FileSplitter {
                 }
                 int ns = 0;
                 while (buffer.hasRemaining()) {
-                    ns = bufferTopNewLine();
+                    ns = bufferTopNewLine(buffer);
                     if (ns > 0) {
                         break;
                     } else {
@@ -336,7 +361,7 @@ public class FileSplitter {
             }
         }
 
-        public int bufferTopNewLine() {
+        public int bufferTopNewLine(ByteBuffer buffer) {
             if (buffer.position() < buffer.limit()) {
                 byte b = buffer.get(buffer.position());
                 if (b == '\n') {
