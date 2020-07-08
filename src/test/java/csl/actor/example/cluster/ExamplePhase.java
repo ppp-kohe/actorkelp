@@ -1,8 +1,6 @@
 package csl.actor.example.cluster;
 
-import csl.actor.ActorBehavior;
-import csl.actor.ActorSystem;
-import csl.actor.ActorSystemDefault;
+import csl.actor.*;
 import csl.actor.kelp.ActorKelp;
 import csl.actor.cluster.PhaseShift;
 
@@ -35,7 +33,7 @@ public class ExamplePhase {
         System.err.println("--------------");
 
         MyActor2 c = new MyActor2(system);
-        c.setNextStage(new MyActor2(system));
+        c.setNextStage(new MyActor3(system));
         c.tell("aaa");
         c.tell("bbb");
         c.tell("ccc");
@@ -78,6 +76,38 @@ public class ExamplePhase {
         public void complete(PhaseShift.PhaseCompleted comp) { //custom handler
             log("completed: %s, this=%s, count=%,d", comp, this, count);
             comp.accept(this);
+        }
+    }
+
+    public static class MyActor3 extends ActorDefault implements PhaseShift.StageSupported {
+        ActorRef next;
+        public MyActor3(ActorSystem system) {
+            super(system);
+            next = new MyActor2(system);
+        }
+
+        @Override
+        public ActorRef nextStage() {
+            return next;
+        }
+
+        @Override
+        public void logPhase(String str, Object... args) {
+            system.getLogger().log(String.format(str, args));
+        }
+
+        @Override
+        protected ActorBehavior initBehavior() {
+            return behaviorBuilder()
+//                    .matchWithSender(PhaseShift.class, (m,s) -> {
+//                        system.getLogger().log("shift: %s from %s", m, s);
+//                        m.accept(this);
+//                    })
+                    .matchWithSender(PhaseShift.PhaseCompleted.class, (m,s) -> {
+                        system.getLogger().log("comp: %s from %s", m, s);
+                        m.accept(this);
+                    })
+                    .build();
         }
     }
 }

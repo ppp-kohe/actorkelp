@@ -1,9 +1,6 @@
 package csl.actor.example.kelp;
 
-import csl.actor.ActorBehavior;
-import csl.actor.ActorDefault;
-import csl.actor.ActorRef;
-import csl.actor.ActorSystem;
+import csl.actor.*;
 import csl.actor.cluster.ActorPlacement;
 import csl.actor.cluster.PhaseShift;
 import csl.actor.cluster.ResponsiveCalls;
@@ -12,12 +9,17 @@ import csl.actor.kelp.*;
 import csl.actor.remote.ActorAddress;
 import csl.actor.remote.ActorRefRemote;
 import csl.actor.remote.ActorSystemRemote;
+import csl.actor.remote.KryoBuilder;
 
 import java.util.Arrays;
 
 public class ExampleActorReplicablePlacement {
+    public static ActorSystemRemote createSystem() {
+        return new ActorSystemRemote(new ActorSystemDefault.ActorSystemDefaultUnlimited(), KryoBuilder.builder());
+    }
+
     public static void main(String[] args) throws Exception {
-        ActorSystemRemote system = new ActorSystemRemote();
+        ActorSystemRemote system = createSystem();
         ResponsiveCalls.initCallableTarget(system);
         int serverPort = 10000;
         system.startWithoutWait(serverPort);
@@ -112,7 +114,7 @@ public class ExampleActorReplicablePlacement {
 
     public static class Follower {
         public static void main(String[] args) throws Exception {
-            ActorSystemRemote system = new ActorSystemRemote();
+            ActorSystemRemote system = createSystem();
             ResponsiveCalls.initCallableTarget(system);
             int port = Integer.parseInt(args[0]);
             int joinPort = Integer.parseInt(args[1]);

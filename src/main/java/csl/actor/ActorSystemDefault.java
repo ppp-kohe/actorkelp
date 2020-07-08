@@ -58,9 +58,25 @@ public class ActorSystemDefault implements ActorSystem {
         threads = Runtime.getRuntime().availableProcessors();
     }
     protected void initSystemExecutorService() {
-        executorService = new ThreadPoolExecutor(threads, Integer.MAX_VALUE, 60L, TimeUnit.SECONDS,
+        executorService = createThreadPoolFixed(threads);
+    }
+
+    public static ExecutorService createThreadPoolUnlimited(int threads) {
+        return new ThreadPoolExecutor(threads, Integer.MAX_VALUE, 60L, TimeUnit.SECONDS,
                 new SynchronousQueue<>());
     }
+
+    public static ExecutorService createThreadPoolFixed(int threads) {
+        return Executors.newFixedThreadPool(threads);
+    }
+
+    public static class ActorSystemDefaultUnlimited extends ActorSystemDefault {
+        @Override
+        protected void initSystemExecutorService() {
+            executorService = ActorSystemDefault.createThreadPoolUnlimited(threads);
+        }
+    }
+
     protected void initSystemProcessingCount() {
         processingCount = new AtomicInteger();
     }
