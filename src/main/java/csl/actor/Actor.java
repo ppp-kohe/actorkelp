@@ -55,10 +55,16 @@ public abstract class Actor implements ActorRef {
         return processLock.get();
     }
 
+    /**
+     * @return true if {@link #getMailbox()} is empty. No checking for {@link #getDelayedMailbox()}
+     */
     public boolean isEmptyMailbox() {
         return mailbox.isEmpty();
     }
 
+    /**
+     * @return poll and process a message in the mailbox. using {@link #getMailbox()} and {@link #getDelayedMailbox()}
+     */
     public boolean processMessageNext() {
         Message<?> message = mailbox.poll();
         if (message != null) {
@@ -87,6 +93,9 @@ public abstract class Actor implements ActorRef {
         system.send(new Message<>(this, sender, data));
     }
 
+    /**
+     * @return another mailbox used for observing phase completion
+     */
     public Mailbox getDelayedMailbox() {
         if (delayedMailbox == null) {
             synchronized (this) {

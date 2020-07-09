@@ -133,7 +133,8 @@ public class ActorSystemCluster extends ActorSystemRemote implements MailboxPers
                 ++runningCount;
             }
             system.getLogger().log(logThrottle, logColorThrottle, "updateTime: %s %s %s -> %s (%s) waiting=%,d running=%,d",
-                    address, (start ? "start" : "finish"), this.time, time, Duration.between(Instant.now(), time), waitingThreads.size(), runningCount);
+                    address, (start ? "start" : "finish"), ActorSystem.timeForLog(this.time), ActorSystem.timeForLog(time),
+                    Duration.between(Instant.now(), time), waitingThreads.size(), runningCount);
             if (time.compareTo(this.time) < 0) { //shorter time
                 if (runningCount <= 0) {
                     this.time = time;
@@ -159,7 +160,7 @@ public class ActorSystemCluster extends ActorSystemRemote implements MailboxPers
                 Thread th = Thread.currentThread();
                 if (!t.isNegative()) {
                     system.getLogger().log(logThrottle, logColorThrottle, "awaits: %s %s (%s) thread=%s %s",
-                            address, time, t, th, info);
+                            address, ActorSystem.timeForLog(time), t, th, info);
                     synchronized (this) {
                         waitingThreads.add(th);
                     }

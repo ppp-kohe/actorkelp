@@ -1,5 +1,8 @@
 package csl.actor;
 
+import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.Objects;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
@@ -63,5 +66,9 @@ public interface ActorSystem extends Executor, AutoCloseable {
                 return s;
             }
         }
+    }
+
+    static OffsetDateTime timeForLog(Instant t) {
+        return OffsetDateTime.ofInstant(t, ZoneOffset.systemDefault());
     }
 }

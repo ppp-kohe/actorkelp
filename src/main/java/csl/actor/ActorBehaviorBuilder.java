@@ -40,6 +40,9 @@ public class ActorBehaviorBuilder {
         return this;
     }
 
+    /**
+     * @return the behavior with appending {@link ActorBehaviorCallable} for {@link CallableMessage}
+     */
     @SuppressWarnings("unchecked")
     public ActorBehavior build() {
         return with(new ActorBehaviorCallable<>(CallableMessage.class))
@@ -140,6 +143,19 @@ public class ActorBehaviorBuilder {
 
     //////
 
+    /**
+     * checks the message type and calls the {@link CallableMessage#call(Actor, ActorRef)}
+     * <ul>
+     *     <li>regular returning of the call becomes a {@link csl.actor.CallableMessage.CallableResponse}</li>
+     *     <li>if the call caused an exception,  it becomes {@link CallableMessage.CallableFailure} </li>
+     *     <li>the response will be sent back to the sender (if non-null)</li>
+     * </ul>
+     * Also the handler processes responses of {@link csl.actor.CallableMessage.CallableResponseVoid} and
+     *    {@link csl.actor.CallableMessage.CallableResponse}({@link csl.actor.CallableMessage.CallableResponseVoid}):
+     *     for ignoring void responses
+     * @param <ActorType> the target actor type
+     * @param <DataType> the {@link CallableMessage}
+     */
     public static class ActorBehaviorCallable<ActorType extends Actor,DataType extends CallableMessage<ActorType,?>> implements ActorBehavior {
         protected Class<DataType> dataType;
 

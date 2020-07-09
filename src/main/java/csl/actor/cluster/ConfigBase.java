@@ -420,7 +420,7 @@ public class ConfigBase implements Serializable, ClusterHttp.ToJson {
     }
 
     protected FormatAndArgs logMessageHeader() {
-        return new FormatAndArgs("!!! [%s] ", Instant.now());
+        return new FormatAndArgs("!!! [%s] ", ActorSystem.timeForLog(Instant.now()));
     }
 
     public ActorSystem.SystemLogger getLogger() {
