@@ -19,6 +19,12 @@ public interface ActorSystem extends Executor, AutoCloseable {
     int getThreads();
     ScheduledExecutorService getScheduledExecutor();
 
+    /**
+     * awaiting termination of executors. it needs to call {@link #close()}
+     * @param time the time amount
+     * @param unit the unit of the time
+     * @throws InterruptedException caused by time-out
+     */
     void awaitClose(long time, TimeUnit unit) throws InterruptedException;
 
     SystemLogger getLogger();

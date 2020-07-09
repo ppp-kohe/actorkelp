@@ -12,8 +12,60 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
+/**
+ * <h3>selecting constructor</h3>
+ * <p>
+ * by default, the primary constructor, {@link #ActorKelp(ActorSystem, String, Config, State)}
+ *  is used at cloning in {@link ActorKelpSerializable#create(ActorSystem, String, Config, State)}.
+ *  The your sub-class should just override the primary constructor and you can define another constructors for creating a router object.
+ * </p>
+ *
+ * <h3>internal state and cloning process</h3>
+ * <p>
+ *     For typical impl. of internal state, implements
+ *      <ol>
+ *          <li>the primary constructor</li>
+ *          <li>{@link #toSerializableInternalState()} and {@link #initSerializedInternalState(Serializable)}</li>
+ *          <li>{@link #initMerged(ActorKelp)}</li>
+ *          <li>{@link #initClone(ActorKelp)}</li>
+ *      </ol>
+ *
+ * </p>
+ * <p>
+ *  a clone is created by {@link #internalCreateClone(ActorRef)}. it uses {@link Object#clone()}.
+ *   Note the method cannot be used for remote nodes, but it first creates local sub-splits by the method.
+ *   The method has a call of {@link #initClone(ActorKelp)} which is an empty impl..
+ *   Your class can supply some init process for the local copy in the method.
+ * </p>
+ *
+ * <p>
+ *     The easiest way of customizing states is using {@link #toSerializableInternalState()}
+ *      and {@link #initSerializedInternalState(Serializable)}.
+ *      You can transfer any kind of {@link Serializable} object by those methods.
+ * </p>
+ *
+ * <p>
+ *    An actor is not {@link Serializable}, so it uses {@link ActorKelpSerializable} for remote sending.
+ *    It is created by {@link #newSerializableState()}, and it just creates the instance.
+ *    Your class can override the method for customizing the serializable class.
+ * </p>
+ *
+ * <p>
+ *     Cloning is a different step from splitting and merging.
+ *     For merging, {@link #initMerged(ActorKelp)}
+ * </p>
+ *
+ * <h3>using as unit</h3>
+ * <p>
+ * it can call {@link #setAsUnit()} in the constructor
+ * </p>
+ *
+ * @param <SelfType> the self-type, e.g.
+ *                  <code>class T extends ActorKelp&lt;T&gt;</code>
+ */
 @SuppressWarnings("rawtypes")
 public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends ActorDefault
         implements KeyHistogramsPersistable.HistogramTreePersistableConfig, PhaseShift.StageSupported, Cloneable {
@@ -243,6 +295,9 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
         return getMailboxAsKelp().create();
     }
 
+    /**
+     * @param m the merging instance, which will be discarded. So you can close any resources in m in the method.
+     */
     protected void initMerged(SelfType m) { }
 
     protected void initClone(SelfType original) { }

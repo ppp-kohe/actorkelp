@@ -46,6 +46,11 @@ public class FileMapper extends ActorKelp<FileMapper> {
         splitCount = Math.max(splitCount, m.splitCount);
     }
 
+    /**
+     * shorthand of <code>tell(new FileSplit(path)); PhaseShift.start(path, getSystem(), this)</code>
+     * @param path the reading file
+     * @return a future returned by {@link PhaseShift#start(Object, ActorSystem, ActorRef)}
+     */
     public CompletableFuture<PhaseShift.PhaseCompleted> startReadFile(String path) {
         tell(new FileSplitter.FileSplit(path));
         return PhaseShift.start(path, getSystem(), this);
@@ -53,7 +58,7 @@ public class FileMapper extends ActorKelp<FileMapper> {
 
     protected void read(FileSplitter.FileSplit s, ActorRef sender) {
         try {
-            if (s.getFileLength() == 0) {
+            if (s.getFileLength() == 0) { //the top FileSplit, (created by new FileSplit(path))
                 splitter.splitIterator(s.getPath())
                         .forEachRemaining(this::tell);
                 if (sender != null) {

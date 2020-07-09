@@ -69,6 +69,15 @@ public class ActorBehaviorBuilderKelp extends ActorBehaviorBuilder {
         return b;
     }
 
+    /**
+     * an entry point of key-value-matching
+     * @param valueType the matching message type (the message type is the value type)
+     * @param keyExtractorFromValue  a function extracting a key from the valueType message.
+     *                                If the message becomes the key, use {@link Function#identity()}
+     * @param <ValueType> the value type
+     * @param <KeyType> the key type
+     * @return a subsequent builder
+     */
     public <ValueType, KeyType> RelayToCollect1<KeyType, ValueType, ValueType> matchKey(
             Class<ValueType> valueType, Function<ValueType, KeyType> keyExtractorFromValue) {
         return new RelayToCollect1<>(this, new KeyExtractorClass<>(valueType, keyExtractorFromValue), Function.identity());
@@ -80,6 +89,17 @@ public class ActorBehaviorBuilderKelp extends ActorBehaviorBuilder {
                 .sort(new ActorBehaviorKelp.KeyComparatorOrdered<>());
     }
 
+    /**
+     * an entry point of key-value-matching
+     * @param valueType the value type extracted from the message
+     * @param keyExtractorFromValue  a function extracting a key from the paramType message.
+     *                                If the message becomes the key, use {@link Function#identity()}
+     * @param valueExtractorFromValue a function extracting a value from the paramType message.
+     * @param <ValueType> the value type
+     * @param <ParamType> the matching message type
+     * @param <KeyType> the key type
+     * @return a subsequent builder
+     */
     public <ValueType, ParamType, KeyType> RelayToCollect1<KeyType, ParamType, ValueType> matchKey(
             Class<ParamType> valueType, Function<ParamType, KeyType> keyExtractorFromValue, Function<ParamType, ValueType> valueExtractorFromValue) {
         return new RelayToCollect1<>(this, new KeyExtractorClass<>(valueType, keyExtractorFromValue), valueExtractorFromValue);
@@ -144,11 +164,41 @@ public class ActorBehaviorBuilderKelp extends ActorBehaviorBuilder {
             this.valueExtractor1 = valueExtractor1;
         }
 
+        /**
+         * optionally matching to another message type.
+         * extracted values are paired by "matchKey" and "or" selections with grouping by the same key.
+         *   <pre>
+         *       .matchKey(T1.class, t1-&gt;k)
+         *             .or(T2.class, t2-&gt;k)
+         *           =&gt; constructing {k=&gt;[(t1,t2)], k'=&gt;[(t1',t2')], ...}
+         *   </pre>
+         * @param valueType another value type
+         * @param keyExtractorFromValue a function extracting a key from the value message
+         * @param <ValueType2> another value message type
+         * @return a subsequent builder
+         */
         public <ValueType2> RelayToCollect2<KeyType, ParamType, ValueType2, ValueType, ValueType2> or(
                 Class<ValueType2> valueType, Function<ValueType2, KeyType> keyExtractorFromValue) {
             return new RelayToCollect2<>(builder, extractor1, new KeyExtractorClass<>(valueType, keyExtractorFromValue), valueExtractor1, Function.identity());
         }
 
+        /**
+         *
+         * optionally matching to another message type.
+         * extracted values are paired by "matchKey" and "or" selections with grouping by the same key.
+         *   <pre>
+         *       .matchKey(T1.class, t1-&gt;k, t1-&gt;v1)
+         *             .or(T2.class, t2-&gt;k, t2-&gt;v2)
+         *           =&gt; constructing {k=&gt;[(v1,v2)], k'=&gt;[(v1',v2')], ...}
+         *   </pre>
+         * @param valueType another message type
+         * @param keyExtractorFromValue a function extracting a key from the value message
+         * @param valueExtractor2 a function extracting a value from the message
+         * @param <ParamType2> another message type
+         * @param <ValueType2> another value type
+         * @return a subsequent builder
+         *
+         */
         public <ParamType2, ValueType2> RelayToCollect2<KeyType, ParamType, ParamType2, ValueType, ValueType2> or(
                 Class<ParamType2> valueType, Function<ParamType2, KeyType> keyExtractorFromValue, Function<ParamType2, ValueType2> valueExtractor2) {
             return new RelayToCollect2<>(builder, extractor1, new KeyExtractorClass<>(valueType, keyExtractorFromValue), valueExtractor1, valueExtractor2);
@@ -160,20 +210,56 @@ public class ActorBehaviorBuilderKelp extends ActorBehaviorBuilder {
             return this;
         }
 
+        /**
+         * inserting intermediate reducing operation.
+         *   <pre>
+         *       .matchKey(T1.class, t1-&gt;k, t1-&gt;v)
+         *           =&gt; constructing {k=&gt;[v1,v2,...], k'=&gt;[v3,v4,...], ...}
+         *         .reduce((k,vs) -&gt; vs')
+         *           =&gt; {k=&gt;[v1'], k'=&gt;[v3'], ...} //reduced lists
+         *   </pre>
+         *   The reducing will happen on demands.
+         * @param keyValuesReducer the reducer (k,vs) -&gt; vs'
+         * @return a list builder
+         */
         public RelayToCollectList<KeyType, ValueType> reduce(BiFunction<KeyType, List<ValueType>, Iterable<ValueType>> keyValuesReducer) {
             return new RelayToCollectList<>(builder, keyComparator, keyValuesReducer,
                     Collections.singletonList(extractor1),
                     Collections.singletonList(valueExtractor1));
         }
 
+        /**
+         * inserting intermediate reducing operation.
+         *   <pre>
+         *       .matchKey(T1.class, t1-&gt;k, t1-&gt;v)
+         *           =&gt; constructing {k=&gt;[v1,v2,...], k'=&gt;[v3,v4,...], ...}
+         *         .fold((k,vs) -&gt; v')
+         *           =&gt; {k=&gt;[v1'], k'=&gt;[v3'], ...} //reduced lists
+         *   </pre>
+         *   The reducing will happen on demands.
+         * @param keyValuesReducer the reducer (k,vs) -&gt; v'
+         * @return a list builder
+         */
         public RelayToCollectList<KeyType, ValueType> fold(BiFunction<KeyType, List<ValueType>, ValueType> keyValuesReducer) {
             return reduce((k,vs) -> Collections.singletonList(keyValuesReducer.apply(k, vs)));
         }
 
+        /**
+         * a terminal action for iterating over key-value pairs.
+         * The action will be immediately invoked when the value arrived.
+         * @param handler the action (k,v)-&gt;()
+         * @return an end of matchKey construction
+         */
         public ActorBehaviorBuilderKelp forEachKeyValue(BiConsumer<KeyType, ValueType> handler) {
             return action(id -> builder.getMatchKeyFactory().get1(id, keyComparator, extractor1, valueExtractor1, handler));
         }
 
+        /**
+         * a terminal action for iterating over the value of key-value pairs.
+         * The action will be immediately invoked when the value arrived.
+         * @param handler the action (v)-&gt;()
+         * @return an end of matchKey construction
+         */
         public ActorBehaviorBuilderKelp forEach(Consumer<ValueType> handler) {
             return forEachKeyValue((k,v) -> handler.accept(v));
         }
