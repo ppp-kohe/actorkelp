@@ -3,7 +3,7 @@ package csl.actor.example.exp.wordcount;
 import com.esotericsoftware.kryo.io.Output;
 import csl.actor.*;
 import csl.actor.cluster.ConfigDeployment;
-import csl.actor.cluster.FileSplitter;
+import csl.actor.util.FileSplitter;
 import csl.actor.cluster.PhaseShift;
 import csl.actor.kelp.ActorKelp;
 import csl.actor.kelp.Config;

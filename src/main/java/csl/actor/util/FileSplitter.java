@@ -1,4 +1,6 @@
-package csl.actor.cluster;
+package csl.actor.util;
+
+import csl.actor.cluster.ConfigDeployment;
 
 import java.io.IOException;
 import java.io.RandomAccessFile;

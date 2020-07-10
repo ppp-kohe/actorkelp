@@ -4,6 +4,7 @@ import csl.actor.ActorSystem;
 import csl.actor.remote.ActorAddress;
 import csl.actor.remote.ActorSystemRemote;
 import csl.actor.remote.KryoBuilder;
+import csl.actor.util.ConfigBase;
 
 import java.io.File;
 import java.lang.reflect.Field;

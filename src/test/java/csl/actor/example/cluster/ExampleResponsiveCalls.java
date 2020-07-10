@@ -1,7 +1,7 @@
 package csl.actor.example.cluster;
 
 import csl.actor.*;
-import csl.actor.cluster.ResponsiveCalls;
+import csl.actor.util.ResponsiveCalls;
 import csl.actor.remote.ActorSystemRemote;
 
 import java.time.Instant;

@@ -1,5 +1,8 @@
 package csl.actor.cluster;
 
+import csl.actor.util.ConfigBase;
+import csl.actor.util.ToJson;
+
 import java.io.Serializable;
 import java.lang.reflect.Field;
 import java.nio.file.Files;
@@ -668,7 +671,7 @@ public class ClusterCommands<AppConfType extends ConfigBase> {
         }
     }
 
-    public static class ClusterUnit<AppConfType extends ConfigBase> implements Serializable, ClusterHttp.ToJson {
+    public static class ClusterUnit<AppConfType extends ConfigBase> implements Serializable, ToJson {
         public static final long serialVersionUID = 1L;
         protected String name;
         protected ConfigDeployment deploymentConfig;

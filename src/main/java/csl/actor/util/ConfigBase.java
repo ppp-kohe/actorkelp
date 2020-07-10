@@ -1,4 +1,4 @@
-package csl.actor.cluster;
+package csl.actor.util;
 
 import csl.actor.ActorSystem;
 import csl.actor.ActorSystemDefault;
@@ -17,7 +17,7 @@ import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
-public class ConfigBase implements Serializable, ClusterHttp.ToJson {
+public class ConfigBase implements Serializable, ToJson {
     public static final long serialVersionUID = 1L;
     protected transient ActorSystem.SystemLogger logger;
 
@@ -440,7 +440,7 @@ public class ConfigBase implements Serializable, ClusterHttp.ToJson {
         return new ActorSystemDefault.SystemLoggerErr();
     }
 
-    protected int getLogColorDefault() {
+    public int getLogColorDefault() {
         return 17;
     }
 

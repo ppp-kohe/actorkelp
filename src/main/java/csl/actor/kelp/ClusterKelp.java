@@ -7,6 +7,8 @@ import csl.actor.cluster.*;
 import csl.actor.remote.ActorAddress;
 import csl.actor.remote.ActorRefRemote;
 import csl.actor.remote.KryoBuilder;
+import csl.actor.util.ResponsiveCalls;
+import csl.actor.util.ToJson;
 
 import java.io.Serializable;
 import java.time.Instant;
@@ -139,7 +141,7 @@ public class ClusterKelp extends ClusterDeployment<Config, ActorPlacementKelp> {
     }
 
 
-    public static class ActorStat implements Serializable, ClusterHttp.ToJson {
+    public static class ActorStat implements Serializable, ToJson {
         public static final long serialVersionUID = 1L;
         public ActorRef ref;
         public String name;
@@ -253,7 +255,7 @@ public class ClusterKelp extends ClusterDeployment<Config, ActorPlacementKelp> {
         }
     }
 
-    public static class PhaseStat implements Serializable, ClusterHttp.ToJson {
+    public static class PhaseStat implements Serializable, ToJson {
         public static final long serialVersionUID = 1L;
         public Object key;
         public Instant startTime;
@@ -298,7 +300,7 @@ public class ClusterKelp extends ClusterDeployment<Config, ActorPlacementKelp> {
         }
     }
 
-    public static class RouterSplitStat implements Serializable, ClusterHttp.ToJson {
+    public static class RouterSplitStat implements Serializable, ToJson {
         public static final long serialVersionUID = 1L;
         public String type = "";
         public KelpRoutingSplit.SplitPath path;
@@ -396,7 +398,7 @@ public class ClusterKelp extends ClusterDeployment<Config, ActorPlacementKelp> {
         }
     }
 
-    public static class HistogramStat implements Serializable, ClusterHttp.ToJson {
+    public static class HistogramStat implements Serializable, ToJson {
         public static final long serialVersionUID = 1L;
         public int entryId;
         public Instant nextSchedule;

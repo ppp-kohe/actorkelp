@@ -8,6 +8,7 @@ import csl.actor.remote.ActorAddress;
 import csl.actor.remote.ActorRefRemote;
 import csl.actor.remote.ActorRefRemoteSerializer;
 import csl.actor.remote.ObjectMessageServer;
+import csl.actor.util.ToJson;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.*;
@@ -296,18 +297,6 @@ public class ClusterHttp implements Closeable {
 
     public Object toJsonActor(ActorRef ref) {
         return Objects.toString(actorToAddress.getAddress(ref));
-    }
-
-    public interface ToJson {
-        Map<String,Object> toJson(Function<Object,Object> valueConverter);
-
-        default Object toJson(Function<Object,Object> valueConverter, Object o) {
-            return valueConverter.apply(o);
-        }
-
-        default Object toJson(Function<Object,Object> valueConverter, Object o, Object nullVal) {
-            return o == null ? valueConverter.apply(nullVal) : valueConverter.apply(o);
-        }
     }
 
     public boolean matchType(Type type, Class<?> baseType, Class<?>... paramTypes) {

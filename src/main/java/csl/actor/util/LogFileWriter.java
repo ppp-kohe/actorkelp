@@ -1,4 +1,4 @@
-package csl.actor.cluster;
+package csl.actor.util;
 
 import java.io.IOException;
 import java.io.OutputStream;

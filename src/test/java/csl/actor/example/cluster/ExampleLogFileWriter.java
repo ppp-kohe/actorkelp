@@ -1,7 +1,7 @@
 package csl.actor.example.cluster;
 
 import csl.actor.ActorSystemDefault;
-import csl.actor.cluster.LogFileWriter;
+import csl.actor.util.LogFileWriter;
 
 import java.nio.file.Paths;
 

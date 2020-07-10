@@ -10,6 +10,10 @@ import csl.actor.remote.ActorAddress;
 import csl.actor.remote.ActorRefRemote;
 import csl.actor.remote.ActorSystemRemote;
 import csl.actor.remote.KryoBuilder;
+import csl.actor.util.ConfigBase;
+import csl.actor.util.LogFileWriter;
+import csl.actor.util.ResponsiveCalls;
+import csl.actor.util.ToJson;
 
 import java.io.File;
 import java.io.Serializable;
@@ -903,7 +907,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         return new ClusterStats().set(this);
     }
 
-    public static class ClusterStats implements Serializable, ClusterHttp.ToJson {
+    public static class ClusterStats implements Serializable, ToJson {
         public static final long serialVersionUID = 1L;
         public String appName;
         public Class<? extends ConfigBase> defaultConfType;
@@ -1209,7 +1213,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 
-    public static class SystemStats implements Serializable, ClusterHttp.ToJson {
+    public static class SystemStats implements Serializable, ToJson {
         public static final long serialVersionUID = 1L;
         public int throughput;
         public int threads;
@@ -1236,7 +1240,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         }
     }
 
-    public static class NetworkStats implements Serializable, ClusterHttp.ToJson {
+    public static class NetworkStats implements Serializable, ToJson {
         public static final long serialVersionUID = 1L;
         public ActorAddress address;
         public long count;

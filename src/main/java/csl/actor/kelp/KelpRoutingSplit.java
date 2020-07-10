@@ -3,7 +3,7 @@ package csl.actor.kelp;
 import csl.actor.Actor;
 import csl.actor.ActorRef;
 import csl.actor.Message;
-import csl.actor.cluster.ResponsiveCalls;
+import csl.actor.util.ResponsiveCalls;
 
 import java.io.Serializable;
 import java.util.*;

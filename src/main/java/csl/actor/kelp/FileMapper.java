@@ -4,7 +4,7 @@ import csl.actor.ActorBehavior;
 import csl.actor.ActorRef;
 import csl.actor.ActorSystem;
 import csl.actor.cluster.ConfigDeployment;
-import csl.actor.cluster.FileSplitter;
+import csl.actor.util.FileSplitter;
 import csl.actor.cluster.PhaseShift;
 
 import java.util.concurrent.CompletableFuture;

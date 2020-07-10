@@ -2,7 +2,7 @@ package csl.actor.example.kelp;
 
 import csl.actor.*;
 import csl.actor.cluster.PhaseShift;
-import csl.actor.cluster.ResponsiveCalls;
+import csl.actor.util.ResponsiveCalls;
 import csl.actor.kelp.*;
 import csl.actor.remote.ActorRefRemote;
 import csl.actor.remote.ActorSystemRemote;

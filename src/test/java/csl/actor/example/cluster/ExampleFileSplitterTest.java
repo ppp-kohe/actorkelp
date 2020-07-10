@@ -1,6 +1,6 @@
 package csl.actor.example.cluster;
 
-import csl.actor.cluster.FileSplitter;
+import csl.actor.util.FileSplitter;
 
 import java.nio.file.Files;
 import java.nio.file.Paths;

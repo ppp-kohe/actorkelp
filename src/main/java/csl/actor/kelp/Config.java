@@ -1,6 +1,6 @@
 package csl.actor.kelp;
 
-import csl.actor.cluster.ConfigBase;
+import csl.actor.util.ConfigBase;
 
 public class Config extends ConfigBase {
     public static final long serialVersionUID = 1L;
@@ -46,7 +46,7 @@ public class Config extends ConfigBase {
     public String logHeader = "";
 
     @Override
-    protected int getLogColorDefault() {
+    public int getLogColorDefault() {
         return logColor;
     }
 

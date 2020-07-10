@@ -3,8 +3,8 @@ package csl.actor.kelp;
 import csl.actor.*;
 import csl.actor.cluster.ClusterDeployment;
 import csl.actor.cluster.ConfigDeployment;
-import csl.actor.cluster.FileSplitter;
-import csl.actor.cluster.ResponsiveCalls;
+import csl.actor.util.FileSplitter;
+import csl.actor.util.ResponsiveCalls;
 import csl.actor.remote.ActorAddress;
 
 import java.io.FileWriter;

@@ -4,6 +4,9 @@ import csl.actor.*;
 import csl.actor.remote.ActorAddress;
 import csl.actor.remote.ActorRefRemote;
 import csl.actor.remote.ActorSystemRemote;
+import csl.actor.util.ConfigBase;
+import csl.actor.util.ResponsiveCalls;
+import csl.actor.util.ToJson;
 
 import java.io.Serializable;
 import java.util.*;
@@ -338,7 +341,7 @@ public interface ActorPlacement {
         }
     }
 
-    class AddressListEntry implements Serializable, ClusterHttp.ToJson {
+    class AddressListEntry implements Serializable, ToJson {
         public static final long serialVersionUID = 1L;
         protected ActorAddress.ActorAddressRemoteActor placementActor;
         protected int threads;

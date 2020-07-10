@@ -4,7 +4,7 @@ import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 import csl.actor.ActorSystem;
-import csl.actor.cluster.ConfigBase;
+import csl.actor.util.ConfigBase;
 import csl.actor.cluster.MailboxPersistable;
 import csl.actor.cluster.MailboxPersistable.PersistentFileReaderSource;
 import csl.actor.remote.KryoBuilder;
