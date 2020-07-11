@@ -23,7 +23,6 @@ public class StagingActor extends ActorDefault {
 
     protected Instant logLastTime;
     protected Duration logDuration;
-    protected long watcherSleepTimeMs = 0;
 
     public StagingActor(ActorSystem system) {
         super(system);
@@ -98,6 +97,10 @@ public class StagingActor extends ActorDefault {
                 .build();
     }
 
+    @Override
+    public String toStringContents() {
+        return String.format("%s", ActorSystem.timeForLog(this.entry.getTask().getStartTime()));
+    }
 
     /**
      * the staging task info.
@@ -145,7 +148,7 @@ public class StagingActor extends ActorDefault {
 
         @Override
         public String toString() {
-            return String.format("stage %s: %s", key, getElapsedTime());
+            return String.format("stage %s: %-11s", key, getElapsedTime());
         }
 
         public Duration getElapsedTime() {
@@ -548,7 +551,7 @@ public class StagingActor extends ActorDefault {
         completed.setCompletedTime(e.getCompletedTime());
 
         log(e.getTask(), e.getStarted(), e.getFinished(),
-                String.format("FINISH %s (%s)", completed.getElapsedTime(), ActorSystem.timeForLog(completed.getCompletedTime())));
+                String.format("FINISH %-11s (%s)", completed.getElapsedTime(), ActorSystem.timeForLog(completed.getCompletedTime())));
         if (handler != null) {
             handler.accept(this, completed);
         }

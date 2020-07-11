@@ -67,7 +67,7 @@ public class ActorSystemDefault implements ActorSystem {
     }
 
     public static ExecutorService createThreadPoolFixed(int threads) {
-        return Executors.newFixedThreadPool(threads);
+        return Executors.newFixedThreadPool(threads * 6);
     }
 
     public static class ActorSystemDefaultUnlimited extends ActorSystemDefault {
