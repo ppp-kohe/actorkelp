@@ -1,6 +1,7 @@
 package csl.actor.kelp2;
 
 import csl.actor.*;
+import csl.actor.cluster.PersistentFileManager;
 import csl.actor.util.FileSplitter;
 import csl.actor.util.StagingActor;
 
@@ -12,33 +13,70 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
         implements StagingActor.StagingSupported {
     protected ActorRef nextStage;
     protected FileSplitter fileSplitter;
+    protected ConfigKelp config;
 
-    public ActorKelp(ActorSystem system, String name, Mailbox mailbox, ActorBehavior behavior) {
+    public ActorKelp(ActorSystem system, String name, Mailbox mailbox, ActorBehavior behavior, ConfigKelp config) {
         super(system, name, mailbox, behavior);
+        if (config == null) {
+            this.config = ConfigKelp.CONFIG_DEFAULT;
+        } else {
+            this.config = config;
+        }
     }
 
-    public ActorKelp(ActorSystem system, String name, ActorBehavior behavior) {
-        super(system, name, behavior);
+    public ActorKelp(ActorSystem system, String name, ConfigKelp config) {
+        this(system, name, null, null, config);
+        this.mailbox = initMailbox();
+        this.behavior = initBehavior();
     }
 
-    public ActorKelp(ActorSystem system, ActorBehavior behavior) {
-        super(system, behavior);
+    public ActorKelp(ActorSystem system, ConfigKelp config) {
+        this(system, null, config);
         setNameRandom();
     }
 
-    public ActorKelp(ActorSystem system, String name, ConfigKelp conf) {
-        super(system, name);
-
-    }
-
     public ActorKelp(ActorSystem system) {
-        super(system);
+        this(system, null, (ConfigKelp) null);
         setNameRandom();
     }
 
     public void setNameRandom() {
         name = getClass().getSimpleName() + "_" + UUID.randomUUID();
         system.register(this);
+    }
+
+    /////////////
+
+    public String getMailboxPath() {
+        return config.mailboxPath;
+    }
+
+    public boolean isPersist() {
+        return config.persist;
+    }
+
+    public long getMailboxOnMemorySize() {
+        return config.mailboxOnMemorySize;
+    }
+
+    ///////////////
+
+    protected PersistentFileManager getPersistentFile() {
+        String path = getMailboxPath();
+        return PersistentFileManager.getPersistentFile(system, () -> path);
+    }
+
+    protected Mailbox initMailbox() {
+        PersistentFileManager m = getPersistentFile();
+        return initMailboxDefault(m);
+    }
+
+    protected MailboxDefault initMailboxDefault(PersistentFileManager m) {
+        if (isPersist()) {
+            return new MailboxKelp(m, getMailboxOnMemorySize());
+        } else {
+            return new MailboxDefault();
+        }
     }
 
     @Override
