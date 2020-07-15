@@ -98,19 +98,19 @@ public interface ActorPlacement {
                     .build();
         }
 
-        public void join(ActorAddress.ActorAddressRemote master) {
-            ActorAddress.ActorAddressRemoteActor masterActor;
-            if (master instanceof ActorAddress.ActorAddressRemoteActor) {
-                masterActor = (ActorAddress.ActorAddressRemoteActor) master;
+        public void join(ActorAddress.ActorAddressRemote primary) {
+            ActorAddress.ActorAddressRemoteActor primaryActor;
+            if (primary instanceof ActorAddress.ActorAddressRemoteActor) {
+                primaryActor = (ActorAddress.ActorAddressRemoteActor) primary;
             } else {
-                masterActor = master.getActor(getName()); //same name
+                primaryActor = primary.getActor(getName()); //same name
             }
             try {
-                int masterThreads = ResponsiveCalls.sendHostTask(getSystem(), masterActor, new CallableMasterThreads())
+                int primaryThreads = ResponsiveCalls.sendHostTask(getSystem(), primaryActor, new CallableMasterThreads())
                         .get(20, TimeUnit.SECONDS);
                 tell(new AddressList(
-                            new AddressListEntry(masterActor, masterThreads)), this);
-                log("join: %s, threads: %,d", masterActor, masterThreads);
+                            new AddressListEntry(primaryActor, primaryThreads)), this);
+                log("join: %s, threads: %,d", primaryActor, primaryThreads);
             } catch (Exception ex) {
                 throw new RuntimeException(ex);
             }

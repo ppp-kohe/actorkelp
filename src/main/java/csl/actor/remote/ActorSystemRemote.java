@@ -401,7 +401,7 @@ public class ActorSystemRemote implements ActorSystem {
         }
 
         @Override
-        protected void processMessage(Message<?> message) {
+        public void processMessage(Message<?> message) {
             send((Message<?>) message.getData());
         }
 
@@ -596,7 +596,7 @@ public class ActorSystemRemote implements ActorSystem {
         }
 
         @Override
-        protected void processMessage(Message<?> message) {
+        public void processMessage(Message<?> message) {
             deliver(message.getData());
         }
 

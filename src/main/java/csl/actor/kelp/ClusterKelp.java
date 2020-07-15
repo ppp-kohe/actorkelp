@@ -58,7 +58,7 @@ public class ClusterKelp extends ClusterDeployment<Config, ActorPlacementKelp> {
             ActorAddress.ActorAddressRemote host = ((ActorRefRemote) actor).getAddress().getHostAddress();
             return placeGet(host, getter);
         } else {
-            return getter.call(getMasterPlace(), null);
+            return getter.call(getPrimaryPlace(), null);
         }
     }
 
@@ -173,7 +173,7 @@ public class ClusterKelp extends ClusterDeployment<Config, ActorPlacementKelp> {
                 if (actor instanceof ActorKelp) {
                     ActorKelp a = (ActorKelp) actor;
 
-                    MailboxPersistable.PersistentFileManager m = MailboxPersistable.getPersistentFile(a.getSystem(), a::persistMailboxPath);
+                    PersistentFileManager m = PersistentFileManager.getPersistentFile(a.getSystem(), a::persistMailboxPath);
                     outputFileHeader = m.getPathModifier().expandPath(a.getOutputFileHeader());
 
                     setMailbox(a, a.getMailboxAsKelp());

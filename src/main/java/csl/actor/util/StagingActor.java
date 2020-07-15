@@ -69,7 +69,7 @@ public class StagingActor extends ActorDefault {
         return this;
     }
 
-    public StagingActor setWatcherSleepTimeMs(long watcherSleepTimeMs) {
+    public StagingActor withWatcherSleepTimeMs(long watcherSleepTimeMs) {
         entry.getTask().setWatcherSleepTimeMs(watcherSleepTimeMs);
         return this;
     }

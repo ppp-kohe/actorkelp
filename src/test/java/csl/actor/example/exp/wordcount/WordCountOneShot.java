@@ -57,7 +57,7 @@ public class WordCountOneShot {
             String debugFlag = "false";
 
             ClusterKelp d = ClusterKelp.create();
-            ClusterKelp.run(Arrays.asList(d.master()
+            ClusterKelp.run(Arrays.asList(d.primary()
                             .edit(c -> c.getDeploymentConfig().baseDir = dir)
                             .edit(c -> c.getAppConfig().routerAutoMerge = false)
                             .edit(c -> c.getDeploymentConfig().httpHost = "0.0.0.0"),

@@ -26,7 +26,7 @@ public class ConfigDeployment extends ConfigBase {
     public int port = 38888;
     public String configType = "csl.actor.kelp.Config";
     public String baseDir = "target/debug";
-    public boolean master = false;
+    public boolean primary = false;
     public boolean sharedDeploy = true;
     public long joinTimeoutMs = 10_000;
     public String pathSeparator = File.pathSeparator;

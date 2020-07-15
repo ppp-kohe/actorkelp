@@ -82,15 +82,15 @@ public abstract class Actor implements ActorRef {
         }
     }
 
-    protected abstract void processMessage(Message<?> message);
+    public abstract void processMessage(Message<?> message);
 
     public void processMessageAfter() {
         processLock.set(false);
     }
 
     @Override
-    public void tell(Object data, ActorRef sender) {
-        system.send(new Message<>(this, sender, data));
+    public void tellMessage(Message<?> message) {
+        system.send(message);
     }
 
     /**

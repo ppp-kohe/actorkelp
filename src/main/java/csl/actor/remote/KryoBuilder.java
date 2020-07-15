@@ -14,9 +14,12 @@ import com.esotericsoftware.kryo.util.Pool;
 import csl.actor.*;
 import csl.actor.cluster.*;
 import csl.actor.kelp.*;
+import csl.actor.kelp2.ActorRefShuffle;
+import csl.actor.kelp2.ConfigKelp;
 import csl.actor.util.ConfigBase;
 import csl.actor.util.FileSplitter;
 import csl.actor.util.ResponsiveCalls;
+import csl.actor.util.StagingActor;
 import org.objenesis.instantiator.basic.ObjectStreamClassInstantiator;
 import org.objenesis.strategy.StdInstantiatorStrategy;
 
@@ -96,6 +99,7 @@ public class KryoBuilder {
             }
         }
 
+        kryo.register(ActorRefShuffle.class); //precede the ActorRefRemoteSerializer
         kryo.addDefaultSerializer(ActorRef.class, new ActorRefRemoteSerializer<>(system)); //for sub-types
 
         register(kryo, getActorClasses());
@@ -288,8 +292,8 @@ public class KryoBuilder {
                 ConfigBase.class,
                 csl.actor.kelp.Config.class,
                 MailboxPersistable.MessageOnStorage.class,
-                MailboxPersistable.PersistentFileEnd.class,
-                MailboxPersistable.PersistentFileReaderSource.class,
+                PersistentFileManager.PersistentFileEnd.class,
+                PersistentFileManager.PersistentFileReaderSource.class,
                 MailboxPersistable.MessageOnStorageFile.class,
                 KeyHistogramsPersistable.HistogramTreePersistable.class,
                 KeyHistogramsPersistable.PutIndexHistory.class,
@@ -327,7 +331,15 @@ public class KryoBuilder {
                 ClusterKelp.RouterSplitStat.class,
                 ClusterKelp.HistogramStat.class,
                 ClusterKelp.ActorStat.class,
-                ClusterKelp.PhaseStat.class);
+                ClusterKelp.PhaseStat.class,
+
+                csl.actor.kelp2.ActorKelp.MessageBundle.class,
+                ConfigKelp.class,
+                csl.actor.kelp2.ActorKelp.ActorKelpSerializable.class,
+                StagingActor.StagingCompleted.class,
+                StagingActor.StagingNotification.class,
+                StagingActor.StagingWatcher.class,
+                StagingActor.StagingTask.class);
     }
 
     public interface SerializerFunction {

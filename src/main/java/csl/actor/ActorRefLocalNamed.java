@@ -27,8 +27,8 @@ public class ActorRefLocalNamed implements ActorRef {
     }
 
     @Override
-    public void tell(Object data, ActorRef sender) {
-        system.send(new Message<>(this, sender, data));
+    public void tellMessage(Message<?> message) {
+        system.send(message);
     }
 
     @Override

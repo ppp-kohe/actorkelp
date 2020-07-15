@@ -41,20 +41,20 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
     public static String NON_DRIVER_FILE_CONF = "cluster-config.txt"; //under appDir
     public static String NON_DRIVER_PROPERTY_APP_NAME = "csl.actor.cluster.appName";
 
-    protected String masterMainType; //for remoteDriver
-    protected List<String> masterMainArgs = new ArrayList<>(); //for remoteDriver
+    protected String primaryMainType; //for remoteDriver
+    protected List<String> primaryMainArgs = new ArrayList<>(); //for remoteDriver
 
     protected boolean driverMode = true;
     protected Class<AppConfType> defaultConfType;
     protected Class<PlaceType> placeType;
 
     protected String appName;
-    protected ClusterUnit<AppConfType> master;
+    protected ClusterUnit<AppConfType> primary;
     protected List<ClusterUnit<AppConfType>> nodes = new ArrayList<>();
     protected Map<ClusterUnit<AppConfType>, Process> processes = new ConcurrentHashMap<>();
     protected ActorSystemRemote system;
 
-    protected PlaceType masterPlace;
+    protected PlaceType primaryPlace;
 
     protected String attachKryoBuilderType = KryoBuilder.class.getName();
     protected ActorRef attachedPlace;
@@ -69,7 +69,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
 
     /**
      * starts cluster as remote-driver mode
-     * @param args {configFilePath, masterMainType, masterMainArgs}
+     * @param args {configFilePath, primaryMainType, primaryMainArgs}
      */
     @SuppressWarnings("unchecked")
     public static void main(String[] args) throws Exception {
@@ -78,20 +78,20 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
     }
 
     public void runAsRemoteDriver(String... args) throws Exception {
-        String masterMainType = args[0];
+        String primaryMainType = args[0];
         String configFilePath = args[1];
-        List<String> masterMainArgs = Arrays.asList(args).subList(2, args.length);
-        runAsRemoteDriver(configFilePath, masterMainType, masterMainArgs);
+        List<String> primaryMainArgs = Arrays.asList(args).subList(2, args.length);
+        runAsRemoteDriver(configFilePath, primaryMainType, primaryMainArgs);
     }
 
-    public void runAsRemoteDriver(String configFilePath, String masterMainType, List<String> masterMainArgs) throws Exception {
-        int n = deployAsRemoteDriver(configFilePath, masterMainType, masterMainArgs)
+    public void runAsRemoteDriver(String configFilePath, String primaryMainType, List<String> primaryMainArgs) throws Exception {
+        int n = deployAsRemoteDriver(configFilePath, primaryMainType, primaryMainArgs)
                 .waitFor();
         System.exit(n);
     }
 
-    public void runAsRemoteDriver(List<ClusterUnit<AppConfType>> units, String masterMainType, List<String> masterMainArgs) throws Exception {
-        int n = deployAsRemoteDriver(units, masterMainType, masterMainArgs)
+    public void runAsRemoteDriver(List<ClusterUnit<AppConfType>> units, String primaryMainType, List<String> primaryMainArgs) throws Exception {
+        int n = deployAsRemoteDriver(units, primaryMainType, primaryMainArgs)
                 .waitFor();
         System.exit(n);
     }
@@ -113,8 +113,8 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         return placeType;
     }
 
-    public ClusterUnit<AppConfType> getMaster() {
-        return master;
+    public ClusterUnit<AppConfType> getPrimary() {
+        return primary;
     }
 
     public List<ClusterUnit<AppConfType>> getNodes() {
@@ -125,8 +125,8 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         return processes;
     }
 
-    public PlaceType getMasterPlace() {
-        return masterPlace;
+    public PlaceType getPrimaryPlace() {
+        return primaryPlace;
     }
 
     public ClusterHttp getHttp() {
@@ -148,27 +148,27 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         this.driverMode = driverMode;
     }
 
-    public String getMasterMainType() {
-        return masterMainType;
+    public String getPrimaryMainType() {
+        return primaryMainType;
     }
 
-    public void setMasterMainType(String masterMainType) {
-        this.masterMainType = masterMainType;
+    public void setPrimaryMainType(String primaryMainType) {
+        this.primaryMainType = primaryMainType;
     }
 
-    public List<String> getMasterMainArgs() {
-        return masterMainArgs;
+    public List<String> getPrimaryMainArgs() {
+        return primaryMainArgs;
     }
 
-    public Process deployAsRemoteDriver(String confFile, String masterMainType, List<String> masterArgs) {
-        setMasterMainType(masterMainType);
-        getMasterMainArgs().addAll(masterArgs);
+    public Process deployAsRemoteDriver(String confFile, String primaryMainType, List<String> primaryArgs) {
+        setPrimaryMainType(primaryMainType);
+        getPrimaryMainArgs().addAll(primaryArgs);
         return deployAsRemoteDriver(confFile);
     }
 
-    public Process deployAsRemoteDriver(List<ClusterUnit<AppConfType>> units, String masterMainType, List<String> masterArgs) {
-        setMasterMainType(masterMainType);
-        getMasterMainArgs().addAll(masterArgs);
+    public Process deployAsRemoteDriver(List<ClusterUnit<AppConfType>> units, String primaryMainType, List<String> primaryArgs) {
+        setPrimaryMainType(primaryMainType);
+        getPrimaryMainArgs().addAll(primaryArgs);
         return deployAsRemoteDriver(units);
     }
 
@@ -181,11 +181,11 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
             deployUnitsAsConfigFile(units);
             deployMasterInitMaster(units);
             deployMasterInitAppName();
-            deployFiles(master);
+            deployFiles(primary);
             deployNodesAsRemoteDriver(units);
-            deployNodeStartProcess(master);
-            attachAsRemoteDriver(ActorAddress.get(master.getDeploymentConfig().getAddress()));
-            return processes.get(master);
+            deployNodeStartProcess(primary);
+            attachAsRemoteDriver(ActorAddress.get(primary.getDeploymentConfig().getAddress()));
+            return processes.get(primary);
         } catch (Exception ex) {
             throw new RuntimeException(ex);
         }
@@ -203,7 +203,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
 
     public void deployNodesAsRemoteDriver(List<ClusterUnit<AppConfType>> units) {
         units.stream()
-                .filter(u -> !u.getDeploymentConfig().master)
+                .filter(u -> !u.getDeploymentConfig().primary)
                 .forEach(this::deployNodeFiles);
     }
 
@@ -220,7 +220,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
 
                     String s = ResponsiveCalls.sendTask(getSystem(), getPlace(),
                             Object::toString).get(30, TimeUnit.SECONDS);
-                    master.log("launched: %s", s);
+                    primary.log("launched: %s", s);
                     return;
                 } catch (Exception ex) {
                     last = ex;
@@ -265,8 +265,8 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
     }
 
     public String getUnitMainType(ClusterUnit<AppConfType> unit) {
-        if (unit.getDeploymentConfig().master) {
-            return masterMainType;
+        if (unit.getDeploymentConfig().primary) {
+            return primaryMainType;
         } else {
             return getNodeMainType().getName();
         }
@@ -286,7 +286,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         deployMaster(units);
         deployNodes(units);
         awaitNodes();
-        return getMasterPlace();
+        return getPrimaryPlace();
     }
 
     public void deployMaster(List<ClusterUnit<AppConfType>> units) throws Exception {
@@ -294,18 +294,18 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         deployMasterInitAppName();
         deployMasterInitSystem();
         deployMasterInitUncaughtHandler();
-        deployFiles(master);
+        deployFiles(primary);
         deployMasterStartSystem();
         deployMasterAfterSystemInit(units);
     }
 
     protected void deployMasterInitMaster(List<ClusterUnit<AppConfType>> units) {
-        master = units.stream()
-                .filter(u -> u.getDeploymentConfig().master)
+        primary = units.stream()
+                .filter(u -> u.getDeploymentConfig().primary)
                 .findFirst()
                 .orElseThrow(RuntimeException::new);
-        if (master == null) {
-            master = master();
+        if (primary == null) {
+            primary = primary();
         }
     }
 
@@ -314,9 +314,9 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
     }
 
     protected void deployMasterInitSystem() {
-        master.log("master %s: create system with serializer %s", master.getDeploymentConfig().getAddress(), master.getDeploymentConfig().kryoBuilderType);
-        system = createSystem(master.getDeploymentConfig().kryoBuilderType);
-        system.getLocalSystem().setLogger(new ConfigBase.SystemLoggerHeader(system.getLogger(), master.getAppConfig()));
+        primary.log("primary %s: create system with serializer %s", primary.getDeploymentConfig().getAddress(), primary.getDeploymentConfig().kryoBuilderType);
+        system = createSystem(primary.getDeploymentConfig().kryoBuilderType);
+        system.getLocalSystem().setLogger(new ConfigBase.SystemLoggerHeader(system.getLogger(), primary.getAppConfig()));
     }
 
     @SuppressWarnings("unchecked")
@@ -335,20 +335,20 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
     }
 
     protected void deployMasterInitUncaughtHandler() {
-        setDefaultUncaughtHandler(master.getDeploymentConfig());
+        setDefaultUncaughtHandler(primary.getDeploymentConfig());
     }
 
     protected void deployMasterStartSystem() {
-        system.startWithoutWait(ActorAddress.get(master.getDeploymentConfig().getAddress()));
+        system.startWithoutWait(ActorAddress.get(primary.getDeploymentConfig().getAddress()));
     }
 
     protected void deployMasterAfterSystemInit(List<ClusterUnit<AppConfType>> units) throws Exception {
         deployMasterAfterSystemInitLogColor();
         deployMasterAfterSystemInitPath();
-        master.log("master %s: path %s", master.getDeploymentConfig().getAddress(), ConfigDeployment.getPathModifier(system));
+        primary.log("primary %s: path %s", primary.getDeploymentConfig().getAddress(), ConfigDeployment.getPathModifier(system));
 
         deployMasterAfterSystemInitPlace();
-        master.log("master %s: started %s", master.getDeploymentConfig().getAddress(), masterPlace);
+        primary.log("primary %s: started %s", primary.getDeploymentConfig().getAddress(), primaryPlace);
 
         deployMasterAfterSystemInitSendConfigToUnits(units);
 
@@ -356,14 +356,14 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
     }
 
     protected void deployMasterAfterSystemInitLogColor() {
-        System.setProperty("csl.actor.logColor", Integer.toString(master.getDeploymentConfig().getLogColorDefault()));
+        System.setProperty("csl.actor.logColor", Integer.toString(primary.getDeploymentConfig().getLogColorDefault()));
     }
 
     protected void deployMasterAfterSystemInitPath() throws Exception {
-        ConfigDeployment.PathModifierHost ph = master.getDeploymentConfig().setPathModifierWithBaseDir(system);
+        ConfigDeployment.PathModifierHost ph = primary.getDeploymentConfig().setPathModifierWithBaseDir(system);
         ph.setApp(getAppName());
         System.setProperty("csl.actor.path.app", ph.getApp());
-        setLogFile(master.getDeploymentConfig(), ph);
+        setLogFile(primary.getDeploymentConfig(), ph);
     }
 
     public static void setLogFile(ConfigDeployment conf, ConfigDeployment.PathModifier pm) throws Exception {
@@ -378,25 +378,25 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
     }
 
     protected void deployMasterAfterSystemInitPlace() throws Exception {
-        masterPlace = createPlace(placeType, system,
+        primaryPlace = createPlace(placeType, system,
                 new ActorPlacement.PlacementStrategyRoundRobin(0));
-        masterPlace.setDeployment(this);
-        masterPlace.setLogger(master.getDeploymentConfig());
+        primaryPlace.setDeployment(this);
+        primaryPlace.setLogger(primary.getDeploymentConfig());
     }
 
     protected void deployMasterAfterSystemInitSendConfigToUnits(List<ClusterUnit<AppConfType>> units) {
-        Map<ActorAddress, AppConfType> configMap = masterPlace.getRemoteConfig();
+        Map<ActorAddress, AppConfType> configMap = primaryPlace.getRemoteConfig();
         units.forEach(u ->
                 configMap.put(ActorAddress.get(u.getDeploymentConfig().getAddress()), u.getAppConfig()));
     }
 
     protected void deployMasterAfterSystemInitHttp() {
-        int port = master.getDeploymentConfig().httpPort;
+        int port = primary.getDeploymentConfig().httpPort;
         if (port > 0) {
             http = new ClusterHttp(this);
-            String host = master.getDeploymentConfig().httpHost;
+            String host = primary.getDeploymentConfig().httpHost;
             if (host.isEmpty()) {
-                host = master.getDeploymentConfig().host;
+                host = primary.getDeploymentConfig().host;
             }
             http.start(host, port);
         }
@@ -404,7 +404,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
 
     public void deployNodes(List<ClusterUnit<AppConfType>> units) {
         units.stream()
-                .filter(u -> !u.getDeploymentConfig().master)
+                .filter(u -> !u.getDeploymentConfig().primary)
                 .forEach(u ->
                     system.execute(() -> deployNode(u)));
     }
@@ -443,9 +443,9 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
     }
 
     public void awaitNodes() throws Exception {
-        ClusterUnit<AppConfType> master = getMaster();
+        ClusterUnit<AppConfType> primary = getPrimary();
         String appName = getAppName();
-        masterPlace.awaitsJoining(appName, master);
+        primaryPlace.awaitsJoining(appName, primary);
     }
 
     protected String getJavaCommand(ClusterUnit<AppConfType> unit) throws Exception {
@@ -466,7 +466,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
             }
         }
 
-        if (unit.getDeploymentConfig().master) {
+        if (unit.getDeploymentConfig().primary) {
             pathProps += escape("-D" + NON_DRIVER_PROPERTY_CONF + "=" +
                     getAppName() + "/" + NON_DRIVER_FILE_CONF) + " "; //suppose the working dir is baseDir
         }
@@ -483,18 +483,18 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
     }
 
     protected String getJavaCommandArgs(ClusterUnit<AppConfType> unit) throws Exception {
-        if (unit.getDeploymentConfig().master) {
+        if (unit.getDeploymentConfig().primary) {
             String args = "";
             if (unit.getDeploymentConfig().configPathAsMasterFirstArgument) {
                 args += "- ";
             }
-            args += masterMainArgs.stream()
+            args += primaryMainArgs.stream()
                     .map(this::escape)
                     .collect(Collectors.joining(" "));
             return args;
         } else {
             return unit.getDeploymentConfig().getAddress() + " " +
-                    master.getDeploymentConfig().getAddress() + " " +
+                    primary.getDeploymentConfig().getAddress() + " " +
                     escape(getPlaceType().getName());
         }
     }
@@ -520,10 +520,10 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
     }
 
     @SuppressWarnings("unchecked")
-    public ClusterUnit<AppConfType> master() {
+    public ClusterUnit<AppConfType> primary() {
         ClusterUnit<AppConfType> unit = new ClusterUnit<>();
         ConfigDeployment conf = new ConfigDeployment(defaultConfType);
-        conf.master = true;
+        conf.primary = true;
         unit.setDeploymentConfig(conf);
         unit.setAppConfig((AppConfType) conf.createAppConfig());
         unit.setName("localhost");
@@ -559,8 +559,8 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
 
     public String getNextAppName() {
         String head;
-        if (master != null)  {
-            head = master.getDeploymentConfig().appNameHeader;
+        if (primary != null)  {
+            head = primary.getDeploymentConfig().appNameHeader;
         } else {
             head = "app";
         }
@@ -610,7 +610,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
     public void deployFiles(ClusterUnit<?> unit) throws Exception {
         ConfigDeployment conf = unit.getDeploymentConfig();
 
-        if (conf.master) { //suppose the code is running under the master
+        if (conf.primary) { //suppose the code is running under the primary
             if (driverMode) {
                 if (conf.sharedDeploy) {
                     //the baseDir is shared between all nodes
@@ -627,16 +627,16 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         } else {
             if (driverMode) {
                 if (conf.sharedDeploy) {
-                    String masterBase = "^" + Pattern.quote(Paths.get(master.getDeploymentConfig().baseDir).toString());
+                    String primaryBase = "^" + Pattern.quote(Paths.get(primary.getDeploymentConfig().baseDir).toString());
                     String unitBase = conf.baseDir;
-                    unit.setClassPathList(master.getClassPathList().stream()
-                            .map(p -> p.replaceFirst(masterBase, unitBase))
+                    unit.setClassPathList(primary.getClassPathList().stream()
+                            .map(p -> p.replaceFirst(primaryBase, unitBase))
                             .collect(Collectors.toList()));
                 } else {
                     new ClusterFiles.ClusterFilesSsh(getAppName(), unit).deployFiles();
                 }
             } else {
-                unit.setClassPathList(master.getClassPathList());
+                unit.setClassPathList(primary.getClassPathList());
             }
         }
     }
@@ -826,33 +826,33 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
             remoteConfig.putAll((Map<ActorAddress, AppConfType>) set.getRemoteConfig());
         }
 
-        public void awaitsJoining(String appName, ClusterUnit<AppConfType> master) {
+        public void awaitsJoining(String appName, ClusterUnit<AppConfType> primary) {
             BlockingQueue<ActorAddress> completed = getCompleted();
             Set<ActorAddress> nodeAddrs = new HashSet<>(getRemoteConfig().keySet());
-            nodeAddrs.remove(ActorAddress.get(master.getDeploymentConfig().getAddress()));
+            nodeAddrs.remove(ActorAddress.get(primary.getDeploymentConfig().getAddress()));
             int limit = Math.max(3, nodeAddrs.size() / getTotalThreads());
             while (!nodeAddrs.isEmpty() && limit > 0) {
                 try {
                     ActorAddress joinedAddr = completed
-                            .poll(master.getDeploymentConfig().joinTimeoutMs, TimeUnit.MILLISECONDS);
+                            .poll(primary.getDeploymentConfig().joinTimeoutMs, TimeUnit.MILLISECONDS);
                     if (joinedAddr != null) {
                         ActorAddress joinedHost = joinedAddr.getHostAddress();
                         nodeAddrs.remove(joinedHost);
-                        master.log("%s: joined: %s  remaining=%,d", joinedHost, appName, nodeAddrs.size());
+                        primary.log("%s: joined: %s  remaining=%,d", joinedHost, appName, nodeAddrs.size());
                     } else {
-                        master.log("%s: waiting join: limit=%,d remaining=%,d", appName, limit, nodeAddrs.size());
+                        primary.log("%s: waiting join: limit=%,d remaining=%,d", appName, limit, nodeAddrs.size());
                         if (nodeAddrs.size() <= 5) {
-                            master.log("  remaining nodes: " + nodeAddrs);
+                            primary.log("  remaining nodes: " + nodeAddrs);
                         }
                         --limit;
                     }
                 } catch (Exception ex) {
                     //
-                    master.log("%s %s", appName, ex);
+                    primary.log("%s %s", appName, ex);
                     break;
                 }
             }
-            master.log("%s launched %,d nodes", appName, getClusterSize());
+            primary.log("%s launched %,d nodes", appName, getClusterSize());
         }
 
         public ActorRef move(Actor actor, ActorAddress address) {
@@ -913,7 +913,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         public Class<? extends ConfigBase> defaultConfType;
         public Class<?> nodeMainType;
         public Class<? extends ActorPlacementForCluster<?>> placeType;
-        public ClusterUnit<?> master;
+        public ClusterUnit<?> primary;
         public List<ClusterUnit<?>> nodes;
 
         public ClusterStats set(ClusterDeployment<?,?> d) {
@@ -921,7 +921,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
             defaultConfType = d.getDefaultConfType();
             nodeMainType = d.getNodeMainType();
             placeType = d.getPlaceType();
-            master = d.getMaster();
+            primary = d.getPrimary();
             nodes = new ArrayList<>(d.getNodes());
             return this;
         }
@@ -933,7 +933,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
             json.put("defaultConfType", toJson(valueConverter, defaultConfType, ""));
             json.put("nodeMainType", toJson(valueConverter, nodeMainType, ""));
             json.put("placeType", toJson(valueConverter, placeType, ""));
-            json.put("master", toJson(valueConverter, master, null));
+            json.put("primary", toJson(valueConverter, primary, null));
             json.put("nodes", toJson(valueConverter, nodes, new ArrayList<>()));
             return json;
         }
@@ -968,9 +968,9 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         return ResponsiveCalls.sendTaskConsumer(getSystem(), target, (a) -> {
             //temporary manager
             //TODO the serializedMailbxPath is expanded ?
-            MailboxPersistable.PersistentFileManager m = MailboxPersistable.createPersistentFile(serializedMailboxPath, a.getSystem());
+            PersistentFileManager m = PersistentFileManager.createPersistentFile(serializedMailboxPath, a.getSystem());
             MailboxPersistable.MessageOnStorage msg = new MailboxPersistable.MessageOnStorageFile(
-                    new MailboxPersistable.PersistentFileReaderSource(serializedMailboxPath, 0, m));
+                    new PersistentFileManager.PersistentFileReaderSource(serializedMailboxPath, 0, m));
             synchronized (msg) {
                 Message<?> next = msg.readNext();
                 while (next != null) {
@@ -1017,8 +1017,8 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
     }
 
     public CompletableFuture<?> shutdownCluster() {
-        List<CompletableFuture<?>> tasks = new ArrayList<>(masterPlace.getClusterSize());
-        for (ActorPlacement.AddressListEntry e : masterPlace.getCluster()) {
+        List<CompletableFuture<?>> tasks = new ArrayList<>(primaryPlace.getClusterSize());
+        for (ActorPlacement.AddressListEntry e : primaryPlace.getCluster()) {
             tasks.add(shutdown(e.getPlacementActor()));
         }
         return CompletableFuture.allOf(tasks.toArray(new CompletableFuture<?>[0]));
@@ -1035,7 +1035,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
 
     @PropertyInterface("cluster-shutdown-all")
     public void shutdownAll() {
-        getMaster().log("shutdownAll");
+        getPrimary().log("shutdownAll");
         try {
             shutdownCluster().get(3, TimeUnit.MINUTES);
         } catch (Exception ex) {
@@ -1052,17 +1052,17 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
 
     @PropertyInterface("placement")
     public ActorRef getPlace() {
-        if (masterPlace != null) {
-            return getMasterPlace();
+        if (primaryPlace != null) {
+            return getPrimaryPlace();
         } else {
             return attachedPlace;
         }
     }
 
-    @PropertyInterface("placement-config-master")
+    @PropertyInterface("placement-config-primary")
     public AppConfType getMasterConfig() {
-        if (master != null) {
-            return master.getAppConfig();
+        if (primary != null) {
+            return primary.getAppConfig();
         } else {
             return placeGet(p -> p.getRemoteConfig().get(p.getSelfAddress().getHostAddress()));
         }
@@ -1097,7 +1097,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
 
             CompletableFuture.allOf(
                     attachInitRun(a -> a.getDeployment().getAppName(), r -> this.appName = r),
-                    attachInitRun(a -> a.getDeployment().getMaster(), r -> master = r),
+                    attachInitRun(a -> a.getDeployment().getPrimary(), r -> primary = r),
                     attachInitRun(a -> a.getDeployment().getNodes(), r -> nodes = r)
                 ).get(30, TimeUnit.SECONDS);
 

@@ -1,6 +1,7 @@
 package csl.actor.example.kelp;
 
 import csl.actor.*;
+import csl.actor.cluster.PersistentFileManager;
 import csl.actor.example.ExampleSerialize2;
 import csl.actor.kelp.Config;
 import csl.actor.cluster.MailboxPersistable;
@@ -30,7 +31,7 @@ public class ExampleMailboxPersistableTest {
         System.err.println("------------ runPersistentFileManager");
         try (ActorSystem system = new ActorSystemDefault()) {
             KryoBuilder.SerializerPool p = new KryoBuilder.SerializerPoolDefault(system);
-            MailboxPersistable.PersistentFileManager manager = new MailboxPersistable.PersistentFileManager(
+            PersistentFileManager manager = new PersistentFileManager(
                     "target/debug-persist", p, Paths::get, system.getLogger());
             MailboxPersistable.MessagePersistentFile mp = new MailboxPersistable.MessagePersistentFile(manager);
 
@@ -67,7 +68,7 @@ public class ExampleMailboxPersistableTest {
         System.err.println("------------ runPersistentFileManagerRecursive");
         try (ActorSystem system = new ActorSystemDefault()) {
             KryoBuilder.SerializerPool p = new KryoBuilder.SerializerPoolDefault(system);
-            MailboxPersistable.PersistentFileManager manager = new MailboxPersistable.PersistentFileManager(
+            PersistentFileManager manager = new PersistentFileManager(
                     "target/debug-persist", p, Paths::get, system.getLogger());
             MailboxPersistable.MessagePersistentFile mp = new MailboxPersistable.MessagePersistentFile(manager);
 
@@ -203,7 +204,7 @@ public class ExampleMailboxPersistableTest {
 
         @Override
         protected Mailbox initMailbox() {
-            return new TestMailboxPersistable(MailboxPersistable.getPersistentFile(system, () -> "target/debug-persist"),
+            return new TestMailboxPersistable(PersistentFileManager.getPersistentFile(system, () -> "target/debug-persist"),
                     5_000,
                     100);
         }
@@ -317,7 +318,7 @@ public class ExampleMailboxPersistableTest {
         @Override
         protected Mailbox initMailbox() {
             if (persist) {
-                return new TestMailboxPersistable(MailboxPersistable.getPersistentFile(system, () -> "target/debug-persist"),
+                return new TestMailboxPersistable(PersistentFileManager.getPersistentFile(system, () -> "target/debug-persist"),
                         100_000,
                         100);
             } else {

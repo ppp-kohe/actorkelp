@@ -18,7 +18,7 @@ public class ExampleCluster {
         String debugFlag = "false";
 
         ClusterKelp d = ClusterKelp.create();
-        ActorPlacementKelp place = d.deploy(d.master()
+        ActorPlacementKelp place = d.deploy(d.primary()
                     .edit(c -> c.getDeploymentConfig().baseDir = dir)
                     .edit(c -> c.getAppConfig().routerAutoMerge = false)
                     .edit(c -> c.getDeploymentConfig().httpHost = "0.0.0.0"),

@@ -2,7 +2,7 @@ package csl.actor.example.exp.wordcount;
 
 import csl.actor.ActorSystemDefault;
 import csl.actor.cluster.ConfigDeployment;
-import csl.actor.cluster.MailboxPersistable;
+import csl.actor.cluster.PersistentFileManager;
 import csl.actor.kelp.*;
 import csl.actor.remote.ActorSystemRemote;
 import csl.actor.remote.KryoBuilder;
@@ -29,7 +29,7 @@ public class KeyHistogramsPersistableLoadTest {
         }
     }
 
-    class TestFileManager extends MailboxPersistable.PersistentFileManager {
+    class TestFileManager extends PersistentFileManager {
 
         public TestFileManager(String path, KryoBuilder.SerializerFunction serializer, ConfigDeployment.PathModifier pathModifier) {
             super(path, serializer, pathModifier, new ActorSystemDefault.SystemLoggerErr());
@@ -51,25 +51,25 @@ public class KeyHistogramsPersistableLoadTest {
     public void test(String path) {
         ActorSystemRemote r = new ActorSystemRemote();
 
-        MailboxPersistable.PersistentFileManager pm = new TestFileManager(Paths.get(path).getParent().toString(),
+        PersistentFileManager pm = new TestFileManager(Paths.get(path).getParent().toString(),
                 r.getSerializer(), Paths::get);
-        MailboxPersistable.PersistentFileReaderSource src = new MailboxPersistable.PersistentFileReaderSource(path, 0,
+        PersistentFileManager.PersistentFileReaderSource src = new PersistentFileManager.PersistentFileReaderSource(path, 0,
                 pm);
 
 
         System.err.println("============ " + path);
-        try (MailboxPersistable.PersistentFileReader reader = src.createReader()) {
+        try (PersistentFileManager.PersistentFileReader reader = src.createReader()) {
             //while (true) {
                 long pos = reader.position();
                 long sibling = reader.nextLong();
                 Object obj = reader.next();
                 KeyHistogramsPersistable.HistogramNodeTreeOnStorage h;
-                if (obj instanceof MailboxPersistable.PersistentFileEnd) {
+                if (obj instanceof PersistentFileManager.PersistentFileEnd) {
                     //break;
                     System.err.println("None");
                     return;
-                } else if (obj instanceof MailboxPersistable.PersistentFileReaderSource) {
-                    MailboxPersistable.PersistentFileReaderSource nSrc = (MailboxPersistable.PersistentFileReaderSource) obj;
+                } else if (obj instanceof PersistentFileManager.PersistentFileReaderSource) {
+                    PersistentFileManager.PersistentFileReaderSource nSrc = (PersistentFileManager.PersistentFileReaderSource) obj;
                     obj = reader.next();
                     KeyHistogramsPersistable.NodeTreeData d = (KeyHistogramsPersistable.NodeTreeData) obj;
                     h = new KeyHistogramsPersistable.HistogramNodeTreeOnStorage(d, nSrc);

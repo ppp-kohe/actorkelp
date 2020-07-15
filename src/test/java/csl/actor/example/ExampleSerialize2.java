@@ -2,6 +2,7 @@ package csl.actor.example;
 
 import csl.actor.*;
 import csl.actor.cluster.MailboxPersistable;
+import csl.actor.cluster.PersistentFileManager;
 import csl.actor.kelp.*;
 import csl.actor.remote.ActorAddress;
 import csl.actor.remote.KryoBuilder;
@@ -102,7 +103,7 @@ public class ExampleSerialize2 extends ExampleSerialize {
     private void runHistogramTree() {
         KeyHistograms.HistogramTree tree = new KeyHistograms.HistogramTree(null,
                 new ActorBehaviorBuilderKelp.KeyComparatorDefault<>(), 10,
-                MailboxPersistable.getPersistentFile(null, () -> ""));
+                PersistentFileManager.getPersistentFile(null, () -> ""));
 
         List<Object> os = values();
         int i = 0;

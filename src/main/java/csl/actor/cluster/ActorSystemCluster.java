@@ -15,10 +15,11 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 
-public class ActorSystemCluster extends ActorSystemRemote implements MailboxPersistable.PersistentFileManagerFactory {
+public class ActorSystemCluster extends ActorSystemRemote implements PersistentFileManager.PersistentFileManagerFactory {
     protected Map<ActorAddress, UnitStatus> units;
 
     public ActorSystemCluster() {
@@ -41,6 +42,16 @@ public class ActorSystemCluster extends ActorSystemRemote implements MailboxPers
     }
 
     public static class ActorSystemDefaultForCluster extends ActorSystemDefaultForRemote {
+        @Override
+        protected void initSystemExecutorService() {
+            executorService = Executors.newFixedThreadPool((threads * 5));
+        }
+
+        @Override
+        protected void initThroughput() {
+            throughput = 256;
+        }
+
         @Override
         public void sendDeadLetter(Message<?> message) {
             if (message.getData() instanceof ActorPlacement.LeaveEntry) {
@@ -196,7 +207,7 @@ public class ActorSystemCluster extends ActorSystemRemote implements MailboxPers
         return new PersistentFileManagerThrottle(path, this);
     }
 
-    public static class PersistentFileManagerThrottle extends MailboxPersistable.PersistentFileManager {
+    public static class PersistentFileManagerThrottle extends PersistentFileManager {
         protected ActorSystemCluster system;
 
         public PersistentFileManagerThrottle(String path, ActorSystemCluster system) {

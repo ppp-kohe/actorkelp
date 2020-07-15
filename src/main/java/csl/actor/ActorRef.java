@@ -1,7 +1,11 @@
 package csl.actor;
 
 public interface ActorRef {
-    void tell(Object data, ActorRef sender);
+    void tellMessage(Message<?> message);
+
+    default void tell(Object data, ActorRef sender) {
+        tellMessage(new Message<>(this, sender, data));
+    }
 
     /**
      * tell(data, null)

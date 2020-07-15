@@ -39,7 +39,7 @@ public abstract class ActorDefault extends Actor {
     }
 
     @Override
-    protected void processMessage(Message<?> message) {
+    public void processMessage(Message<?> message) {
         if (!behavior.process(this, message)) {
             processMessageUnhandled(message);
         }

@@ -243,13 +243,13 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
 
     @Override
     protected Mailbox initMailbox() {
-        MailboxPersistable.PersistentFileManager m = getPersistentFile();
+        PersistentFileManager m = getPersistentFile();
         MailboxDefault mailbox = initMailboxDefault(m);
         return new MailboxKelp(mailboxThreshold(), mailboxTreeSize(),
                 mailbox, initTreeFactory(mailbox, m));
     }
 
-    protected MailboxDefault initMailboxDefault(MailboxPersistable.PersistentFileManager m) {
+    protected MailboxDefault initMailboxDefault(PersistentFileManager m) {
         if (initPersistentEnabled()) {
             MailboxPersistable.PersistentConditionMailbox condMailbox;
             if (persistRuntimeCondition()) {
@@ -263,7 +263,7 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
         }
     }
 
-    protected KeyHistograms initTreeFactory(MailboxDefault mailbox, MailboxPersistable.PersistentFileManager m) {
+    protected KeyHistograms initTreeFactory(MailboxDefault mailbox, PersistentFileManager m) {
         if (initPersistentEnabled()) {
             KeyHistogramsPersistable.PersistentConditionHistogram condHist;
             if (persistRuntimeCondition()) {
@@ -283,9 +283,9 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
         }
     }
 
-    protected MailboxPersistable.PersistentFileManager getPersistentFile() {
+    protected PersistentFileManager getPersistentFile() {
         String path = persistMailboxPath();
-        return MailboxPersistable.getPersistentFile(system, () -> path);
+        return PersistentFileManager.getPersistentFile(system, () -> path);
     }
 
     protected boolean initPersistentEnabled() {
@@ -475,7 +475,7 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
     }
 
     @Override
-    protected void processMessage(Message<?> message) {
+    public void processMessage(Message<?> message) {
         if (isNoRoutingMessage(message)) {
             if (isRouterParallelRouting()) {
                 processMessageDelayWhileParallelRouting(message);

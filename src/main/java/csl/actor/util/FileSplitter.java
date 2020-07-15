@@ -128,6 +128,10 @@ public class FileSplitter {
             this.splitLength = splitLength;
         }
 
+        public long getSplitStart() {
+            return splitStart;
+        }
+
         public long getSplitIndex() {
             return splitIndex;
         }
