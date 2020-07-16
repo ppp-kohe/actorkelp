@@ -14,8 +14,6 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Random;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 public class ExpRemoteSending {
@@ -25,7 +23,7 @@ public class ExpRemoteSending {
         ActorSystemRemote s2 = new ActorSystemRemote();
         s2.startWithoutWait(20001);
 
-        MasterActor masterActor = new MasterActor(s2);
+        PrimaryActor primaryActor = new PrimaryActor(s2);
 
         ExampleRemote.setMvnClasspath();
         ExampleRemote.launchJava(Receiver.class.getName(), Integer.toString(msgs));
@@ -39,7 +37,7 @@ public class ExpRemoteSending {
         }
         System.err.println("created inputs");
 
-        masterActor.getConnected().get();
+        primaryActor.getConnected().get();
 
         ActorRef rec = ActorAddress.get("localhost", 20000).getActor("r").ref(s2);
 
@@ -54,10 +52,10 @@ public class ExpRemoteSending {
         s2.closeAfterOtherConnectionsClosed();
     }
 
-    static class MasterActor extends ActorDefault {
+    static class PrimaryActor extends ActorDefault {
         CompletableFuture<Object> connected;
-        MasterActor(ActorSystem s) {
-            super(s, "master");
+        PrimaryActor(ActorSystem s) {
+            super(s, "primary");
             connected = new CompletableFuture<>();
         }
 
@@ -85,7 +83,7 @@ public class ExpRemoteSending {
             s1.startWithoutWait(20000);
             new ActorReceiver(s1, "r", msgs);
 
-            ActorAddress.get("localhost", 20001).getActor("master").ref(s1)
+            ActorAddress.get("localhost", 20001).getActor("primary").ref(s1)
                     .tell("start");
         }
     }

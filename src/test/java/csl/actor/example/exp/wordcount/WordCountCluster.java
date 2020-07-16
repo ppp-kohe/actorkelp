@@ -49,10 +49,10 @@ public class WordCountCluster {
         Path inputPath = Paths.get(inputFile);
         Path dir = inputPath.getParent();
         String confData = "" +
-                "node master:\n" +
+                "node primary:\n" +
                 "   host \"localhost\"\n" +
                 "   port 38888\n" +
-                "   master true\n" +
+                "   primary true\n" +
                 String.format("   baseDir \"%s\"\n", dir) +
                 "   logColor 102\n" +
                 "   logFile true\n" +

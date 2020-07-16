@@ -162,7 +162,7 @@ public class ActorPlacementKelp extends ClusterDeployment.ActorPlacementForClust
     }
 
     public FileMapper fileMapper(FileSplitter splitter) {
-        return new FileMapper(getSystem(), "fileMapper", getMasterConfig(), splitter);
+        return new FileMapper(getSystem(), "fileMapper", getPrimaryConfig(), splitter);
     }
 
     public FileMapper fileMapperWithSplitCount(long splits) {
@@ -176,7 +176,7 @@ public class ActorPlacementKelp extends ClusterDeployment.ActorPlacementForClust
     }
 
     public ActorKelpOneShot actor(String name, InitBuilder builderFunction) {
-        return new ActorKelpOneShot(getSystem(), name, getMasterConfig(), builderFunction);
+        return new ActorKelpOneShot(getSystem(), name, getPrimaryConfig(), builderFunction);
     }
 
     public interface InitBuilder extends Serializable {

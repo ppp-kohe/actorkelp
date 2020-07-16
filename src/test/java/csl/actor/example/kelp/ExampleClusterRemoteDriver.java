@@ -27,10 +27,10 @@ public class ExampleClusterRemoteDriver {
         Files.createDirectories(p2);
 
         String confData = "" +
-                "node master:\n" +
+                "node primary:\n" +
                 "   host \"localhost\"\n" +
                 "   port 38888\n" +
-                "   master true\n" +
+                "   primary true\n" +
                 String.format("   baseDir \"%s\"\n", p0) +
                 "   logColor 102\n" +
                 "   logFile true\n" +

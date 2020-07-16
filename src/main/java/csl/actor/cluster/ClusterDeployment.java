@@ -179,8 +179,8 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
     public Process deployAsRemoteDriver(List<ClusterCommands.ClusterUnit<AppConfType>> units) {
         try {
             deployUnitsAsConfigFile(units);
-            deployMasterInitMaster(units);
-            deployMasterInitAppName();
+            deployPrimaryInitPrimary(units);
+            deployPrimaryInitAppName();
             deployFiles(primary);
             deployNodesAsRemoteDriver(units);
             deployNodeStartProcess(primary);
@@ -283,23 +283,23 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
     }
 
     public PlaceType deploy(List<ClusterCommands.ClusterUnit<AppConfType>> units) throws Exception {
-        deployMaster(units);
+        deployPrimary(units);
         deployNodes(units);
         awaitNodes();
         return getPrimaryPlace();
     }
 
-    public void deployMaster(List<ClusterUnit<AppConfType>> units) throws Exception {
-        deployMasterInitMaster(units);
-        deployMasterInitAppName();
-        deployMasterInitSystem();
-        deployMasterInitUncaughtHandler();
+    public void deployPrimary(List<ClusterUnit<AppConfType>> units) throws Exception {
+        deployPrimaryInitPrimary(units);
+        deployPrimaryInitAppName();
+        deployPrimaryInitSystem();
+        deployPrimaryInitUncaughtHandler();
         deployFiles(primary);
-        deployMasterStartSystem();
-        deployMasterAfterSystemInit(units);
+        deployPrimaryStartSystem();
+        deployPrimaryAfterSystemInit(units);
     }
 
-    protected void deployMasterInitMaster(List<ClusterUnit<AppConfType>> units) {
+    protected void deployPrimaryInitPrimary(List<ClusterUnit<AppConfType>> units) {
         primary = units.stream()
                 .filter(u -> u.getDeploymentConfig().primary)
                 .findFirst()
@@ -309,22 +309,26 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         }
     }
 
-    protected void deployMasterInitAppName() {
+    protected void deployPrimaryInitAppName() {
         this.appName = getAppName();
     }
 
-    protected void deployMasterInitSystem() {
+    protected void deployPrimaryInitSystem() {
         primary.log("primary %s: create system with serializer %s", primary.getDeploymentConfig().getAddress(), primary.getDeploymentConfig().kryoBuilderType);
-        system = createSystem(primary.getDeploymentConfig().kryoBuilderType);
+        system = createSystem(primary.getDeploymentConfig().kryoBuilderType, primary.getDeploymentConfig().throttle);
         system.getLocalSystem().setLogger(new ConfigBase.SystemLoggerHeader(system.getLogger(), primary.getAppConfig()));
     }
 
     @SuppressWarnings("unchecked")
-    public static ActorSystemCluster createSystem(String buildType) {
+    public static ActorSystemRemote createSystem(String buildType, boolean throttle) {
         try {
             Class<?> cls = Class.forName(buildType);
             if (KryoBuilder.class.isAssignableFrom(cls)) {
-                return ActorSystemCluster.createWithKryoBuilderType((Class<? extends KryoBuilder>) cls);
+                if (throttle) {
+                    return ActorSystemCluster.createWithKryoBuilderTypeThrottle((Class<? extends KryoBuilder>) cls);
+                } else {
+                    return ActorSystemCluster.createWithKryoBuilderType((Class<? extends KryoBuilder>) cls);
+                }
             } else {
                 throw new RuntimeException("not a KryoBuilder: " + cls);
             }
@@ -334,32 +338,32 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
 
     }
 
-    protected void deployMasterInitUncaughtHandler() {
+    protected void deployPrimaryInitUncaughtHandler() {
         setDefaultUncaughtHandler(primary.getDeploymentConfig());
     }
 
-    protected void deployMasterStartSystem() {
+    protected void deployPrimaryStartSystem() {
         system.startWithoutWait(ActorAddress.get(primary.getDeploymentConfig().getAddress()));
     }
 
-    protected void deployMasterAfterSystemInit(List<ClusterUnit<AppConfType>> units) throws Exception {
-        deployMasterAfterSystemInitLogColor();
-        deployMasterAfterSystemInitPath();
+    protected void deployPrimaryAfterSystemInit(List<ClusterUnit<AppConfType>> units) throws Exception {
+        deployPrimaryAfterSystemInitLogColor();
+        deployPrimaryAfterSystemInitPath();
         primary.log("primary %s: path %s", primary.getDeploymentConfig().getAddress(), ConfigDeployment.getPathModifier(system));
 
-        deployMasterAfterSystemInitPlace();
+        deployPrimaryAfterSystemInitPlace();
         primary.log("primary %s: started %s", primary.getDeploymentConfig().getAddress(), primaryPlace);
 
-        deployMasterAfterSystemInitSendConfigToUnits(units);
+        deployPrimaryAfterSystemInitSendConfigToUnits(units);
 
-        deployMasterAfterSystemInitHttp();
+        deployPrimaryAfterSystemInitHttp();
     }
 
-    protected void deployMasterAfterSystemInitLogColor() {
+    protected void deployPrimaryAfterSystemInitLogColor() {
         System.setProperty("csl.actor.logColor", Integer.toString(primary.getDeploymentConfig().getLogColorDefault()));
     }
 
-    protected void deployMasterAfterSystemInitPath() throws Exception {
+    protected void deployPrimaryAfterSystemInitPath() throws Exception {
         ConfigDeployment.PathModifierHost ph = primary.getDeploymentConfig().setPathModifierWithBaseDir(system);
         ph.setApp(getAppName());
         System.setProperty("csl.actor.path.app", ph.getApp());
@@ -377,20 +381,20 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         }
     }
 
-    protected void deployMasterAfterSystemInitPlace() throws Exception {
+    protected void deployPrimaryAfterSystemInitPlace() throws Exception {
         primaryPlace = createPlace(placeType, system,
                 new ActorPlacement.PlacementStrategyRoundRobin(0));
         primaryPlace.setDeployment(this);
         primaryPlace.setLogger(primary.getDeploymentConfig());
     }
 
-    protected void deployMasterAfterSystemInitSendConfigToUnits(List<ClusterUnit<AppConfType>> units) {
+    protected void deployPrimaryAfterSystemInitSendConfigToUnits(List<ClusterUnit<AppConfType>> units) {
         Map<ActorAddress, AppConfType> configMap = primaryPlace.getRemoteConfig();
         units.forEach(u ->
                 configMap.put(ActorAddress.get(u.getDeploymentConfig().getAddress()), u.getAppConfig()));
     }
 
-    protected void deployMasterAfterSystemInitHttp() {
+    protected void deployPrimaryAfterSystemInitHttp() {
         int port = primary.getDeploymentConfig().httpPort;
         if (port > 0) {
             http = new ClusterHttp(this);
@@ -477,6 +481,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
                 escape("-Dcsl.actor.logFilePath=" + unit.getDeploymentConfig().logFilePath) + " " +
                 escape("-Dcsl.actor.logFilePreserveColor=" + unit.getDeploymentConfig().logFilePreserveColor) + " " +
                 escape("-Dcsl.actor.kryoBuilderType=" + unit.getDeploymentConfig().kryoBuilderType) + " " +
+                escape("-Dcsl.actor.throttle=" + unit.getDeploymentConfig().throttle) + " " +
                 escape("-D" + NON_DRIVER_PROPERTY_APP_NAME + "=" + getAppName()) + " " +
                 pathProps +
                 getJavaCommandOptionsClassPath(unit);
@@ -485,7 +490,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
     protected String getJavaCommandArgs(ClusterUnit<AppConfType> unit) throws Exception {
         if (unit.getDeploymentConfig().primary) {
             String args = "";
-            if (unit.getDeploymentConfig().configPathAsMasterFirstArgument) {
+            if (unit.getDeploymentConfig().configPathAsPrimaryFirstArgument) {
                 args += "- ";
             }
             args += primaryMainArgs.stream()
@@ -535,7 +540,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
     @SuppressWarnings("unchecked")
     public ClusterUnit<AppConfType> node(String host, int port) {
         ClusterUnit<AppConfType> unit = new ClusterUnit<>();
-        ConfigDeployment conf = new ConfigDeployment();
+        ConfigDeployment conf = new ConfigDeployment(defaultConfType);
         conf.host = host;
         conf.port = port;
         unit.setDeploymentConfig(conf);
@@ -659,6 +664,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         protected ActorSystemRemote system;
         protected ActorPlacement.ActorPlacementDefault place;
         protected String kryoBuilderType;
+        protected boolean throttle = System.getProperty("csl.actor.throttle", "false").equals("true");
 
         public void run(String[] args) throws Exception {
             initLogger();
@@ -700,7 +706,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         }
 
         protected ActorSystemRemote initSystem() {
-            ActorSystemRemote system = createSystem(kryoBuilderType);
+            ActorSystemRemote system = createSystem(kryoBuilderType, throttle);
             system.getLocalSystem().setLogger(new ConfigBase.SystemLoggerHeader(system.getLogger(), logger));
             return system;
         }
@@ -865,11 +871,11 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         }
 
         public <ActorType extends Actor> ActorType actor(BiFunction<ActorSystem, AppConfType, ActorType> creator) {
-            return creator.apply(getSystem(), getMasterConfig());
+            return creator.apply(getSystem(), getPrimaryConfig());
         }
 
-        public AppConfType getMasterConfig() {
-            return this.deployment.getMasterConfig();
+        public AppConfType getPrimaryConfig() {
+            return this.deployment.getPrimaryConfig();
         }
     }
 
@@ -1060,7 +1066,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
     }
 
     @PropertyInterface("placement-config-primary")
-    public AppConfType getMasterConfig() {
+    public AppConfType getPrimaryConfig() {
         if (primary != null) {
             return primary.getAppConfig();
         } else {
@@ -1107,7 +1113,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
     }
 
     protected void attachInitSystem() {
-        system = createSystem(attachKryoBuilderType);
+        system = createSystem(attachKryoBuilderType, false);
         int port;
         try (ServerSocket sock = new ServerSocket(0)) { //obtain a dynamic port
             port = sock.getLocalPort();

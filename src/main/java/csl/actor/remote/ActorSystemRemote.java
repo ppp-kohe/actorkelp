@@ -181,7 +181,7 @@ public class ActorSystemRemote implements ActorSystem {
             ActorAddress addrHost = addrActor.getHostAddress();
             ActorAddress local = getServerAddress();
             if (local != null && local.equals(addrHost)) { //localhost
-                localSystem.send(new Message<>(localize(target), message.getSender(), message.getData()));
+                localSystem.send(message.renewTarget(localize(target)));
             } else {
                 getLogger().log(debugLogMsg, debugLogMsgColorSend, "%s: client tell <%s> to remote %s", this,
                         message.getData(), addrActor);
@@ -611,20 +611,16 @@ public class ActorSystemRemote implements ActorSystem {
                 for (Object elem : msgs) {
                     Message<?> msgElem = (Message<?>) elem;
                     logMsg("%s receive-remote: [%,d] %s", this, i, msgElem);
-                    remote.getLocalSystem().send(new Message<>(
-                            remote.localize(msgElem.getTarget()),
-                            msgElem.getSender(),
-                            msgElem.getData()));
+                    remote.getLocalSystem().send(msgElem.renewTarget(
+                            remote.localize(msgElem.getTarget())));
                     ++i;
                     receiveMessages.incrementAndGet();
                 }
             } else if (msg instanceof Message<?>) {
                 Message<?> m = (Message<?>)  msg;
                 logMsg("%s receive-remote: %s", this, m);
-                remote.getLocalSystem().send(new Message<>(
-                        remote.localize(m.getTarget()),
-                        m.getSender(),
-                        m.getData()));
+                remote.getLocalSystem().send(m.renewTarget(
+                        remote.localize(m.getTarget())));
                 receiveMessages.incrementAndGet();
             } else {
                 logMsg("%s receive unintended object: %s", this, msg);

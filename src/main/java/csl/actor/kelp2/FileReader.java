@@ -9,8 +9,12 @@ import java.time.Instant;
 import java.util.concurrent.CompletableFuture;
 
 public class FileReader extends ActorKelp<FileReader> {
-    public FileReader(ActorSystem system, String name) {
-        super(system, name);
+    public FileReader(ActorSystem system, String name, ConfigKelp config) {
+        super(system, name, config);
+    }
+
+    public FileReader(ActorSystem system, ConfigKelp config) {
+        super(system, config);
     }
 
     public FileReader(ActorSystem system) {

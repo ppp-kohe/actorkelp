@@ -47,6 +47,11 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
 
     /////////////
 
+
+    public ConfigKelp getConfig() {
+        return config;
+    }
+
     public String getMailboxPath() {
         return config.mailboxPath;
     }
@@ -89,6 +94,11 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
 
         public MessageBundle(ActorRef target, ActorRef sender, Iterable<? extends DataType> items) {
             super(target, sender, toList(items));
+        }
+
+        @Override
+        public Message<List<DataType>> renewTarget(ActorRef target) {
+            return new MessageBundle<>(target, sender, data);
         }
 
         @Override
@@ -186,6 +196,7 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
         public static final long serialVersionUID = 1L;
         public Class<SelfType> actorType;
         public String name;
+        public ConfigKelp config;
         //TODO mailbox
         public Serializable internalState;
 
@@ -196,6 +207,7 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
         protected void init(SelfType actor) {
             initActorType(actor);
             initName(actor);
+            initConfig(actor);
             initInternalState(actor);
         }
 
@@ -208,12 +220,16 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
             name = actor.getName();
         }
 
+        protected void initConfig(SelfType actor) {
+            config = actor.getConfig();
+        }
+
         protected void initInternalState(SelfType actor) {
             internalState = actor.toInternalState();
         }
 
         public SelfType restore(ActorSystem system, long num) throws Exception {
-            SelfType a = create(system, restoreName(num));
+            SelfType a = create(system, restoreName(num), config);
             restoreInit(a);
             return a;
         }
@@ -222,9 +238,9 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
             return name == null ? ("$" + num) : name;
         }
 
-        protected SelfType create(ActorSystem system, String name) throws Exception {
-            return actorType.getConstructor(ActorSystem.class, String.class)
-                    .newInstance(system, name);
+        protected SelfType create(ActorSystem system, String name, ConfigKelp config) throws Exception {
+            return actorType.getConstructor(ActorSystem.class, String.class, ConfigKelp.class)
+                    .newInstance(system, name, config);
         }
 
         protected void restoreInit(SelfType actor) {

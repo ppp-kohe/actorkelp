@@ -106,7 +106,7 @@ public interface ActorPlacement {
                 primaryActor = primary.getActor(getName()); //same name
             }
             try {
-                int primaryThreads = ResponsiveCalls.sendHostTask(getSystem(), primaryActor, new CallableMasterThreads())
+                int primaryThreads = ResponsiveCalls.sendHostTask(getSystem(), primaryActor, new CallablePrimaryThreads())
                         .get(20, TimeUnit.SECONDS);
                 tell(new AddressList(
                             new AddressListEntry(primaryActor, primaryThreads)), this);
@@ -308,7 +308,7 @@ public interface ActorPlacement {
         }
     }
 
-    class CallableMasterThreads implements CallableMessage<Actor, Integer> {
+    class CallablePrimaryThreads implements CallableMessage<Actor, Integer> {
         public static final long serialVersionUID = 1L;
         @Override
         public Integer call(Actor self) {

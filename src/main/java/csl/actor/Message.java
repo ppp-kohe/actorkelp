@@ -37,6 +37,10 @@ public class Message<DataType> implements Serializable {
         return getClass().getSimpleName() + "(" + dataToStr.apply(data) + " : " + target + " <- " + sender + ")";
     }
 
+    public Message<DataType> renewTarget(ActorRef target) {
+        return new Message<>(target, sender, data);
+    }
+
     /**
      * the special message intended to start processing of the target
      */
@@ -44,6 +48,11 @@ public class Message<DataType> implements Serializable {
         public static final long serialVersionUID = 1L;
         public MessageNone(ActorRef target) {
             super(target, null, null);
+        }
+
+        @Override
+        public Message<Void> renewTarget(ActorRef target) {
+            return new MessageNone(target);
         }
     }
 }

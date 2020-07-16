@@ -29,8 +29,8 @@ public class ExampleCluster {
                     .edit(c -> c.getDeploymentConfig().baseDir = dir)
                     .edit(c -> c.getDeploymentConfig().java = "java -Dcsl.actor.debug=" + debugFlag + " -Dcsl.actor.debugMsg=" + debugFlag + " %s %s %s"));
 
-        TestSource s = new TestSource(d.getSystem(), "source", d.getMasterConfig());
-        TestActor a = new TestActor(d.getSystem(), "test", d.getMasterConfig());
+        TestSource s = new TestSource(d.getSystem(), "source", d.getPrimaryConfig());
+        TestActor a = new TestActor(d.getSystem(), "test", d.getPrimaryConfig());
 //        Random rand = new Random();
 
         place.connectStage(s, a).get();

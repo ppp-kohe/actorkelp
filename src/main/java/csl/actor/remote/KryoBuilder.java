@@ -265,7 +265,7 @@ public class KryoBuilder {
                 ActorPlacement.AddressList.class,
                 ActorPlacement.AddressListEntry.class,
                 ActorPlacement.ActorCreationRequest.class,
-                ActorPlacement.CallableMasterThreads.class,
+                ActorPlacement.CallablePrimaryThreads.class,
                 ActorPlacement.LeaveEntry.class,
                 ActorPlacementKelp.Task.class,
                 ActorPlacementKelp.TaskChain.class,

@@ -37,7 +37,7 @@
   "defaultConfType": String //Class,
   "nodeMainType": String //Class,
   "placeType": String //Class,
-  "master": { //ClusterUnit
+  "primary": { //ClusterUnit
     "name": String,
     "deploymentConfig": {
         "ssh": "ssh %s",
@@ -46,7 +46,7 @@
         "port": 38888,
         "configType": "csl.actor.keyaggregate.Config",
         "baseDir": "target/debug",
-        "master" : true,
+        "primary" : true,
         "sharedDeploy": true,
         "joinTimeoutMs": 10000,
         "pathSeparator": ":", //File.pathSeparator
@@ -98,7 +98,7 @@
   },
    "nodes": [
      { //ClusterUnit
-       ...//same as "master"
+       ...//same as "primary"
      }
    ]
 }
@@ -162,14 +162,14 @@ null
 "host:port/name"
 ```
 
-### placement-config-master
+### placement-config-primary
 
 * input: `()`
 * output: `ConfigBase`
 
 ```javascript
 { //Config
-  ... //same as cluster().master.appConfig
+  ... //same as cluster().primary.appConfig
 }
 ```
 
@@ -299,7 +299,7 @@ long
 ```javascript
 {
   "host:port/name":{ //Config
-    ...//same as  cluster().master.appConfig
+    ...//same as  cluster().primary.appConfig
   }
 }
 ```

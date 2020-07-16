@@ -14,9 +14,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 import java.util.function.Function;
 
 public class ActorSystemCluster extends ActorSystemRemote implements PersistentFileManager.PersistentFileManagerFactory {
@@ -30,9 +28,20 @@ public class ActorSystemCluster extends ActorSystemRemote implements PersistentF
         super(localSystem, kryoFactory);
     }
 
-    public static ActorSystemCluster createWithKryoBuilderType(Class<? extends KryoBuilder> kryoBuilderType) throws Exception {
+    public static ActorSystemCluster createWithKryoBuilderTypeThrottle(Class<? extends KryoBuilder> kryoBuilderType) throws Exception {
         Constructor<? extends KryoBuilder> cons = kryoBuilderType.getConstructor();
-        return new ActorSystemCluster(new ActorSystemDefaultForCluster(), KryoBuilder.builder(() -> {
+        return new ActorSystemCluster(new ActorSystemDefaultForClusterThrottle(), KryoBuilder.builder(() -> {
+            try {
+                return cons.newInstance();
+            } catch (Exception ex) {
+                throw new RuntimeException(ex);
+            }
+        }));
+    }
+
+    public static ActorSystemRemote createWithKryoBuilderType(Class<? extends KryoBuilder> kryoBuilderType) throws Exception {
+        Constructor<? extends KryoBuilder> cons = kryoBuilderType.getConstructor();
+        return new ActorSystemRemote(new ActorSystemDefaultForCluster(), KryoBuilder.builder(() -> {
             try {
                 return cons.newInstance();
             } catch (Exception ex) {
@@ -50,6 +59,27 @@ public class ActorSystemCluster extends ActorSystemRemote implements PersistentF
         @Override
         protected void initThroughput() {
             throughput = 256;
+        }
+
+        @Override
+        public void sendDeadLetter(Message<?> message) {
+            if (message.getData() instanceof ActorPlacement.LeaveEntry) {
+                //the target might be already left
+            } else {
+                super.sendDeadLetter(message);
+            }
+        }
+    }
+
+    public static class ActorSystemDefaultForClusterThrottle extends ActorSystemDefaultForRemote {
+        @Override
+        protected void initSystemExecutorService() {
+            executorService = createThreadPoolUnlimited(threads);
+        }
+
+        @Override
+        protected void initThroughput() {
+            threads = 256;
         }
 
         @Override
