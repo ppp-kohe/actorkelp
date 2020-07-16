@@ -412,10 +412,7 @@ public class ActorSystemRemote implements ActorSystem {
                     writeSpecial(message);
                 } else {
                     if (mailbox.isEmpty()) {
-                        logMsg("%s write %s", this, message);
-                        connection.write(new TransferredMessage(count, message));
-                        ++count;
-                        ++recordSendMessages;
+                        writeSingleMessage(message);
                     } else {
                         int maxBundle = 30;
                         List<Object> messageBundle = new ArrayList<>(maxBundle);
@@ -446,11 +443,22 @@ public class ActorSystemRemote implements ActorSystem {
 
         private void write(List<Object> messageBundle) {
             if (!messageBundle.isEmpty()) {
-                logMsg("%s write %,d messages: %s,...", this, messageBundle.size(), messageBundle.get(0));
-                connection.write(new TransferredMessage(count, messageBundle));
-                ++count;
-                recordSendMessages += messageBundle.size();
+                writeNonEmpty(messageBundle);
             }
+        }
+
+        protected void writeSingleMessage(Message<?> message) {
+            logMsg("%s write %s", this, message);
+            connection.write(new TransferredMessage(count, message));
+            ++count;
+            ++recordSendMessages;
+        }
+
+        protected void writeNonEmpty(List<Object> messageBundle) {
+            logMsg("%s write %,d messages: %s,...", this, messageBundle.size(), messageBundle.get(0));
+            connection.write(new TransferredMessage(count, messageBundle));
+            ++count;
+            recordSendMessages += messageBundle.size();
         }
 
         protected void writeSpecial(Message<?> message) {

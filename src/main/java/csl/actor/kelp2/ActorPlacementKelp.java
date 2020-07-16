@@ -39,6 +39,7 @@ public class ActorPlacementKelp extends ClusterDeployment.ActorPlacementForClust
     public Actor fromSerializable(Serializable s, long num) {
         if (s instanceof ActorKelp.ActorKelpSerializable<?>) {
             try {
+                //TODO change config to local node config
                 return ((ActorKelp.ActorKelpSerializable<?>) s).restore(getSystem(), num);
             } catch (Exception ex) {
                 throw new RuntimeException(ex);
