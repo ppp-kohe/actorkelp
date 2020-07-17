@@ -71,23 +71,9 @@ public class ActorSystemKelp extends ActorSystemRemote {
         protected AtomicLong transferredBytes = new AtomicLong();
         protected volatile Instant previousLogTime = Instant.now();
 
-        protected volatile ConnectionHostHistory history;
-
         public ConnectionHost(ActorSystemKelp system, ActorAddress address) {
             this.system = system;
             this.address = address;
-            initHistory();
-        }
-        protected void initHistory() {
-            ConnectionHostHistory tail = new ConnectionHostHistory();
-            ConnectionHostHistory top = tail;
-            for (int i = 0; i < HISTORY_SIZE - 1; ++i) {
-                ConnectionHostHistory n = new ConnectionHostHistory();
-                n.next = top;
-                top = n;
-            }
-            tail.next = top;
-            this.history = top;
         }
 
         public void addSize(int n) {
@@ -106,56 +92,6 @@ public class ActorSystemKelp extends ActorSystemRemote {
             return transferredBytes.get();
         }
 
-        public void update() {
-            Instant now = Instant.now();
-            Duration d = Duration.between(previousLogTime, now);
-            if (d.compareTo(getHostUpdateTime()) > 0) {
-                updateAndWait();
-            }
-        }
-
-        protected synchronized void updateAndWait() {
-            Instant now = Instant.now();
-            Instant prev = previousLogTime;
-            previousLogTime = now;
-            Duration time = Duration.between(prev, now);
-            long bs = getTransferredBytes();
-            long mbox = size();
-
-            log("transferredBytes=%,14d pendingSize=%,7d elapsed=%s", bs, mbox, time);
-            ConnectionHostHistory newest = history;
-            history = history.set(mbox, bs, time);
-            //the current history has oldest values
-            if (newest.size > getPendingMessageSize()) {
-                List<ConnectionHostHistory> hsAll = history.toList();
-                List<ConnectionHostHistory> hs = hsAll.subList(hsAll.size() - 7, hsAll.size()); //only recent items
-                float sdr = history.sizeDecreasesRate(hs);
-                if (sdr > 0) {
-                    long ms = (long) (mbox * getWaitMsFactor());
-                    log( "wait %,d ms pendingSize=%s bytesPerSec=%,.2f",
-                        ms,
-                        hs.stream().map(h -> h.size)
-                                .map(l -> String.format("%,d", l))
-                                .collect(Collectors.joining(", ")),
-                        history.bytesPerSec(hs));
-
-                    try {
-                        Thread.sleep(ms);
-                    } catch (Exception ex) {
-                        system.getLogger().log(true, debugLogColor, ex, "ConnectionHost: wait error");
-                    }
-
-                    long afterSize = size();
-                    log( "after wait %,d ms: pendingSize %,7d -> %,7d (%+,d)",
-                            ms, mbox, afterSize, (afterSize - mbox));
-                }
-            }
-        }
-
-        public void log(String fmt, Object... args) {
-            ConfigBase.FormatAndArgs fa = new ConfigBase.FormatAndArgs("ConnectionHost: %s ", address).append(new ConfigBase.FormatAndArgs(fmt, args));
-            system.getLogger().log(true, debugLogColor, fa.format, fa.args);
-        }
 
         public double getWaitMsFactor() {
             return system.getConfig().systemWaitMsFactor;
@@ -172,15 +108,44 @@ public class ActorSystemKelp extends ActorSystemRemote {
         public long getPendingMessageSize() {
             return system.getConfig().systemPendingMessageSize;
         }
+
+        public boolean checkLogTime() {
+            Instant now = Instant.now();
+            Duration d = Duration.between(previousLogTime, now);
+            if (d.compareTo(getHostUpdateTime()) > 0) {
+                synchronized (this) {
+                    this.previousLogTime = now;
+                }
+                return true;
+            } else {
+                return false;
+            }
+        }
     }
 
     public static class ConnectionActorKelp extends ConnectionActor {
         protected ConnectionHost host;
 
+        protected volatile Instant previousLogTime = Instant.now();
+        protected volatile ConnectionHostHistory history;
+
         public ConnectionActorKelp(ActorSystem system, ActorSystemRemote remoteSystem, ConnectionHost host, ActorAddress.ActorAddressRemote address) throws InterruptedException {
             super(system, remoteSystem, address);
             this.host = host;
             this.mailbox = new MailboxForConnection(host);
+            initHistory();
+        }
+
+        protected void initHistory() {
+            ConnectionHostHistory tail = new ConnectionHostHistory();
+            ConnectionHostHistory top = tail;
+            for (int i = 0; i < HISTORY_SIZE - 1; ++i) {
+                ConnectionHostHistory n = new ConnectionHostHistory();
+                n.next = top;
+                top = n;
+            }
+            tail.next = top;
+            this.history = top;
         }
 
         @Override
@@ -191,7 +156,66 @@ public class ActorSystemKelp extends ActorSystemRemote {
         @Override
         public void tell(Object data) {
             super.tell(data);
-            host.update();
+            update();
+        }
+
+        public void log(String fmt, Object... args) {
+            ConfigBase.FormatAndArgs fa = new ConfigBase.FormatAndArgs("ConnectionActorKelp ")
+                    .append(new ConfigBase.FormatAndArgs(fmt, args)
+                    .append(new ConfigBase.FormatAndArgs(" @ %s", address)));
+            system.getLogger().log(true, debugLogColor, fa.format, fa.args);
+        }
+
+        public void update() {
+            Instant now = Instant.now();
+            Duration d = Duration.between(previousLogTime, now);
+            if (d.compareTo(host.getHostUpdateTime()) > 0) {
+                updateAndWait();
+            }
+        }
+
+        protected synchronized void updateAndWait() {
+            Instant now = Instant.now();
+            Instant prev = previousLogTime;
+            Duration time = Duration.between(prev, now);
+            if (time.compareTo(host.getHostUpdateTime()) <= 0) {
+                return; //multiple entering from update() and the first one already done
+            }
+            previousLogTime = now;
+
+            long bs = host.getTransferredBytes();
+            long mbox = host.size();
+
+            if (host.checkLogTime()) { // in order to avoid log flooding
+                log("transferredBytes=%,14d, pendingSize=%,7d, elapsed=%s", bs, mbox, time);
+            }
+            ConnectionHostHistory newest = history;
+            history = history.set(mbox, bs, time);
+            //the current history has oldest values
+            if (newest.size > host.getPendingMessageSize()) {
+                List<ConnectionHostHistory> hsAll = history.toList();
+                List<ConnectionHostHistory> hs = hsAll.subList(hsAll.size() - 7, hsAll.size()); //only recent items
+                float sdr = history.sizeDecreasesRate(hs);
+                if (sdr > 0) {
+                    long ms = (long) (mbox * host.getWaitMsFactor());
+                    log( "wait %,d ms, pendingSize=%s, bytesPerSec=%,.2f",
+                            ms,
+                            hs.stream().map(h -> h.size)
+                                    .map(l -> String.format("%,d", l))
+                                    .collect(Collectors.joining(", ")),
+                            history.bytesPerSec(hs));
+
+                    try {
+                        Thread.sleep(ms);
+                    } catch (Exception ex) {
+                        system.getLogger().log(true, debugLogColor, ex, "ConnectionHost: wait error");
+                    }
+
+                    long afterSize = host.size();
+                    log( "after wait %,d ms: pendingSize %,7d -> %,7d (%+,d)",
+                            ms, mbox, afterSize, (afterSize - mbox));
+                }
+            }
         }
 
         @Override
