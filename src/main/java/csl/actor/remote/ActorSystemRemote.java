@@ -129,7 +129,6 @@ public class ActorSystemRemote implements ActorSystem {
     public void start(ActorAddress.ActorAddressRemote serverAddress) {
         setServerAddress(serverAddress);
         try {
-
             server.setHost(serverAddress.getHost())
                     .setPort(serverAddress.getPort());
             server.start();
@@ -183,9 +182,10 @@ public class ActorSystemRemote implements ActorSystem {
             if (local != null && local.equals(addrHost)) { //localhost
                 localSystem.send(message.renewTarget(localize(target)));
             } else {
+                ActorAddress addr = getAddressForConnection(addrActor);
                 getLogger().log(debugLogMsg, debugLogMsgColorSend, "%s: client tell <%s> to remote %s", this,
                         message.getData(), addrActor);
-                ConnectionActor a = connectionMap.computeIfAbsent(addrActor, k -> createConnection(addrActor));
+                ConnectionActor a = connectionMap.computeIfAbsent(addr, k -> createConnection(addr));
                 if (a != null) {
                     a.tell(message);
                 } else {
@@ -195,6 +195,10 @@ public class ActorSystemRemote implements ActorSystem {
         } else {
             localSystem.send(message);
         }
+    }
+
+    protected ActorAddress getAddressForConnection(ActorAddress target) {
+        return target;
     }
 
     protected ConnectionActor createConnection(ActorAddress addr) {
@@ -414,8 +418,8 @@ public class ActorSystemRemote implements ActorSystem {
                     if (mailbox.isEmpty()) {
                         writeSingleMessage(message);
                     } else {
-                        int maxBundle = 30;
-                        List<Object> messageBundle = new ArrayList<>(maxBundle);
+                        int maxBundle = getMaxBundle();
+                        List<Object> messageBundle = new ArrayList<>(Math.max(0, maxBundle));
                         messageBundle.add(message);
                         int i = 1;
                         while (i < maxBundle) {
@@ -439,6 +443,10 @@ public class ActorSystemRemote implements ActorSystem {
             } finally {
                 recordSendMessageTime = Duration.between(start, Instant.now());
             }
+        }
+
+        public int getMaxBundle() {
+            return 30;
         }
 
         private void write(List<Object> messageBundle) {
@@ -466,13 +474,17 @@ public class ActorSystemRemote implements ActorSystem {
             boolean close = (message.getData() instanceof ConnectionCloseNotice);
             int id = close ? ObjectMessageServer.RESULT_CLOSE : count;
             if (!close || connection.isOpen()) {
-                connection.write(new TransferredMessage(id, message));
+                writeSpecial(message, id);
             }
             ++count;
             ++recordSendMessages;
             if (close) {
                 close();
             }
+        }
+
+        protected void writeSpecial(Message<?> message, int id) {
+            connection.write(new TransferredMessage(id, message));
         }
 
         protected void logMsg(String fmt, Object... args) {

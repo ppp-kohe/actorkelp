@@ -475,6 +475,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
                     getAppName() + "/" + NON_DRIVER_FILE_CONF) + " "; //suppose the working dir is baseDir
         }
 
+        String additionalOpt = unit.getDeploymentConfig().javaVmOption;
 
         return escape("-Dcsl.actor.logColor=" + unit.getAppConfig().get("logColor")) + " " +
                 escape("-Dcsl.actor.logFile=" + unit.getDeploymentConfig().logFile) + " " +
@@ -484,7 +485,8 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
                 escape("-Dcsl.actor.throttle=" + unit.getDeploymentConfig().throttle) + " " +
                 escape("-D" + NON_DRIVER_PROPERTY_APP_NAME + "=" + getAppName()) + " " +
                 pathProps +
-                getJavaCommandOptionsClassPath(unit);
+                getJavaCommandOptionsClassPath(unit) + " " +
+                additionalOpt;
     }
 
     protected String getJavaCommandArgs(ClusterUnit<AppConfType> unit) throws Exception {

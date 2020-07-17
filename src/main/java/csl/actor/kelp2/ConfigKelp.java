@@ -7,7 +7,11 @@ public class ConfigKelp extends ConfigBase {
     public static ConfigKelp CONFIG_DEFAULT = new ConfigKelp();
     public String mailboxPath = "%a/mbox";
     public boolean persist = true;
-    public int mailboxOnMemorySize = 1000;
+    public int mailboxOnMemorySize = 1_000;
     public int logColor = 17;
-    public int logColorPhase = 27;
+
+    public long systemHostUpdateMs = 3_000;
+    public int systemMaxBundle = 30;
+    public long systemPendingMessageSize = 10_000;
+    public double systemWaitMsFactor = 0.3; //10_000 messages -> 3000ms
 }

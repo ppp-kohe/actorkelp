@@ -2,6 +2,7 @@ package csl.actor.kelp2;
 
 import csl.actor.Actor;
 import csl.actor.ActorSystem;
+import csl.actor.Message;
 import csl.actor.cluster.ClusterDeployment;
 import csl.actor.remote.ActorAddress;
 
@@ -39,12 +40,31 @@ public class ActorPlacementKelp extends ClusterDeployment.ActorPlacementForClust
     public Actor fromSerializable(Serializable s, long num) {
         if (s instanceof ActorKelp.ActorKelpSerializable<?>) {
             try {
-                //TODO change config to local node config
-                return ((ActorKelp.ActorKelpSerializable<?>) s).restore(getSystem(), num);
+                ActorKelp.ActorKelpSerializable<?> actorSrc = (ActorKelp.ActorKelpSerializable<?>) s;
+                Actor a = actorSrc.restore(getSystem(), num, getConfig(actorSrc));
+                a.tellMessage(new Message.MessageNone(a));
+                return a;
             } catch (Exception ex) {
                 throw new RuntimeException(ex);
             }
         }
         return null;
+    }
+
+    protected ConfigKelp getConfig(ActorKelp.ActorKelpSerializable<?> actorSrc) {
+        return getRemoteConfig().getOrDefault(getSelfAddress().getHostAddress(), actorSrc.config);
+    }
+
+    @Override
+    public void receiveConfigSet(ClusterDeployment.ConfigSet set) {
+        super.receiveConfigSet(set);
+        if (getSystem() instanceof ActorSystemKelp) {
+            ActorSystemKelp kelp = (ActorSystemKelp) getSystem();
+            ConfigKelp conf = (ConfigKelp) set.getRemoteConfig().get(kelp.getServerAddress());
+            log("receiveConfigSet: %s %s", kelp, conf);
+            if (conf != null) {
+                kelp.setConfig(conf);
+            }
+        }
     }
 }

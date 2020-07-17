@@ -228,7 +228,7 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
             internalState = actor.toInternalState();
         }
 
-        public SelfType restore(ActorSystem system, long num) throws Exception {
+        public SelfType restore(ActorSystem system, long num, ConfigKelp config) throws Exception {
             SelfType a = create(system, restoreName(num), config);
             restoreInit(a);
             return a;

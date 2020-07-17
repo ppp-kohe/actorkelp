@@ -22,6 +22,7 @@ public class ConfigDeployment extends ConfigBase {
     public static final long serialVersionUID = 1L;
     public String ssh = "ssh %s"; //host
     public String java = "java %s %s %s"; //option mainClass args
+    public String javaVmOption = ""; //additional option for java
     public String host = "localhost";
     public int port = 38888;
     public String configType = "csl.actor.kelp.Config";
