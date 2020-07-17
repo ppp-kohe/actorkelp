@@ -201,7 +201,7 @@ public class ActorSystemKelp extends ActorSystemRemote {
                 List<ConnectionHostHistory> hs = hsAll.subList(hsAll.size() - 7, hsAll.size()); //only recent items
                 float sdr = history.sizeDecreasesRate(hs);
                 long avg = history.averagePendingSize(hs);
-                if (sdr > 0 || avg > host.getPendingMessageLimit()) {
+                if (sdr == 0 || avg > host.getPendingMessageLimit()) {
                     long ms = (long) (mbox * host.getWaitMsFactor());
                     log( "wait %,d ms, pendingSize=%s, bytesPerSec=%,.2f, decreasesRate=%.2f, averagePendingSize=%,d/%,d",
                             ms,
