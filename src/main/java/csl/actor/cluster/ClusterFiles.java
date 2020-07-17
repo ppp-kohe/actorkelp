@@ -40,7 +40,7 @@ public class ClusterFiles {
             Path filePath = Paths.get(pathItem);
             if (Files.isDirectory(filePath)) { //creates jar and copies it
                 deployFilesDirToJar(filePath, jarDir, pathList);
-            } else { //copy jar
+            } else if (Files.exists(filePath)){ //copy jar
                 deployFilesCopyFile(filePath, jarDir, pathList);
             }
         }
