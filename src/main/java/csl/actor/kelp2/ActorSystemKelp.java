@@ -109,6 +109,10 @@ public class ActorSystemKelp extends ActorSystemRemote {
             return system.getConfig().systemPendingMessageSize;
         }
 
+        public long getPendingMessageLimit() {
+            return system.getConfig().systemPendingMessageLimit;
+        }
+
         public boolean checkLogTime() {
             Instant now = Instant.now();
             Duration d = Duration.between(previousLogTime, now);
@@ -196,14 +200,16 @@ public class ActorSystemKelp extends ActorSystemRemote {
                 List<ConnectionHostHistory> hsAll = history.toList();
                 List<ConnectionHostHistory> hs = hsAll.subList(hsAll.size() - 7, hsAll.size()); //only recent items
                 float sdr = history.sizeDecreasesRate(hs);
-                if (sdr > 0) {
+                long avg = history.averagePendingSize(hs);
+                if (sdr > 0 || avg > host.getPendingMessageLimit()) {
                     long ms = (long) (mbox * host.getWaitMsFactor());
-                    log( "wait %,d ms, pendingSize=%s, bytesPerSec=%,.2f",
+                    log( "wait %,d ms, pendingSize=%s, bytesPerSec=%,.2f, decreasesRate=%.2f, averagePendingSize=%,d/%,d",
                             ms,
                             hs.stream().map(h -> h.size)
                                     .map(l -> String.format("%,d", l))
                                     .collect(Collectors.joining(", ")),
-                            history.bytesPerSec(hs));
+                            history.bytesPerSec(hs),
+                            sdr, avg, host.getPendingMessageLimit());
 
                     try {
                         Thread.sleep(ms);
@@ -327,6 +333,14 @@ public class ActorSystemKelp extends ActorSystemRemote {
             long n = d.getSeconds();
             double nn = d.getNano() / 1_000_000_000.0;
             return n + nn;
+        }
+
+        public long averagePendingSize(List<ConnectionHostHistory> hs) {
+            long s = 0;
+            for (ConnectionHostHistory h : hs) {
+                s += h.size;
+            }
+            return (long) (s / (double) hs.size());
         }
     }
 }

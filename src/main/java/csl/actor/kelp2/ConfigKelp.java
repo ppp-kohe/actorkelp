@@ -14,4 +14,6 @@ public class ConfigKelp extends ConfigBase {
     public int systemMaxBundle = 30;
     public long systemPendingMessageSize = 10_000;
     public double systemWaitMsFactor = 0.3; //10_000 messages -> 3000ms
+    public long systemPendingMessageLimit = 150_000;
+
 }
