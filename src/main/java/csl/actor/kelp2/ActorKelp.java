@@ -64,6 +64,10 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
         return config.mailboxOnMemorySize;
     }
 
+    public long getSplitLength() {
+        return config.splitLength;
+    }
+
     ///////////////
 
     protected PersistentFileManager getPersistentFile() {
@@ -157,7 +161,7 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
     /////
     public void processFileSplit(FileSplitter.FileSplit split) {
         if (fileSplitter == null) {
-            fileSplitter = FileSplitter.getWithSplitLength(32 * 1024L * 1024L); //TODO config
+            fileSplitter = FileSplitter.getWithSplitLength(getSplitLength()); 
         }
         try {
             if (split.getFileLength() == 0) {

@@ -16,4 +16,8 @@ public class ConfigKelp extends ConfigBase {
     public double systemWaitMsFactor = 0.3; //10_000 messages -> 3000ms
     public long systemPendingMessageLimit = 150_000;
 
+    public int shuffleBufferSize = 512;
+    public int shuffleBufferSizeFile = 0;
+    public int shufflePartitions = 30;
+    public long splitLength = 32 * 1024L * 1024L;
 }
