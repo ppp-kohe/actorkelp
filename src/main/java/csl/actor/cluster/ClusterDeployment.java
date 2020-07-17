@@ -848,7 +848,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
                     } else {
                         primary.log("%s: waiting join: limit=%,d remaining=%,d", appName, limit, nodeAddrs.size());
                         if (nodeAddrs.size() <= 5) {
-                            primary.log("  remaining nodes: " + nodeAddrs);
+                            primary.log("  remaining nodes: %s", nodeAddrs);
                         }
                         --limit;
                     }

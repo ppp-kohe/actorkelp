@@ -123,7 +123,7 @@ public class ClusterFiles {
                 out.closeEntry();
             }
         } catch (Exception ex) {
-            unit.log("error writeToJar: " + path + " : " + ex);
+            unit.log("error writeToJar: %s :  %s",path, ex);
         }
     }
 

@@ -25,10 +25,10 @@ public class ClusterCommands<AppConfType extends ConfigBase> {
         root.write(System.out::println);
 
         units.forEach(u -> {
-            u.log(u.getName() + ":");
-            u.log("    clusterConfig: " + u.getDeploymentConfig().toString());
+            u.log("%s:", u.getName());
+            u.log("    clusterConfig: %s", u.getDeploymentConfig().toString());
             if (u.getAppConfig() != null) {
-                u.log("    appConfig: " + u.getAppConfig().toString());
+                u.log("    appConfig: %s", u.getAppConfig().toString());
             }
         });
     }
@@ -75,7 +75,7 @@ public class ClusterCommands<AppConfType extends ConfigBase> {
             block.getConfigLines()
                     .forEach(cs -> set(unit.getAppConfig(), cs));
         } catch (Exception e) {
-            conf.log(e, "appConfig error: %s : %s", conf.configType);
+            conf.log(e, "appConfig error: %s", conf.configType);
         }
         return unit;
     }
@@ -93,7 +93,7 @@ public class ClusterCommands<AppConfType extends ConfigBase> {
                     .collect(Collectors.joining(" "));
             conf.set(fld.getName(), data);
         } catch (Exception e) {
-            conf.log("property error: " + conf + " : " + cs + " : " + e);
+            conf.log(e, "property error: %s : %s", conf,  cs);
         }
     }
 

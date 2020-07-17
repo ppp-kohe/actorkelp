@@ -270,7 +270,7 @@ public class ConfigBase implements Serializable, ToJson {
             readProperty(comArg.field, args.get(index));
             return index + 1;
         } catch (Exception ex) {
-            log("#failed parsing argument at: " + index + " for property: " + comArg.argument + " : " + ex);
+            log(ex, "#failed parsing argument at: %,d for property: %s", index, comArg.argument);
             return index + 1;
         }
     }
