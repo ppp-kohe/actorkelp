@@ -1,6 +1,7 @@
 package csl.actor.kelp2;
 
 import csl.actor.cluster.ClusterDeployment;
+import csl.actor.cluster.ConfigDeployment;
 import csl.actor.remote.ActorSystemRemote;
 import csl.actor.remote.KryoBuilder;
 import csl.actor.util.ConfigBase;
@@ -18,20 +19,20 @@ public class ClusterKelp extends ClusterDeployment<ConfigKelp, ActorPlacementKel
 
     protected void deployPrimaryInitSystem() {
         primary.log("primary %s: create system with serializer %s", primary.getDeploymentConfig().getAddress(), primary.getDeploymentConfig().kryoBuilderType);
-        system = createSystemKelp(primary.getDeploymentConfig().kryoBuilderType);
+        system = createSystemKelp(primary.getDeploymentConfig().kryoBuilderType, primary.getDeploymentConfig());
         system.getLocalSystem().setLogger(new ConfigBase.SystemLoggerHeader(system.getLogger(), primary.getAppConfig()));
     }
 
-    public static ActorSystemKelp createSystemKelp(String buildType) {
+    public static ActorSystemKelp createSystemKelp(String buildType, ConfigDeployment configDeployment) {
         try {
             Class<?> cls = Class.forName(buildType);
             if (KryoBuilder.class.isAssignableFrom(cls)) {
-                return new ActorSystemKelp();
+                return new ActorSystemKelp(configDeployment);
             } else {
                 throw new RuntimeException("not a KryoBuilder: " + cls);
             }
         } catch (Exception ex) {
-            throw new RuntimeException();
+            throw new RuntimeException(ex);
         }
     }
 
@@ -47,8 +48,8 @@ public class ClusterKelp extends ClusterDeployment<ConfigKelp, ActorPlacementKel
 
         @Override
         protected ActorSystemRemote initSystem() {
-            ActorSystemRemote system = createSystemKelp(kryoBuilderType);
-            system.getLocalSystem().setLogger(new ConfigBase.SystemLoggerHeader(system.getLogger(), logger));
+            ActorSystemRemote system = createSystemKelp(kryoBuilderType, this.configDeployment);
+            system.getLocalSystem().setLogger(new ConfigBase.SystemLoggerHeader(system.getLogger(), configDeployment));
             return system;
         }
     }

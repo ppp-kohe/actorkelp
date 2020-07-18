@@ -45,6 +45,13 @@ public class ConfigDeployment extends ConfigBase {
 
     public boolean throttle = false;
 
+
+    public int systemThroughput = 256;
+    public float systemThreadFactor = 5;
+    public int systemServerLeaderThreads = 4;
+    public float systemServerWorkerThreadsFactor = 20;
+    public float systemClientThreadsFactor = 10;
+
     public ConfigDeployment() {
     }
 

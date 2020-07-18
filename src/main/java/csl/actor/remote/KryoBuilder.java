@@ -336,6 +336,7 @@ public class KryoBuilder {
                 csl.actor.kelp2.ActorKelp.MessageBundle.class,
                 ConfigKelp.class,
                 csl.actor.kelp2.ActorKelp.ActorKelpSerializable.class,
+                ActorRefShuffle.ShuffleEntry.class,
                 StagingActor.StagingCompleted.class,
                 StagingActor.StagingNotification.class,
                 StagingActor.StagingWatcher.class,

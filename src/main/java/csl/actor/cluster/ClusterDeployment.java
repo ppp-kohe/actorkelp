@@ -333,7 +333,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
                 throw new RuntimeException("not a KryoBuilder: " + cls);
             }
         } catch (Exception ex) {
-            throw new RuntimeException();
+            throw new RuntimeException(ex);
         }
 
     }
@@ -483,6 +483,13 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
                 escape("-Dcsl.actor.logFilePreserveColor=" + unit.getDeploymentConfig().logFilePreserveColor) + " " +
                 escape("-Dcsl.actor.kryoBuilderType=" + unit.getDeploymentConfig().kryoBuilderType) + " " +
                 escape("-Dcsl.actor.throttle=" + unit.getDeploymentConfig().throttle) + " " +
+
+                escape("-Dcsl.actor.systemThroughput" + unit.getDeploymentConfig().systemThroughput) + " " +
+                escape("-Dcsl.actor.systemServerWorkerThreadsFactor" + unit.getDeploymentConfig().systemServerWorkerThreadsFactor) + " " +
+                escape("-Dcsl.actor.systemServerLeaderThreads" + unit.getDeploymentConfig().systemServerLeaderThreads) + " " +
+                escape("-Dcsl.actor.systemClientThreadsFactor" + unit.getDeploymentConfig().systemClientThreadsFactor) + " " +
+                escape("-Dcsl.actor.systemThreadFactor" + unit.getDeploymentConfig().systemThreadFactor) + " " +
+
                 escape("-D" + NON_DRIVER_PROPERTY_APP_NAME + "=" + getAppName()) + " " +
                 pathProps +
                 getJavaCommandOptionsClassPath(unit) + " " +
@@ -661,7 +668,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         }
 
         protected int logColor = ActorSystem.systemPropertyColor("csl.actor.logColor", 0);
-        protected ConfigDeployment logger;
+        protected ConfigDeployment configDeployment; //from properties
         protected ActorAddress.ActorAddressRemote selfAddress;
         protected ActorSystemRemote system;
         protected ActorPlacement.ActorPlacementDefault place;
@@ -669,7 +676,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         protected boolean throttle = System.getProperty("csl.actor.throttle", "false").equals("true");
 
         public void run(String[] args) throws Exception {
-            initLogger();
+            initConfigDeployment();
 
             String selfAddr = args[0];
             String joinAddr = args[1];
@@ -677,29 +684,29 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
 
             kryoBuilderType = initKryoBuilderType();
             selfAddress = initSelfAddress(selfAddr);
-            logger.log(logColor, "%s: system  with serializer %s", selfAddress, kryoBuilderType);
+            configDeployment.log(logColor, "%s: system  with serializer %s", selfAddress, kryoBuilderType);
             system = initSystem();
 
             initPath();
-            logger.log(logColor, "%s: path %s", selfAddress, ConfigDeployment.getPathModifier(system));
+            configDeployment.log(logColor, "%s: path %s", selfAddress, ConfigDeployment.getPathModifier(system));
 
             startSystem();
             place = initPlace(placeType);
 
-            logger.log(logColor, "%s: joining to %s", place, joinAddr);
+            configDeployment.log(logColor, "%s: joining to %s", place, joinAddr);
             join(joinAddr);
         }
 
-        protected void initLogger() {
-            logger = new ConfigDeployment();
-            logger.read("csl.actor", System.getProperties());
-            setDefaultUncaughtHandler(logger);
+        protected void initConfigDeployment() {
+            configDeployment = new ConfigDeployment();
+            configDeployment.read("csl.actor", System.getProperties());
+            setDefaultUncaughtHandler(configDeployment);
         }
 
         protected ActorAddress.ActorAddressRemote initSelfAddress(String selfAddr) {
             ActorAddress.ActorAddressRemote selfAddrObj = ActorAddress.get(selfAddr);
-            logger.host = selfAddrObj.getHost();
-            logger.port = selfAddrObj.getPort();
+            configDeployment.host = selfAddrObj.getHost();
+            configDeployment.port = selfAddrObj.getPort();
             return selfAddrObj;
         }
 
@@ -709,7 +716,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
 
         protected ActorSystemRemote initSystem() {
             ActorSystemRemote system = createSystem(kryoBuilderType, throttle);
-            system.getLocalSystem().setLogger(new ConfigBase.SystemLoggerHeader(system.getLogger(), logger));
+            system.getLocalSystem().setLogger(new ConfigBase.SystemLoggerHeader(system.getLogger(), configDeployment));
             return system;
         }
 
@@ -720,7 +727,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
             ph.setHost(selfAddress.getHost(), selfAddress.getPort());
             String appName = System.getProperty("csl.actor.path.app", "");
             ph.setApp(appName);
-            setLogFile(logger, ph);
+            setLogFile(configDeployment, ph);
         }
 
         protected void startSystem() {
@@ -729,7 +736,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
 
         protected ActorPlacement.ActorPlacementDefault initPlace(String placeType) throws Exception {
             ActorPlacement.ActorPlacementDefault p = createPlace(placeType, system, new ActorPlacement.PlacementStrategyUndertaker());
-            p.setLogger(logger);
+            p.setLogger(configDeployment);
             return p;
         }
 

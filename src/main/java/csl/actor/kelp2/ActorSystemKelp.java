@@ -3,6 +3,7 @@ package csl.actor.kelp2;
 import com.esotericsoftware.kryo.Kryo;
 import csl.actor.*;
 import csl.actor.cluster.ActorSystemCluster;
+import csl.actor.cluster.ConfigDeployment;
 import csl.actor.remote.ActorAddress;
 import csl.actor.remote.ActorSystemRemote;
 import csl.actor.remote.KryoBuilder;
@@ -14,6 +15,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -23,11 +25,52 @@ public class ActorSystemKelp extends ActorSystemRemote {
     protected volatile ConfigKelp config = ConfigKelp.CONFIG_DEFAULT;
 
     public ActorSystemKelp() {
-        this(new ActorSystemCluster.ActorSystemDefaultForCluster(), KryoBuilder.builder());
+        this(new ConfigDeployment());
+    }
+
+    public ActorSystemKelp(ConfigDeployment configDeployment) {
+        this(new ActorSystemDefaultForKelp(configDeployment), KryoBuilder.builder());
     }
 
     public ActorSystemKelp(ActorSystemDefault localSystem, Function<ActorSystem, Kryo> kryoFactory) {
         super(localSystem, kryoFactory);
+    }
+
+    public static class ActorSystemDefaultForKelp extends ActorSystemCluster.ActorSystemDefaultForCluster {
+        protected ConfigDeployment configDeployment;
+
+        public ActorSystemDefaultForKelp(ConfigDeployment configDeployment) {
+            this.configDeployment = configDeployment;
+            super.initSystem();
+        }
+
+        @Override
+        protected void initSystem() {
+            //delay
+        }
+
+        @Override
+        protected void initSystemExecutorService() {
+            executorService = Executors.newFixedThreadPool(
+                    Math.max(1, (int) (threads * configDeployment.systemThreadFactor)));
+        }
+
+        @Override
+        protected void initThroughput() {
+            throughput = configDeployment.systemThroughput;
+        }
+
+        public int getServerLeaderThreads() {
+            return configDeployment.systemServerLeaderThreads;
+        }
+
+        public int getServerWorkerThreads() {
+            return Math.max(1, (int) (getThreads() * configDeployment.systemServerWorkerThreadsFactor));
+        }
+
+        public int getClientThreads() {
+            return Math.max(1, (int) (getThreads() * configDeployment.systemClientThreadsFactor));
+        }
     }
 
     public void setConfig(ConfigKelp config) {

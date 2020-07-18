@@ -1,28 +1,24 @@
 package csl.actor.kelp2;
 
 
-import csl.actor.ActorRef;
-import csl.actor.ActorSystem;
-import csl.actor.CallableMessage;
-import csl.actor.Message;
+import csl.actor.*;
+import csl.actor.remote.ActorAddress;
+import csl.actor.remote.ActorRefRemote;
 import csl.actor.util.ResponsiveCalls;
 
 import java.io.Serializable;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Objects;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Function;
 import java.util.function.IntFunction;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 public class ActorRefShuffle implements ActorRef, Serializable {
     public static final long serialVersionUID = 1L;
-
-    protected List<ActorRef> actors;
-    protected transient List<List<Object>> messageBuffers;
     protected int bufferSize;
+    protected Map<ActorAddress, List<ShuffleEntry>> entries; //host-address to entries
+    protected List<List<ShuffleEntry>> entriesList;
 
     public static final int BUFFER_SIZE_DEFAULT = 512;
 
@@ -40,12 +36,29 @@ public class ActorRefShuffle implements ActorRef, Serializable {
     }
 
     public static ActorRefShuffle createRef(Iterable<? extends ActorRef> actors, int bufferSize) {
-        ArrayList<ActorRef> refs = new ArrayList<>();
-        for (ActorRef a: actors) {
-            refs.add(a);
+        return new ActorRefShuffle(createEntries(actors, bufferSize, ActorRefShuffle::toHost), bufferSize);
+    }
+
+    public static Map<ActorAddress, List<ShuffleEntry>> createEntries(Iterable<? extends ActorRef> actors, int bufferSize,
+                                                                      Function<ActorRef, ActorAddress> refToHost) {
+        Map<ActorAddress, List<ShuffleEntry>> refs = new HashMap<>();
+        for (ActorRef ref : actors) {
+            refs.computeIfAbsent(toHost(ref), _h -> new ArrayList<>())
+                    .add(new ShuffleEntry(ref, bufferSize));
         }
-        refs.trimToSize();
-        return new ActorRefShuffle(refs, bufferSize);
+        refs.values().forEach(es ->
+                ((ArrayList<?>) es).trimToSize());
+        return refs;
+    }
+
+    static ActorAddress LOCALHOST = ActorAddress.get("localhost", -1);
+
+    public static ActorAddress toHost(ActorRef ref) {
+        if (ref instanceof ActorRefRemote) {
+            return ((ActorRefRemote) ref).getAddress().getHostAddress();
+        } else {
+            return LOCALHOST;
+        }
     }
 
     public static void flush(ActorRef ref, ActorRef sender) {
@@ -57,24 +70,17 @@ public class ActorRefShuffle implements ActorRef, Serializable {
     public ActorRefShuffle() {
     }
 
-    public ActorRefShuffle(List<ActorRef> actors) {
-        this(actors, BUFFER_SIZE_DEFAULT);
-    }
-
-    public ActorRefShuffle(List<ActorRef> actors, int bufferSize) {
-        this.actors = actors;
+    public ActorRefShuffle(Map<ActorAddress, List<ShuffleEntry>> entries, int bufferSize) {
+        this.entries = entries;
         this.bufferSize = bufferSize;
-        initBuffers();
-    }
-
-    public void initBuffers() {
-        messageBuffers = IntStream.range(0, actors.size())
-                .mapToObj(i -> bufferSize <= 0 ? Collections.emptyList() : new ArrayList<>(bufferSize))
-                .collect(Collectors.toList());
+        entriesList = new ArrayList<>(entries.values());
     }
 
     public List<ActorRef> getActors() {
-        return actors;
+        return entriesList.stream()
+                .flatMap(List::stream)
+                .map(ShuffleEntry::getActor)
+                .collect(Collectors.toList());
     }
 
     public int getBufferSize() {
@@ -82,7 +88,12 @@ public class ActorRefShuffle implements ActorRef, Serializable {
     }
 
     public ActorRefShuffle use() {
-        return new ActorRefShuffle(actors, bufferSize);
+        Map<ActorAddress, List<ShuffleEntry>> es = new HashMap<>(entries.size());
+        entries.forEach((k,v) ->
+                es.put(k, v.stream()
+                    .map(e -> e.copy(bufferSize))
+                    .collect(Collectors.toList())));
+        return new ActorRefShuffle(es, bufferSize);
     }
 
     @Override
@@ -91,26 +102,25 @@ public class ActorRefShuffle implements ActorRef, Serializable {
             ((ActorKelp.MessageBundle<?>) message).getData().forEach(d ->
                     tell(d, message.getSender()));
         } else {
-            int index = index(message.getData());
-            if (bufferSize <= 0) {
-                ActorRef actor = actors.get(index);
-                actor.tell(message.getData(), message.getSender());
-            } else {
-                if (messageBuffers == null) {
-                    initBuffers();
-                }
-                List<Object> buffer = messageBuffers.get(index);
-                buffer.add(message.getData());
-
-                if (buffer.size() >= bufferSize) { //suppose the ref is not shared
-                    sendBuffer(index, message.getSender());
-                }
-            }
+            int hash = Objects.hashCode(message.getData());
+            List<ShuffleEntry> es = entries(message, hash);
+            int index = hashMod(hash, es.size());
+            ShuffleEntry entry = es.get(index);
+            entry.tell(bufferSize, message);
         }
     }
 
-    protected int index(Object data) {
-        return hashMod(Objects.hashCode(data), actors.size());
+    protected List<ShuffleEntry> entries(Message<?> message, int dataHash) {
+        ActorAddress target = addressFromMessageData(message);
+        List<ShuffleEntry> es = (target == null ? null : entries.get(target));
+        if (es == null) {
+            es = entriesList.get(hashMod(dataHash, entriesList.size()));
+        }
+        return es;
+    }
+
+    protected ActorAddress addressFromMessageData(Message<?> message) {
+        return null;
     }
 
     /**
@@ -119,44 +129,33 @@ public class ActorRefShuffle implements ActorRef, Serializable {
      * @return the index within size
      */
     public static int hashMod(int hash, int size) {
-        int h = hash;
-        int sh = Integer.highestOneBit(size);
-        int sizeWidth = Integer.numberOfTrailingZeros(sh);
-        //max of sizeWidth is 30
-        int result = 0;
-        int remainingBits = 32;
-        while (remainingBits > 0) {
-            result ^= h;
-            h >>>= sizeWidth;
-            remainingBits -= sizeWidth;
+        if (size <= 1) {
+            return 0;
+        } else {
+            int h = hash;
+            int sh = Integer.highestOneBit(size);
+            int sizeWidth = Integer.numberOfTrailingZeros(sh);
+            //max of sizeWidth is 30
+            int result = 0;
+            int remainingBits = 32;
+            while (remainingBits > 0) {
+                result ^= h;
+                h >>>= sizeWidth;
+                remainingBits -= sizeWidth;
+            }
+            return Math.abs(result % size);
         }
-        return Math.abs(result % size);
     }
 
     public void flush(ActorRef sender) {
-        if (messageBuffers == null) {
-            return;
-        }
-        for (int i = 0, l = actors.size(); i < l; ++i) {
-            sendBuffer(i, sender);
-        }
-    }
-
-    protected void sendBuffer(int index, ActorRef sender) {
-        if (messageBuffers == null) {
-            initBuffers();
-        }
-        List<Object> buffer = messageBuffers.get(index);
-        if (!buffer.isEmpty()) {
-            ActorRef actor = actors.get(index);
-            actor.tellMessage(new ActorKelp.MessageBundle<>(actor, sender, buffer));
-            buffer.clear();
-        }
+        entries.values()
+                .forEach(es -> es.forEach(e ->
+                        e.flush(sender)));
     }
 
     public CompletableFuture<Void> connect(ActorSystem system, ActorRef next) {
         List<CompletableFuture<?>> tasks = new ArrayList<>();
-        for (ActorRef a : actors) {
+        for (ActorRef a : getActors()) {
             tasks.add(setNextStage(system, a, next));
         }
         return CompletableFuture.allOf(tasks.toArray(new CompletableFuture<?>[0]));
@@ -184,9 +183,74 @@ public class ActorRefShuffle implements ActorRef, Serializable {
 
     @Override
     public String toString() {
-        return "refShuffle[" + actors.size() + "](" +
-                "actors=" + (actors.isEmpty()? "[]" : "[" + actors.get(0) + ",...]") +
+        int as = getActorSize();
+        return "refShuffle[" + as + "](" +
+                "actors=" + (as == 0 ? "[]" : "[" + getFirstActor() + ",...]") +
                 ", bufferSize=" + bufferSize +
                 ')';
+    }
+
+    public int getActorSize() {
+        int s = 0;
+        for (List<ShuffleEntry> es : entriesList) {
+            s += es.size();
+        }
+        return s;
+    }
+
+    public ActorRef getFirstActor() {
+        for (List<ShuffleEntry> es : entriesList) {
+            if (!es.isEmpty()) {
+                return es.get(0).getActor();
+            }
+        }
+        return null;
+    }
+
+    public static class ShuffleEntry implements Serializable {
+        public static final long serialVersionUID = 1L;
+        protected ActorRef actor;
+        protected transient ArrayList<Object> buffer;
+
+        public ShuffleEntry() {}
+
+        public ShuffleEntry(ActorRef actor, int bufferSize) {
+            this.actor = actor;
+            buffer = new ArrayList<>(bufferSize);
+        }
+
+        public ActorRef getActor() {
+            return actor;
+        }
+
+        public List<Object> getBuffer() {
+            return buffer;
+        }
+
+        public ShuffleEntry copy(int bufferSize) {
+            return new ShuffleEntry(actor, bufferSize);
+        }
+
+        public void tell(int bufferSize, Message<?> message) {
+            if (bufferSize <= 0) {
+                actor.tell(message.getData(), message.getSender());
+            } else {
+                if (buffer == null) {
+                    buffer = new ArrayList<>(bufferSize);
+                }
+                buffer.add(message.getData());
+                if (buffer.size() >= bufferSize) { //suppose the ref is not shared
+                    actor.tellMessage(new ActorKelp.MessageBundle<>(actor, message.getSender(), buffer));
+                    buffer.clear();
+                }
+            }
+        }
+
+        public void flush(ActorRef sender) {
+            if (buffer != null && !buffer.isEmpty()) {
+                actor.tellMessage(new ActorKelp.MessageBundle<>(actor, sender, buffer));
+                buffer.clear();
+            }
+        }
     }
 }
