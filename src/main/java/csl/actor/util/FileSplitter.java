@@ -13,6 +13,7 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Objects;
 
 public class FileSplitter {
     protected long splitLength;
@@ -150,6 +151,21 @@ public class FileSplitter {
 
         public long splitEnd() {
             return splitStart + splitLength;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            FileSplit fileSplit = (FileSplit) o;
+            return splitStart == fileSplit.splitStart &&
+                    splitLength == fileSplit.splitLength &&
+                    Objects.equals(path, fileSplit.path);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(path, splitStart, splitLength);
         }
 
         @Override

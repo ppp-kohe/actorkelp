@@ -110,8 +110,27 @@ public class ActorRefShuffle implements ActorRef, Serializable {
     }
 
     protected int index(Object data) {
-        int hash = Math.abs(Objects.hashCode(data));
-        return hash % actors.size();
+        return hashMod(Objects.hashCode(data), actors.size());
+    }
+
+    /**
+     * @param hash hashCode
+     * @param size a max+1 value, >= 0 , usually relatively smaller than hash
+     * @return the index within size
+     */
+    public static int hashMod(int hash, int size) {
+        int h = hash;
+        int sh = Integer.highestOneBit(size);
+        int sizeWidth = Integer.numberOfTrailingZeros(sh);
+        //max of sizeWidth is 30
+        int result = 0;
+        int remainingBits = 32;
+        while (remainingBits > 0) {
+            result ^= h;
+            h >>>= sizeWidth;
+            remainingBits -= sizeWidth;
+        }
+        return Math.abs(result % size);
     }
 
     public void flush(ActorRef sender) {
