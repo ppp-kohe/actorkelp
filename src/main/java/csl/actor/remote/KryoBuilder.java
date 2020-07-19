@@ -76,20 +76,38 @@ public class KryoBuilder {
         return system;
     }
 
-    @SuppressWarnings("unchecked")
     public Kryo build() {
-        Kryo kryo = (this.kryo == null ? new Kryo() : this.kryo);
+        Kryo kryo = buildKryoGetOrCreate();
+        buildKryoInit(kryo);
+        buildRegisterBasic(kryo);
+        buildRegisterLambda(kryo);
+        buildRegisterBasicAdditional(kryo);
+        buildRegisterActor(kryo);
+        return kryo;
+    }
+
+    protected Kryo buildKryoGetOrCreate() {
+        return (this.kryo == null ? new Kryo() : this.kryo);
+    }
+
+    protected void buildKryoInit(Kryo kryo) {
         kryo.setRegistrationRequired(false);
         kryo.setReferences(true);
         kryo.setInstantiatorStrategy(new DefaultInstantiatorStrategy(new StdInstantiatorStrategy()));
+    }
 
+    protected void buildRegisterBasic(Kryo kryo) {
         register(kryo, getDefaultSerializerClasses());
         register(kryo, getBaseClasses());
+    }
 
+    protected void buildRegisterLambda(Kryo kryo) {
         kryo.register(SerializedLambda.class);
         kryo.register(ClosureSerializer.Closure.class, new ClosureSerializer());
-        //kryo.register(ClosureSerializer.Closure.class, new PatchedClosureSerializer());
+    }
 
+    @SuppressWarnings("unchecked")
+    protected void buildRegisterBasicAdditional(Kryo kryo) {
         registerObjectStream(kryo, EnumMap.class);
         registerObjectStream(kryo, SimpleTimeZone.class);
 
@@ -98,14 +116,14 @@ public class KryoBuilder {
                 registerObjectStream(kryo, (Class<Serializable>) cls);
             }
         }
+    }
 
+    protected void buildRegisterActor(Kryo kryo) {
         kryo.register(ActorRefShuffle.class); //precede the ActorRefRemoteSerializer
         kryo.addDefaultSerializer(ActorRef.class, new ActorRefRemoteSerializer<>(system)); //for sub-types
 
         register(kryo, getActorClasses());
-        return kryo;
     }
-
 
     public void register(Kryo kryo, List<Class<?>> types) {
         for (Class<?> t : types) {
