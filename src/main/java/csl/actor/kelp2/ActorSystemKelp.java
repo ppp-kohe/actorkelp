@@ -9,6 +9,7 @@ import csl.actor.remote.ActorSystemRemote;
 import csl.actor.remote.KryoBuilder;
 import csl.actor.util.ConfigBase;
 
+import java.lang.reflect.Constructor;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -23,6 +24,17 @@ import java.util.stream.Collectors;
 public class ActorSystemKelp extends ActorSystemRemote {
     protected Map<ActorAddress, ConnectionHost> connectionHostMap;
     protected volatile ConfigKelp config = ConfigKelp.CONFIG_DEFAULT;
+
+    public static ActorSystemKelp createWithKryoBuilderType(Class<? extends KryoBuilder> kryoBuilderType, ConfigDeployment configDeployment) throws Exception {
+        Constructor<? extends KryoBuilder> cons = kryoBuilderType.getConstructor();
+        return new ActorSystemKelp(new ActorSystemDefaultForKelp(configDeployment), KryoBuilder.builder(() -> {
+            try {
+                return cons.newInstance();
+            } catch (Exception ex) {
+                throw new RuntimeException(ex);
+            }
+        }));
+    }
 
     public ActorSystemKelp() {
         this(new ConfigDeployment());

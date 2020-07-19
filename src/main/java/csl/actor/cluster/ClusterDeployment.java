@@ -539,7 +539,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         ConfigDeployment conf = new ConfigDeployment(defaultConfType);
         conf.primary = true;
         unit.setDeploymentConfig(conf);
-        unit.setAppConfig((AppConfType) conf.createAppConfig());
+        unit.setAppConfig((AppConfType) conf.createAppConfig(defaultConfType));
         unit.setName("localhost");
         unit.setAppConfigLogHeader();
         return unit;
@@ -553,7 +553,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         conf.host = host;
         conf.port = port;
         unit.setDeploymentConfig(conf);
-        unit.setAppConfig((AppConfType) conf.createAppConfig());
+        unit.setAppConfig((AppConfType) conf.createAppConfig(defaultConfType));
         unit.setName(host + ":" + port);
         unit.setAppConfigLogHeader();
         return unit;

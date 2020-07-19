@@ -25,7 +25,7 @@ public class ConfigDeployment extends ConfigBase {
     public String javaVmOption = ""; //additional option for java
     public String host = "localhost";
     public int port = 38888;
-    public String configType = "csl.actor.kelp.Config";
+    public String configType = ""; //empty means the default: "csl.actor.kelp.Config";
     public String baseDir = "target/debug";
     public boolean primary = false;
     public boolean sharedDeploy = true;
@@ -75,10 +75,16 @@ public class ConfigDeployment extends ConfigBase {
         return host + ":" + port;
     }
 
-    public ConfigBase createAppConfig() {
+    @SuppressWarnings("unchecked")
+    public ConfigBase createAppConfig(Class<? extends ConfigBase> defaultConfType) {
         try {
-            return (ConfigBase) Class.forName(configType)
-                    .getConstructor().newInstance();
+            Class<? extends ConfigBase> type;
+            if (configType.isEmpty()) {
+                type = defaultConfType;
+            } else {
+                type = (Class<? extends ConfigBase>) Class.forName(configType);
+            }
+            return type.getConstructor().newInstance();
         } catch (Exception ex) {
             throw new RuntimeException(ex);
         }

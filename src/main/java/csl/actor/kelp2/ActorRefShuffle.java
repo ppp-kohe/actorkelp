@@ -17,6 +17,7 @@ import java.util.stream.IntStream;
 public class ActorRefShuffle implements ActorRef, Serializable {
     public static final long serialVersionUID = 1L;
     protected int bufferSize;
+    protected boolean hostIncludePort;
     protected Map<ActorAddress, List<ShuffleEntry>> entries; //host-address to entries
     protected List<List<ShuffleEntry>> entriesList;
 
@@ -26,17 +27,28 @@ public class ActorRefShuffle implements ActorRef, Serializable {
         return createRef(actors, actorGen, ActorRefShuffle.BUFFER_SIZE_DEFAULT);
     }
 
+    public static ActorRefShuffle createRefForFile(ConfigKelp config, IntFunction<? extends ActorRef> actorGen) {
+        return createRef(IntStream.range(0, config.shufflePartitions).mapToObj(actorGen)
+                .collect(Collectors.toList()), config.shuffleBufferSizeFile, config.shuffleHostIncludePort);
+    }
+
+    public static ActorRefShuffle createRef(ConfigKelp config, IntFunction<? extends ActorRef> actorGen) {
+        return createRef(IntStream.range(0, config.shufflePartitions).mapToObj(actorGen)
+                .collect(Collectors.toList()), config.shuffleBufferSize, config.shuffleHostIncludePort);
+    }
+
     public static ActorRefShuffle createRef(int actors, IntFunction<? extends ActorRef> actorGen, int bufferSize) {
         return createRef(IntStream.range(0, actors).mapToObj(actorGen)
-                .collect(Collectors.toList()), bufferSize);
+                .collect(Collectors.toList()), bufferSize, true);
     }
 
     public static ActorRefShuffle createRef(Iterable<? extends ActorRef> actors) {
-        return createRef(actors, ActorRefShuffle.BUFFER_SIZE_DEFAULT);
+        return createRef(actors, ActorRefShuffle.BUFFER_SIZE_DEFAULT, true);
     }
 
-    public static ActorRefShuffle createRef(Iterable<? extends ActorRef> actors, int bufferSize) {
-        return new ActorRefShuffle(createEntries(actors, bufferSize, ActorRefShuffle::toHost), bufferSize);
+    public static ActorRefShuffle createRef(Iterable<? extends ActorRef> actors, int bufferSize, boolean hostIncludePort) {
+        return new ActorRefShuffle(createEntries(actors, bufferSize,
+                hostIncludePort ? ActorRefShuffle::toHost : ActorRefShuffle::toHostWithoutPort), bufferSize, hostIncludePort);
     }
 
     public static Map<ActorAddress, List<ShuffleEntry>> createEntries(Iterable<? extends ActorRef> actors, int bufferSize,
@@ -51,15 +63,28 @@ public class ActorRefShuffle implements ActorRef, Serializable {
         return refs;
     }
 
-    static ActorAddress LOCALHOST = ActorAddress.get("localhost", -1);
+    public static ActorAddress.ActorAddressRemote LOCALHOST = ActorAddress.get("localhost", -1);
 
-    public static ActorAddress toHost(ActorRef ref) {
+    public static ActorAddress.ActorAddressRemote toHost(ActorRef ref) {
         if (ref instanceof ActorRefRemote) {
             return ((ActorRefRemote) ref).getAddress().getHostAddress();
         } else {
             return LOCALHOST;
         }
     }
+
+    public static ActorAddress.ActorAddressRemote toHostWithoutPort(ActorRef ref) {
+        return toHostWithoutPort(toHost(ref));
+    }
+
+    public static ActorAddress.ActorAddressRemote toHostWithoutPort(ActorAddress.ActorAddressRemote a) {
+        if (a.getPort() != -1) {
+            return ActorAddress.get(a.getHost(), -1);
+        } else {
+            return a;
+        }
+    }
+
 
     public static void flush(ActorRef ref, ActorRef sender) {
         if (ref instanceof ActorRefShuffle) {
@@ -70,9 +95,10 @@ public class ActorRefShuffle implements ActorRef, Serializable {
     public ActorRefShuffle() {
     }
 
-    public ActorRefShuffle(Map<ActorAddress, List<ShuffleEntry>> entries, int bufferSize) {
+    public ActorRefShuffle(Map<ActorAddress, List<ShuffleEntry>> entries, int bufferSize, boolean hostIncludePort) {
         this.entries = entries;
         this.bufferSize = bufferSize;
+        this.hostIncludePort = hostIncludePort;
         entriesList = new ArrayList<>(entries.values());
     }
 
@@ -93,7 +119,7 @@ public class ActorRefShuffle implements ActorRef, Serializable {
                 es.put(k, v.stream()
                     .map(e -> e.copy(bufferSize))
                     .collect(Collectors.toList())));
-        return new ActorRefShuffle(es, bufferSize);
+        return new ActorRefShuffle(es, bufferSize, hostIncludePort);
     }
 
     @Override

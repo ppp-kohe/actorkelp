@@ -1,6 +1,7 @@
 package csl.actor.kelp2;
 
 import csl.actor.*;
+import csl.actor.cluster.ConfigDeployment;
 import csl.actor.cluster.PersistentFileManager;
 import csl.actor.util.FileSplitter;
 import csl.actor.util.StagingActor;
@@ -161,17 +162,12 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
     /////
     public void processFileSplit(FileSplitter.FileSplit split) {
         if (fileSplitter == null) {
-            fileSplitter = FileSplitter.getWithSplitLength(getSplitLength()); 
+            fileSplitter = FileSplitter.getWithSplitLength(getSplitLength(), ConfigDeployment.getPathModifier(system));
         }
         try {
             if (split.getFileLength() == 0) {
-                if (nextStage != null) {
-                    fileSplitter.splitIterator(split.getPath())
-                            .forEachRemaining(nextStage::tell);
-                } else {
-                    fileSplitter.splitIterator(split.getPath())
-                            .forEachRemaining(this::tell); //process by self
-                }
+                fileSplitter.splitIterator(split.getPath())
+                        .forEachRemaining(this::processFileSplitForEachNext);
             } else {
                 fileSplitter.openLineIterator(split).forEachRemaining(line ->
                         processMessage(new Message<>(this, this, line)));
@@ -180,6 +176,14 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
             ActorRefShuffle.flush(nextStageActor(), this);
         } catch (Exception ex) {
             getSystem().getLogger().log(true, 0, ex, "splitter=%s split=%s", fileSplitter, split);
+        }
+    }
+
+    protected void processFileSplitForEachNext(FileSplitter.FileSplit split) {
+        if (nextStage != null) {
+            nextStage.tell(split);
+        } else {
+            tell(split); //process by self
         }
     }
 

@@ -6,28 +6,33 @@ import csl.actor.remote.ActorSystemRemote;
 import csl.actor.remote.KryoBuilder;
 import csl.actor.util.ConfigBase;
 
-public class ClusterKelp extends ClusterDeployment<ConfigKelp, ActorPlacementKelp> {
-    public ClusterKelp(Class<ConfigKelp> defaultConfType, Class<ActorPlacementKelp> placeType) {
-        super(defaultConfType, placeType);
+public class ClusterKelp<ConfigType extends ConfigKelp> extends ClusterDeployment<ConfigType, ActorPlacementKelp<ConfigType>> {
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    public ClusterKelp(Class<ConfigType> defaultConfType, Class<ActorPlacementKelp> placeType) {
+        super(defaultConfType, (Class<ActorPlacementKelp<ConfigType>>) (Class) placeType);
     }
 
-    public ClusterKelp() {
-        this(ConfigKelp.class, ActorPlacementKelp.class);
+    public static ClusterKelp<ConfigKelp> create() {
+        return new ClusterKelp<>(ConfigKelp.class, ActorPlacementKelp.class);
     }
 
     @Override
-
     protected void deployPrimaryInitSystem() {
         primary.log("primary %s: create system with serializer %s", primary.getDeploymentConfig().getAddress(), primary.getDeploymentConfig().kryoBuilderType);
-        system = createSystemKelp(primary.getDeploymentConfig().kryoBuilderType, primary.getDeploymentConfig());
+        system = createSystemKelpPrimary(primary.getDeploymentConfig().kryoBuilderType, primary.getDeploymentConfig());
         system.getLocalSystem().setLogger(new ConfigBase.SystemLoggerHeader(system.getLogger(), primary.getAppConfig()));
     }
 
+    public ActorSystemKelp createSystemKelpPrimary(String buildType, ConfigDeployment configDeployment) {
+        return createSystemKelp(buildType, configDeployment);
+    }
+
+    @SuppressWarnings("unchecked")
     public static ActorSystemKelp createSystemKelp(String buildType, ConfigDeployment configDeployment) {
         try {
             Class<?> cls = Class.forName(buildType);
             if (KryoBuilder.class.isAssignableFrom(cls)) {
-                return new ActorSystemKelp(configDeployment);
+                return ActorSystemKelp.createWithKryoBuilderType((Class<? extends KryoBuilder>) cls, configDeployment);
             } else {
                 throw new RuntimeException("not a KryoBuilder: " + cls);
             }
@@ -48,9 +53,13 @@ public class ClusterKelp extends ClusterDeployment<ConfigKelp, ActorPlacementKel
 
         @Override
         protected ActorSystemRemote initSystem() {
-            ActorSystemRemote system = createSystemKelp(kryoBuilderType, this.configDeployment);
+            ActorSystemRemote system = createSystemKelpNode(kryoBuilderType, this.configDeployment);
             system.getLocalSystem().setLogger(new ConfigBase.SystemLoggerHeader(system.getLogger(), configDeployment));
             return system;
+        }
+
+        public ActorSystemKelp createSystemKelpNode(String buildType, ConfigDeployment configDeployment) {
+            return createSystemKelp(buildType, configDeployment);
         }
     }
 }

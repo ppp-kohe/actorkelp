@@ -8,7 +8,7 @@ import csl.actor.remote.ActorAddress;
 
 import java.io.Serializable;
 
-public class ActorPlacementKelp extends ClusterDeployment.ActorPlacementForCluster<ConfigKelp> {
+public class ActorPlacementKelp<ConfigType extends ConfigKelp> extends ClusterDeployment.ActorPlacementForCluster<ConfigType> {
     public ActorPlacementKelp(ActorSystem system) {
         super(system);
     }
@@ -51,8 +51,9 @@ public class ActorPlacementKelp extends ClusterDeployment.ActorPlacementForClust
         return null;
     }
 
-    protected ConfigKelp getConfig(ActorKelp.ActorKelpSerializable<?> actorSrc) {
-        return getRemoteConfig().getOrDefault(getSelfAddress().getHostAddress(), actorSrc.config);
+    @SuppressWarnings("unchecked")
+    protected ConfigType getConfig(ActorKelp.ActorKelpSerializable<?> actorSrc) {
+        return getRemoteConfig().getOrDefault(getSelfAddress().getHostAddress(), (ConfigType) actorSrc.config);
     }
 
     @Override
