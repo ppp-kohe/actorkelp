@@ -2,7 +2,6 @@ package csl.actor.kelp2.behavior;
 
 import csl.actor.*;
 import csl.actor.kelp2.ActorKelp;
-import csl.actor.kelp2.ActorKelpFunctions;
 import csl.actor.kelp2.ActorKelpFunctions.KeyComparator;
 
 import java.util.ArrayList;
@@ -395,15 +394,15 @@ public class MailboxKelp implements Mailbox, Cloneable {
         }
     }
 
-    @SuppressWarnings("rawtypes")
+    @SuppressWarnings({"unchecked", "rawtypes"})
     public void serializeTo(ActorKelp.ActorKelpSerializable state) {
-        state.messages = mailbox.getQueue().toArray(new Message[0]);
-        state.histograms = Arrays.stream(entries)
+        state.setMessages(mailbox.getQueue().toArray(new Message[0])); //TODO mailbox serialization form: queue and saved file
+        state.setHistograms(Arrays.stream(entries)
                 .map(HistogramEntry::getTree)
-                .collect(Collectors.toList());
+                .collect(Collectors.toList()));
     }
 
-    public void deserializeFrom(ActorKelp.ActorKelpSerializable state) {
+    public void deserializeFrom(ActorKelp.ActorKelpSerializable<?> state) {
         mailbox.getQueue().addAll(Arrays.asList(state.messages));
         int i = 0;
         for (KeyHistograms.HistogramTree t : state.histograms) {

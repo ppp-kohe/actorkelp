@@ -15,12 +15,15 @@ public class ActorKelpFunctions {
         KeyType toKey(ValueType v);
     }
 
+    public interface KeyExtractorFunction<ValueType, KeyType> extends Function<ValueType, KeyType>, Serializable {
+        long serialVersionUID = 1L;
+    }
 
     public static class KeyExtractorClass<KeyType, ValueType> implements KeyExtractor<KeyType, ValueType> {
         protected Class<ValueType> valueType;
-        protected Function<ValueType, KeyType> keyExtractorFromValue;
+        protected KeyExtractorFunction<ValueType, KeyType> keyExtractorFromValue;
 
-        public KeyExtractorClass(Class<ValueType> valueType, Function<ValueType, KeyType> keyExtractorFromValue) {
+        public KeyExtractorClass(Class<ValueType> valueType, KeyExtractorFunction<ValueType, KeyType> keyExtractorFromValue) {
             this.valueType = valueType;
             this.keyExtractorFromValue = keyExtractorFromValue;
         }

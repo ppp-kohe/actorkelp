@@ -132,12 +132,12 @@ public class ActorBehaviorBuilderKelp extends ActorBehaviorBuilder {
      * @return a subsequent builder
      */
     public <ValueType, KeyType> KelpMatchKey1<KeyType, ValueType, ValueType> matchKey(
-            Class<ValueType> valueType, Function<ValueType, KeyType> keyExtractorFromValue) {
+            Class<ValueType> valueType, KeyExtractorFunction<ValueType, KeyType> keyExtractorFromValue) {
         return new KelpMatchKey1<>(this, new KeyExtractorClass<>(valueType, keyExtractorFromValue), Function.identity());
     }
 
     public <ValueType, KeyType extends Comparable<KeyType>> KelpMatchKey1<KeyType, ValueType, ValueType> matchKeyOrdered(
-            Class<ValueType> valueType, Function<ValueType, KeyType> keyExtractorFromValue) {
+            Class<ValueType> valueType, KeyExtractorFunction<ValueType, KeyType> keyExtractorFromValue) {
         return new KelpMatchKey1<>(this, new KeyExtractorClass<>(valueType, keyExtractorFromValue), Function.identity())
                 .sort(new KeyComparatorOrdered<>());
     }
@@ -154,12 +154,12 @@ public class ActorBehaviorBuilderKelp extends ActorBehaviorBuilder {
      * @return a subsequent builder
      */
     public <ValueType, ParamType, KeyType> KelpMatchKey1<KeyType, ParamType, ValueType> matchKey(
-            Class<ParamType> valueType, Function<ParamType, KeyType> keyExtractorFromValue, Function<ParamType, ValueType> valueExtractorFromValue) {
+            Class<ParamType> valueType, KeyExtractorFunction<ParamType, KeyType> keyExtractorFromValue, Function<ParamType, ValueType> valueExtractorFromValue) {
         return new KelpMatchKey1<>(this, new KeyExtractorClass<>(valueType, keyExtractorFromValue), valueExtractorFromValue);
     }
 
     public <ValueType, ParamType, KeyType extends Comparable<KeyType>> KelpMatchKey1<KeyType, ParamType, ValueType> matchKeyOrdered(
-            Class<ParamType> valueType, Function<ParamType, KeyType> keyExtractorFromValue, Function<ParamType, ValueType> valueExtractorFromValue) {
+            Class<ParamType> valueType, KeyExtractorFunction<ParamType, KeyType> keyExtractorFromValue, Function<ParamType, ValueType> valueExtractorFromValue) {
         return new KelpMatchKey1<>(this, new KeyExtractorClass<>(valueType, keyExtractorFromValue), valueExtractorFromValue)
                 .sort(new KeyComparatorOrdered<>());
     }
@@ -231,7 +231,7 @@ public class ActorBehaviorBuilderKelp extends ActorBehaviorBuilder {
          * @return a subsequent builder
          */
         public <ValueType2> KelpMatchKey2<KeyType, ParamType, ValueType2, ValueType, ValueType2> or(
-                Class<ValueType2> valueType, Function<ValueType2, KeyType> keyExtractorFromValue) {
+                Class<ValueType2> valueType, KeyExtractorFunction<ValueType2, KeyType> keyExtractorFromValue) {
             return new KelpMatchKey2<>(builder, extractor1, new KeyExtractorClass<>(valueType, keyExtractorFromValue), valueExtractor1, Function.identity());
         }
 
@@ -253,7 +253,7 @@ public class ActorBehaviorBuilderKelp extends ActorBehaviorBuilder {
          *
          */
         public <ParamType2, ValueType2> KelpMatchKey2<KeyType, ParamType, ParamType2, ValueType, ValueType2> or(
-                Class<ParamType2> valueType, Function<ParamType2, KeyType> keyExtractorFromValue, Function<ParamType2, ValueType2> valueExtractor2) {
+                Class<ParamType2> valueType, KeyExtractorFunction<ParamType2, KeyType> keyExtractorFromValue, Function<ParamType2, ValueType2> valueExtractor2) {
             return new KelpMatchKey2<>(builder, extractor1, new KeyExtractorClass<>(valueType, keyExtractorFromValue), valueExtractor1, valueExtractor2);
         }
 
@@ -345,13 +345,13 @@ public class ActorBehaviorBuilderKelp extends ActorBehaviorBuilder {
         }
 
         public <ValueType3> KelpMatchKey3<KeyType, ParamType1, ParamType2, ValueType3, ValueType1, ValueType2, ValueType3> or(
-                Class<ValueType3> valueType, Function<ValueType3, KeyType> keyExtractorFromValue) {
+                Class<ValueType3> valueType, KeyExtractorFunction<ValueType3, KeyType> keyExtractorFromValue) {
             return new KelpMatchKey3<>(builder, extractor1, extractor2, new KeyExtractorClass<>(valueType, keyExtractorFromValue),
                     valueExtractor1, valueExtractor2, Function.identity());
         }
 
         public <ParamType3, ValueType3> KelpMatchKey3<KeyType, ParamType1, ParamType2, ParamType3, ValueType1, ValueType2, ValueType3> or(
-                Class<ParamType3> valueType, Function<ParamType3, KeyType> keyExtractorFromValue, Function<ParamType3, ValueType3> valueExtractorFromValue) {
+                Class<ParamType3> valueType, KeyExtractorFunction<ParamType3, KeyType> keyExtractorFromValue, Function<ParamType3, ValueType3> valueExtractorFromValue) {
             return new KelpMatchKey3<>(builder, extractor1, extractor2, new KeyExtractorClass<>(valueType, keyExtractorFromValue),
                     valueExtractor1, valueExtractor2, valueExtractorFromValue);
         }
@@ -424,13 +424,13 @@ public class ActorBehaviorBuilderKelp extends ActorBehaviorBuilder {
         }
 
         public <ValueType4> KelpMatchKey4<KeyType, ParamType1, ParamType2, ParamType3, ValueType4, ValueType1, ValueType2, ValueType3, ValueType4> or(
-                Class<ValueType4> valueType, Function<ValueType4, KeyType> keyExtractorFromValue) {
+                Class<ValueType4> valueType, KeyExtractorFunction<ValueType4, KeyType> keyExtractorFromValue) {
             return new KelpMatchKey4<>(builder, extractor1, extractor2, extractor3, new KeyExtractorClass<>(valueType, keyExtractorFromValue),
                     valueExtractor1, valueExtractor2, valueExtractor3, Function.identity());
         }
 
         public <ParamType4, ValueType4> KelpMatchKey4<KeyType, ParamType1, ParamType2, ParamType3, ParamType4, ValueType1, ValueType2, ValueType3, ValueType4> or(
-                Class<ParamType4> valueType, Function<ParamType4, KeyType> keyExtractorFromValue, Function<ParamType4, ValueType4> valueExtractorFromValue) {
+                Class<ParamType4> valueType, KeyExtractorFunction<ParamType4, KeyType> keyExtractorFromValue, Function<ParamType4, ValueType4> valueExtractorFromValue) {
             return new KelpMatchKey4<>(builder, extractor1, extractor2, extractor3, new KeyExtractorClass<>(valueType, keyExtractorFromValue),
                     valueExtractor1, valueExtractor2, valueExtractor3, valueExtractorFromValue);
         }
@@ -511,7 +511,7 @@ public class ActorBehaviorBuilderKelp extends ActorBehaviorBuilder {
 
         @SuppressWarnings("unchecked")
         public <ValueType5> KelpMatchKeyList<KeyType, Object> or(
-                Class<ValueType5> valueType, Function<ValueType5, KeyType> keyExtractorFromValue) {
+                Class<ValueType5> valueType, KeyExtractorFunction<ValueType5, KeyType> keyExtractorFromValue) {
             return new KelpMatchKeyList<>(builder,
                     Arrays.asList(extractor1, extractor2, extractor3, extractor4, new KeyExtractorClass<>(valueType, keyExtractorFromValue)),
                     Arrays.asList((Function<?,Object>) valueExtractor1, (Function<?,Object>) valueExtractor2, (Function<?,Object>) valueExtractor3, (Function<?,Object>) valueExtractor4,
@@ -520,7 +520,7 @@ public class ActorBehaviorBuilderKelp extends ActorBehaviorBuilder {
 
         @SuppressWarnings("unchecked")
         public <ParamType5, ValueType5> KelpMatchKeyList<KeyType, Object> or(
-                Class<ParamType5> valueType, Function<ParamType5, KeyType> keyExtractorFromValue, Function<ParamType5, ValueType5> valueExtractorFromValue) {
+                Class<ParamType5> valueType, KeyExtractorFunction<ParamType5, KeyType> keyExtractorFromValue, Function<ParamType5, ValueType5> valueExtractorFromValue) {
             return new KelpMatchKeyList<>(builder,
                     Arrays.asList(extractor1, extractor2, extractor3, extractor4, new KeyExtractorClass<>(valueType, keyExtractorFromValue)),
                     Arrays.asList((Function<?,Object>) valueExtractor1, (Function<?,Object>) valueExtractor2, (Function<?,Object>) valueExtractor3, (Function<?,Object>) valueExtractor4,
@@ -612,13 +612,13 @@ public class ActorBehaviorBuilderKelp extends ActorBehaviorBuilder {
         }
 
         public KelpMatchKeyList<KeyType,ValueType> or(
-                Class<ValueType> valueType, Function<ValueType, KeyType> keyExtractorFromValue) {
+                Class<ValueType> valueType, KeyExtractorFunction<ValueType, KeyType> keyExtractorFromValue) {
             extractors.add(new KeyExtractorClass<>(valueType, keyExtractorFromValue));
             return this;
         }
 
         public <ParamType> KelpMatchKeyList<KeyType,ValueType> or(
-                Class<ParamType> valueType, Function<ParamType, KeyType> keyExtractorFromValue, Function<ParamType, ValueType> valueExtractorFromValue) {
+                Class<ParamType> valueType, KeyExtractorFunction<ParamType, KeyType> keyExtractorFromValue, Function<ParamType, ValueType> valueExtractorFromValue) {
             extractors.add(new KeyExtractorClass<>(valueType, keyExtractorFromValue));
             valueExtractors.add(valueExtractorFromValue);
             return this;

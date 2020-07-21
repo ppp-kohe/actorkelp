@@ -1,7 +1,10 @@
 package csl.actor.kelp2;
 
 
-import csl.actor.*;
+import csl.actor.ActorRef;
+import csl.actor.ActorSystem;
+import csl.actor.Message;
+import csl.actor.kelp2.ActorKelpFunctions.KeyExtractor;
 import csl.actor.remote.ActorAddress;
 import csl.actor.remote.ActorRefRemote;
 import csl.actor.util.ResponsiveCalls;
@@ -18,10 +21,12 @@ import java.util.stream.IntStream;
 
 public class ActorRefShuffle implements ActorRef, Serializable {
     public static final long serialVersionUID = 1L;
+    protected transient ActorSystem system; //TODO use the system and set by special serializer
     protected int bufferSize;
     protected boolean hostIncludePort;
     protected Map<ActorAddress, List<ShuffleEntry>> entries; //host-address to entries
     protected List<List<ShuffleEntry>> entriesList;
+    protected List<KeyExtractor<?,?>> keyExtractors;
 
     public static final int BUFFER_SIZE_DEFAULT = 512;
 
@@ -49,15 +54,19 @@ public class ActorRefShuffle implements ActorRef, Serializable {
     }
 
     public static ActorRefShuffle createRef(Iterable<? extends ActorRef> actors, int bufferSize, boolean hostIncludePort) {
-        return new ActorRefShuffle(createEntries(actors, bufferSize,
-                hostIncludePort ? ActorRefShuffle::toHost : ActorRefShuffle::toHostWithoutPort), bufferSize, hostIncludePort);
+        return new ActorRefShuffle(createEntries(actors, bufferSize, refToHost(hostIncludePort)),
+                Collections.emptyList(), bufferSize, hostIncludePort);
+    }
+
+    public static Function<ActorRef, ActorAddress> refToHost(boolean hostIncludePort) {
+        return hostIncludePort ? ActorRefShuffle::toHost : ActorRefShuffle::toHostWithoutPort;
     }
 
     public static Map<ActorAddress, List<ShuffleEntry>> createEntries(Iterable<? extends ActorRef> actors, int bufferSize,
                                                                       Function<ActorRef, ActorAddress> refToHost) {
         Map<ActorAddress, List<ShuffleEntry>> refs = new HashMap<>();
         for (ActorRef ref : actors) {
-            refs.computeIfAbsent(toHost(ref), _h -> new ArrayList<>())
+            refs.computeIfAbsent(refToHost.apply(ref), _h -> new ArrayList<>())
                     .add(new ShuffleEntry(ref, bufferSize));
         }
         refs.values().forEach(es ->
@@ -97,8 +106,9 @@ public class ActorRefShuffle implements ActorRef, Serializable {
     public ActorRefShuffle() {
     }
 
-    public ActorRefShuffle(Map<ActorAddress, List<ShuffleEntry>> entries, int bufferSize, boolean hostIncludePort) {
+    public ActorRefShuffle(Map<ActorAddress, List<ShuffleEntry>> entries, List<KeyExtractor<?,?>> keyExtractors, int bufferSize, boolean hostIncludePort) {
         this.entries = entries;
+        this.keyExtractors = keyExtractors;
         this.bufferSize = bufferSize;
         this.hostIncludePort = hostIncludePort;
         entriesList = new ArrayList<>(entries.values());
@@ -121,7 +131,7 @@ public class ActorRefShuffle implements ActorRef, Serializable {
                 es.put(k, v.stream()
                     .map(e -> e.copy(bufferSize))
                     .collect(Collectors.toList())));
-        return new ActorRefShuffle(es, bufferSize, hostIncludePort);
+        return new ActorRefShuffle(es, keyExtractors, bufferSize, hostIncludePort);
     }
 
     @Override
@@ -130,24 +140,45 @@ public class ActorRefShuffle implements ActorRef, Serializable {
             ((ActorKelp.MessageBundle<?>) message).getData().forEach(d ->
                     tell(d, message.getSender()));
         } else {
-            int hash = Objects.hashCode(message.getData());
-            List<ShuffleEntry> es = entries(message, hash);
-            int index = hashMod(hash, es.size());
-            ShuffleEntry entry = es.get(index);
-            entry.tell(bufferSize, message);
+            tellMessageShuffle(message);
         }
     }
 
-    protected List<ShuffleEntry> entries(Message<?> message, int dataHash) {
-        ActorAddress target = addressFromMessageData(message);
+    public void tellMessageShuffle(Message<?> message) {
+        Object key = toKey(message);
+        int hash = hash(key);
+        List<ShuffleEntry> es = entries(message, key, hash);
+        int index = hashMod(hash, es.size());
+        ShuffleEntry entry = es.get(index);
+        entry.tell(bufferSize, message);
+    }
+
+    @SuppressWarnings("unchecked")
+    protected Object toKey(Message<?> message) {
+        Object data = message.getData();
+        for (KeyExtractor<?,?> f : keyExtractors) {
+            KeyExtractor<Object,Object> ef = (KeyExtractor<Object, Object>) f;
+            if (ef.matchValue(data)) {
+                return ef.toKey(data);
+            }
+        }
+        return data;
+    }
+
+    protected int hash(Object key) {
+        return Objects.hashCode(key);
+    }
+
+    protected List<ShuffleEntry> entries(Message<?> message, Object key, int keyHash) {
+        ActorAddress target = addressFromMessageData(message, key);
         List<ShuffleEntry> es = (target == null ? null : entries.get(target));
         if (es == null) {
-            es = entriesList.get(hashMod(dataHash, entriesList.size()));
+            es = entriesList.get(hashMod(keyHash, entriesList.size()));
         }
         return es;
     }
 
-    protected ActorAddress addressFromMessageData(Message<?> message) {
+    protected ActorAddress addressFromMessageData(Message<?> message, Object key) {
         return null;
     }
 

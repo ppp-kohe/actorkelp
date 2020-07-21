@@ -1,10 +1,11 @@
 package csl.actor.kelp2;
 
 import csl.actor.*;
+import csl.actor.cluster.ActorPlacement;
 import csl.actor.cluster.ConfigDeployment;
 import csl.actor.cluster.PersistentFileManager;
-import csl.actor.kelp2.behavior.ActorBehaviorBuilderKelp;
-import csl.actor.kelp2.behavior.MailboxKelp;
+import csl.actor.kelp2.behavior.*;
+import csl.actor.remote.ActorAddress;
 import csl.actor.util.FileSplitter;
 import csl.actor.util.StagingActor;
 
@@ -13,6 +14,8 @@ import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends ActorDefault
         implements StagingActor.StagingSupported, ActorKelpFileReader {
@@ -336,7 +339,8 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
         public Class<SelfType> actorType;
         public String name;
         public ConfigKelp config;
-        //TODO mailbox
+        public Message<?>[] messages;
+        public List<KeyHistograms.HistogramTree> histograms;
         public Serializable internalState;
 
         public ActorKelpSerializable(SelfType actor) {
@@ -365,6 +369,14 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
 
         protected void initInternalState(SelfType actor) {
             internalState = actor.toInternalState();
+        }
+
+        public void setMessages(Message<?>[] messages) {
+            this.messages = messages;
+        }
+
+        public void setHistograms(List<KeyHistograms.HistogramTree> histograms) {
+            this.histograms = histograms;
         }
 
         public SelfType restore(ActorSystem system, long num, ConfigKelp config) throws Exception {
@@ -406,5 +418,66 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
                 }
             }
         };
+    }
+
+    //// shuffle
+
+    public ActorPlacement getPlacement() {
+        Actor placement = getSystem().resolveActorLocalNamed(
+                ActorRefLocalNamed.get(getSystem(), ActorPlacement.PLACEMENT_NAME));
+        if (placement instanceof ActorPlacement) {
+            return (ActorPlacement) placement;
+        } else {
+            return null;
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    public ActorRefShuffleKelp<SelfType> shuffle() {
+        List<ActorKelpFunctions.KeyExtractor<?,?>> kes = getMailboxAsKelp().getEntries().stream()
+                .map(HistogramEntry::getProcessor)
+                .filter(ActorBehaviorKelp.ActorBehaviorMatchKey.class::isInstance)
+                .map(ActorBehaviorKelp.ActorBehaviorMatchKey.class::cast)
+                .flatMap(p -> ((List<ActorKelpFunctions.KeyExtractor<?,?>>) p.getKeyExtractors()).stream())
+                .collect(Collectors.toList());
+
+        ActorKelpSerializable<SelfType> serialized = toSerializable(); //TODO without mailbox
+        ActorPlacement place = getPlacement();
+
+        int partitions = getConfig().shufflePartitions;
+        int bufferSize = getConfig().shufflePartitions;
+        boolean hostIncludePort = getConfig().shuffleHostIncludePort;
+
+        return new ActorRefShuffleKelp<>(
+                ActorRefShuffle.createEntries(
+                        IntStream.range(0, partitions)
+                            .mapToObj(i -> createAndPlace(place, serialized, i))
+                            .collect(Collectors.toList()),
+                        bufferSize,
+                        ActorRefShuffle.refToHost(hostIncludePort)),
+                kes,
+                bufferSize,
+                hostIncludePort);
+    }
+
+    protected ActorRef createAndPlace(ActorPlacement place, ActorKelpSerializable<SelfType> serialized, int i) {
+        try {
+            return place.place(
+                    serialized.restore(system, i, getConfig()));
+        } catch (Exception ex) {
+            throw new RuntimeException(ex);
+        }
+    }
+
+    public static class ActorRefShuffleKelp<ActorType extends ActorKelp<ActorType>> extends ActorRefShuffle {
+        public ActorRefShuffleKelp() {
+        }
+
+        public ActorRefShuffleKelp(Map<ActorAddress, List<ShuffleEntry>> entries,
+                                   List<ActorKelpFunctions.KeyExtractor<?, ?>> keyExtractors, int bufferSize, boolean hostIncludePort) {
+            super(entries, keyExtractors, bufferSize, hostIncludePort);
+        }
+
+
     }
 }
