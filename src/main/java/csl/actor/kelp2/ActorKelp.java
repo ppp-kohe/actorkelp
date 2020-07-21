@@ -3,6 +3,8 @@ package csl.actor.kelp2;
 import csl.actor.*;
 import csl.actor.cluster.ConfigDeployment;
 import csl.actor.cluster.PersistentFileManager;
+import csl.actor.kelp2.behavior.ActorBehaviorBuilderKelp;
+import csl.actor.kelp2.behavior.MailboxKelp;
 import csl.actor.util.FileSplitter;
 import csl.actor.util.StagingActor;
 
@@ -48,7 +50,7 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
         system.register(this);
     }
 
-    /////////////
+    ///////////// config
 
 
     public ConfigKelp getConfig() {
@@ -71,6 +73,30 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
         return config.splitLength;
     }
 
+    public int getReduceRuntimeCheckingThreshold() {
+        return config.reduceRuntimeCheckingThreshold;
+    }
+
+    public double getReduceRuntimeRemainingBytesToSizeRatio() {
+        return config.reduceRuntimeRemainingBytesToSizeRatio;
+    }
+
+    public long getTraverseDelayTimeMs() {
+        return config.traverseDelayTimeMs;
+    }
+
+    public long getPruneGreaterThanLeaf() {
+        return (long) config.pruneGreaterThanLeafThresholdFactor * getMailboxThreshold();
+    }
+
+    public int getMailboxThreshold() {
+        return config.mailboxThreshold;
+    }
+
+    public double getPruneLessThanNonZeroLeafRate() {
+        return config.pruneLessThanNonZeroLeafRate;
+    }
+
     ///////////////
 
     protected PersistentFileManager getPersistentFile() {
@@ -80,20 +106,28 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
 
     protected Mailbox initMailbox() {
         PersistentFileManager m = getPersistentFile();
-        return initMailboxDefault(m);
+        return initMailboxKelp(initMailboxDefault(m));
     }
 
     protected MailboxDefault initMailboxDefault(PersistentFileManager m) {
         if (isPersist()) {
-            return new MailboxKelp(m, getMailboxOnMemorySize());
+            return new MailboxPersistableKelp(m, getMailboxOnMemorySize());
         } else {
             return new MailboxDefault();
         }
     }
 
+    protected MailboxKelp initMailboxKelp(MailboxDefault m) {
+        return new MailboxKelp(1000, 32, m);
+    }
+
+    public MailboxKelp getMailboxAsKelp() {
+        return (MailboxKelp) super.getMailbox();
+    }
+
     @Override
     protected ActorBehaviorBuilderKelp behaviorBuilder() {
-        return new ActorBehaviorBuilderKelp();
+        return new ActorBehaviorBuilderKelp(getMailboxAsKelp()::initMessageEntries);
     }
 
     public static class MessageBundle<DataType> extends Message<List<DataType>> {
@@ -159,6 +193,66 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
         } else {
             return Collections.emptyList();
         }
+    }
+
+    ///// processes
+
+
+    @Override
+    public boolean processMessageNext() {
+        if (getMailboxAsKelp().processHistogram(this)) {
+            return true;
+        } else {
+            return super.processMessageNext();
+        }
+    }
+
+    @Override
+    public void processMessage(Message<?> message) {
+        processPrune();
+        super.processMessage(message);
+    }
+
+    public void processMessageBundle(MessageBundle<Object> mb) {
+        processMessageBundle(this, mb);
+    }
+
+    public static void processMessageBundle(Actor self, MessageBundle<Object> mb) {
+        mb.getData().forEach(d ->
+                self.processMessage(new Message<>(self, mb.getSender(), d)));
+    }
+
+    public void processStagingCompleted(StagingActor.StagingCompleted comp) {
+        processStagingCompleted(this, comp);
+    }
+
+    public static void processStagingCompleted(Actor self,
+                                               StagingActor.StagingCompleted data) {
+        if (self instanceof StagingActor.StagingSupported) {
+            ActorRefShuffle.flush(((StagingActor.StagingSupported) self).nextStageActor(), self);
+        }
+        if (self instanceof ActorKelp<?>) {
+            ((ActorKelp<?>) self).processStagingCompletedImpl(data);
+        }
+        data.accept(self);
+    }
+
+    public void processStagingCompletedImpl(StagingActor.StagingCompleted comp) {
+        //clear mailbox
+        Mailbox defaultMailbox = getMailboxAsKelp().getMailbox();
+        if (defaultMailbox instanceof MailboxPersistableKelp) {
+            ((MailboxPersistableKelp) defaultMailbox).delete();
+        }
+
+        //clear histogram
+        getMailboxAsKelp()
+                .processStageEnd(this, comp.getTask().getKey(), getReducedSize());
+    }
+
+    public void processPrune() {
+        getMailboxAsKelp().prune(
+                getPruneGreaterThanLeaf(),
+                getPruneLessThanNonZeroLeafRate());
     }
 
     ///// file reader
@@ -291,5 +385,26 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
         protected void restoreInit(SelfType actor) {
             actor.setInternalState(internalState);
         }
+    }
+
+    ////// reducedSize
+
+    public MailboxKelp.ReducedSize getReducedSize() {
+        return new MailboxKelp.ReducedSizeDefault(getReduceRuntimeCheckingThreshold(), getReduceRuntimeRemainingBytesToSizeRatio()) {
+            @Override
+            protected void logReducedSize(long size, long availableOnMemoryMessages, int consuming) {
+                if (config.logSplit) {
+                    config.log("%s reduceSize: %,d -> %,d", this, size, consuming);
+                }
+            }
+
+            @Override
+            protected void logNeedToReduce(long size, long availableOnMemoryMessages) {
+                if (config.logSplit) {
+                    config.log("%s needToReduce: %,d > %,d & %,d", this, size, reduceRuntimeCheckingThreshold,
+                            availableOnMemoryMessages);
+                }
+            }
+        };
     }
 }

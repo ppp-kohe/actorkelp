@@ -8,7 +8,10 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantLock;
 
-public class MailboxKelp extends MailboxDefault {
+/**
+ * continuously persisting incoming messages when overflow
+ */
+public class MailboxPersistableKelp extends MailboxDefault {
     protected AtomicLong size;
     protected volatile long previousSize;
     protected ReentrantLock persistLock;
@@ -20,16 +23,16 @@ public class MailboxKelp extends MailboxDefault {
     protected PersistentFileManager manager;
     protected AtomicLong writeSize;
 
-    public MailboxKelp(PersistentFileManager manager, long onMemorySize) {
+    public MailboxPersistableKelp(PersistentFileManager manager, long onMemorySize) {
         this.manager = manager;
         this.onMemorySize = onMemorySize;
         init();
     }
 
     @Override
-    public MailboxKelp create() {
+    public MailboxPersistableKelp create() {
         try {
-            MailboxKelp m = (MailboxKelp) super.clone();
+            MailboxPersistableKelp m = (MailboxPersistableKelp) super.clone();
             m.init();
             return m;
         } catch (CloneNotSupportedException ce) {
