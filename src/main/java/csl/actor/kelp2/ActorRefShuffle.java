@@ -5,8 +5,11 @@ import csl.actor.*;
 import csl.actor.remote.ActorAddress;
 import csl.actor.remote.ActorRefRemote;
 import csl.actor.util.ResponsiveCalls;
+import csl.actor.util.StagingActor;
 
 import java.io.Serializable;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
@@ -279,4 +282,27 @@ public class ActorRefShuffle implements ActorRef, Serializable {
             }
         }
     }
+
+    ///////////
+
+    public CompletableFuture<StagingActor.StagingCompleted> forEachTell(ActorSystem system, Instant startTime, IntFunction<Object> indexToMessage) {
+        IntStream.range(0, getActors().size())
+                .forEach(i -> getActors().get(i).tell(indexToMessage.apply(i)));
+        return StagingActor.staging(system)
+                .withStartTime(startTime)
+                .startActors(getActors());
+    }
+
+    public CompletableFuture<StagingActor.StagingCompleted> forEachTell(ActorSystem system, IntFunction<Object> indexToMessage) {
+        return forEachTell(system, Instant.now(), indexToMessage);
+    }
+
+    public CompletableFuture<StagingActor.StagingCompleted> forEachTell(ActorSystem system, Object msg) {
+        return forEachTell(system, Instant.now(), i -> msg);
+    }
+
+    public CompletableFuture<StagingActor.StagingCompleted> forEachTell(ActorSystem system, Instant startTime, Object msg) {
+        return forEachTell(system, startTime, i -> msg);
+    }
+
 }

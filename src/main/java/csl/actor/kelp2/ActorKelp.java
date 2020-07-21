@@ -7,11 +7,13 @@ import csl.actor.util.FileSplitter;
 import csl.actor.util.StagingActor;
 
 import java.io.Serializable;
+import java.time.Instant;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
 
 public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends ActorDefault
-        implements StagingActor.StagingSupported {
+        implements StagingActor.StagingSupported, ActorKelpFileReader {
     protected ActorRef nextStage;
     protected FileSplitter fileSplitter;
     protected ConfigKelp config;
@@ -159,7 +161,17 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
         }
     }
 
-    /////
+    ///// file reader
+
+    @Override
+    public CompletableFuture<StagingActor.StagingCompleted> startReading(String path, Instant startTime) {
+        tell(new FileSplitter.FileSplit(path));
+        return StagingActor.staging(system)
+                .withStartTime(startTime)
+                .withWatcherSleepTimeMs(3)
+                .start(this);
+    }
+
     public void processFileSplit(FileSplitter.FileSplit split) {
         if (fileSplitter == null) {
             fileSplitter = FileSplitter.getWithSplitLength(getSplitLength(), ConfigDeployment.getPathModifier(system));
@@ -186,6 +198,31 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
             tell(split); //process by self
         }
     }
+
+    /**
+     * default reader class
+     */
+    public static class FileReader extends ActorKelp<FileReader> {
+        public FileReader(ActorSystem system, String name, ConfigKelp config) {
+            super(system, name, config);
+        }
+
+        public FileReader(ActorSystem system, ConfigKelp config) {
+            super(system, config);
+        }
+
+        public FileReader(ActorSystem system) {
+            super(system);
+        }
+
+        @Override
+        protected ActorBehavior initBehavior() {
+            return behaviorBuilder()
+                    .build();
+        }
+    }
+
+    ///// serializable
 
     @SuppressWarnings("unchecked")
     public ActorKelpSerializable<SelfType> toSerializable() {
