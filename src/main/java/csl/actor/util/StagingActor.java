@@ -5,9 +5,7 @@ import csl.actor.*;
 import java.io.Serializable;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BiConsumer;
@@ -72,6 +70,25 @@ public class StagingActor extends ActorDefault {
     public StagingActor withWatcherSleepTimeMs(long watcherSleepTimeMs) {
         entry.getTask().setWatcherSleepTimeMs(watcherSleepTimeMs);
         return this;
+    }
+
+    @SuppressWarnings("unchecked")
+    public <ActorType extends Actor> StagingActor withHandler(Class<ActorType> actorType,
+                                                                      CallableMessage.CallableMessageConsumer<ActorType> handler) {
+        participantsHandler.add(new CompletionHandlerForActor(actorType, (CallableMessage.CallableMessageConsumer<Actor>) handler));
+        return this;
+    }
+
+    public <ActorType> StagingActor withHandlerNonActor(Class<ActorType> actorType,
+                                                              CallConsumerI<ActorType> handler) {
+        participantsHandler.add(new CompletionHandlerForActor(actorType, (self) -> {
+            handler.accept(actorType.cast(self));
+        }));
+        return this;
+    }
+
+    public interface CallConsumerI<ActorType> extends Serializable {
+        void accept(ActorType type);
     }
 
     ////starting
@@ -334,7 +351,7 @@ public class StagingActor extends ActorDefault {
                 }
             }
             //first, notify start of N actors: the task is started by self
-            task.getTerminalActor().tell(new StagingNotification(task, sender, true, refs.size()));
+            task.getTerminalActor().tell(new StagingNotification(task, sender, true, refs.size(), completedActor));
 
             if (withCompleteThis) {
                 sendCompleteThisToTerminal(); //second, finish this task
@@ -349,7 +366,7 @@ public class StagingActor extends ActorDefault {
         }
 
         public void sendCompleteThisToTerminal() {
-            task.getTerminalActor().tell(new StagingNotification(task, sender, false, 1));
+            task.getTerminalActor().tell(new StagingNotification(task, sender, false, 1, completedActor));
         }
 
         public void sendToTerminal() {
@@ -397,12 +414,14 @@ public class StagingActor extends ActorDefault {
         protected Object sender;
         protected boolean start; //or complete
         protected int taskCount;
+        protected ActorRef actor;
 
-        public StagingNotification(StagingTask task, Object sender, boolean start, int taskCount) {
+        public StagingNotification(StagingTask task, Object sender, boolean start, int taskCount, ActorRef actor) {
             this.task = task;
             this.sender = sender;
             this.start = start;
             this.taskCount = taskCount;
+            this.actor = actor;
         }
 
         public Object getSender() {
@@ -419,6 +438,10 @@ public class StagingActor extends ActorDefault {
 
         public int getTaskCount() {
             return taskCount;
+        }
+
+        public ActorRef getActor() {
+            return actor;
         }
 
         @Override
@@ -439,6 +462,8 @@ public class StagingActor extends ActorDefault {
         protected AtomicLong finished;
         protected Instant completedTime;
         protected CompletableFuture<StagingCompleted> future;
+
+        protected Set<ActorRef> completedActors;
 
         public StagingEntry(StagingTask task) {
             this.task = task;
@@ -485,6 +510,17 @@ public class StagingActor extends ActorDefault {
         public Instant getCompletedTime() {
             return completedTime;
         }
+
+        public synchronized void addCompletedActor(ActorRef actor) {
+            if (completedActors == null) {
+                completedActors = new HashSet<>();
+            }
+            completedActors.add(actor);
+        }
+
+        public synchronized Set<ActorRef> getCompletedActors() {
+            return new HashSet<>(completedActors);
+        }
     }
 
     public void notified(StagingNotification notification) {
@@ -501,6 +537,9 @@ public class StagingActor extends ActorDefault {
         } else {
             started = e.getStarted();
             finished = e.addFinished(added);
+        }
+        if (isRecordCompletedActors()) {
+            e.addCompletedActor(notification.getActor());
         }
         if (added != 0) {
             notified(notification, started, finished);
@@ -561,9 +600,76 @@ public class StagingActor extends ActorDefault {
         if (handler != null) {
             handler.accept(this, completed);
         }
+        if (isRecordCompletedActors()) {
+            runParticipantsHandlers(e.getCompletedActors());
+        }
         e.complete(completed);
         if (systemClose) {
             getSystem().close();
+        }
+    }
+
+    //// completion handler for each participants
+
+    protected List<CompletionHandlerForActor> participantsHandler = new ArrayList<>();
+
+    public boolean isRecordCompletedActors() {
+        return !participantsHandler.isEmpty();
+    }
+
+    public void runParticipantsHandlers(Set<ActorRef> completed) {
+        CompletionHandlerTask task = new CompletionHandlerTask(participantsHandler);
+        List<CompletableFuture<?>> fs = new ArrayList<>(completed.size());
+        for (ActorRef a : completed) {
+            fs.add(ResponsiveCalls.sendTaskConsumer(system, a, task));
+        }
+        try {
+            CompletableFuture.allOf(fs.toArray(new CompletableFuture<?>[0])).get();
+        } catch (Exception ex) {
+            throw new RuntimeException(ex);
+        }
+    }
+
+    public static class CompletionHandlerTask implements CallableMessage.CallableMessageConsumer<Actor> {
+        public static final long serialVersionUID = 1L;
+        protected List<CompletionHandlerForActor> handlers;
+
+        public CompletionHandlerTask(List<CompletionHandlerForActor> handlers) {
+            this.handlers = handlers;
+        }
+
+        @Override
+        public void accept(Actor self, ActorRef sender) {
+            for (CompletionHandlerForActor h : handlers) {
+                if (h.handle(self, sender)) {
+                    break;
+                }
+            }
+        }
+
+        @Override
+        public void accept(Actor self) {
+            accept(self, null);
+        }
+    }
+
+    public static class CompletionHandlerForActor implements Serializable {
+        public static final long serialVersionUID = 1L;
+        protected Class<?> actorType;
+        protected CallableMessage.CallableMessageConsumer<Actor> handler;
+
+        public CompletionHandlerForActor(Class<?> actorType, CallableMessage.CallableMessageConsumer<Actor> handler) {
+            this.actorType = actorType;
+            this.handler = handler;
+        }
+
+        public boolean handle(Actor target, ActorRef sender) {
+            if (actorType.isInstance(target)) {
+                handler.accept(target, sender);
+                return true;
+            } else {
+                return false;
+            }
         }
     }
 }

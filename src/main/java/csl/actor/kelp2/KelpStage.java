@@ -11,6 +11,8 @@ import csl.actor.util.ResponsiveCalls;
 import csl.actor.util.StagingActor;
 
 import java.io.Serializable;
+import java.util.Collections;
+import java.util.List;
 
 public interface KelpStage<ActorType extends Actor> {
 
@@ -34,6 +36,8 @@ public interface KelpStage<ActorType extends Actor> {
     }
 
     <NextActorType extends Actor> KelpStage<NextActorType> connects(Class<NextActorType> actorType, ActorRef ref);
+
+    List<ActorRef> getMemberActors();
 
     class KelpStageRefWrapper<ActorType extends Actor> implements KelpStage<ActorType>, Serializable {
         public static final long serialVersionUID = 1L;
@@ -90,6 +94,11 @@ public interface KelpStage<ActorType extends Actor> {
 
         public ActorSystem getSystem() {
             return system;
+        }
+
+        @Override
+        public List<ActorRef> getMemberActors() {
+            return Collections.singletonList(ref);
         }
     }
 

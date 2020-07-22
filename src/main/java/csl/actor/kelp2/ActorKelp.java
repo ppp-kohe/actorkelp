@@ -13,6 +13,7 @@ import java.io.Serializable;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -23,6 +24,7 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
     protected FileSplitter fileSplitter;
     protected ConfigKelp config;
     protected boolean original = true;
+    protected int shuffleIndex = -1;
 
     public ActorKelp(ActorSystem system, String name, Mailbox mailbox, ActorBehavior behavior, ConfigKelp config) {
         super(system, name, mailbox, behavior);
@@ -63,6 +65,14 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
 
     public void setOriginal(boolean original) {
         this.original = original;
+    }
+
+    public int getShuffleIndex() {
+        return shuffleIndex;
+    }
+
+    public void setShuffleIndex(int shuffleIndex) {
+        this.shuffleIndex = shuffleIndex;
     }
 
     ///////////// config
@@ -203,7 +213,7 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
     @Override
     public Iterable<? extends ActorRef> nextStageActors() {
         if (nextStage instanceof ActorRefShuffle) {
-            return ((ActorRefShuffle) nextStage).getActors();
+            return ((ActorRefShuffle) nextStage).getMemberActors();
         } else if (nextStage != null) {
             return Collections.singletonList(nextStage);
         } else {
@@ -274,12 +284,13 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
     ///// file reader
 
     @Override
-    public CompletableFuture<StagingActor.StagingCompleted> startReading(String path, Instant startTime) {
+    public CompletableFuture<StagingActor.StagingCompleted> startReading(String path, Instant startTime, Consumer<StagingActor> setup) {
         tell(new FileSplitter.FileSplit(path));
-        return StagingActor.staging(system)
+        StagingActor sa = StagingActor.staging(system)
                 .withStartTime(startTime)
-                .withWatcherSleepTimeMs(3)
-                .start(this);
+                .withWatcherSleepTimeMs(3);
+        setup.accept(sa);
+        return sa.start(this);
     }
 
     public void processFileSplit(FileSplitter.FileSplit split) {
@@ -395,6 +406,7 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
         public SelfType restore(ActorSystem system, long num, ConfigKelp config) throws Exception {
             SelfType a = create(system, restoreName(num), config);
             restoreSetNonOriginal(a);
+            restoreSetShuffleIndex(a, num);
             restoreInit(a);
             return a;
         }
@@ -410,6 +422,10 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
 
         protected void restoreSetNonOriginal(SelfType actor) {
             actor.setOriginal(false);
+        }
+
+        protected void restoreSetShuffleIndex(SelfType actor, long num) {
+            actor.setShuffleIndex((int) num);
         }
 
         protected void restoreInit(SelfType actor) {
@@ -459,7 +475,7 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
         int bufferSize = getConfig().shufflePartitions;
         boolean hostIncludePort = getConfig().shuffleHostIncludePort;
 
-        return new ActorRefShuffleKelp<>(
+        return createShuffle(
                 getSystem(),
                 ActorRefShuffle.createEntries(
                         IntStream.range(0, partitions)
@@ -471,6 +487,12 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
                 bufferSize,
                 hostIncludePort,
                 (Class<SelfType>) getClass());
+    }
+
+    protected ActorRefShuffleKelp<SelfType> createShuffle(ActorSystem system, Map<ActorAddress, List<ActorRefShuffle.ShuffleEntry>> entries,
+                                                          List<ActorKelpFunctions.KeyExtractor<?, ?>> keyExtractors, int bufferSize, boolean hostIncludePort,
+                                                          Class<SelfType> actorType) {
+        return new ActorRefShuffleKelp<>(system, entries, keyExtractors, bufferSize, hostIncludePort, actorType);
     }
 
     @SuppressWarnings("unchecked")
@@ -537,4 +559,8 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
         }
     }
 
+    @Override
+    public List<ActorRef> getMemberActors() {
+        return Collections.emptyList();
+    }
 }

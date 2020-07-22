@@ -21,7 +21,7 @@ import java.util.function.IntFunction;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
-public class ActorRefShuffle implements ActorRef, Serializable {
+public class ActorRefShuffle implements ActorRef, Serializable, Cloneable {
     public static final long serialVersionUID = 1L;
     protected transient ActorSystem system;
     protected int bufferSize;
@@ -81,14 +81,18 @@ public class ActorRefShuffle implements ActorRef, Serializable {
     }
 
     public ActorRefShuffle(ActorSystem system, Map<ActorAddress, List<ShuffleEntry>> entries, List<KeyExtractor<?,?>> keyExtractors, int bufferSize, boolean hostIncludePort) {
-        this.entries = entries;
         this.keyExtractors = keyExtractors;
         this.bufferSize = bufferSize;
         this.hostIncludePort = hostIncludePort;
+        initEntries(entries);
+    }
+
+    protected void initEntries(Map<ActorAddress, List<ShuffleEntry>> entries) {
+        this.entries = entries;
         entriesList = new ArrayList<>(entries.values());
     }
 
-    public List<ActorRef> getActors() {
+    public List<ActorRef> getMemberActors() {
         return entriesList.stream()
                 .flatMap(List::stream)
                 .map(ShuffleEntry::getActor)
@@ -105,7 +109,17 @@ public class ActorRefShuffle implements ActorRef, Serializable {
                 es.put(k, v.stream()
                     .map(e -> e.copy(bufferSize))
                     .collect(Collectors.toList())));
-        return new ActorRefShuffle(system, es, keyExtractors, bufferSize, hostIncludePort);
+        return copyForUse(es);
+    }
+
+    protected ActorRefShuffle copyForUse(Map<ActorAddress, List<ShuffleEntry>> es) {
+        try {
+            ActorRefShuffle ref = (ActorRefShuffle) super.clone();
+            ref.initEntries(es);
+            return ref;
+        } catch (CloneNotSupportedException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     @Override
@@ -193,7 +207,7 @@ public class ActorRefShuffle implements ActorRef, Serializable {
 
     public CompletableFuture<Void> connectStageWithoutInit(ActorRef next) {
         List<CompletableFuture<?>> tasks = new ArrayList<>();
-        for (ActorRef a : getActors()) {
+        for (ActorRef a : getMemberActors()) {
             tasks.add(setNextStage(system, a, next));
         }
         return CompletableFuture.allOf(tasks.toArray(new CompletableFuture<?>[0]));
@@ -329,11 +343,11 @@ public class ActorRefShuffle implements ActorRef, Serializable {
     ///////////
 
     public CompletableFuture<StagingActor.StagingCompleted> forEachTell(Instant startTime, IntFunction<Object> indexToMessage) {
-        IntStream.range(0, getActors().size())
-                .forEach(i -> getActors().get(i).tell(indexToMessage.apply(i)));
+        IntStream.range(0, getMemberActors().size())
+                .forEach(i -> getMemberActors().get(i).tell(indexToMessage.apply(i)));
         return StagingActor.staging(system)
                 .withStartTime(startTime)
-                .startActors(getActors());
+                .startActors(getMemberActors());
     }
 
     public CompletableFuture<StagingActor.StagingCompleted> forEachTell(IntFunction<Object> indexToMessage) {
