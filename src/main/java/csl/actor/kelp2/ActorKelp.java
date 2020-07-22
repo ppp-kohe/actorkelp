@@ -146,7 +146,7 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
     }
 
     protected MailboxKelp initMailboxKelp(MailboxDefault m) {
-        return new MailboxKelp(1000, 32, m);
+        return new MailboxKelp(32, m);
     }
 
     public MailboxKelp getMailboxAsKelp() {

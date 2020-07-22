@@ -11,7 +11,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 public class MailboxKelp implements Mailbox, Cloneable {
@@ -19,27 +18,21 @@ public class MailboxKelp implements Mailbox, Cloneable {
     protected int treeSize;
     protected HistogramEntry[] entries;
     protected KeyHistograms treeFactory;
-    protected volatile boolean remainingProcessesLock = false;
-
-    protected int threshold;
-    //private volatile int size;
-    private AtomicInteger size = new AtomicInteger();
 
     public MailboxKelp() {
-        this(1000, 32);
+        this(32);
     }
 
-    public MailboxKelp(int threshold, int treeSize) {
-        this(threshold, treeSize, new MailboxDefault());
+    public MailboxKelp(int treeSize) {
+        this(treeSize, new MailboxDefault());
     }
 
-    public MailboxKelp(int threshold, int treeSize, MailboxDefault mailbox) {
-        this(threshold, treeSize, mailbox, new KeyHistograms());
+    public MailboxKelp(int treeSize, MailboxDefault mailbox) {
+        this(treeSize, mailbox, new KeyHistograms());
     }
 
-    public MailboxKelp(int threshold, int treeSize, MailboxDefault mailbox,
+    public MailboxKelp(int treeSize, MailboxDefault mailbox,
                        KeyHistograms treeFactory) {
-        this.threshold = threshold;
         this.treeSize = treeSize;
         this.mailbox = mailbox;
         this.treeFactory = treeFactory;
@@ -53,134 +46,36 @@ public class MailboxKelp implements Mailbox, Cloneable {
         return treeFactory;
     }
 
-    public void setThreshold(int threshold) {
-        this.threshold = threshold;
-    }
-
-    public MailboxStatus getStatus(float thresholdFactor) {
-        int s = size();
-        int t = threshold;
-        if (s > t) {
-            /*
-            if (hasSufficientPoints()) {
-                return MailboxStatus.Exceeded;
-            } else {
-                return MailboxStatus.Unready;
-            }*/
-            return MailboxStatus.Exceeded;
-        } else if (s < t * thresholdFactor) {
-            return MailboxStatus.Few;
-        } else {
-            return MailboxStatus.Reasonable;
-        }
-    }
-
-    public enum MailboxStatus {
-        Exceeded {
-            @Override
-            public boolean isExcessive() {
-                return true;
-            }
-        },
-        Reasonable,
-        Few {
-            @Override
-            public boolean isExcessive() {
-                return true;
-            }
-        },
-        Unready;
-
-        public boolean isExcessive() {
-            return false;
-        }
-    }
-
-
-    public int getThreshold() {
-        return threshold;
-    }
-
 
     @Override
     public MailboxKelp create() {
         try {
             MailboxKelp m = (MailboxKelp) super.clone();
-            m.remainingProcessesLock = false;
             m.mailbox = mailbox.create();
             int size = entries.length;
             m.entries = new HistogramEntry[size];
             for (int i = 0; i < size; ++i) {
                 m.entries[i] = entries[i].create();
             }
-            //r.size = 0;
-            m.size = new AtomicInteger();
             return m;
         } catch (CloneNotSupportedException cne) {
             throw new RuntimeException(cne);
         }
     }
 
-
-    public int size() {
-        return size.get();
-    }
-
     @Override
     public void offer(Message<?> message) {
-        /*
-        ++size; //queue.size() is slow. the volatile field is used here. it is sufficient just for checking over the threshold
-        if (size < 0) { //overflow
-            size = Integer.MAX_VALUE;
-        }*/
-        if (size.incrementAndGet() < 0) {
-            size.set(Integer.MAX_VALUE);
-        }
         mailbox.offer(message);
     }
 
     @Override
     public Message<?> poll() {
-        if (remainingProcessesLock) {
-            return null;
-        } else {
-            Message<?> m = mailbox.poll();
-            if (m != null) {
-                //size = Math.max(size - 1, 0);
-                if (size.decrementAndGet() < 0) {
-                    size.set(0);
-                }
-            }
-            return m;
-        }
+        return mailbox.poll();
     }
 
     @Override
     public boolean isEmpty() {
         return mailbox.isEmpty();
-    }
-
-    public boolean hasRemainingProcesses() {
-        return !isEmpty() && Arrays.stream(entries)
-                .anyMatch(HistogramEntry::hasRemainingProcesses);
-    }
-
-    public void lockRemainingProcesses() {
-        if (!remainingProcessesLock) {
-            remainingProcessesLock = true;
-            for (HistogramEntry e : entries) {
-                e.lockRemainingProcess();
-            }
-        }
-    }
-    public void unlockRemainingProcesses(Actor self) {
-        if (remainingProcessesLock) {
-            for (HistogramEntry e : entries) {
-                e.unlockRemainingProcess(self);
-            }
-            remainingProcessesLock = false;
-        }
-        self.getSystem().send(new Message.MessageNone(self));
     }
 
     public void terminateAfterSerialized() {
@@ -379,13 +274,6 @@ public class MailboxKelp implements Mailbox, Cloneable {
     }
 
     public void merge(MailboxKelp m) {
-        /*size += m.size;
-        if (size < 0) { //overflow
-            size = Integer.MAX_VALUE;
-        }*/
-        if (size.addAndGet(m.size()) < 0) {
-            size.set(Integer.MAX_VALUE);
-        }
         ConcurrentLinkedQueue<Message<?>> q = m.mailbox.getQueue();
         mailbox.getQueue().addAll(q); //it does not change target of each message
         q.clear(); //it suppose that the q is no longer offered
