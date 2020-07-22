@@ -7,6 +7,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BiConsumer;
 
@@ -111,6 +112,7 @@ public class StagingActor extends ActorDefault {
         return behaviorBuilder()
                 .match(StagingNotification.class, this::notified)
                 .match(StagingCompleted.class, this::complete)
+                .match(StagingHandlerCompleted.class, this::completeHandler)
                 .build();
     }
 
@@ -464,12 +466,16 @@ public class StagingActor extends ActorDefault {
         protected CompletableFuture<StagingCompleted> future;
 
         protected Set<ActorRef> completedActors;
+        protected AtomicInteger completedActorSize;
+        protected AtomicInteger completedHandlers;
 
         public StagingEntry(StagingTask task) {
             this.task = task;
             this.started = new AtomicLong();
             this.finished = new AtomicLong();
             this.completedTime = Instant.EPOCH;
+            this.completedActorSize = new AtomicInteger();
+            this.completedHandlers = new AtomicInteger();
         }
 
         public StagingTask getTask() {
@@ -515,11 +521,21 @@ public class StagingActor extends ActorDefault {
             if (completedActors == null) {
                 completedActors = new HashSet<>();
             }
-            completedActors.add(actor);
+            if (completedActors.add(actor)) {
+                completedActorSize.incrementAndGet();
+            }
         }
 
         public synchronized Set<ActorRef> getCompletedActors() {
             return new HashSet<>(completedActors);
+        }
+
+        public int getCompletedActorSize() {
+            return completedActorSize.get();
+        }
+
+        public int addCompletedHandler() {
+            return completedHandlers.incrementAndGet();
         }
     }
 
@@ -595,17 +611,65 @@ public class StagingActor extends ActorDefault {
         e.setCompletedTime(Instant.now());
         completed.setCompletedTime(e.getCompletedTime());
 
+        if (isRecordCompletedActors()) {
+            runParticipantsHandlers(e, completed);
+        } else {
+            completedActuallyHandler(completed);
+        }
+    }
+
+    public void completeHandler(StagingHandlerCompleted completed) {
+        StagingEntry e = getEntry(completed.getCompleted().getTask());
+        int finished = e.addCompletedHandler();
+        int started = e.getCompletedActorSize();
+        StagingTask task = completed.getCompleted().getTask();
+        if (finished >= started) {
+            log(task, started, finished, String.format("completed handler : [%,d] %s", completed.getHandlerIndex(), completed.getTarget()));
+            completedActuallyHandler(completed.getCompleted());
+        } else {
+            if (isLogging(task, started, finished)) {
+                log(task, started, finished, String.format("completed handler : [%,d] %s", completed.getHandlerIndex(), completed.getTarget()));
+            }
+        }
+    }
+
+    public void completedActuallyHandler(StagingCompleted completed) {
+        StagingEntry e = getEntry(completed.getTask());
         log(e.getTask(), e.getStarted(), e.getFinished(),
                 String.format("FINISH %-11s (%s)", completed.getElapsedTime(), ActorSystem.timeForLog(completed.getCompletedTime())));
         if (handler != null) {
             handler.accept(this, completed);
         }
-        if (isRecordCompletedActors()) {
-            runParticipantsHandlers(e.getCompletedActors());
-        }
         e.complete(completed);
         if (systemClose) {
             getSystem().close();
+        }
+    }
+
+    public static class StagingHandlerCompleted implements Serializable {
+        public static final long serialVersionUID = 1L;
+        protected ActorRef target;
+        protected int handlerIndex;
+        protected StagingCompleted completed;
+
+        public StagingHandlerCompleted() {}
+
+        public StagingHandlerCompleted(ActorRef target, int handlerIndex, StagingCompleted completed) {
+            this.target = target;
+            this.handlerIndex = handlerIndex;
+            this.completed = completed;
+        }
+
+        public ActorRef getTarget() {
+            return target;
+        }
+
+        public int getHandlerIndex() {
+            return handlerIndex;
+        }
+
+        public StagingCompleted getCompleted() {
+            return completed;
         }
     }
 
@@ -617,33 +681,47 @@ public class StagingActor extends ActorDefault {
         return !participantsHandler.isEmpty();
     }
 
-    public void runParticipantsHandlers(Set<ActorRef> completed) {
-        CompletionHandlerTask task = new CompletionHandlerTask(participantsHandler);
-        List<CompletableFuture<?>> fs = new ArrayList<>(completed.size());
-        for (ActorRef a : completed) {
-            fs.add(ResponsiveCalls.sendTaskConsumer(system, a, task));
-        }
-        try {
-            CompletableFuture.allOf(fs.toArray(new CompletableFuture<?>[0])).get();
-        } catch (Exception ex) {
-            throw new RuntimeException(ex);
+    public void runParticipantsHandlers(StagingEntry e, StagingCompleted completed) {
+        Set<ActorRef> completedActors = e.getCompletedActors();
+        if (completedActors.isEmpty()) {
+            completedActuallyHandler(completed);
+        } else {
+            log(completed.getTask(), e.getStarted(), e.getFinished(), String.format("start handlers for %,d actors", completedActors.size()));
+            int i = 0;
+            for (ActorRef a : completedActors) {
+                a.tell(new CompletionHandlerTask(this.participantsHandler, this, i, completed));
+                ++i;
+            }
         }
     }
 
     public static class CompletionHandlerTask implements CallableMessage.CallableMessageConsumer<Actor> {
         public static final long serialVersionUID = 1L;
+        protected ActorRef stagingActor;
+        protected int index;
+        protected StagingCompleted completed;
         protected List<CompletionHandlerForActor> handlers;
 
-        public CompletionHandlerTask(List<CompletionHandlerForActor> handlers) {
+        public CompletionHandlerTask() {}
+
+        public CompletionHandlerTask(List<CompletionHandlerForActor> handlers,
+                                     ActorRef stagingActor, int index, StagingCompleted completed) {
             this.handlers = handlers;
+            this.stagingActor = stagingActor;
+            this.index = index;
+            this.completed = completed;
         }
 
         @Override
         public void accept(Actor self, ActorRef sender) {
-            for (CompletionHandlerForActor h : handlers) {
-                if (h.handle(self, sender)) {
-                    break;
+            try {
+                for (CompletionHandlerForActor h : handlers) {
+                    if (h.handle(self, sender)) {
+                        break;
+                    }
                 }
+            } finally {
+                stagingActor.tell(new StagingHandlerCompleted(self, index, completed));
             }
         }
 

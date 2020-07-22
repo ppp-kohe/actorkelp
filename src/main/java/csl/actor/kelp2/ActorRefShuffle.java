@@ -2,13 +2,14 @@ package csl.actor.kelp2;
 
 
 import com.esotericsoftware.kryo.Kryo;
-import com.esotericsoftware.kryo.Serializer;
+import com.esotericsoftware.kryo.KryoSerializable;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 import csl.actor.*;
 import csl.actor.kelp2.ActorKelpFunctions.KeyExtractor;
 import csl.actor.remote.ActorAddress;
 import csl.actor.remote.ActorRefRemote;
+import csl.actor.remote.ActorRefRemoteSerializer;
 import csl.actor.util.ResponsiveCalls;
 import csl.actor.util.StagingActor;
 
@@ -21,7 +22,7 @@ import java.util.function.IntFunction;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
-public class ActorRefShuffle implements ActorRef, Serializable, Cloneable {
+public class ActorRefShuffle implements ActorRef, Serializable, Cloneable, KryoSerializable {
     public static final long serialVersionUID = 1L;
     protected transient ActorSystem system;
     protected int bufferSize;
@@ -81,6 +82,7 @@ public class ActorRefShuffle implements ActorRef, Serializable, Cloneable {
     }
 
     public ActorRefShuffle(ActorSystem system, Map<ActorAddress, List<ShuffleEntry>> entries, List<KeyExtractor<?,?>> keyExtractors, int bufferSize, boolean hostIncludePort) {
+        this.system = system;
         this.keyExtractors = keyExtractors;
         this.bufferSize = bufferSize;
         this.hostIncludePort = hostIncludePort;
@@ -372,25 +374,61 @@ public class ActorRefShuffle implements ActorRef, Serializable, Cloneable {
         return system;
     }
 
-    public static class ActorRefShuffleSerializer extends Serializer<ActorRefShuffle> {
+    static int BYTE_MARK_REF = 0;
+    static int BYTE_MARK_SHUFFLE = 1;
+
+    @Override
+    public void write(Kryo kryo, Output output) {
+        kryo.writeClassAndObject(output, entries);
+        kryo.writeClassAndObject(output, entriesList);
+        kryo.writeClassAndObject(output, keyExtractors);
+        output.writeInt(bufferSize);
+        output.writeBoolean(hostIncludePort);
+    }
+
+    @SuppressWarnings("unchecked")
+    @Override
+    public void read(Kryo kryo, Input input) {
+        this.entries = (Map<ActorAddress,List<ShuffleEntry>>) kryo.readClassAndObject(input);
+        this.entriesList = (List<List<ShuffleEntry>>) kryo.readClassAndObject(input);
+        this.keyExtractors = (List<KeyExtractor<?,?>>) kryo.readClassAndObject(input);
+        bufferSize = input.readInt();
+        hostIncludePort = input.readBoolean();
+    }
+
+    public static class ActorRefShuffleSerializer extends ActorRefRemoteSerializer<ActorRef> {
         protected ActorSystem system;
 
         public ActorRefShuffleSerializer(ActorSystem system) {
-            this.system = system;
+            super(system);
         }
 
         @Override
-        public void write(Kryo kryo, Output output, ActorRefShuffle actorRefShuffle) {
-            kryo.writeClassAndObject(output, actorRefShuffle);
-        }
-
-        @Override
-        public ActorRefShuffle read(Kryo kryo, Input input, Class<? extends ActorRefShuffle> aClass) {
-            ActorRefShuffle r = (ActorRefShuffle) kryo.readClassAndObject(input);
-            if (r != null) {
-                r.setSystem(system);
+        public void write(Kryo kryo, Output output, ActorRef ref) {
+            if (ref instanceof ActorRefShuffle) {
+                output.writeByte(BYTE_MARK_SHUFFLE);
+                ((ActorRefShuffle) ref).write(kryo, output);
+            } else {
+                output.writeByte(BYTE_MARK_REF);
+                super.write(kryo, output, ref);
             }
-            return r;
+        }
+
+        @Override
+        public ActorRef read(Kryo kryo, Input input, Class<? extends ActorRef> aClass) {
+            int n = input.readByte();
+            if (n == BYTE_MARK_SHUFFLE) {
+                try {
+                    ActorRefShuffle r = (ActorRefShuffle) aClass.getConstructor().newInstance();
+                    r.read(kryo, input);
+                    r.setSystem(system);
+                    return r;
+                } catch (Exception ex) {
+                    throw new RuntimeException(ex);
+                }
+            } else {
+                return super.read(kryo, input, aClass);
+            }
         }
     }
 }

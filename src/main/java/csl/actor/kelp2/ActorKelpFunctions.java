@@ -10,7 +10,8 @@ import java.util.function.Function;
 
 public class ActorKelpFunctions {
 
-    public interface KeyExtractor<KeyType, ValueType> {
+    public interface KeyExtractor<KeyType, ValueType> extends Serializable {
+        long serialVersionUID = 1L;
         boolean matchValue(Object value);
         KeyType toKey(ValueType v);
     }

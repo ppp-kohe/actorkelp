@@ -119,11 +119,14 @@ public class KryoBuilder {
     }
 
     protected void buildRegisterActor(Kryo kryo) {
-        kryo.register(ActorRefShuffle.class, new ActorRefShuffle.ActorRefShuffleSerializer(system)); //precede the ActorRefRemoteSerializer
         kryo.register(csl.actor.kelp2.ActorKelp.KelpStageRefWrapper.class, new csl.actor.kelp2.ActorKelp.KelpStageRefWrapperSerializer(system));
-        kryo.addDefaultSerializer(ActorRef.class, new ActorRefRemoteSerializer<>(system)); //for sub-types
-
+        buildRegisterActorRef(kryo);
         register(kryo, getActorClasses());
+    }
+
+    protected void buildRegisterActorRef(Kryo kryo) {
+        //kryo.addDefaultSerializer(ActorRef.class, new ActorRefRemoteSerializer<>(system)); //for sub-types
+        kryo.addDefaultSerializer(ActorRef.class, new ActorRefShuffle.ActorRefShuffleSerializer(system)); //for sub-types
     }
 
     public void register(Kryo kryo, List<Class<?>> types) {
@@ -359,7 +362,8 @@ public class KryoBuilder {
                 StagingActor.StagingCompleted.class,
                 StagingActor.StagingNotification.class,
                 StagingActor.StagingWatcher.class,
-                StagingActor.StagingTask.class);
+                StagingActor.StagingTask.class,
+                StagingActor.StagingHandlerCompleted.class);
     }
 
     public interface SerializerFunction {

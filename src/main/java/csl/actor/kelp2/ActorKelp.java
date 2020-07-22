@@ -1,5 +1,8 @@
 package csl.actor.kelp2;
 
+import com.esotericsoftware.kryo.Kryo;
+import com.esotericsoftware.kryo.io.Input;
+import com.esotericsoftware.kryo.io.Output;
 import csl.actor.*;
 import csl.actor.cluster.ActorPlacement;
 import csl.actor.cluster.ConfigDeployment;
@@ -412,7 +415,7 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
         }
 
         protected String restoreName(long num) {
-            return name == null ? ("$" + num) : name;
+            return name == null ? ("$" + num) : name + "$" + num;
         }
 
         protected SelfType create(ActorSystem system, String name, ConfigKelp config) throws Exception {
@@ -507,8 +510,12 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
 
     protected ActorRef createAndPlace(ActorPlacement place, ActorKelpSerializable<SelfType> serialized, int i) {
         try {
-            return place.place(
-                    serialized.restore(system, i, getConfig()));
+            Actor a = serialized.restore(system, i, getConfig());
+            if (place != null) {
+                return place.place(a);
+            } else {
+                return a;
+            }
         } catch (Exception ex) {
             throw new RuntimeException(ex);
         }
@@ -537,6 +544,18 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
                 throw new RuntimeException(ex);
             }
             return toKelpStage(system, actorType, ref);
+        }
+
+        @Override
+        public void write(Kryo kryo, Output output) {
+            super.write(kryo, output);
+            kryo.writeClass(output, actorType);
+        }
+
+        @Override
+        public void read(Kryo kryo, Input input) {
+            super.read(kryo, input);
+            actorType = kryo.readClass(input).getType();
         }
     }
 
