@@ -7,6 +7,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BiConsumer;
@@ -464,6 +465,7 @@ public class StagingActor extends ActorDefault {
         protected AtomicLong finished;
         protected Instant completedTime;
         protected CompletableFuture<StagingCompleted> future;
+        protected AtomicBoolean completedLaunched = new AtomicBoolean();
 
         protected Set<ActorRef> completedActors;
         protected AtomicInteger completedActorSize;
@@ -537,6 +539,10 @@ public class StagingActor extends ActorDefault {
         public int addCompletedHandler() {
             return completedHandlers.incrementAndGet();
         }
+
+        public boolean launchComplete() {
+            return completedLaunched.compareAndSet(false, true);
+        }
     }
 
     public void notified(StagingNotification notification) {
@@ -603,7 +609,9 @@ public class StagingActor extends ActorDefault {
             return;
         }
         if (e.getFinished() >= e.getStarted()) {
-            completedActually(e, completed);
+            if (e.launchComplete()) {
+                completedActually(e, completed);
+            }
         }
     }
 
