@@ -1,9 +1,11 @@
 package csl.actor.kelp2;
 
 
-import csl.actor.ActorRef;
-import csl.actor.ActorSystem;
-import csl.actor.Message;
+import com.esotericsoftware.kryo.Kryo;
+import com.esotericsoftware.kryo.Serializer;
+import com.esotericsoftware.kryo.io.Input;
+import com.esotericsoftware.kryo.io.Output;
+import csl.actor.*;
 import csl.actor.kelp2.ActorKelpFunctions.KeyExtractor;
 import csl.actor.remote.ActorAddress;
 import csl.actor.remote.ActorRefRemote;
@@ -21,42 +23,12 @@ import java.util.stream.IntStream;
 
 public class ActorRefShuffle implements ActorRef, Serializable {
     public static final long serialVersionUID = 1L;
-    protected transient ActorSystem system; //TODO use the system and set by special serializer
+    protected transient ActorSystem system;
     protected int bufferSize;
     protected boolean hostIncludePort;
     protected Map<ActorAddress, List<ShuffleEntry>> entries; //host-address to entries
     protected List<List<ShuffleEntry>> entriesList;
     protected List<KeyExtractor<?,?>> keyExtractors;
-
-    public static final int BUFFER_SIZE_DEFAULT = 512;
-
-    public static ActorRefShuffle createRef(int actors, IntFunction<? extends ActorRef> actorGen) {
-        return createRef(actors, actorGen, ActorRefShuffle.BUFFER_SIZE_DEFAULT);
-    }
-
-    public static ActorRefShuffle createRefForFile(ConfigKelp config, IntFunction<? extends ActorRef> actorGen) {
-        return createRef(IntStream.range(0, config.shufflePartitions).mapToObj(actorGen)
-                .collect(Collectors.toList()), config.shuffleBufferSizeFile, config.shuffleHostIncludePort);
-    }
-
-    public static ActorRefShuffle createRef(ConfigKelp config, IntFunction<? extends ActorRef> actorGen) {
-        return createRef(IntStream.range(0, config.shufflePartitions).mapToObj(actorGen)
-                .collect(Collectors.toList()), config.shuffleBufferSize, config.shuffleHostIncludePort);
-    }
-
-    public static ActorRefShuffle createRef(int actors, IntFunction<? extends ActorRef> actorGen, int bufferSize) {
-        return createRef(IntStream.range(0, actors).mapToObj(actorGen)
-                .collect(Collectors.toList()), bufferSize, true);
-    }
-
-    public static ActorRefShuffle createRef(Iterable<? extends ActorRef> actors) {
-        return createRef(actors, ActorRefShuffle.BUFFER_SIZE_DEFAULT, true);
-    }
-
-    public static ActorRefShuffle createRef(Iterable<? extends ActorRef> actors, int bufferSize, boolean hostIncludePort) {
-        return new ActorRefShuffle(createEntries(actors, bufferSize, refToHost(hostIncludePort)),
-                Collections.emptyList(), bufferSize, hostIncludePort);
-    }
 
     public static Function<ActorRef, ActorAddress> refToHost(boolean hostIncludePort) {
         return hostIncludePort ? ActorRefShuffle::toHost : ActorRefShuffle::toHostWithoutPort;
@@ -103,10 +75,12 @@ public class ActorRefShuffle implements ActorRef, Serializable {
         }
     }
 
+    ////////////
+
     public ActorRefShuffle() {
     }
 
-    public ActorRefShuffle(Map<ActorAddress, List<ShuffleEntry>> entries, List<KeyExtractor<?,?>> keyExtractors, int bufferSize, boolean hostIncludePort) {
+    public ActorRefShuffle(ActorSystem system, Map<ActorAddress, List<ShuffleEntry>> entries, List<KeyExtractor<?,?>> keyExtractors, int bufferSize, boolean hostIncludePort) {
         this.entries = entries;
         this.keyExtractors = keyExtractors;
         this.bufferSize = bufferSize;
@@ -131,7 +105,7 @@ public class ActorRefShuffle implements ActorRef, Serializable {
                 es.put(k, v.stream()
                     .map(e -> e.copy(bufferSize))
                     .collect(Collectors.toList())));
-        return new ActorRefShuffle(es, keyExtractors, bufferSize, hostIncludePort);
+        return new ActorRefShuffle(system, es, keyExtractors, bufferSize, hostIncludePort);
     }
 
     @Override
@@ -212,7 +186,12 @@ public class ActorRefShuffle implements ActorRef, Serializable {
                         e.flush(sender)));
     }
 
-    public CompletableFuture<Void> connect(ActorSystem system, ActorRef next) {
+    public CompletableFuture<Void> connectStage(ActorRef next) {
+        return connectStageWithoutInit(
+                connectStageInitialActor(next));
+    }
+
+    public CompletableFuture<Void> connectStageWithoutInit(ActorRef next) {
         List<CompletableFuture<?>> tasks = new ArrayList<>();
         for (ActorRef a : getActors()) {
             tasks.add(setNextStage(system, a, next));
@@ -220,24 +199,58 @@ public class ActorRefShuffle implements ActorRef, Serializable {
         return CompletableFuture.allOf(tasks.toArray(new CompletableFuture<?>[0]));
     }
 
-    public <ActorTypeNext extends ActorRef> ActorTypeNext connectAndGet(ActorSystem system, ActorTypeNext next) {
-        try {
-            connect(system, next).get();
-        } catch (Exception ex) {
-            throw new RuntimeException(ex);
-        }
-        return next;
+    public ActorRef connectStageInitialActor(ActorRef next) {
+        return connectStageInitialActor(system, next);
     }
+
+    public static ActorRef connectStageInitialActor(ActorSystem system, ActorRef next) {
+        if (next instanceof ActorKelp<?> && ((ActorKelp<?>) next).isOriginal()) {
+            return ((ActorKelp<?>) next).shuffle();
+        } else if (!(next instanceof Actor || next instanceof ActorRefShuffle)) { //remote or local ref
+            try {
+                return ResponsiveCalls.sendTask(system, next, new ToShuffleTask()).get();
+            } catch (Exception ex) {
+                throw new RuntimeException(ex);
+            }
+        } else {
+            return next;
+        }
+    }
+
+    public static class ToShuffleTask implements CallableMessage<Actor, ActorRef> {
+        public static final long serialVersionUID = 1L;
+        @Override
+        public ActorRef call(Actor self) {
+            if (self instanceof ActorKelp<?> && ((ActorKelp<?>) self).isOriginal()) {
+                return ((ActorKelp<?>) self).shuffle();
+            } else {
+                return self;
+            }
+        }
+    }
+
     public static CompletableFuture<?> setNextStage(ActorSystem system, ActorRef a, ActorRef next) {
-        return ResponsiveCalls.sendTaskConsumer(system, a, (ref) -> {
-            if (ref instanceof ActorKelp) {
+        return ResponsiveCalls.sendTaskConsumer(system, a, new ConnectTask(next));
+    }
+
+    public static class ConnectTask implements CallableMessage.CallableMessageConsumer<Actor> {
+        public static final long serialVersionUID = 1L;
+        protected ActorRef next;
+
+        public ConnectTask(ActorRef next) {
+            this.next = next;
+        }
+
+        @Override
+        public void accept(Actor self) {
+            if (self instanceof StagingActor.StagingSupported) {
                 ActorRef nr = next;
                 if (next instanceof ActorRefShuffle) {
                     nr = ((ActorRefShuffle) next).use();
                 }
-                ((ActorKelp<?>) ref).setNextStage(nr);
+                ((StagingActor.StagingSupported) self).setNextStage(nr);
             }
-        });
+        }
     }
 
     @Override
@@ -315,7 +328,7 @@ public class ActorRefShuffle implements ActorRef, Serializable {
 
     ///////////
 
-    public CompletableFuture<StagingActor.StagingCompleted> forEachTell(ActorSystem system, Instant startTime, IntFunction<Object> indexToMessage) {
+    public CompletableFuture<StagingActor.StagingCompleted> forEachTell(Instant startTime, IntFunction<Object> indexToMessage) {
         IntStream.range(0, getActors().size())
                 .forEach(i -> getActors().get(i).tell(indexToMessage.apply(i)));
         return StagingActor.staging(system)
@@ -323,16 +336,47 @@ public class ActorRefShuffle implements ActorRef, Serializable {
                 .startActors(getActors());
     }
 
-    public CompletableFuture<StagingActor.StagingCompleted> forEachTell(ActorSystem system, IntFunction<Object> indexToMessage) {
-        return forEachTell(system, Instant.now(), indexToMessage);
+    public CompletableFuture<StagingActor.StagingCompleted> forEachTell(IntFunction<Object> indexToMessage) {
+        return forEachTell(Instant.now(), indexToMessage);
     }
 
-    public CompletableFuture<StagingActor.StagingCompleted> forEachTell(ActorSystem system, Object msg) {
-        return forEachTell(system, Instant.now(), i -> msg);
+    public CompletableFuture<StagingActor.StagingCompleted> forEachTell(Object msg) {
+        return forEachTell(Instant.now(), i -> msg);
     }
 
-    public CompletableFuture<StagingActor.StagingCompleted> forEachTell(ActorSystem system, Instant startTime, Object msg) {
-        return forEachTell(system, startTime, i -> msg);
+    public CompletableFuture<StagingActor.StagingCompleted> forEachTell(Instant startTime, Object msg) {
+        return forEachTell(startTime, i -> msg);
     }
 
+    ///////////
+
+    public void setSystem(ActorSystem system) {
+        this.system = system;
+    }
+
+    public ActorSystem getSystem() {
+        return system;
+    }
+
+    public static class ActorRefShuffleSerializer extends Serializer<ActorRefShuffle> {
+        protected ActorSystem system;
+
+        public ActorRefShuffleSerializer(ActorSystem system) {
+            this.system = system;
+        }
+
+        @Override
+        public void write(Kryo kryo, Output output, ActorRefShuffle actorRefShuffle) {
+            kryo.writeClassAndObject(output, actorRefShuffle);
+        }
+
+        @Override
+        public ActorRefShuffle read(Kryo kryo, Input input, Class<? extends ActorRefShuffle> aClass) {
+            ActorRefShuffle r = (ActorRefShuffle) kryo.readClassAndObject(input);
+            if (r != null) {
+                r.setSystem(system);
+            }
+            return r;
+        }
+    }
 }

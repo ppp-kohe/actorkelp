@@ -1,6 +1,9 @@
 package csl.actor.kelp2.behavior;
 
-import csl.actor.*;
+import csl.actor.Actor;
+import csl.actor.Mailbox;
+import csl.actor.MailboxDefault;
+import csl.actor.Message;
 import csl.actor.kelp2.ActorKelp;
 import csl.actor.kelp2.ActorKelpFunctions.KeyComparator;
 

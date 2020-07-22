@@ -18,10 +18,11 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends ActorDefault
-        implements StagingActor.StagingSupported, ActorKelpFileReader {
+        implements StagingActor.StagingSupported, ActorKelpFileReader, KelpStage<SelfType> {
     protected ActorRef nextStage;
     protected FileSplitter fileSplitter;
     protected ConfigKelp config;
+    protected boolean original = true;
 
     public ActorKelp(ActorSystem system, String name, Mailbox mailbox, ActorBehavior behavior, ConfigKelp config) {
         super(system, name, mailbox, behavior);
@@ -51,6 +52,17 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
     public void setNameRandom() {
         name = getClass().getSimpleName() + "_" + UUID.randomUUID();
         system.register(this);
+    }
+
+    /**
+     * @return true if the instance is manually created and not a suffle entry
+     */
+    public boolean isOriginal() {
+        return original;
+    }
+
+    public void setOriginal(boolean original) {
+        this.original = original;
     }
 
     ///////////// config
@@ -178,6 +190,7 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
         return list;
     }
 
+    @Override
     public void setNextStage(ActorRef nextStage) {
         this.nextStage = nextStage;
     }
@@ -381,6 +394,7 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
 
         public SelfType restore(ActorSystem system, long num, ConfigKelp config) throws Exception {
             SelfType a = create(system, restoreName(num), config);
+            restoreSetNonOriginal(a);
             restoreInit(a);
             return a;
         }
@@ -392,6 +406,10 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
         protected SelfType create(ActorSystem system, String name, ConfigKelp config) throws Exception {
             return actorType.getConstructor(ActorSystem.class, String.class, ConfigKelp.class)
                     .newInstance(system, name, config);
+        }
+
+        protected void restoreSetNonOriginal(SelfType actor) {
+            actor.setOriginal(false);
         }
 
         protected void restoreInit(SelfType actor) {
@@ -434,13 +452,6 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
 
     @SuppressWarnings("unchecked")
     public ActorRefShuffleKelp<SelfType> shuffle() {
-        List<ActorKelpFunctions.KeyExtractor<?,?>> kes = getMailboxAsKelp().getEntries().stream()
-                .map(HistogramEntry::getProcessor)
-                .filter(ActorBehaviorKelp.ActorBehaviorMatchKey.class::isInstance)
-                .map(ActorBehaviorKelp.ActorBehaviorMatchKey.class::cast)
-                .flatMap(p -> ((List<ActorKelpFunctions.KeyExtractor<?,?>>) p.getKeyExtractors()).stream())
-                .collect(Collectors.toList());
-
         ActorKelpSerializable<SelfType> serialized = toSerializable(); //TODO without mailbox
         ActorPlacement place = getPlacement();
 
@@ -449,15 +460,27 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
         boolean hostIncludePort = getConfig().shuffleHostIncludePort;
 
         return new ActorRefShuffleKelp<>(
+                getSystem(),
                 ActorRefShuffle.createEntries(
                         IntStream.range(0, partitions)
                             .mapToObj(i -> createAndPlace(place, serialized, i))
                             .collect(Collectors.toList()),
                         bufferSize,
                         ActorRefShuffle.refToHost(hostIncludePort)),
-                kes,
+                getKeyExtractors(),
                 bufferSize,
-                hostIncludePort);
+                hostIncludePort,
+                (Class<SelfType>) getClass());
+    }
+
+    @SuppressWarnings("unchecked")
+    public List<ActorKelpFunctions.KeyExtractor<?,?>> getKeyExtractors() {
+        return getMailboxAsKelp().getEntries().stream()
+                .map(HistogramEntry::getProcessor)
+                .filter(ActorBehaviorKelp.ActorBehaviorMatchKey.class::isInstance)
+                .map(ActorBehaviorKelp.ActorBehaviorMatchKey.class::cast)
+                .flatMap(p -> ((List<ActorKelpFunctions.KeyExtractor<?,?>>) p.getKeyExtractors()).stream())
+                .collect(Collectors.toList());
     }
 
     protected ActorRef createAndPlace(ActorPlacement place, ActorKelpSerializable<SelfType> serialized, int i) {
@@ -469,15 +492,49 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
         }
     }
 
-    public static class ActorRefShuffleKelp<ActorType extends ActorKelp<ActorType>> extends ActorRefShuffle {
+    public static class ActorRefShuffleKelp<ActorType extends Actor> extends ActorRefShuffle implements KelpStage<ActorType> {
+        public static final long serialVersionUID = 1L;
+        protected Class<?> actorType;
+
         public ActorRefShuffleKelp() {
         }
 
-        public ActorRefShuffleKelp(Map<ActorAddress, List<ShuffleEntry>> entries,
-                                   List<ActorKelpFunctions.KeyExtractor<?, ?>> keyExtractors, int bufferSize, boolean hostIncludePort) {
-            super(entries, keyExtractors, bufferSize, hostIncludePort);
+        public ActorRefShuffleKelp(ActorSystem system, Map<ActorAddress, List<ShuffleEntry>> entries,
+                                   List<ActorKelpFunctions.KeyExtractor<?, ?>> keyExtractors, int bufferSize, boolean hostIncludePort,
+                                   Class<ActorType> actorType) {
+            super(system, entries, keyExtractors, bufferSize, hostIncludePort);
+            this.actorType = actorType;
         }
 
-
+        @Override
+        public <NextActorType extends Actor> KelpStage<NextActorType> connects(Class<NextActorType> actorType, ActorRef ref) {
+            ref = connectStageInitialActor(ref);
+            try {
+                connectStageWithoutInit(ref).get();
+            } catch (Exception ex) {
+                throw new RuntimeException(ex);
+            }
+            return toKelpStage(system, actorType, ref);
+        }
     }
+
+    @Override
+    public <NextActorType extends Actor> KelpStage<NextActorType> connects(Class<NextActorType> actorType, ActorRef ref) {
+        ref = ActorRefShuffle.connectStageInitialActor(system, ref);
+        if (ref instanceof ActorRefShuffle) {
+            ref = ((ActorRefShuffle) ref).use();
+        }
+        setNextStage(ref);
+        return toKelpStage(system, actorType, ref);
+    }
+
+    @SuppressWarnings("unchecked")
+    public static <NextActorType extends Actor> KelpStage<NextActorType> toKelpStage(ActorSystem system, Class<NextActorType> actorType, ActorRef ref) {
+        if (ref instanceof ActorRefShuffleKelp<?>) {
+            return (ActorRefShuffleKelp<NextActorType>) ref;
+        } else {
+            return new KelpStageRefWrapper<>(system, actorType, ref);
+        }
+    }
+
 }

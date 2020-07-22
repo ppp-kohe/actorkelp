@@ -119,7 +119,8 @@ public class KryoBuilder {
     }
 
     protected void buildRegisterActor(Kryo kryo) {
-        kryo.register(ActorRefShuffle.class); //precede the ActorRefRemoteSerializer
+        kryo.register(ActorRefShuffle.class, new ActorRefShuffle.ActorRefShuffleSerializer(system)); //precede the ActorRefRemoteSerializer
+        kryo.register(csl.actor.kelp2.ActorKelp.KelpStageRefWrapper.class, new csl.actor.kelp2.ActorKelp.KelpStageRefWrapperSerializer(system));
         kryo.addDefaultSerializer(ActorRef.class, new ActorRefRemoteSerializer<>(system)); //for sub-types
 
         register(kryo, getActorClasses());

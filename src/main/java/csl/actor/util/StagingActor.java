@@ -383,6 +383,12 @@ public class StagingActor extends ActorDefault {
         default ActorRef nextStageActor() {
             return null;
         }
+
+        /**
+         * optional operation
+         * @param ref the next stage reference
+         */
+        default void setNextStage(ActorRef ref) { }
     }
 
     public static class StagingNotification implements Serializable {
