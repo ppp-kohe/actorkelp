@@ -77,7 +77,7 @@ public interface KelpStage<ActorType extends Actor> {
         }
 
         public <NextActorType extends Actor> KelpStage<NextActorType> connectsStagingSend(Class<NextActorType> nextActorType, ActorRef next) {
-            ActorRef nextRef = ActorRefShuffle.connectStageInitialActor(system, next);
+            ActorRef nextRef = ActorRefShuffle.connectStageInitialActor(system, next, getShuffleBufferSizeMax());
             try {
                 ResponsiveCalls.sendTaskConsumer(system, ref, (self) ->
                         ((StagingActor.StagingSupported) self).setNextStage(
@@ -86,6 +86,10 @@ public interface KelpStage<ActorType extends Actor> {
                 throw new RuntimeException(ex);
             }
             return ActorKelp.toKelpStage(system, nextActorType, nextRef);
+        }
+
+        public int getShuffleBufferSizeMax() {
+            return Integer.MAX_VALUE;
         }
 
         public void setSystem(ActorSystem system) {

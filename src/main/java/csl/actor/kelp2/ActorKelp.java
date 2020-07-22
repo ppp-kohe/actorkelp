@@ -125,6 +125,22 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
         return config.pruneLessThanNonZeroLeafRate;
     }
 
+    public int getShuffleBufferSize() {
+        return config.shuffleBufferSize;
+    }
+
+    public int getShufflePartitions() {
+        return config.shufflePartitions;
+    }
+
+    public boolean isShuffleHostIncludePort() {
+        return config.shuffleHostIncludePort;
+    }
+
+    public int getShuffleBufferSizeFile() {
+        return config.shuffleBufferSizeFile;
+    }
+
     ///////////////
 
     protected PersistentFileManager getPersistentFile() {
@@ -344,6 +360,11 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
             return behaviorBuilder()
                     .build();
         }
+
+        @Override
+        public int getShuffleBufferSizeMax() {
+            return getShuffleBufferSizeFile();
+        }
     }
 
     ///// serializable
@@ -470,13 +491,13 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
     }
 
     @SuppressWarnings("unchecked")
-    public ActorRefShuffleKelp<SelfType> shuffle() {
+    public ActorRefShuffleKelp<SelfType> shuffle(int bufferSizeMax) {
         ActorKelpSerializable<SelfType> serialized = toSerializable(); //TODO without mailbox
         ActorPlacement place = getPlacement();
 
-        int partitions = getConfig().shufflePartitions;
-        int bufferSize = getConfig().shufflePartitions;
-        boolean hostIncludePort = getConfig().shuffleHostIncludePort;
+        int partitions = getShufflePartitions();
+        int bufferSize = Math.min(bufferSizeMax, getShuffleBufferSize());
+        boolean hostIncludePort = isShuffleHostIncludePort();
 
         return createShuffle(
                 getSystem(),
@@ -537,7 +558,7 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
 
         @Override
         public <NextActorType extends Actor> KelpStage<NextActorType> connects(Class<NextActorType> actorType, ActorRef ref) {
-            ref = connectStageInitialActor(ref);
+            ref = connectStageInitialActor(ref, Integer.MAX_VALUE);
             try {
                 connectStageWithoutInit(ref).get();
             } catch (Exception ex) {
@@ -561,12 +582,16 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
 
     @Override
     public <NextActorType extends Actor> KelpStage<NextActorType> connects(Class<NextActorType> actorType, ActorRef ref) {
-        ref = ActorRefShuffle.connectStageInitialActor(system, ref);
+        ref = ActorRefShuffle.connectStageInitialActor(system, ref, getShuffleBufferSizeMax());
         if (ref instanceof ActorRefShuffle) {
             ref = ((ActorRefShuffle) ref).use();
         }
         setNextStage(ref);
         return toKelpStage(system, actorType, ref);
+    }
+
+    public int getShuffleBufferSizeMax() {
+        return Integer.MAX_VALUE;
     }
 
     @SuppressWarnings("unchecked")

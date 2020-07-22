@@ -204,7 +204,7 @@ public class ActorRefShuffle implements ActorRef, Serializable, Cloneable, KryoS
 
     public CompletableFuture<Void> connectStage(ActorRef next) {
         return connectStageWithoutInit(
-                connectStageInitialActor(next));
+                connectStageInitialActor(next, Integer.MAX_VALUE));
     }
 
     public CompletableFuture<Void> connectStageWithoutInit(ActorRef next) {
@@ -215,16 +215,16 @@ public class ActorRefShuffle implements ActorRef, Serializable, Cloneable, KryoS
         return CompletableFuture.allOf(tasks.toArray(new CompletableFuture<?>[0]));
     }
 
-    public ActorRef connectStageInitialActor(ActorRef next) {
-        return connectStageInitialActor(system, next);
+    public ActorRef connectStageInitialActor(ActorRef next, int bufferSizeMax) {
+        return connectStageInitialActor(system, next, bufferSizeMax);
     }
 
-    public static ActorRef connectStageInitialActor(ActorSystem system, ActorRef next) {
+    public static ActorRef connectStageInitialActor(ActorSystem system, ActorRef next, int bufferSizeMax) {
         if (next instanceof ActorKelp<?> && ((ActorKelp<?>) next).isOriginal()) {
-            return ((ActorKelp<?>) next).shuffle();
+            return ((ActorKelp<?>) next).shuffle(bufferSizeMax);
         } else if (!(next instanceof Actor || next instanceof ActorRefShuffle)) { //remote or local ref
             try {
-                return ResponsiveCalls.sendTask(system, next, new ToShuffleTask()).get();
+                return ResponsiveCalls.sendTask(system, next, new ToShuffleTask(bufferSizeMax)).get();
             } catch (Exception ex) {
                 throw new RuntimeException(ex);
             }
@@ -235,10 +235,16 @@ public class ActorRefShuffle implements ActorRef, Serializable, Cloneable, KryoS
 
     public static class ToShuffleTask implements CallableMessage<Actor, ActorRef> {
         public static final long serialVersionUID = 1L;
+        protected int bufferSizeMax;
+
+        public ToShuffleTask(int bufferSizeMax) {
+            this.bufferSizeMax = bufferSizeMax;
+        }
+
         @Override
         public ActorRef call(Actor self) {
             if (self instanceof ActorKelp<?> && ((ActorKelp<?>) self).isOriginal()) {
-                return ((ActorKelp<?>) self).shuffle();
+                return ((ActorKelp<?>) self).shuffle(bufferSizeMax);
             } else {
                 return self;
             }
