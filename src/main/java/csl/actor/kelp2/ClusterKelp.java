@@ -19,26 +19,17 @@ public class ClusterKelp<ConfigType extends ConfigKelp> extends ClusterDeploymen
     @Override
     protected void deployPrimaryInitSystem() {
         primary.log("primary %s: create system with serializer %s", primary.getDeploymentConfig().getAddress(), primary.getDeploymentConfig().kryoBuilderType);
-        system = createSystemKelpPrimary(primary.getDeploymentConfig().kryoBuilderType, primary.getDeploymentConfig());
+        system = createSystemKelpPrimary(primary.getDeploymentConfig());
         system.getLocalSystem().setLogger(new ConfigBase.SystemLoggerHeader(system.getLogger(), primary.getAppConfig()));
     }
 
-    public ActorSystemKelp createSystemKelpPrimary(String buildType, ConfigDeployment configDeployment) {
-        return createSystemKelp(buildType, configDeployment);
+    public ActorSystemKelp createSystemKelpPrimary(ConfigDeployment configDeployment) {
+        return ActorSystemKelp.create(configDeployment);
     }
 
-    @SuppressWarnings("unchecked")
-    public static ActorSystemKelp createSystemKelp(String buildType, ConfigDeployment configDeployment) {
-        try {
-            Class<?> cls = Class.forName(buildType);
-            if (KryoBuilder.class.isAssignableFrom(cls)) {
-                return ActorSystemKelp.createWithKryoBuilderType((Class<? extends KryoBuilder>) cls, configDeployment);
-            } else {
-                throw new RuntimeException("not a KryoBuilder: " + cls);
-            }
-        } catch (Exception ex) {
-            throw new RuntimeException(ex);
-        }
+    @Override
+    protected ActorSystemRemote createAttachInitSystem() {
+        return ActorSystemKelp.create(KryoBuilder.builder(getBuilderType(attachKryoBuilderType, KryoBuilderKelp.class)), primary.getDeploymentConfig());
     }
 
     @Override
@@ -59,7 +50,12 @@ public class ClusterKelp<ConfigType extends ConfigKelp> extends ClusterDeploymen
         }
 
         public ActorSystemKelp createSystemKelpNode(String buildType, ConfigDeployment configDeployment) {
-            return createSystemKelp(buildType, configDeployment);
+            return ActorSystemKelp.create(KryoBuilder.builder(getBuilderType(buildType, defaultConfigType())), configDeployment);
+        }
+
+        @Override
+        protected Class<? extends KryoBuilder> defaultConfigType() {
+            return KryoBuilderKelp.class;
         }
     }
 }

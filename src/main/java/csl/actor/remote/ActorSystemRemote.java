@@ -19,7 +19,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
 
-public class ActorSystemRemote implements ActorSystem {
+public class ActorSystemRemote implements ActorSystem, KryoBuilder.SerializerFactory {
     protected ActorSystemDefault localSystem;
 
     protected ActorAddress.ActorAddressRemote serverAddress;
@@ -375,12 +375,15 @@ public class ActorSystemRemote implements ActorSystem {
     }
 
     public boolean isSpecialMessageData(Object data) {
-        return data instanceof ConnectionCloseNotice ||
+        return data instanceof SpecialMessage ||
+                data instanceof ConnectionCloseNotice ||
                 data instanceof CallableMessage ||
                 data instanceof CallableMessage.CallableFailure ||
                 data instanceof CallableMessage.CallableResponse<?> ||
                 data instanceof CallableMessage.CallableResponseVoid;
     }
+
+    public interface SpecialMessage {}
 
     public static class ConnectionActor extends Actor {
         protected ActorSystemRemote remoteSystem;

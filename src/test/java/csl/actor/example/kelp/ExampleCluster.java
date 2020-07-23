@@ -2,7 +2,7 @@ package csl.actor.example.kelp;
 
 import csl.actor.ActorBehavior;
 import csl.actor.ActorSystem;
-import csl.actor.cluster.PhaseShift;
+import csl.actor.kelp.PhaseShift;
 import csl.actor.kelp.ActorKelp;
 import csl.actor.kelp.ActorPlacementKelp;
 import csl.actor.kelp.ClusterKelp;

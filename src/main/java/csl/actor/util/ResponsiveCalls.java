@@ -275,6 +275,8 @@ public class ResponsiveCalls {
         public static final long serialVersionUID = 1L;
         protected ActorSystemDefault.DeadLetter letter;
 
+        public DeadLetterException() {}
+
         public DeadLetterException(ActorSystemDefault.DeadLetter letter) {
             super(Objects.toString(letter));
             this.letter = letter;

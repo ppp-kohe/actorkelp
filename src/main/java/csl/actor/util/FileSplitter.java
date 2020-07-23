@@ -1,7 +1,5 @@
 package csl.actor.util;
 
-import csl.actor.cluster.ConfigDeployment;
-
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.io.Serializable;
@@ -19,13 +17,13 @@ public class FileSplitter {
     protected long splitLength;
     protected long splits;
 
-    protected ConfigDeployment.PathModifier pathModifier;
+    protected PathModifier pathModifier;
 
     public static FileSplitter getWithSplitLength(long splitLength) {
         return new FileSplitter(splitLength, 0);
     }
 
-    public static FileSplitter getWithSplitLength(long splitLength, ConfigDeployment.PathModifier pm) {
+    public static FileSplitter getWithSplitLength(long splitLength, PathModifier pm) {
         return new FileSplitter(splitLength, 0, pm);
     }
 
@@ -33,7 +31,7 @@ public class FileSplitter {
         return new FileSplitter(10_000_000L, splits);
     }
 
-    public static FileSplitter getWithSplitCount(long splits, ConfigDeployment.PathModifier pm) {
+    public static FileSplitter getWithSplitCount(long splits, PathModifier pm) {
         return new FileSplitter(10_000_000L, splits, pm);
     }
 
@@ -41,7 +39,7 @@ public class FileSplitter {
         this(splitLength, splits, Paths::get);
     }
 
-    public FileSplitter(long splitLength, long splits, ConfigDeployment.PathModifier pathModifier) {
+    public FileSplitter(long splitLength, long splits, PathModifier pathModifier) {
         this.splitLength = splitLength;
         this.splits = splits;
         this.pathModifier = pathModifier;
@@ -55,7 +53,7 @@ public class FileSplitter {
         return splits;
     }
 
-    public ConfigDeployment.PathModifier getPathModifier() {
+    public PathModifier getPathModifier() {
         return pathModifier;
     }
 
@@ -116,6 +114,8 @@ public class FileSplitter {
         long splitIndex;
         long splitStart;
         long splitLength;
+
+        public FileSplit() {}
 
         public FileSplit(String path) {
             this.path = path;
@@ -236,9 +236,9 @@ public class FileSplitter {
         protected int newLinesBeforeLineStart;
         protected long filePosition;
         protected Path actualPath;
-        protected ConfigDeployment.PathModifier pathModifier;
+        protected PathModifier pathModifier;
 
-        public FileSplitReader(FileSplit split, ConfigDeployment.PathModifier pathModifier) throws IOException {
+        public FileSplitReader(FileSplit split, PathModifier pathModifier) throws IOException {
             this.split = split;
             this.pathModifier = pathModifier;
             open();

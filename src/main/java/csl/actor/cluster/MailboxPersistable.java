@@ -511,6 +511,8 @@ public class MailboxPersistable extends MailboxDefault implements Mailbox, Clone
         protected transient PersistentFileManager.PersistentFileReader reader;
         protected transient MessageOnStorage currentMessage;
 
+        public MessageOnStorageFile() {}
+
         public MessageOnStorageFile(PersistentFileManager.PersistentFileReaderSource source) {
             this.source = source;
         }

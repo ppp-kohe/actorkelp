@@ -4,6 +4,7 @@ import csl.actor.*;
 import csl.actor.cluster.*;
 import csl.actor.kelp.KelpRoutingSplit.SplitPath;
 import csl.actor.util.ConfigBase;
+import csl.actor.util.PathModifier;
 import csl.actor.util.ResponsiveCalls;
 
 import java.io.Serializable;
@@ -884,7 +885,7 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
         if (n == null) {
             n = getClass().getSimpleName() + "-" + Integer.toHexString(System.identityHashCode(this));
         }
-        return "%h-" + ActorPlacement.toOutputFileComponent(true, 30, n);
+        return "%h-" + PathModifier.toOutputFileComponent(true, 30, n);
     }
 
 

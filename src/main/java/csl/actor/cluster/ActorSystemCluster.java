@@ -2,8 +2,10 @@ package csl.actor.cluster;
 
 import com.esotericsoftware.kryo.Kryo;
 import csl.actor.*;
+import csl.actor.kelp2.KryoBuilderKelp;
 import csl.actor.remote.*;
 import csl.actor.util.ConfigBase;
+import csl.actor.util.PathModifier;
 import csl.actor.util.ResponsiveCalls;
 
 import java.lang.reflect.Constructor;
@@ -21,36 +23,28 @@ public class ActorSystemCluster extends ActorSystemRemote implements PersistentF
     protected Map<ActorAddress, UnitStatus> units;
 
     public ActorSystemCluster() {
-        super(new ActorSystemDefaultForCluster(), KryoBuilder.builder());
+        super(new ActorSystemDefaultForCluster(KryoBuilderCluster.builder()), KryoBuilderCluster.builder());
     }
 
     public ActorSystemCluster(ActorSystemDefault localSystem, Function<ActorSystem, Kryo> kryoFactory) {
         super(localSystem, kryoFactory);
     }
 
-    public static ActorSystemCluster createWithKryoBuilderTypeThrottle(Class<? extends KryoBuilder> kryoBuilderType) throws Exception {
-        Constructor<? extends KryoBuilder> cons = kryoBuilderType.getConstructor();
-        return new ActorSystemCluster(new ActorSystemDefaultForClusterThrottle(), KryoBuilder.builder(() -> {
-            try {
-                return cons.newInstance();
-            } catch (Exception ex) {
-                throw new RuntimeException(ex);
-            }
-        }));
+    public static ActorSystemCluster createWithKryoBuilderThrottle(Function<ActorSystem, Kryo> kryoFactory) {
+        return new ActorSystemCluster(new ActorSystemDefaultForClusterThrottle(kryoFactory), kryoFactory);
     }
 
-    public static ActorSystemRemote createWithKryoBuilderType(Class<? extends KryoBuilder> kryoBuilderType) throws Exception {
-        Constructor<? extends KryoBuilder> cons = kryoBuilderType.getConstructor();
-        return new ActorSystemRemote(new ActorSystemDefaultForCluster(), KryoBuilder.builder(() -> {
-            try {
-                return cons.newInstance();
-            } catch (Exception ex) {
-                throw new RuntimeException(ex);
-            }
-        }));
+    public static ActorSystemCluster createWithKryoBuilder(Function<ActorSystem, Kryo> kryoFactory) {
+        return new ActorSystemCluster(new ActorSystemDefaultForCluster(kryoFactory), kryoFactory);
     }
 
-    public static class ActorSystemDefaultForCluster extends ActorSystemDefaultForRemote {
+    public static class ActorSystemDefaultForCluster extends ActorSystemDefaultForRemote implements KryoBuilder.SerializerFactory {
+        protected Function<ActorSystem, Kryo> kryoBuilder;
+
+        public ActorSystemDefaultForCluster(Function<ActorSystem, Kryo> kryoBuilder) {
+            this.kryoBuilder = kryoBuilder;
+        }
+
         @Override
         protected void initSystemExecutorService() {
             executorService = Executors.newFixedThreadPool((threads * 5));
@@ -69,9 +63,20 @@ public class ActorSystemCluster extends ActorSystemRemote implements PersistentF
                 super.sendDeadLetter(message);
             }
         }
+
+        @Override
+        public Kryo createSerializer() {
+            return kryoBuilder.apply(this);
+        }
     }
 
-    public static class ActorSystemDefaultForClusterThrottle extends ActorSystemDefaultForRemote {
+    public static class ActorSystemDefaultForClusterThrottle extends ActorSystemDefaultForRemote implements KryoBuilder.SerializerFactory {
+        protected Function<ActorSystem, Kryo> kryoBuilder;
+
+        public ActorSystemDefaultForClusterThrottle(Function<ActorSystem, Kryo> kryoBuilder) {
+            this.kryoBuilder = kryoBuilder;
+        }
+
         @Override
         protected void initSystemExecutorService() {
             executorService = createThreadPoolUnlimited(threads);
@@ -89,6 +94,11 @@ public class ActorSystemCluster extends ActorSystemRemote implements PersistentF
             } else {
                 super.sendDeadLetter(message);
             }
+        }
+
+        @Override
+        public Kryo createSerializer() {
+            return kryoBuilder.apply(this);
         }
     }
 
@@ -111,10 +121,7 @@ public class ActorSystemCluster extends ActorSystemRemote implements PersistentF
     public boolean isSpecialMessageData(Object data) {
         return super.isSpecialMessageData(data)||
                 data instanceof ActorPlacement.AddressList ||
-                data instanceof ClusterDeployment.ConfigSet ||
-                data instanceof PhaseShift ||
-                data instanceof PhaseShift.PhaseShiftIntermediate ||
-                data instanceof PhaseShift.PhaseCompleted;
+                data instanceof ClusterDeployment.ConfigSet;
     }
 
     @Override
@@ -241,10 +248,10 @@ public class ActorSystemCluster extends ActorSystemRemote implements PersistentF
         protected ActorSystemCluster system;
 
         public PersistentFileManagerThrottle(String path, ActorSystemCluster system) {
-            this(path, system.getSerializer(), ConfigDeployment.getPathModifier(system), system.getLogger(), system);
+            this(path, system.getSerializer(), PathModifier.getPathModifier(system), system.getLogger(), system);
         }
 
-        public PersistentFileManagerThrottle(String path, KryoBuilder.SerializerFunction serializer, ConfigDeployment.PathModifier pathModifier, SystemLogger logger,
+        public PersistentFileManagerThrottle(String path, KryoBuilder.SerializerFunction serializer, PathModifier pathModifier, SystemLogger logger,
                                              ActorSystemCluster system) {
             super(path, serializer, pathModifier, logger);
             this.system = system;

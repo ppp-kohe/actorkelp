@@ -1,7 +1,6 @@
 package csl.actor.example.util;
 
 import csl.actor.*;
-import csl.actor.cluster.PhaseShift;
 import csl.actor.util.StagingActor;
 
 import java.time.Instant;

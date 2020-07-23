@@ -4,6 +4,7 @@ import csl.actor.*;
 import csl.actor.cluster.ClusterDeployment;
 import csl.actor.cluster.ConfigDeployment;
 import csl.actor.util.FileSplitter;
+import csl.actor.util.PathModifier;
 import csl.actor.util.ResponsiveCalls;
 import csl.actor.remote.ActorAddress;
 
@@ -167,12 +168,12 @@ public class ActorPlacementKelp extends ClusterDeployment.ActorPlacementForClust
 
     public FileMapper fileMapperWithSplitCount(long splits) {
         return fileMapper(FileSplitter.getWithSplitCount(splits,
-                ConfigDeployment.getPathModifier(getSystem())));
+                PathModifier.getPathModifier(getSystem())));
     }
 
     public FileMapper fileMapperWithSplitLength(long length) {
         return fileMapper(FileSplitter.getWithSplitLength(length,
-                ConfigDeployment.getPathModifier(getSystem())));
+                PathModifier.getPathModifier(getSystem())));
     }
 
     public ActorKelpOneShot actor(String name, InitBuilder builderFunction) {
@@ -341,7 +342,7 @@ public class ActorPlacementKelp extends ClusterDeployment.ActorPlacementForClust
         protected void init() throws Exception {
             ActorKelp self = owner;
             path = getPath(self);
-            expandedPath = ConfigDeployment.getPathModifier(self.getSystem()).getExpanded(path);
+            expandedPath = PathModifier.getPathModifier(self.getSystem()).getExpanded(path);
             Path parent = expandedPath.getParent();
             if (parent != null && !parent.toString().isEmpty()) {
                 Files.createDirectories(expandedPath.getParent());

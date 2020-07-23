@@ -38,9 +38,9 @@ public class ActorPlacementKelp<ConfigType extends ConfigKelp> extends ClusterDe
 
     @Override
     public Actor fromSerializable(Serializable s, long num) {
-        if (s instanceof ActorKelp.ActorKelpSerializable<?>) {
+        if (s instanceof ActorKelpSerializable<?>) {
             try {
-                ActorKelp.ActorKelpSerializable<?> actorSrc = (ActorKelp.ActorKelpSerializable<?>) s;
+                ActorKelpSerializable<?> actorSrc = (ActorKelpSerializable<?>) s;
                 Actor a = actorSrc.restore(getSystem(), num, getConfig(actorSrc));
                 a.tellMessage(new Message.MessageNone(a));
                 return a;
@@ -52,7 +52,7 @@ public class ActorPlacementKelp<ConfigType extends ConfigKelp> extends ClusterDe
     }
 
     @SuppressWarnings("unchecked")
-    protected ConfigType getConfig(ActorKelp.ActorKelpSerializable<?> actorSrc) {
+    protected ConfigType getConfig(ActorKelpSerializable<?> actorSrc) {
         return getRemoteConfig().getOrDefault(getSelfAddress().getHostAddress(), (ConfigType) actorSrc.config);
     }
 

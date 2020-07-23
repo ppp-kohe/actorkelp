@@ -5,7 +5,7 @@ import csl.actor.cluster.PersistentFileManager;
 import csl.actor.example.ExampleSerialize2;
 import csl.actor.kelp.Config;
 import csl.actor.cluster.MailboxPersistable;
-import csl.actor.cluster.PhaseShift;
+import csl.actor.kelp.PhaseShift;
 import csl.actor.util.ResponsiveCalls;
 import csl.actor.remote.KryoBuilder;
 

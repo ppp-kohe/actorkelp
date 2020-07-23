@@ -1,7 +1,7 @@
 package csl.actor.example.exp.wordcount;
 
 import csl.actor.ActorSystemDefault;
-import csl.actor.cluster.ConfigDeployment;
+import csl.actor.util.PathModifier;
 import csl.actor.cluster.PersistentFileManager;
 import csl.actor.kelp.*;
 import csl.actor.remote.ActorSystemRemote;
@@ -31,7 +31,7 @@ public class KeyHistogramsPersistableLoadTest {
 
     class TestFileManager extends PersistentFileManager {
 
-        public TestFileManager(String path, KryoBuilder.SerializerFunction serializer, ConfigDeployment.PathModifier pathModifier) {
+        public TestFileManager(String path, KryoBuilder.SerializerFunction serializer, PathModifier pathModifier) {
             super(path, serializer, pathModifier, new ActorSystemDefault.SystemLoggerErr());
         }
 

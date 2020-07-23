@@ -9,7 +9,6 @@ import csl.actor.remote.ActorSystemRemote;
 import csl.actor.remote.KryoBuilder;
 import csl.actor.util.ConfigBase;
 
-import java.lang.reflect.Constructor;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -25,15 +24,13 @@ public class ActorSystemKelp extends ActorSystemRemote {
     protected Map<ActorAddress, ConnectionHost> connectionHostMap;
     protected volatile ConfigKelp config = ConfigKelp.CONFIG_DEFAULT;
 
-    public static ActorSystemKelp createWithKryoBuilderType(Class<? extends KryoBuilder> kryoBuilderType, ConfigDeployment configDeployment) throws Exception {
-        Constructor<? extends KryoBuilder> cons = kryoBuilderType.getConstructor();
-        return new ActorSystemKelp(new ActorSystemDefaultForKelp(configDeployment), KryoBuilder.builder(() -> {
-            try {
-                return cons.newInstance();
-            } catch (Exception ex) {
-                throw new RuntimeException(ex);
-            }
-        }));
+    public static ActorSystemKelp create(ConfigDeployment configDeployment) {
+        Function<ActorSystem, Kryo> kryoFactory = configDeployment.kryoBuilder(KryoBuilderKelp.class);
+        return create(kryoFactory, configDeployment);
+    }
+
+    public static ActorSystemKelp create(Function<ActorSystem, Kryo> kryoFactory, ConfigDeployment configDeployment) {
+        return new ActorSystemKelp(new ActorSystemDefaultForKelp(configDeployment, kryoFactory), kryoFactory);
     }
 
     public ActorSystemKelp() {
@@ -41,7 +38,7 @@ public class ActorSystemKelp extends ActorSystemRemote {
     }
 
     public ActorSystemKelp(ConfigDeployment configDeployment) {
-        this(new ActorSystemDefaultForKelp(configDeployment), KryoBuilder.builder());
+        this(new ActorSystemDefaultForKelp(configDeployment), configDeployment.kryoBuilder(KryoBuilderKelp.class));
     }
 
     public ActorSystemKelp(ActorSystemDefault localSystem, Function<ActorSystem, Kryo> kryoFactory) {
@@ -51,7 +48,16 @@ public class ActorSystemKelp extends ActorSystemRemote {
     public static class ActorSystemDefaultForKelp extends ActorSystemCluster.ActorSystemDefaultForCluster {
         protected ConfigDeployment configDeployment;
 
+        public ActorSystemDefaultForKelp() {
+            this(new ConfigDeployment(), KryoBuilderKelp.builder());
+        }
+
         public ActorSystemDefaultForKelp(ConfigDeployment configDeployment) {
+            this(configDeployment, configDeployment.kryoBuilder(KryoBuilderKelp.class));
+        }
+
+        public ActorSystemDefaultForKelp(ConfigDeployment configDeployment, Function<ActorSystem, Kryo> kryoFactory) {
+            super(kryoFactory);
             this.configDeployment = configDeployment;
             super.initSystem();
         }

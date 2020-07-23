@@ -12,10 +12,6 @@ import com.esotericsoftware.kryo.serializers.JavaSerializer;
 import com.esotericsoftware.kryo.util.DefaultInstantiatorStrategy;
 import com.esotericsoftware.kryo.util.Pool;
 import csl.actor.*;
-import csl.actor.cluster.*;
-import csl.actor.kelp.*;
-import csl.actor.kelp2.ActorRefShuffle;
-import csl.actor.kelp2.ConfigKelp;
 import csl.actor.util.ConfigBase;
 import csl.actor.util.FileSplitter;
 import csl.actor.util.ResponsiveCalls;
@@ -26,6 +22,7 @@ import org.objenesis.strategy.StdInstantiatorStrategy;
 import java.io.File;
 import java.io.Serializable;
 import java.lang.invoke.SerializedLambda;
+import java.lang.reflect.Constructor;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.net.*;
@@ -64,6 +61,21 @@ public class KryoBuilder {
 
     public static Function<ActorSystem, Kryo> builder(Supplier<KryoBuilder> builderCreator) {
         return (sys) -> builderCreator.get().setSystem(sys).build();
+    }
+
+    public static Function<ActorSystem, Kryo> builder(Class<? extends KryoBuilder> kryoBuilderType) {
+        try {
+            Constructor<? extends KryoBuilder> cons = kryoBuilderType.getConstructor();
+            return KryoBuilder.builder(() -> {
+                try {
+                    return cons.newInstance();
+                } catch (Exception ex) {
+                    throw new RuntimeException(ex);
+                }
+            });
+        } catch (Exception ex) {
+            throw new RuntimeException(ex);
+        }
     }
 
     /** @return implementation field getter */
@@ -125,8 +137,7 @@ public class KryoBuilder {
     }
 
     protected void buildRegisterActorRef(Kryo kryo) {
-        //kryo.addDefaultSerializer(ActorRef.class, new ActorRefRemoteSerializer<>(system)); //for sub-types
-        kryo.addDefaultSerializer(ActorRef.class, new ActorRefShuffle.ActorRefShuffleSerializer(system)); //for sub-types
+        kryo.addDefaultSerializer(ActorRef.class, new ActorRefRemoteSerializer<>(system)); //for sub-types
     }
 
     public void register(Kryo kryo, List<Class<?>> types) {
@@ -281,94 +292,25 @@ public class KryoBuilder {
                 ActorRefLocalNamed.ActorRefLocalNamedNoName.class,
                 ActorAddress.ActorAddressAnonymousActor.class,
                 ActorAddress.ActorAddressError.class,
-                ResponsiveCalls.ResponsiveCallableActor.class,
 
-                ResponsiveCalls.DeadLetterException.class,
-                ActorPlacement.AddressList.class,
-                ActorPlacement.AddressListEntry.class,
-                ActorPlacement.ActorCreationRequest.class,
-                ActorPlacement.CallablePrimaryThreads.class,
-                ActorPlacement.LeaveEntry.class,
-                ActorPlacementKelp.Task.class,
-                ActorPlacementKelp.TaskChain.class,
-                ActorPlacementKelp.InitBuilder.class,
-                ActorPlacementKelp.OneShotState.class,
-                ActorKelp.StateUnit.class,
-                ActorKelp.ActorKelpSerializable.class,
-                ActorKelp.CallableToLocalSerializable.class,
-                KelpRoutingSplit.SplitPath.class,
-                KeyHistograms.HistogramTree.class,
-                KeyHistograms.HistogramNodeTree.class,
-                KeyHistograms.HistogramNodeLeaf.class,
-                KeyHistograms.HistogramLeafList.class,
-                KeyHistograms.HistogramLeafCell.class,
-                ActorBehaviorKelp.HistogramNodeLeaf1.class,
-                ActorBehaviorKelp.HistogramNodeLeaf2.class,
-                ActorBehaviorKelp.HistogramNodeLeaf3.class,
-                ActorBehaviorKelp.HistogramNodeLeaf4.class,
-                ActorBehaviorKelp.HistogramNodeLeafList.class,
-                ActorBehaviorKelp.HistogramNodeLeafListReducible.class,
-                ActorBehaviorKelp.HistogramNodeLeafListReducibleForPhase.class,
-                KeyHistograms.HistogramNodeLeafMap.class,
-                KeyHistograms.HistogramLeafCellSerializedEnd.class,
+                //util
                 ConfigBase.class,
-                csl.actor.kelp.Config.class,
-                MailboxPersistable.MessageOnStorage.class,
-                PersistentFileManager.PersistentFileEnd.class,
-                PersistentFileManager.PersistentFileReaderSource.class,
-                MailboxPersistable.MessageOnStorageFile.class,
-                KeyHistogramsPersistable.HistogramTreePersistable.class,
-                KeyHistogramsPersistable.PutIndexHistory.class,
-                KeyHistogramsPersistable.HistogramLeafListPersistable.class,
-                KeyHistogramsPersistable.HistogramLeafCellOnStorageFile.class,
-                KeyHistogramsPersistable.PersistentFileReaderSourceWithSize.class,
-                KeyHistogramsPersistable.HistogramNodeTreeOnStorage.class,
-                KeyHistogramsPersistable.HistogramNodeLeafOnStorage.class,
-                KeyHistogramsPersistable.NodeTreeData.class,
-
-                KelpVisitor.class,
-                KelpVisitor.VisitorNoSender.class,
-                PhaseShift.class,
-                PhaseShift.PhaseCompleted.class,
-                PhaseShift.PhaseShiftIntermediate.class,
-                PhaseShift.PhaseShiftIntermediateType.class,
-                KelpPhaseEntry.VisitorIncompleteLeaf.class,
-                ActorKelp.CancelChange.class,
-                ActorKelp.CanceledChangeType.class,
-
-                ClusterDeployment.ConfigSet.class,
-                ClusterDeployment.ShutdownTask.class,
-                ClusterDeployment.NetworkStats.class,
-                ClusterDeployment.SystemStats.class,
-                ClusterDeployment.ClusterStats.class,
-                ClusterCommands.ClusterUnit.class,
-                ClusterCommands.CommandToken.class,
-                ClusterCommands.CommandTokenType.class,
-                ClusterCommands.CommandBlock.class,
-                ClusterCommands.CommandBlockNamed.class,
-                ClusterCommands.CommandBlockRoot.class,
-                ClusterCommands.CommandBlockLineContinue.class,
-                ConfigDeployment.class,
                 FileSplitter.FileSplit.class,
-                ClusterKelp.RouterSplitStat.class,
-                ClusterKelp.HistogramStat.class,
-                ClusterKelp.ActorStat.class,
-                ClusterKelp.PhaseStat.class,
-
-                csl.actor.kelp2.ActorKelp.MessageBundle.class,
-                ConfigKelp.class,
-                csl.actor.kelp2.ActorKelp.ActorKelpSerializable.class,
-                ActorRefShuffle.ShuffleEntry.class,
+                ResponsiveCalls.DeadLetterException.class,
+                StagingActor.CallConsumerI.class,
+                StagingActor.CompletionHandlerForActor.class,
+                StagingActor.CompletionHandlerTask.class,
                 StagingActor.StagingCompleted.class,
+                StagingActor.StagingHandlerCompleted.class,
                 StagingActor.StagingNotification.class,
-                StagingActor.StagingWatcher.class,
                 StagingActor.StagingTask.class,
-                StagingActor.StagingHandlerCompleted.class);
+                StagingActor.StagingWatcher.class);
     }
 
     public interface SerializerFunction {
         Object read(Input input);
         void write(Output out, Object o);
+        Object copy(Object src);
     }
 
     public static class SerializerPool implements SerializerFunction {
@@ -377,6 +319,13 @@ public class KryoBuilder {
 
         public SerializerPool(Pool<Kryo> pool) {
             this.pool = pool;
+        }
+
+        public Object copy(Object src) {
+            Kryo k = pool.obtain();
+            Object o = k.copy(src);
+            pool.free(k);
+            return o;
         }
 
         @Override
@@ -429,8 +378,8 @@ public class KryoBuilder {
             super(new Pool<>(true, false, 8) {
                 @Override
                 protected Kryo create() {
-                    if (system instanceof ActorSystemRemote) {
-                        return ((ActorSystemRemote) system).createSerializer();
+                    if (system instanceof SerializerFactory) {
+                        return ((SerializerFactory) system).createSerializer();
                     } else {
                         return KryoBuilder.builder().apply(system); //TODO null system
                     }
@@ -440,5 +389,9 @@ public class KryoBuilder {
                 logger = system.getLogger();
             }
         }
+    }
+
+    public interface SerializerFactory {
+        Kryo createSerializer();
     }
 }

@@ -1,6 +1,7 @@
 package csl.actor.util;
 
 import csl.actor.*;
+import csl.actor.remote.ActorSystemRemote;
 
 import java.io.Serializable;
 import java.time.Duration;
@@ -14,11 +15,90 @@ import java.util.function.BiConsumer;
 
 /**
  * The actor managing computation stages of actor processing
+ * <pre>
+ *     Duration d = StagingActor.staging(system)
+ *         .withStartTime(instant)
+ *         .withId(filePath)
+ *         .withHandler(MyActor.class, (self) -> completionTask)
+ *         .start(topActor)
+ *         .get().getElapsedTime();
+ * </pre>
+ *
+ * <pre>
+ * Example:
+ * actor stages:
+ * *  a1 -&gt; {a2, a3} -&gt;  a4
+ *    * a1.nextStageActors() : {a2,a3}
+ *    * a2.nextStageActors() : {a4}
+ *    * a3.nextStageActors() : {a4}
+ *
+ * StagingActor s:
+ *    start(a1)
+ *       -&gt; StagingCompleted(...).redirectTo(...,{a1},false)
+ *          -&gt; s.tell(StagingNotification(...,true, 1, null)) //started=1
+ *             a1.tell(StagingWatcher(...))
+ *
+ * a1:
+ *     receive StagingWatcher w1
+ *       -&gt; w1.accept(a1)
+ *            -&gt; w1.retry(a1,...) ... //offered to the delayed mailbox of a1
+ *            -&gt; if the mailbox of a1 becomes empty,
+ *                w1.completed(a1)
+ *                 -&gt; a1.tell(StagingCompleted(...,a1,...))
+ *                     -&gt; receive StagingCompleted c1
+ *                          -&gt; c1.redirectTo(...,{a2,a3},true)
+ *                             -&gt; s.tell(StagingNotification(...,true,2,a1)) //start of a2,a3 : started=3
+ *                                s.tell(StagingNotification(...,false,1,a1)) //end of a1     : finishd=1
+ *                                a2.tell(StagingWatcher(...))
+ *                                a3.tell(StagingWatcher(...))
+ *
+ * a2,a3:
+ *    //almost same as a1
+ *      ... s.tell(StagingNotification(...,true,1,a4))...
+ *      ... s.tell(StagingNotification(...,true,1,a4))... //started=5, finished=3
+ *
+ *    //2 StagingWatchers are sent to a4
+ * a4:
+ *     recieve StagingWatcher w4_1, w4_2
+ *        ... -&gt; w4_1.completed(a4)
+ *               w4_2.completed(a4)
+ *                 ... -&gt; receive StagingCompleted c4_1  //started=5, finished=4
+ *                         -&gt; s.tell(StagingNotification(...,false,1,a4))
+ *                            s.tell(c4_1)
+ *                              -&gt; s.completed(c4_1)
+ *                                  -&gt; finshed:4 < started:5, nothing happen
+ *                 ... -&gt; receive StagingCompleted c4_2  //started=5, finished=5
+ *                         -&gt; s.tell(StagingNotification(...,false,1,a4))
+ *                            s.tell(c4_2)
+ *                              -&gt; s.completed(c4_2)
+ *                                  -&gt; finshed:5 &gt;= started:5,
+ *                                     -&gt; launchComplete():true
+ *                                         -&gt; s.completedActually(...,c4_2)
+ *                                          -&gt; s.runParticipantsHandlers(...,c4_2)
+ *                                           -&gt;  a1.tell(CompletionHandlerTask(...s,0,c4_2))
+ *                                               a2.tell(CompletionHandlerTask(...s,1,c4_2))
+ *                                               a3.tell(CompletionHandlerTask(...s,2,c4_2))
+ *                                               a4.tell(CompletionHandlerTask(...s,3,c4_2))
+ * a1,...,a4:
+ *   receive CompletionHandlerTask h1,...,h4
+ *     -&gt;  hN.accept(aN)
+ *       -&gt; executes handler
+ *          s.tell(StagingHandlerCompleted(...,c4_2))
+ *            -&gt; s.completeHandler(StagingHandlerCompleted(...))
+ *              ...
+ *               -&gt; completedHandlers &gt;= completedActorSize,
+ *                   s.completedActuallyHandler(c4_2)
+ *                    -&gt; future.complete(c4_2)
+ *
+ *
+ *
+ * </pre>
  */
 public class StagingActor extends ActorDefault {
     protected UUID id;
     protected StagingEntry entry;
     protected BiConsumer<StagingActor, StagingCompleted> handler;
+    protected List<CompletionHandlerForActor> participantsHandler = new ArrayList<>();
     protected boolean systemClose;
 
     protected Instant logLastTime;
@@ -83,12 +163,12 @@ public class StagingActor extends ActorDefault {
 
     public <ActorType> StagingActor withHandlerNonActor(Class<ActorType> actorType,
                                                               CallConsumerI<ActorType> handler) {
-        participantsHandler.add(new CompletionHandlerForActor(actorType, (self) -> {
-            handler.accept(actorType.cast(self));
-        }));
+        participantsHandler.add(new CompletionHandlerForActor(actorType,
+                (self) -> handler.accept(actorType.cast(self))));
         return this;
     }
 
+    @FunctionalInterface
     public interface CallConsumerI<ActorType> extends Serializable {
         void accept(ActorType type);
     }
@@ -101,7 +181,7 @@ public class StagingActor extends ActorDefault {
 
     public CompletableFuture<StagingCompleted> startActors(Iterable<? extends ActorRef> targets) {
         //create temporary completed
-        new StagingCompleted(entry.getTask(), this, this)
+        new StagingCompleted(entry.getTask(), null, this)
                 .redirectTo(this, targets, false);
         return entry.future();
     }
@@ -131,6 +211,8 @@ public class StagingActor extends ActorDefault {
         protected Object key;
         protected ActorRef terminalActor; //stagingActor
         protected long watcherSleepTimeMs;
+
+        public StagingTask() {}
 
         public StagingTask(Instant startTime, Object key, ActorRef terminalActor) {
             this.startTime = startTime;
@@ -184,11 +266,13 @@ public class StagingActor extends ActorDefault {
      * the task observing actor's mailbox;
      *   if no messages on the box, it sends {@link StagingCompleted} to the actor
      */
-    public static class StagingWatcher implements CallableMessage.CallableMessageConsumer<Actor>, Cloneable {
+    public static class StagingWatcher implements CallableMessage.CallableMessageConsumer<Actor>, Cloneable, ActorSystemRemote.SpecialMessage {
         public static final long serialVersionUID = 1L;
         protected StagingTask task;
         protected Object sender;
         protected int count;
+
+        public StagingWatcher() {}
 
         public StagingWatcher(StagingTask task, Object sender) {
             this.task = task;
@@ -266,9 +350,10 @@ public class StagingActor extends ActorDefault {
     }
 
     /**
-     * the completion handling actor.
+     * the completion handling message.
      *  An actor can handle this message manually for doing special actions at stage-completion.
      *  Then, the actor needs to explicitly call {@link #accept(Actor)} to the completion.
+     *  (For completion task, {@link StagingActor#withHandler(Class, CallableMessageConsumer)} is suitable)
      * <p>
      *  This message might be called multiple times for a same actor
      *    because of multiple actors specifying the same actor as the next stage.
@@ -285,13 +370,16 @@ public class StagingActor extends ActorDefault {
      *              c.accept(this);
      *          })
      *    </pre>
+     *
      */
-    public static class StagingCompleted implements CallableMessage.CallableMessageConsumer<Actor>, Serializable {
+    public static class StagingCompleted implements CallableMessage.CallableMessageConsumer<Actor>, Serializable, ActorSystemRemote.SpecialMessage {
         public static final long serialVersionUID = 1L;
         protected StagingTask task;
         protected Object sender;
         protected ActorRef completedActor;
         protected volatile Instant completedTime;
+
+        public StagingCompleted() {}
 
         public StagingCompleted(StagingTask task, ActorRef completedActor, Object sender) {
             this.task = task;
@@ -411,13 +499,19 @@ public class StagingActor extends ActorDefault {
         default void setNextStage(ActorRef ref) { }
     }
 
-    public static class StagingNotification implements Serializable {
+    /**
+     * The notification message sent back to {@link StagingActor}
+     *   from each participants.
+     */
+    public static class StagingNotification implements Serializable, ActorSystemRemote.SpecialMessage {
         public static final long serialVersionUID = 1L;
         protected StagingTask task;
         protected Object sender;
         protected boolean start; //or complete
         protected int taskCount;
         protected ActorRef actor;
+
+        public StagingNotification() { }
 
         public StagingNotification(StagingTask task, Object sender, boolean start, int taskCount, ActorRef actor) {
             this.task = task;
@@ -484,10 +578,18 @@ public class StagingActor extends ActorDefault {
             return task;
         }
 
+        /**
+         * @param n the number of stated tasks
+         * @return total started tasks including the n
+         */
         public long addStarted(int n) {
             return started.addAndGet(n);
         }
 
+        /**
+         * @param n the number of finished tasks
+         * @return total finished tasks including the n
+         */
         public long addFinished(int n) {
             return finished.addAndGet(n);
         }
@@ -504,6 +606,10 @@ public class StagingActor extends ActorDefault {
             this.completedTime = time;
         }
 
+        /**
+         * complete the {@link #future()} object
+         * @param c the completion object
+         */
         public synchronized void complete(StagingCompleted c) {
             future().complete(c);
         }
@@ -519,6 +625,11 @@ public class StagingActor extends ActorDefault {
             return completedTime;
         }
 
+        /**
+         * add an participant actor to the completed actors set.
+         *  it increments {@link #getCompletedActorSize()}
+         * @param actor the completed participant
+         */
         public synchronized void addCompletedActor(ActorRef actor) {
             if (completedActors == null) {
                 completedActors = new HashSet<>();
@@ -536,13 +647,22 @@ public class StagingActor extends ActorDefault {
             return completedActorSize.get();
         }
 
+        /**
+         * checks the launch of completion handlers
+         * @return true if successfully launched
+         */
+        public boolean launchComplete() {
+            return completedLaunched.compareAndSet(false, true);
+        }
+
+        /**
+         * increments the number of handler completed actors
+         * @return the total number of completed handlers
+         */
         public int addCompletedHandler() {
             return completedHandlers.incrementAndGet();
         }
 
-        public boolean launchComplete() {
-            return completedLaunched.compareAndSet(false, true);
-        }
     }
 
     public void notified(StagingNotification notification) {
@@ -560,8 +680,8 @@ public class StagingActor extends ActorDefault {
             started = e.getStarted();
             finished = e.addFinished(added);
         }
-        if (isRecordCompletedActors()) {
-            e.addCompletedActor(notification.getActor());
+        if (needsToRecordCompletedActors() && notification.getActor() != null) {
+            e.addCompletedActor(notification.getActor()); //note: the actor might not be the completed actor
         }
         if (added != 0) {
             notified(notification, started, finished);
@@ -619,7 +739,7 @@ public class StagingActor extends ActorDefault {
         e.setCompletedTime(Instant.now());
         completed.setCompletedTime(e.getCompletedTime());
 
-        if (isRecordCompletedActors()) {
+        if (needsToRecordCompletedActors()) { //i.e. it has participants handlers
             runParticipantsHandlers(e, completed);
         } else {
             completedActuallyHandler(completed);
@@ -654,7 +774,7 @@ public class StagingActor extends ActorDefault {
         }
     }
 
-    public static class StagingHandlerCompleted implements Serializable {
+    public static class StagingHandlerCompleted implements Serializable, ActorSystemRemote.SpecialMessage {
         public static final long serialVersionUID = 1L;
         protected ActorRef target;
         protected int handlerIndex;
@@ -683,9 +803,8 @@ public class StagingActor extends ActorDefault {
 
     //// completion handler for each participants
 
-    protected List<CompletionHandlerForActor> participantsHandler = new ArrayList<>();
 
-    public boolean isRecordCompletedActors() {
+    public boolean needsToRecordCompletedActors() {
         return !participantsHandler.isEmpty();
     }
 
@@ -703,7 +822,7 @@ public class StagingActor extends ActorDefault {
         }
     }
 
-    public static class CompletionHandlerTask implements CallableMessage.CallableMessageConsumer<Actor> {
+    public static class CompletionHandlerTask implements CallableMessage.CallableMessageConsumer<Actor>, ActorSystemRemote.SpecialMessage {
         public static final long serialVersionUID = 1L;
         protected ActorRef stagingActor;
         protected int index;
@@ -743,6 +862,8 @@ public class StagingActor extends ActorDefault {
         public static final long serialVersionUID = 1L;
         protected Class<?> actorType;
         protected CallableMessage.CallableMessageConsumer<Actor> handler;
+
+        public CompletionHandlerForActor() {}
 
         public CompletionHandlerForActor(Class<?> actorType, CallableMessage.CallableMessageConsumer<Actor> handler) {
             this.actorType = actorType;

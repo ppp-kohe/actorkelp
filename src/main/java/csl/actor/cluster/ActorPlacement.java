@@ -320,6 +320,8 @@ public interface ActorPlacement {
         public static final long serialVersionUID = 1L;
         protected List<AddressListEntry> cluster;
 
+        public AddressList() {}
+
         public AddressList(List<AddressListEntry> cluster) {
             this.cluster = cluster;
         }
@@ -345,6 +347,8 @@ public interface ActorPlacement {
         public static final long serialVersionUID = 1L;
         protected ActorAddress.ActorAddressRemoteActor placementActor;
         protected int threads;
+
+        public AddressListEntry() {}
 
         public AddressListEntry(ActorAddress.ActorAddressRemoteActor placementActor, int threads) {
             this.placementActor = placementActor;
@@ -397,6 +401,8 @@ public interface ActorPlacement {
         public static final long serialVersionUID = 1L;
         protected Serializable data;
 
+        public ActorCreationRequest() {}
+
         public ActorCreationRequest(Serializable data) {
             this.data = data;
         }
@@ -416,6 +422,8 @@ public interface ActorPlacement {
     class LeaveEntry implements Serializable {
         public static final long serialVersionUID = 1L;
         protected ActorAddress.ActorAddressRemoteActor placementActor;
+
+        public LeaveEntry() {}
 
         public LeaveEntry(ActorAddress.ActorAddressRemoteActor placementActor) {
             this.placementActor = placementActor;
@@ -598,38 +606,6 @@ public interface ActorPlacement {
         /** @return implementation field getter */
         public int getCurrentClusterCount() {
             return currentClusterCount;
-        }
-    }
-
-
-
-    static String toOutputFileComponent(boolean preferRight, int max, String str) {
-        return toOutputFileComponentMinus(preferRight, max, str.replaceAll("\\W+", "-"));
-    }
-
-    private static String toOutputFileComponentMinus(boolean preferRight, int max, String str) {
-        if (str.length() > max) {
-            int n = (preferRight ? str.lastIndexOf("-") : str.indexOf("-"));
-            if (n >= 0 && max > 8) {
-                int nextMax = Math.max(max / 2 - 1, 8);
-                String pre = toOutputFileComponentMinus(preferRight, nextMax, str.substring(0, n));
-                String pos = toOutputFileComponentMinus(preferRight, nextMax, str.substring(n + 1));
-                if (pre.length() + pos.length() + 1 > max) {
-                    if (pre.length() + 1 + 8 <= max) {
-                        return pre + "-" + Integer.toHexString(pos.hashCode());
-                    } else if (8 + 1 + pos.length() <= max) {
-                        return Integer.toHexString(pre.hashCode()) + "-" + pos;
-                    } else {
-                        return Integer.toHexString(str.hashCode());
-                    }
-                } else {
-                    return pre + "-" + pos;
-                }
-            } else {
-                return Integer.toHexString(str.hashCode());
-            }
-        } else {
-            return str;
         }
     }
 }

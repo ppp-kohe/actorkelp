@@ -4,8 +4,8 @@ import csl.actor.Actor;
 import csl.actor.Mailbox;
 import csl.actor.MailboxDefault;
 import csl.actor.Message;
-import csl.actor.kelp2.ActorKelp;
 import csl.actor.kelp2.ActorKelpFunctions.KeyComparator;
+import csl.actor.kelp2.ActorKelpSerializable;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -286,14 +286,14 @@ public class MailboxKelp implements Mailbox, Cloneable {
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})
-    public void serializeTo(ActorKelp.ActorKelpSerializable state) {
+    public void serializeTo(ActorKelpSerializable state) {
         state.setMessages(mailbox.getQueue().toArray(new Message[0])); //TODO mailbox serialization form: queue and saved file
         state.setHistograms(Arrays.stream(entries)
                 .map(HistogramEntry::getTree)
                 .collect(Collectors.toList()));
     }
 
-    public void deserializeFrom(ActorKelp.ActorKelpSerializable<?> state) {
+    public void deserializeFrom(ActorKelpSerializable<?> state) {
         mailbox.getQueue().addAll(Arrays.asList(state.messages));
         int i = 0;
         for (KeyHistograms.HistogramTree t : state.histograms) {

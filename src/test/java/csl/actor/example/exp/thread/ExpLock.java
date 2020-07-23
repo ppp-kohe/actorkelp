@@ -4,7 +4,7 @@ import csl.actor.*;
 import csl.actor.example.kelp.DebugBehavior;
 import csl.actor.kelp.ActorBehaviorBuilderKelp;
 import csl.actor.kelp.KeyHistograms;
-import csl.actor.cluster.PhaseShift;
+import csl.actor.kelp.PhaseShift;
 
 import java.util.*;
 import java.util.concurrent.TimeUnit;

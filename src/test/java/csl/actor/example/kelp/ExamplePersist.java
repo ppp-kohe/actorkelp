@@ -4,7 +4,7 @@ import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 import csl.actor.ActorBehavior;
 import csl.actor.ActorSystem;
-import csl.actor.cluster.PhaseShift;
+import csl.actor.kelp.PhaseShift;
 import csl.actor.kelp.ActorKelp;
 import csl.actor.kelp.Config;
 import csl.actor.kelp.KeyHistogramsPersistable;

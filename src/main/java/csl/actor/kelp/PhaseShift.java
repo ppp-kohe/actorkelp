@@ -1,4 +1,4 @@
-package csl.actor.cluster;
+package csl.actor.kelp;
 
 import csl.actor.*;
 
@@ -10,6 +10,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiConsumer;
 
+@Deprecated
 public class PhaseShift implements CallableMessage.CallableMessageConsumer<Actor>, Cloneable {
     public static final long serialVersionUID = 1L;
     protected Instant startTime;

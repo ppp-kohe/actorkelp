@@ -4,12 +4,13 @@ import com.esotericsoftware.kryo.io.Output;
 import csl.actor.*;
 import csl.actor.cluster.ConfigDeployment;
 import csl.actor.util.FileSplitter;
-import csl.actor.cluster.PhaseShift;
+import csl.actor.kelp.PhaseShift;
 import csl.actor.kelp.ActorKelp;
 import csl.actor.kelp.Config;
 import csl.actor.kelp.FileMapper;
 import csl.actor.kelp.KelpRoutingSplit;
 import csl.actor.remote.KryoBuilder;
+import csl.actor.util.PathModifier;
 
 import java.io.*;
 import java.nio.file.Files;
@@ -239,8 +240,8 @@ public class WordCount {
                 if (writer == null) {
                     String p = Paths.get(dst, "%a/wcout-" + getOutputFileHeader() + ".txt")
                             .toString();
-                    Path outFile = ConfigDeployment.getPathModifier(getSystem()).getExpanded(p);
-                    log("path: " + ConfigDeployment.getPathModifier(getSystem()) + ".get(" + p  +")" + "\n -> " + outFile);
+                    Path outFile = PathModifier.getPathModifier(getSystem()).getExpanded(p);
+                    log("path: " + PathModifier.getPathModifier(getSystem()) + ".get(" + p  +")" + "\n -> " + outFile);
                     Files.createDirectories(outFile.getParent());
                     writer = new PrintWriter(new FileWriter(outFile.toFile()));
                     flushTask = getSystem().getScheduledExecutor().scheduleAtFixedRate(() ->

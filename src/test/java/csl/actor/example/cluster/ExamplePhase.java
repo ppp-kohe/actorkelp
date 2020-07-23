@@ -2,7 +2,7 @@ package csl.actor.example.cluster;
 
 import csl.actor.*;
 import csl.actor.kelp.ActorKelp;
-import csl.actor.cluster.PhaseShift;
+import csl.actor.kelp.PhaseShift;
 
 import java.time.Instant;
 

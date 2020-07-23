@@ -1,9 +1,11 @@
 package csl.actor.kelp2;
 
 import com.esotericsoftware.kryo.Kryo;
+import com.esotericsoftware.kryo.KryoSerializable;
 import com.esotericsoftware.kryo.Serializer;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
+import com.esotericsoftware.kryo.serializers.DefaultSerializers;
 import csl.actor.Actor;
 import csl.actor.ActorRef;
 import csl.actor.ActorSystem;
@@ -20,7 +22,7 @@ public interface KelpStage<ActorType extends Actor> {
      * set the nextStage property of each shuffle-members to the next actor.
      *  <ol>
      *      <li>If the next is an original actor ({@link ActorKelp#isOriginal()}),
-     *          it uses {@link ActorKelp#shuffle()} as the actual next</li>
+     *          it uses {@link ActorKelp#shuffle(int)} as the actual next</li>
      *      <li>If the next is a remote (or local) reference,
      *          it sends synchronous task for doing the first step. </li>
      *      <li>If the next is a {@link ActorRefShuffle},
@@ -39,11 +41,13 @@ public interface KelpStage<ActorType extends Actor> {
 
     List<ActorRef> getMemberActors();
 
-    class KelpStageRefWrapper<ActorType extends Actor> implements KelpStage<ActorType>, Serializable {
+    class KelpStageRefWrapper<ActorType extends Actor> implements KelpStage<ActorType>, Serializable, KryoSerializable {
         public static final long serialVersionUID = 1L;
         protected transient ActorSystem system;
         protected Class<ActorType> actorType;
         protected ActorRef ref;
+
+        public KelpStageRefWrapper() {}
 
         public KelpStageRefWrapper(ActorSystem system, Class<ActorType> actorType, ActorRef ref) {
             this.system = system;
@@ -104,23 +108,38 @@ public interface KelpStage<ActorType extends Actor> {
         public List<ActorRef> getMemberActors() {
             return Collections.singletonList(ref);
         }
+
+        @SuppressWarnings("unchecked")
+        @Override
+        public void read(Kryo kryo, Input input) {
+            actorType = (Class<ActorType>) kryo.readClass(input).getType();
+            ref = (ActorRef) kryo.readClassAndObject(input);
+        }
+
+        @Override
+        public void write(Kryo kryo, Output output) {
+            kryo.writeClass(output, actorType);
+            kryo.writeClassAndObject(output, ref);
+        }
     }
 
     class KelpStageRefWrapperSerializer extends Serializer<KelpStageRefWrapper<?>> {
         protected ActorSystem system;
+        protected DefaultSerializers.KryoSerializableSerializer serializer;
 
         public KelpStageRefWrapperSerializer(ActorSystem system) {
             this.system = system;
+            serializer = new DefaultSerializers.KryoSerializableSerializer();
         }
 
         @Override
         public void write(Kryo kryo, Output output, KelpStageRefWrapper<?> actorRefShuffle) {
-            kryo.writeClassAndObject(output, actorRefShuffle);
+            serializer.write(kryo, output, actorRefShuffle);
         }
 
         @Override
         public KelpStageRefWrapper<?> read(Kryo kryo, Input input, Class<? extends KelpStageRefWrapper<?>> aClass) {
-            KelpStageRefWrapper<?> r = (KelpStageRefWrapper<?>) kryo.readClassAndObject(input);
+            KelpStageRefWrapper<?> r = (KelpStageRefWrapper<?>) serializer.read(kryo, input, aClass);
             if (r != null) {
                 r.setSystem(system);
             }

@@ -5,7 +5,7 @@ import csl.actor.ActorSystem;
 import csl.actor.ActorSystemDefault;
 import csl.actor.kelp.ActorKelp;
 import csl.actor.kelp.Config;
-import csl.actor.cluster.PhaseShift;
+import csl.actor.kelp.PhaseShift;
 
 import java.util.*;
 import java.util.function.BiPredicate;

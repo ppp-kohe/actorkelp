@@ -1,6 +1,7 @@
 package csl.actor.kelp2.behavior;
 
 import csl.actor.Actor;
+import csl.actor.CallableMessage;
 import csl.actor.kelp2.ActorKelp;
 
 import java.time.Duration;
@@ -114,11 +115,20 @@ public class HistogramEntry {
         }
     }
 
-    public static class TraversalProcess {
+    public static class TraversalProcess implements CallableMessage.CallableMessageConsumer<ActorKelp<?>> {
+        public static final long serialVersionUID = 1L;
         protected int entryId;
+
+        public TraversalProcess() {}
 
         public TraversalProcess(int entryId) {
             this.entryId = entryId;
+        }
+
+        @Override
+        public void accept(ActorKelp<?> self) {
+            self.getMailboxAsKelp()
+                    .processTraversal(self, entryId, self.getReducedSize());
         }
     }
 

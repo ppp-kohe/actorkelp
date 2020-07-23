@@ -6,6 +6,7 @@ import csl.actor.ActorSystem;
 import csl.actor.ActorSystemDefault;
 import csl.actor.remote.ActorSystemRemote;
 import csl.actor.remote.KryoBuilder;
+import csl.actor.util.PathModifier;
 
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -21,7 +22,7 @@ import java.util.function.Supplier;
 public class PersistentFileManager {
     protected String path;
     protected long fileCount;
-    protected ConfigDeployment.PathModifier pathModifier;
+    protected PathModifier pathModifier;
     protected ActorSystem.SystemLogger logger;
 
     protected KryoBuilder.SerializerFunction serializer;
@@ -48,7 +49,7 @@ public class PersistentFileManager {
             } else {
                 serializer = new KryoBuilder.SerializerPoolDefault(system);
             }
-            return new PersistentFileManager(path, serializer, ConfigDeployment.getPathModifier(system),
+            return new PersistentFileManager(path, serializer, PathModifier.getPathModifier(system),
                     system == null ? new ActorSystemDefault.SystemLoggerErr() : system.getLogger());
         }
     }
@@ -58,14 +59,14 @@ public class PersistentFileManager {
     }
 
     public PersistentFileManager(String path, KryoBuilder.SerializerFunction serializer,
-                                 ConfigDeployment.PathModifier pathModifier, ActorSystem.SystemLogger logger) {
+                                 PathModifier pathModifier, ActorSystem.SystemLogger logger) {
         this.path = path;
         this.serializer = serializer;
         this.pathModifier = pathModifier;
         this.logger = logger;
     }
 
-    public ConfigDeployment.PathModifier getPathModifier() {
+    public PathModifier getPathModifier() {
         return pathModifier;
     }
 
@@ -188,6 +189,8 @@ public class PersistentFileManager {
         protected String pathExpanded;
         protected long offset;
         protected transient PersistentFileManager manager;
+
+        public PersistentFileReaderSource() {}
 
         public PersistentFileReaderSource(String pathExpanded, long offset, PersistentFileManager manager) {
             this.pathExpanded = pathExpanded;

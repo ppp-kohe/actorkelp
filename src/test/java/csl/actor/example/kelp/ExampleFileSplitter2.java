@@ -2,7 +2,7 @@ package csl.actor.example.kelp;
 
 import csl.actor.ActorSystemDefault;
 import csl.actor.util.FileSplitter;
-import csl.actor.cluster.PhaseShift;
+import csl.actor.kelp.PhaseShift;
 import csl.actor.example.exp.thread.ExpLock;
 import csl.actor.kelp.Config;
 import csl.actor.kelp.FileMapper;

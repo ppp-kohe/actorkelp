@@ -5,7 +5,7 @@ import csl.actor.ActorRef;
 import csl.actor.ActorSystem;
 import csl.actor.cluster.ConfigDeployment;
 import csl.actor.util.FileSplitter;
-import csl.actor.cluster.PhaseShift;
+import csl.actor.util.PathModifier;
 
 import java.util.concurrent.CompletableFuture;
 
@@ -30,8 +30,8 @@ public class FileMapper extends ActorKelp<FileMapper> {
 
     public static FileSplitter splitter(ActorSystem system, Config config) {
         return config.fileMapperSplitByCount ?
-                FileSplitter.getWithSplitCount(config.fileMapperSplitCount, ConfigDeployment.getPathModifier(system)) :
-                FileSplitter.getWithSplitLength(config.fileMapperSplitLength, ConfigDeployment.getPathModifier(system));
+                FileSplitter.getWithSplitCount(config.fileMapperSplitCount, PathModifier.getPathModifier(system)) :
+                FileSplitter.getWithSplitLength(config.fileMapperSplitLength, PathModifier.getPathModifier(system));
     }
 
     @Override

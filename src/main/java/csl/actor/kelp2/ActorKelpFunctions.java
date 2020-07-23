@@ -21,6 +21,8 @@ public class ActorKelpFunctions {
     }
 
     public static class KeyExtractorClass<KeyType, ValueType> implements KeyExtractor<KeyType, ValueType> {
+        public static final long serialVersionUID = 1L;
+
         protected Class<ValueType> valueType;
         protected KeyExtractorFunction<ValueType, KeyType> keyExtractorFromValue;
 
@@ -49,6 +51,7 @@ public class ActorKelpFunctions {
     }
 
     public static class KeyExtractorList<KeyType, ValueType> implements KeyExtractor<KeyType, ValueType> {
+        public static final long serialVersionUID = 1L;
         protected List<KeyExtractor<KeyType, ?>> keyExtractors;
 
         public KeyExtractorList(List<KeyExtractor<KeyType, ?>> keyExtractors) {

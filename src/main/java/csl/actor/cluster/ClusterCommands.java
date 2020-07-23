@@ -268,6 +268,8 @@ public class ClusterCommands<AppConfType extends ConfigBase> {
         protected CommandTokenType type;
         protected String data;
 
+        public CommandToken() {}
+
         public CommandToken(CommandTokenType type, String data) {
             this.type = type;
             this.data = data;
@@ -578,6 +580,8 @@ public class ClusterCommands<AppConfType extends ConfigBase> {
         protected CommandBlock base;
         protected List<CommandToken> commands;
 
+        public CommandBlockLineContinue() {}
+
         public CommandBlockLineContinue(CommandBlock base, List<CommandToken> commands) {
             this.base = base;
             this.commands = commands;
@@ -610,6 +614,9 @@ public class ClusterCommands<AppConfType extends ConfigBase> {
         protected boolean isClass;
         protected CommandToken name;
         protected CommandBlock parent;
+
+        public CommandBlockNamed() {}
+
         public CommandBlockNamed(CommandToken indent, boolean isClass, CommandToken name, CommandBlock parent) {
             this.parent = parent;
             this.isClass = isClass;

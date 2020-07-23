@@ -5,14 +5,15 @@ import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 import csl.actor.*;
 import csl.actor.cluster.ActorPlacement;
-import csl.actor.cluster.ConfigDeployment;
 import csl.actor.cluster.PersistentFileManager;
 import csl.actor.kelp2.behavior.*;
 import csl.actor.remote.ActorAddress;
 import csl.actor.util.FileSplitter;
+import csl.actor.util.PathModifier;
 import csl.actor.util.StagingActor;
 
 import java.io.Serializable;
+import java.lang.annotation.*;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
@@ -56,6 +57,11 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
 
     public void setNameRandom() {
         name = getClass().getSimpleName() + "_" + UUID.randomUUID();
+        system.register(this);
+    }
+
+    public void setNameInternal(String name) {
+        this.name = name;
         system.register(this);
     }
 
@@ -290,6 +296,7 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
         }
 
         //clear histogram
+        //TODO avoid multiple execution?
         getMailboxAsKelp()
                 .processStageEnd(this, comp.getTask().getKey(), getReducedSize());
     }
@@ -314,7 +321,7 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
 
     public void processFileSplit(FileSplitter.FileSplit split) {
         if (fileSplitter == null) {
-            fileSplitter = FileSplitter.getWithSplitLength(getSplitLength(), ConfigDeployment.getPathModifier(system));
+            fileSplitter = FileSplitter.getWithSplitLength(getSplitLength(), PathModifier.getPathModifier(system));
         }
         try {
             if (split.getFileLength() == 0) {
@@ -375,87 +382,49 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
     }
 
     public Serializable toInternalState() {
-        return null;
+        try {
+            getPersistentFile();
+            return ActorKelpSerializable.getBuilder(getClass()).toState(getPersistentFile().getSerializer(), this);
+        } catch (Exception ex) {
+            throw new RuntimeException(ex);
+        }
     }
 
     public void setInternalState(Serializable data) {
-
-    }
-
-    public static class ActorKelpSerializable<SelfType extends ActorKelp<SelfType>> implements Serializable {
-        public static final long serialVersionUID = 1L;
-        public Class<SelfType> actorType;
-        public String name;
-        public ConfigKelp config;
-        public Message<?>[] messages;
-        public List<KeyHistograms.HistogramTree> histograms;
-        public Serializable internalState;
-
-        public ActorKelpSerializable(SelfType actor) {
-            init(actor);
-        }
-
-        protected void init(SelfType actor) {
-            initActorType(actor);
-            initName(actor);
-            initConfig(actor);
-            initInternalState(actor);
-        }
-
-        @SuppressWarnings("unchecked")
-        protected void initActorType(SelfType actor) {
-            actorType = (Class<SelfType>) actor.getClass();
-        }
-
-        protected void initName(SelfType actor) {
-            name = actor.getName();
-        }
-
-        protected void initConfig(SelfType actor) {
-            config = actor.getConfig();
-        }
-
-        protected void initInternalState(SelfType actor) {
-            internalState = actor.toInternalState();
-        }
-
-        public void setMessages(Message<?>[] messages) {
-            this.messages = messages;
-        }
-
-        public void setHistograms(List<KeyHistograms.HistogramTree> histograms) {
-            this.histograms = histograms;
-        }
-
-        public SelfType restore(ActorSystem system, long num, ConfigKelp config) throws Exception {
-            SelfType a = create(system, restoreName(num), config);
-            restoreSetNonOriginal(a);
-            restoreSetShuffleIndex(a, num);
-            restoreInit(a);
-            return a;
-        }
-
-        protected String restoreName(long num) {
-            return name == null ? ("$" + num) : name + "$" + num;
-        }
-
-        protected SelfType create(ActorSystem system, String name, ConfigKelp config) throws Exception {
-            return actorType.getConstructor(ActorSystem.class, String.class, ConfigKelp.class)
-                    .newInstance(system, name, config);
-        }
-
-        protected void restoreSetNonOriginal(SelfType actor) {
-            actor.setOriginal(false);
-        }
-
-        protected void restoreSetShuffleIndex(SelfType actor, long num) {
-            actor.setShuffleIndex((int) num);
-        }
-
-        protected void restoreInit(SelfType actor) {
-            actor.setInternalState(internalState);
+        try {
+            ActorKelpSerializable.getBuilder(getClass()).setState(this, data);
+        } catch (Exception ex) {
+            throw new RuntimeException(ex);
         }
     }
+
+    @Target(ElementType.FIELD)
+    @Retention(RetentionPolicy.RUNTIME)
+    public @interface TransferredState {
+        Merger merger() default MergerDefault.Default;
+    }
+
+    public @interface Merger { }
+
+    public enum MergerDefault implements Merger {
+        Default,
+        Add,
+        Multiply,
+        Mean,
+        Max,
+        Min,
+        None;
+
+        @Override
+        public Class<? extends Annotation> annotationType() {
+            return Merger.class;
+        }
+    }
+
+    public @interface MergerClass {
+        Class<? extends ActorKelpSerializable.MergerFunction> value();
+    }
+
 
     ////// reducedSize
 
