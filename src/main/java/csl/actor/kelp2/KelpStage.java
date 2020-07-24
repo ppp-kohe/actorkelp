@@ -41,6 +41,8 @@ public interface KelpStage<ActorType extends Actor> {
 
     List<ActorRef> getMemberActors();
 
+    ActorType merge();
+
     class KelpStageRefWrapper<ActorType extends Actor> implements KelpStage<ActorType>, Serializable, KryoSerializable {
         public static final long serialVersionUID = 1L;
         protected transient ActorSystem system;
@@ -120,6 +122,17 @@ public interface KelpStage<ActorType extends Actor> {
         public void write(Kryo kryo, Output output) {
             kryo.writeClass(output, actorType);
             kryo.writeClassAndObject(output, ref);
+        }
+
+        @SuppressWarnings({"unchecked", "rawtypes"})
+        @Override
+        public ActorType merge() {
+            if (ActorKelp.class.isAssignableFrom(actorType)) {
+                return (ActorType) new ActorKelpMerger(system, new ConfigKelp())
+                        .mergeToLocalSync(getMemberActors());
+            } else {
+                return null;
+            }
         }
     }
 

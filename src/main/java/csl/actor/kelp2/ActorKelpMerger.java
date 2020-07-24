@@ -1,54 +1,121 @@
 package csl.actor.kelp2;
 
-import csl.actor.*;
+import csl.actor.Actor;
+import csl.actor.ActorRef;
+import csl.actor.ActorSystem;
+import csl.actor.Message;
+import csl.actor.util.ResponsiveCalls;
 
-import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
-public class ActorKelpMerger {
-    public void merge(List<? extends ActorRef> members) {
-        int size = members.size() / 2;
-        MergingSplit s1 = new MergingSplit(null, null, members.subList(0, size));
-        MergingSplit s2 = new MergingSplit(null, null, members.subList(size, members.size()));
-        s1.go();
-        s2.go();
+public class ActorKelpMerger<ActorType extends ActorKelp<ActorType>> implements AutoCloseable {
+    protected ActorSystem system;
+    protected ExecutorService executor;
+    protected ConfigKelp config;
+
+    public ActorKelpMerger(ActorSystem system, ConfigKelp config) {
+        this.system = system;
+        this.config = config;
+        executor = Executors.newCachedThreadPool();
     }
 
-    public static class MergingSplit implements CallableMessage.CallableMessageConsumer<ActorKelp<?>> {
-        protected ActorRef actor;
-        protected MergingSplit parent;
-        protected List<? extends ActorRef> members;
+    @Override
+    public void close() {
+        executor.shutdown();
+    }
 
-        public MergingSplit(ActorRef actor, MergingSplit parent, List<? extends ActorRef> members) {
-            this.actor = actor;
-            this.parent = parent;
-            this.members = members;
-        }
-
-        public void go() {
-            members.get(0).tell(this);
-        }
-
-        @Override
-        public void accept(ActorKelp<?> self) {
-            if (members.size() == 2) {
-                ActorRef r = members.get(1);
-                new DelegateActor(self.getSystem(), self.getName(), r); //invalidate left
-                r.tell(new MergingSplitToRight(this, self.toSerializable()));
-            } else if (members.size() <= 1) {
-                //TODO
-
-            } else {
-                int size = members.size() / 2;
-                MergingSplit s1 = new MergingSplit(self, this, members.subList(0, size));
-                MergingSplit s2 = new MergingSplit(self, this, members.subList(size, members.size()));
-                s1.go();
-                s2.go();
+    @SuppressWarnings("unchecked")
+    public ActorType mergeToLocalSync(List<? extends ActorRef> mebers) {
+        ActorRef ref = mergeSync(mebers);
+        if (ref instanceof Actor) {
+            return (ActorType) ref;
+        } else {
+            try {
+                return (ActorType) toState(system, null, ref, false).restore(system, -1, config);
+            } catch (Exception ex) {
+                throw new RuntimeException(ex);
             }
         }
+    }
 
-        public MergingSplit getParent() {
-            return parent;
+    public ActorRef mergeSync(List<? extends ActorRef> members) {
+        try {
+            return mergeAsync(members).get();
+        } catch (Exception ex) {
+            throw new RuntimeException(ex);
+        }
+    }
+
+    public Future<ActorRef> mergeAsync(List<? extends ActorRef> members) {
+        if (members.isEmpty()) {
+            return null;
+        } else if (members.size() == 1) {
+            return CompletableFuture.completedFuture(members.get(0));
+        } else if (members.size() == 2) {
+            return mergeAsync(
+                    CompletableFuture.completedFuture(members.get(0)),
+                    CompletableFuture.completedFuture(members.get(1)));
+        } else {
+            int hs = members.size() / 2;
+            return mergeAsync(
+                    mergeAsync(members.subList(0, hs)),
+                    mergeAsync(members.subList(hs, members.size())));
+        }
+    }
+
+    public Future<ActorRef> mergeAsync(Future<ActorRef> l, Future<ActorRef> r) {
+        if (l == null) {
+            return r;
+        } else if (r == null) {
+            return l;
+        } else {
+            try {
+                return executor.submit(() -> merge(l.get(), r.get()));
+            } catch (Exception ex) {
+                system.getLogger().log(true, 0, ex, "error: %s : ", l, r);
+                return l;
+            }
+        }
+    }
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    public ActorRef merge(ActorRef l, ActorRef r) {
+        try {
+            return ResponsiveCalls.sendTask(system, l, (self) -> {
+                try {
+                    ActorKelpSerializable<?> anotherState = toState(self.getSystem(), l, r, true);
+                    ((ActorKelp<?>) self).merge((ActorKelpSerializable) anotherState);
+                    return self;
+                } catch (Exception ex) {
+                    self.getSystem().getLogger().log(true, 0, ex, "error: %s", self);
+                    return self;
+                }
+            }).get();
+        } catch (Exception ex) {
+            system.getLogger().log(true, 0, ex, "error: %s : ", l, r);
+            return l;
+        }
+    }
+
+    public ActorKelpSerializable<?> toState(ActorSystem system, ActorRef l, ActorRef r, boolean disable) {
+        try {
+            return ResponsiveCalls.sendTask(system, r, (another) -> {
+                if (disable) {
+                    new DelegateActor(another.getSystem(), another.getName(), l);
+
+                    //already merged actors
+                    ((ActorKelp<?>) another).getMergedActorNames().forEach(n ->
+                            new DelegateActor(another.getSystem(), n, l));
+                }
+                return ((ActorKelp<?>) another).toSerializable();
+            }).get();
+        } catch (Exception ex) {
+            system.getLogger().log(true, 0, ex, "error: %s", r);
+            return null;
         }
     }
 
@@ -62,42 +129,12 @@ public class ActorKelpMerger {
 
         @Override
         public void processMessage(Message<?> message) {
-            target.tellMessage(message);
-        }
-    }
-
-    public static class MergingSplitToRight implements CallableMessage.CallableMessageConsumer<ActorKelp<?>> {
-        protected MergingSplit split;
-        protected ActorKelpSerializable<?> left;
-
-        public MergingSplitToRight(MergingSplit split, ActorKelpSerializable<?> left) {
-            this.split = split;
-            this.left = left;
+            target.tellMessage(message.renewTarget(target));
         }
 
         @Override
-        public void accept(ActorKelp<?> self) {
-            new MergingSplitCompleted()
-        }
-    }
-
-    public static class MergingSplitCompleted implements CallableMessage.CallableMessageConsumer<ActorKelp<?>> {
-        protected MergingSplit split;
-        protected ActorRef mergedActor;
-
-        public MergingSplitCompleted(MergingSplit split, ActorRef mergedActor) {
-            this.split = split;
-            this.mergedActor = mergedActor;
-        }
-
-        @Override
-        public void accept(ActorKelp<?> self) {
-            //boolean end = self.addCompleted(split)
-            boolean end = false;
-            List<ActorRef> leftAndRight = new ArrayList<>();
-            if (end) {
-                new MergingSplit(split, leftAndRight).go();
-            }
+        public String toString() {
+            return getClass().getSimpleName() + "(" + name + " -> " + target + ")";
         }
     }
 }

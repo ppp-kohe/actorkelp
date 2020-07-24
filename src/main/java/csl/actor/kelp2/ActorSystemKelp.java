@@ -6,7 +6,6 @@ import csl.actor.cluster.ActorSystemCluster;
 import csl.actor.cluster.ConfigDeployment;
 import csl.actor.remote.ActorAddress;
 import csl.actor.remote.ActorSystemRemote;
-import csl.actor.remote.KryoBuilder;
 import csl.actor.util.ConfigBase;
 
 import java.time.Duration;

@@ -6,14 +6,20 @@ import com.esotericsoftware.kryo.io.Output;
 import csl.actor.*;
 import csl.actor.cluster.ActorPlacement;
 import csl.actor.cluster.PersistentFileManager;
-import csl.actor.kelp2.behavior.*;
+import csl.actor.kelp2.behavior.ActorBehaviorBuilderKelp;
+import csl.actor.kelp2.behavior.ActorBehaviorKelp;
+import csl.actor.kelp2.behavior.HistogramEntry;
+import csl.actor.kelp2.behavior.MailboxKelp;
 import csl.actor.remote.ActorAddress;
 import csl.actor.util.FileSplitter;
 import csl.actor.util.PathModifier;
 import csl.actor.util.StagingActor;
 
 import java.io.Serializable;
-import java.lang.annotation.*;
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
@@ -29,6 +35,8 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
     protected ConfigKelp config;
     protected boolean original = true;
     protected int shuffleIndex = -1;
+    protected int mergedCount = 1;
+    protected Set<String> mergedActorNames = Collections.emptySet();
 
     public ActorKelp(ActorSystem system, String name, Mailbox mailbox, ActorBehavior behavior, ConfigKelp config) {
         super(system, name, mailbox, behavior);
@@ -61,6 +69,9 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
     }
 
     public void setNameInternal(String name) {
+        if (this.name != null) {
+            system.unregister(this);
+        }
         this.name = name;
         system.register(this);
     }
@@ -82,6 +93,22 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
 
     public void setShuffleIndex(int shuffleIndex) {
         this.shuffleIndex = shuffleIndex;
+    }
+
+    public void setMergedCount(int mergedCount) {
+        this.mergedCount = mergedCount;
+    }
+
+    public int getMergedCount() {
+        return mergedCount;
+    }
+
+    public void setMergedActorNames(Set<String> mergedActorNames) {
+        this.mergedActorNames = mergedActorNames;
+    }
+
+    public Set<String> getMergedActorNames() {
+        return mergedActorNames;
     }
 
     ///////////// config
@@ -378,13 +405,13 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
 
     @SuppressWarnings("unchecked")
     public ActorKelpSerializable<SelfType> toSerializable() {
-        return new ActorKelpSerializable<SelfType>((SelfType) this);
+        return new ActorKelpSerializable<>((SelfType) this);
     }
 
     public Serializable toInternalState() {
         try {
-            getPersistentFile();
-            return ActorKelpSerializable.getBuilder(getClass()).toState(getPersistentFile().getSerializer(), this);
+            return ActorKelpSerializable.getBuilder(getClass())
+                    .toState(getPersistentFile().getSerializer(), this);
         } catch (Exception ex) {
             throw new RuntimeException(ex);
         }
@@ -392,7 +419,26 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
 
     public void setInternalState(Serializable data) {
         try {
-            ActorKelpSerializable.getBuilder(getClass()).setState(this, data);
+            ActorKelpSerializable.getBuilder(getClass())
+                    .setState(this, data);
+        } catch (Exception ex) {
+            throw new RuntimeException(ex);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    public void merge(ActorKelpSerializable<SelfType> another) {
+        another.mergeTo((SelfType) this);
+    }
+
+    public void mergeInternalState(ActorKelpSerializable<SelfType> another, ActorKelpSerializable.MergingContext context, Serializable data) {
+        mergeInternalState(context, data);
+    }
+
+    public void mergeInternalState(ActorKelpSerializable.MergingContext context, Serializable data) {
+        try {
+            ActorKelpSerializable.getBuilder(getClass())
+                    .merge(context, this, data);
         } catch (Exception ex) {
             throw new RuntimeException(ex);
         }
@@ -401,12 +447,15 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
     @Target(ElementType.FIELD)
     @Retention(RetentionPolicy.RUNTIME)
     public @interface TransferredState {
-        Merger merger() default MergerDefault.Default;
+        MergerOpType mergeType() default MergerOpType.Default;
+        Class<? extends ActorKelpMergerFunctions.MergerFunction<?>> mergeFunc()
+                default ActorKelpMergerFunctions.MergerFunctionDefault.class;
+        boolean mergeOnly() default false;
     }
 
     public @interface Merger { }
 
-    public enum MergerDefault implements Merger {
+    public enum MergerOpType {
         Default,
         Add,
         Multiply,
@@ -414,15 +463,6 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
         Max,
         Min,
         None;
-
-        @Override
-        public Class<? extends Annotation> annotationType() {
-            return Merger.class;
-        }
-    }
-
-    public @interface MergerClass {
-        Class<? extends ActorKelpSerializable.MergerFunction> value();
     }
 
 
@@ -459,6 +499,10 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
         }
     }
 
+    public ActorRefShuffleKelp<SelfType> shuffle() {
+        return shuffle(Integer.MAX_VALUE);
+    }
+
     @SuppressWarnings("unchecked")
     public ActorRefShuffleKelp<SelfType> shuffle(int bufferSizeMax) {
         ActorKelpSerializable<SelfType> serialized = toSerializable(); //TODO without mailbox
@@ -472,7 +516,7 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
                 getSystem(),
                 ActorRefShuffle.createEntries(
                         IntStream.range(0, partitions)
-                            .mapToObj(i -> createAndPlace(place, serialized, i))
+                            .mapToObj(i -> createAndPlaceShuffle(place, serialized, i))
                             .collect(Collectors.toList()),
                         bufferSize,
                         ActorRefShuffle.refToHost(hostIncludePort)),
@@ -485,7 +529,7 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
     protected ActorRefShuffleKelp<SelfType> createShuffle(ActorSystem system, Map<ActorAddress, List<ActorRefShuffle.ShuffleEntry>> entries,
                                                           List<ActorKelpFunctions.KeyExtractor<?, ?>> keyExtractors, int bufferSize, boolean hostIncludePort,
                                                           Class<SelfType> actorType) {
-        return new ActorRefShuffleKelp<>(system, entries, keyExtractors, bufferSize, hostIncludePort, actorType);
+        return new ActorRefShuffleKelp<>(system, entries, keyExtractors, bufferSize, hostIncludePort, actorType, config);
     }
 
     @SuppressWarnings("unchecked")
@@ -498,9 +542,9 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
                 .collect(Collectors.toList());
     }
 
-    protected ActorRef createAndPlace(ActorPlacement place, ActorKelpSerializable<SelfType> serialized, int i) {
+    protected ActorRef createAndPlaceShuffle(ActorPlacement place, ActorKelpSerializable<SelfType> serialized, int i) {
         try {
-            Actor a = serialized.restore(system, i, getConfig());
+            Actor a = serialized.restoreShuffle(system, i, getConfig());
             if (place != null) {
                 return place.place(a);
             } else {
@@ -511,18 +555,25 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
         }
     }
 
-    public static class ActorRefShuffleKelp<ActorType extends Actor> extends ActorRefShuffle implements KelpStage<ActorType> {
+    /**
+     * called when creation as a shuffle member
+     */
+    public void initShuffle() { }
+
+    public static class ActorRefShuffleKelp<ActorType extends ActorKelp<ActorType>> extends ActorRefShuffle implements KelpStage<ActorType> {
         public static final long serialVersionUID = 1L;
         protected Class<?> actorType;
+        protected ConfigKelp config;
 
         public ActorRefShuffleKelp() {
         }
 
         public ActorRefShuffleKelp(ActorSystem system, Map<ActorAddress, List<ShuffleEntry>> entries,
                                    List<ActorKelpFunctions.KeyExtractor<?, ?>> keyExtractors, int bufferSize, boolean hostIncludePort,
-                                   Class<ActorType> actorType) {
+                                   Class<ActorType> actorType, ConfigKelp config) {
             super(system, entries, keyExtractors, bufferSize, hostIncludePort);
             this.actorType = actorType;
+            this.config = config;
         }
 
         @Override
@@ -547,6 +598,12 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
             super.read(kryo, input);
             actorType = kryo.readClass(input).getType();
         }
+
+        public ActorType merge() {
+            try (ActorKelpMerger<ActorType> m = new ActorKelpMerger<>(system, config)) {
+                return m.mergeToLocalSync(getMemberActors());
+            }
+        }
     }
 
     @Override
@@ -566,7 +623,7 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
     @SuppressWarnings("unchecked")
     public static <NextActorType extends Actor> KelpStage<NextActorType> toKelpStage(ActorSystem system, Class<NextActorType> actorType, ActorRef ref) {
         if (ref instanceof ActorRefShuffleKelp<?>) {
-            return (ActorRefShuffleKelp<NextActorType>) ref;
+            return (KelpStage<NextActorType>) ref;
         } else {
             return new KelpStageRefWrapper<>(system, actorType, ref);
         }
@@ -575,5 +632,11 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
     @Override
     public List<ActorRef> getMemberActors() {
         return Collections.emptyList();
+    }
+
+    @SuppressWarnings("unchecked")
+    @Override
+    public SelfType merge() {
+        return (SelfType) this;
     }
 }
