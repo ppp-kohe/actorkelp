@@ -29,7 +29,7 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends ActorDefault
-        implements StagingActor.StagingSupported, ActorKelpFileReader, KelpStage<SelfType> {
+        implements StagingActor.StagingSupported, ActorKelpFileReader<SelfType>, KelpStage<SelfType> {
     protected ActorRef nextStage;
     protected FileSplitter fileSplitter;
     protected ConfigKelp config;

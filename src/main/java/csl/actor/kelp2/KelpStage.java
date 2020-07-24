@@ -9,6 +9,7 @@ import com.esotericsoftware.kryo.serializers.DefaultSerializers;
 import csl.actor.Actor;
 import csl.actor.ActorRef;
 import csl.actor.ActorSystem;
+import csl.actor.Message;
 import csl.actor.util.ResponsiveCalls;
 import csl.actor.util.StagingActor;
 
@@ -16,7 +17,7 @@ import java.io.Serializable;
 import java.util.Collections;
 import java.util.List;
 
-public interface KelpStage<ActorType extends Actor> {
+public interface KelpStage<ActorType extends Actor> extends ActorRef {
 
     /**
      * set the nextStage property of each shuffle-members to the next actor.
@@ -133,6 +134,11 @@ public interface KelpStage<ActorType extends Actor> {
             } else {
                 return null;
             }
+        }
+
+        @Override
+        public void tellMessage(Message<?> message) {
+            ref.tellMessage(message);
         }
     }
 

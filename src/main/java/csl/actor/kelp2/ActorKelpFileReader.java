@@ -7,7 +7,7 @@ import java.time.Instant;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 
-public interface ActorKelpFileReader extends ActorRef  {
+public interface ActorKelpFileReader<SelfType extends ActorKelp<SelfType>> extends ActorRef, KelpStage<SelfType>  {
     default CompletableFuture<StagingActor.StagingCompleted> startReading(String path) {
         return startReading(path, Instant.now());
     }
