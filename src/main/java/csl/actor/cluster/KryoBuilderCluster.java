@@ -11,7 +11,7 @@ import java.util.function.Function;
 
 public class KryoBuilderCluster extends KryoBuilder {
     public static Function<ActorSystem, Kryo> builder() {
-        return builder(KryoBuilderCluster::new);
+        return builder(new Creator(KryoBuilderCluster.class));
     }
 
     @Override

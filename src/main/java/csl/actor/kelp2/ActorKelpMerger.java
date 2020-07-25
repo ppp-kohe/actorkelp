@@ -1,11 +1,9 @@
 package csl.actor.kelp2;
 
-import csl.actor.Actor;
-import csl.actor.ActorRef;
-import csl.actor.ActorSystem;
-import csl.actor.Message;
+import csl.actor.*;
 import csl.actor.util.ResponsiveCalls;
 
+import java.io.Serializable;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
@@ -35,7 +33,8 @@ public class ActorKelpMerger<ActorType extends ActorKelp<ActorType>> implements 
             return (ActorType) ref;
         } else {
             try {
-                return (ActorType) toState(system, null, ref, false).restore(system, -1, config);
+                ActorKelpSerializable<?> k = toState(system, null, ref, false);
+                return (ActorType) (k == null ? null : k.restore(system, -1, config));
             } catch (Exception ex) {
                 throw new RuntimeException(ex);
             }
@@ -76,46 +75,82 @@ public class ActorKelpMerger<ActorType extends ActorKelp<ActorType>> implements 
             try {
                 return executor.submit(() -> merge(l.get(), r.get()));
             } catch (Exception ex) {
-                system.getLogger().log(true, 0, ex, "error: %s : ", l, r);
+                config.log(ex, "error: %s : ", l, r);
                 return l;
             }
         }
     }
 
-    @SuppressWarnings({"unchecked", "rawtypes"})
     public ActorRef merge(ActorRef l, ActorRef r) {
         try {
-            return ResponsiveCalls.sendTask(system, l, (self) -> {
-                try {
-                    ActorKelpSerializable<?> anotherState = toState(self.getSystem(), l, r, true);
-                    ((ActorKelp<?>) self).merge((ActorKelpSerializable) anotherState);
-                    return self;
-                } catch (Exception ex) {
-                    self.getSystem().getLogger().log(true, 0, ex, "error: %s", self);
-                    return self;
-                }
-            }).get();
+            return ResponsiveCalls.sendTask(system, l, new MergeTask(l, r)).get();
         } catch (Exception ex) {
-            system.getLogger().log(true, 0, ex, "error: %s : ", l, r);
+            config.log(ex, "error: %s : ", l, r);
             return l;
         }
     }
 
-    public ActorKelpSerializable<?> toState(ActorSystem system, ActorRef l, ActorRef r, boolean disable) {
-        try {
-            return ResponsiveCalls.sendTask(system, r, (another) -> {
-                if (disable) {
-                    new DelegateActor(another.getSystem(), another.getName(), l);
+    public static class MergeTask implements Serializable, CallableMessage<Actor, ActorRef> {
+        public static final long serialVersionUID = -1;
 
-                    //already merged actors
-                    ((ActorKelp<?>) another).getMergedActorNames().forEach(n ->
-                            new DelegateActor(another.getSystem(), n, l));
-                }
-                return ((ActorKelp<?>) another).toSerializable();
-            }).get();
+        protected ActorRef l;
+        protected ActorRef r;
+
+        public MergeTask() {}
+
+        public MergeTask(ActorRef l, ActorRef r) {
+            this.l = l;
+            this.r = r;
+        }
+
+        @SuppressWarnings({"unchecked", "rawtypes"})
+        @Override
+        public ActorRef call(Actor self) {
+            try {
+                ActorKelpSerializable<?> anotherState = toState(self.getSystem(), l, r, true);
+                ((ActorKelp<?>) self).merge((ActorKelpSerializable) anotherState);
+                return self;
+            } catch (Exception ex) {
+                self.getSystem().getLogger().log(true, 0, ex, "error: %s", self);
+                return self;
+            }
+        }
+    }
+
+    public static ActorKelpSerializable<?> toState(ActorSystem system, ActorRef l, ActorRef r, boolean disable) {
+        try {
+            return ResponsiveCalls.sendTask(system, r, new ToStateTask(l, disable)).get();
         } catch (Exception ex) {
             system.getLogger().log(true, 0, ex, "error: %s", r);
             return null;
+        }
+    }
+
+
+    public static class ToStateTask implements Serializable, CallableMessage<Actor, ActorKelpSerializable<?>> {
+        public static final long serialVersionUID = -1;
+        protected ActorRef l;
+        protected boolean disable;
+
+        public ToStateTask() {}
+
+        public ToStateTask(ActorRef l, boolean disable) {
+            this.l = l;
+            this.disable = disable;
+        }
+
+        @Override
+        public ActorKelpSerializable<?> call(Actor another) {
+            if (disable) {
+                new DelegateActor(another.getSystem(), another.getName(), l);
+
+                //already merged actors
+                ((ActorKelp<?>) another).getMergedActorNames().forEach(n ->
+                        new DelegateActor(another.getSystem(), n, l));
+            }
+            ActorKelpSerializable<?> s = ((ActorKelp<?>) another).toSerializable();
+            s.internalStateUsed = true;
+            return s;
         }
     }
 

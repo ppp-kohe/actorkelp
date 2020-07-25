@@ -10,6 +10,7 @@ public class ConfigKelp extends ConfigBase {
     public int mailboxOnMemorySize = 1_000;
     public int logColor = 17;
     public boolean logSplit = true;
+    public String logHeader = "";
 
     public long systemHostUpdateMs = 3_000;
     public int systemMaxBundle = 30;
@@ -30,4 +31,19 @@ public class ConfigKelp extends ConfigBase {
     public float pruneGreaterThanLeafThresholdFactor = 2f;
     public float pruneLessThanNonZeroLeafRate = 0.2f;
     public int mailboxThreshold = 1000;
+
+
+    @Override
+    public int getLogColorDefault() {
+        return logColor;
+    }
+
+    @Override
+    protected FormatAndArgs logMessageHeader() {
+        if (logHeader.isEmpty()) {
+            return super.logMessageHeader();
+        } else {
+            return super.logMessageHeader().append(new FormatAndArgs("%s ", logHeader));
+        }
+    }
 }

@@ -2,7 +2,6 @@ package csl.actor.kelp2;
 
 import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.KryoSerializable;
-import com.esotericsoftware.kryo.Serializer;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 import com.esotericsoftware.kryo.serializers.DefaultSerializers;
@@ -10,6 +9,7 @@ import csl.actor.Actor;
 import csl.actor.ActorRef;
 import csl.actor.ActorSystem;
 import csl.actor.Message;
+import csl.actor.remote.ActorRefRemoteSerializer;
 import csl.actor.util.ResponsiveCalls;
 import csl.actor.util.StagingActor;
 
@@ -44,7 +44,11 @@ public interface KelpStage<ActorType extends Actor> extends ActorRef {
 
     ActorType merge();
 
-    class KelpStageRefWrapper<ActorType extends Actor> implements KelpStage<ActorType>, Serializable, KryoSerializable {
+    default void setSystemBySerializer(ActorSystem system) { }
+
+    default void flush() {}
+
+    class KelpStageRefWrapper<ActorType extends Actor> implements KelpStage<ActorType>, Serializable, KryoSerializable, StagingActor.StagingNonSubject {
         public static final long serialVersionUID = 1L;
         protected transient ActorSystem system;
         protected Class<ActorType> actorType;
@@ -140,29 +144,68 @@ public interface KelpStage<ActorType extends Actor> extends ActorRef {
         public void tellMessage(Message<?> message) {
             ref.tellMessage(message);
         }
+
+        @Override
+        public String toString() {
+            return getClass().getSimpleName() + "(" + this.actorType.getName() + ", " + ref + ")";
+        }
+
+        @Override
+        public List<ActorRef> getStagingSubjectActors() {
+            flush();
+            return getMemberActors();
+        }
     }
 
-    class KelpStageRefWrapperSerializer extends Serializer<KelpStageRefWrapper<?>> {
-        protected ActorSystem system;
+    int BYTE_MARK_REF = 0;
+    int BYTE_MARK_SHUFFLE = 1;
+
+    class KelpStageSerializer extends ActorRefRemoteSerializer<ActorRef> {
         protected DefaultSerializers.KryoSerializableSerializer serializer;
 
-        public KelpStageRefWrapperSerializer(ActorSystem system) {
-            this.system = system;
+        public KelpStageSerializer(ActorSystem system) {
+            super(system);
             serializer = new DefaultSerializers.KryoSerializableSerializer();
         }
 
         @Override
-        public void write(Kryo kryo, Output output, KelpStageRefWrapper<?> actorRefShuffle) {
-            serializer.write(kryo, output, actorRefShuffle);
+        public void write(Kryo kryo, Output output, ActorRef ref) {
+            if ((ref instanceof KelpStage && ref instanceof KryoSerializable) ||
+                ref instanceof ActorRefShuffle) { //ActorRefShuffle is KryoSerializable but not a KelpStage
+                output.writeByte(BYTE_MARK_SHUFFLE);
+                serializer.write(kryo, output, (KryoSerializable) ref);
+            } else {
+                output.writeByte(BYTE_MARK_REF);
+                super.write(kryo, output, ref);
+            }
+        }
+
+        @SuppressWarnings("unchecked")
+        @Override
+        public ActorRef read(Kryo kryo, Input input, Class<? extends ActorRef> aClass) {
+            int n = input.readByte();
+            if (n == BYTE_MARK_SHUFFLE) {
+                ActorRef r = (ActorRef) serializer.read(kryo, input, (Class<? extends KryoSerializable>) aClass);
+                if (r != null) {
+                    if (r instanceof KelpStage<?>) {
+                        ((KelpStage<?>) r).setSystemBySerializer(getRemoteSystem());
+                    } else if (r instanceof ActorRefShuffle) {
+                        ((ActorRefShuffle) r).setSystemBySerializer(getRemoteSystem());
+                    }
+                }
+                return r;
+            } else {
+                return super.read(kryo, input, aClass);
+            }
         }
 
         @Override
-        public KelpStageRefWrapper<?> read(Kryo kryo, Input input, Class<? extends KelpStageRefWrapper<?>> aClass) {
-            KelpStageRefWrapper<?> r = (KelpStageRefWrapper<?>) serializer.read(kryo, input, aClass);
-            if (r != null) {
-                r.setSystem(system);
+        public ActorRef copy(Kryo kryo, ActorRef original) {
+            if (original instanceof ActorRefShuffle) {
+                return ((ActorRefShuffle) original).use();
+            } else {
+                return original;
             }
-            return r;
         }
     }
 }

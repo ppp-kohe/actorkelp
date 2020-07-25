@@ -5,6 +5,7 @@ import csl.actor.cluster.PersistentFileManager;
 import csl.actor.example.ExampleSerialize;
 import csl.actor.kelp.*;
 import csl.actor.kelp2.ActorRefShuffle;
+import csl.actor.kelp2.ActorSystemKelp;
 import csl.actor.remote.ActorAddress;
 import csl.actor.remote.KryoBuilder;
 
@@ -18,7 +19,7 @@ public class ExampleSerializeKelp extends ExampleSerialize {
     KryoBuilder.SerializerPoolDefault p;
     ActorSystemDefault system;
     public void run() {
-        system = new ActorSystemDefault();
+        system = new ActorSystemKelp.ActorSystemDefaultForKelp();
         p = new KryoBuilder.SerializerPoolDefault(system);
 
         writeRead(p, new ActorRefShuffle(system,

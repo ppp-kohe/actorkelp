@@ -7,6 +7,7 @@ import csl.actor.cluster.KryoBuilderCluster;
 import csl.actor.kelp2.behavior.ActorBehaviorKelp;
 import csl.actor.kelp2.behavior.HistogramEntry;
 import csl.actor.kelp2.behavior.KeyHistograms;
+import csl.actor.kelp2.behavior.KeyHistogramsPersistable;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -16,12 +17,15 @@ import java.util.function.Function;
 public class KryoBuilderKelp extends KryoBuilderCluster {
 
     public static Function<ActorSystem, Kryo> builder() {
-        return builder(KryoBuilderKelp::new);
+        return builder(new Creator(KryoBuilderKelp.class));
     }
 
     protected void buildRegisterActorRef(Kryo kryo) {
-        kryo.addDefaultSerializer(ActorRef.class, new ActorRefShuffle.ActorRefShuffleSerializer(system)); //for sub-types
-        kryo.addDefaultSerializer(KelpStage.KelpStageRefWrapper.class, new KelpStage.KelpStageRefWrapperSerializer(system));
+        KelpStage.KelpStageSerializer ss = new KelpStage.KelpStageSerializer(system);
+        kryo.addDefaultSerializer(ActorRef.class, ss); //for sub-types
+
+        kryo.register(ActorRefShuffle.class, ss);
+        kryo.register(KelpStage.KelpStageRefWrapper.class, ss);
     }
 
     @Override
@@ -29,7 +33,6 @@ public class KryoBuilderKelp extends KryoBuilderCluster {
         List<Class<?>> cs = new ArrayList<>(super.getActorClasses());
 
         cs.addAll(Arrays.asList(
-                ActorKelpSerializable.class,
                 ActorKelp.ActorRefShuffleKelp.class,
                 ActorKelp.MessageBundle.class,
 
@@ -42,13 +45,16 @@ public class KryoBuilderKelp extends KryoBuilderCluster {
                 ActorKelpFunctions.KeyExtractorFunction.class,
                 ActorKelpFunctions.KeyExtractorList.class,
 
+                ActorKelpMerger.MergeTask.class,
+                ActorKelpMerger.ToStateTask.class,
+
+                ActorKelpSerializable.class,
+
                 ActorRefShuffle.ConnectTask.class,
                 ActorRefShuffle.ShuffleEntry.class,
                 ActorRefShuffle.ToShuffleTask.class,
 
                 ConfigKelp.class,
-
-                KelpStage.KelpStageRefWrapper.class,
 
                 //behavior
                 ActorBehaviorKelp.HistogramNodeLeaf1.class,
@@ -68,7 +74,19 @@ public class KryoBuilderKelp extends KryoBuilderCluster {
                 KeyHistograms.HistogramNodeLeaf.class,
                 KeyHistograms.HistogramNodeLeafMap.class,
                 KeyHistograms.HistogramNodeTree.class,
-                KeyHistograms.HistogramTree.class
+                KeyHistograms.HistogramTree.class,
+
+                KeyHistogramsPersistable.HistogramLeafCellOnStorage.class,
+                KeyHistogramsPersistable.HistogramLeafCellOnStorageFile.class,
+                KeyHistogramsPersistable.HistogramLeafListPersistable.class,
+                KeyHistogramsPersistable.HistogramNodeLeafOnStorage.class,
+                KeyHistogramsPersistable.HistogramNodeTreeOnStorage.class,
+                KeyHistogramsPersistable.HistogramPersistentOperationType.class,
+                KeyHistogramsPersistable.HistogramTreePersistable.class,
+                KeyHistogramsPersistable.NodeTreeData.class,
+                KeyHistogramsPersistable.PersistentFileReaderSourceWithSize.class,
+                KeyHistogramsPersistable.PutIndexHistory.class
+
         ));
 
         return cs;

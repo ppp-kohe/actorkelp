@@ -9,7 +9,6 @@ import csl.actor.*;
 import csl.actor.kelp2.ActorKelpFunctions.KeyExtractor;
 import csl.actor.remote.ActorAddress;
 import csl.actor.remote.ActorRefRemote;
-import csl.actor.remote.ActorRefRemoteSerializer;
 import csl.actor.util.ResponsiveCalls;
 import csl.actor.util.StagingActor;
 
@@ -22,7 +21,7 @@ import java.util.function.IntFunction;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
-public class ActorRefShuffle implements ActorRef, Serializable, Cloneable, KryoSerializable {
+public class ActorRefShuffle implements ActorRef, Serializable, Cloneable, KryoSerializable, StagingActor.StagingNonSubject {
     public static final long serialVersionUID = 1L;
     protected transient ActorSystem system;
     protected int bufferSize;
@@ -94,6 +93,18 @@ public class ActorRefShuffle implements ActorRef, Serializable, Cloneable, KryoS
         entriesList = new ArrayList<>(entries.values());
     }
 
+    /**
+     * do {@link #flush()} before returning.
+     *  The method will cause sending remaining messages to member actors,
+     *    before starting StagingWatcher for the member actors
+     * @return {@link #getMemberActors()}
+     */
+    @Override
+    public List<ActorRef> getStagingSubjectActors() {
+        flush();
+        return getMemberActors();
+    }
+
     public List<ActorRef> getMemberActors() {
         return entriesList.stream()
                 .flatMap(List::stream)
@@ -129,8 +140,23 @@ public class ActorRefShuffle implements ActorRef, Serializable, Cloneable, KryoS
         if (message instanceof ActorKelp.MessageBundle) {
             ((ActorKelp.MessageBundle<?>) message).getData().forEach(d ->
                     tell(d, message.getSender()));
+        } else if (isMessageBroadCasted(message)) {
+            getMemberActors().forEach(a ->
+                    a.tellMessage(message));
         } else {
             tellMessageShuffle(message);
+        }
+    }
+
+    public boolean isMessageBroadCasted(Message<?> message) {
+        if (message instanceof Message.MessageNone) {
+            return true;
+        } else {
+            Object data = message.getData();
+            return data instanceof StagingActor.StagingWatcher ||
+                    data instanceof StagingActor.StagingCompleted ||
+                    data instanceof StagingActor.StagingHandlerCompleted ||
+                    data instanceof StagingActor.StagingNotification;
         }
     }
 
@@ -194,6 +220,10 @@ public class ActorRefShuffle implements ActorRef, Serializable, Cloneable, KryoS
             }
             return Math.abs(result % size);
         }
+    }
+
+    public void flush() {
+        this.flush(null);
     }
 
     public void flush(ActorRef sender) {
@@ -376,16 +406,13 @@ public class ActorRefShuffle implements ActorRef, Serializable, Cloneable, KryoS
 
     ///////////
 
-    public void setSystem(ActorSystem system) {
+    public void setSystemBySerializer(ActorSystem system) {
         this.system = system;
     }
 
     public ActorSystem getSystem() {
         return system;
     }
-
-    static int BYTE_MARK_REF = 0;
-    static int BYTE_MARK_SHUFFLE = 1;
 
     @Override
     public void write(Kryo kryo, Output output) {
@@ -404,41 +431,5 @@ public class ActorRefShuffle implements ActorRef, Serializable, Cloneable, KryoS
         this.keyExtractors = (List<KeyExtractor<?,?>>) kryo.readClassAndObject(input);
         bufferSize = input.readInt();
         hostIncludePort = input.readBoolean();
-    }
-
-    public static class ActorRefShuffleSerializer extends ActorRefRemoteSerializer<ActorRef> {
-        protected ActorSystem system;
-
-        public ActorRefShuffleSerializer(ActorSystem system) {
-            super(system);
-        }
-
-        @Override
-        public void write(Kryo kryo, Output output, ActorRef ref) {
-            if (ref instanceof ActorRefShuffle) {
-                output.writeByte(BYTE_MARK_SHUFFLE);
-                ((ActorRefShuffle) ref).write(kryo, output);
-            } else {
-                output.writeByte(BYTE_MARK_REF);
-                super.write(kryo, output, ref);
-            }
-        }
-
-        @Override
-        public ActorRef read(Kryo kryo, Input input, Class<? extends ActorRef> aClass) {
-            int n = input.readByte();
-            if (n == BYTE_MARK_SHUFFLE) {
-                try {
-                    ActorRefShuffle r = (ActorRefShuffle) aClass.getConstructor().newInstance();
-                    r.read(kryo, input);
-                    r.setSystem(system);
-                    return r;
-                } catch (Exception ex) {
-                    throw new RuntimeException(ex);
-                }
-            } else {
-                return super.read(kryo, input, aClass);
-            }
-        }
     }
 }

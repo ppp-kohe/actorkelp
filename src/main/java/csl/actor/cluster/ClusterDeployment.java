@@ -320,10 +320,10 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
     @SuppressWarnings("unchecked")
     public static Class<? extends KryoBuilder> getBuilderType(String buildType, Class<? extends KryoBuilder> defaultBuildType) {
         try {
-            Class<?> b = Class.forName(buildType);
+
+            Class<?> b = buildType.isEmpty() ? defaultBuildType : Class.forName(buildType);
             if (KryoBuilder.class.isAssignableFrom(b)) {
-                return buildType.isEmpty() ? defaultBuildType :
-                        (Class<? extends KryoBuilder>) b;
+                return (Class<? extends KryoBuilder>) b;
             } else {
                 throw new RuntimeException("not a KryoBuilder: " + b);
             }
@@ -718,16 +718,16 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         }
 
         protected String initKryoBuilderType() {
-            return System.getProperty("csl.actor.kryoBuilderType", defaultConfigType().getName());
+            return System.getProperty("csl.actor.kryoBuilderType", defaultBuilderType().getName());
         }
 
         protected ActorSystemRemote initSystem() {
-            ActorSystemRemote system = createSystem(KryoBuilder.builder(getBuilderType(kryoBuilderType, defaultConfigType())), throttle);
+            ActorSystemRemote system = createSystem(KryoBuilder.builder(getBuilderType(kryoBuilderType, defaultBuilderType())), throttle);
             system.getLocalSystem().setLogger(new ConfigBase.SystemLoggerHeader(system.getLogger(), configDeployment));
             return system;
         }
 
-        protected Class<? extends KryoBuilder> defaultConfigType() {
+        protected Class<? extends KryoBuilder> defaultBuilderType() {
             return KryoBuilderCluster.class;
         }
 

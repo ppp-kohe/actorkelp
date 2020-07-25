@@ -435,21 +435,25 @@ public class StagingActor extends ActorDefault {
          * @param withCompleteThis if true, it calls {@link #sendCompleteThisToTerminal()}
          */
         public void redirectTo(Object sender, Iterable<? extends ActorRef> nextActors, boolean withCompleteThis) {
-            ArrayList<ActorRef> refs = new ArrayList<>();
+            ArrayList<ActorRef> subjects = new ArrayList<>();
             for (ActorRef a : nextActors) {
-                if (a != null) {
-                    refs.add(a);
+                if (a instanceof StagingNonSubject) {
+                    for (ActorRef s : ((StagingNonSubject) a).getStagingSubjectActors()) {
+                        subjects.add(s);
+                    }
+                } else if (a != null) {
+                    subjects.add(a);
                 }
             }
             //first, notify start of N actors: the task is started by self
-            task.getTerminalActor().tell(new StagingNotification(task, sender, true, refs.size(), completedActor));
+            task.getTerminalActor().tell(new StagingNotification(task, sender, true, subjects.size(), completedActor));
 
             if (withCompleteThis) {
                 sendCompleteThisToTerminal(); //second, finish this task
             }
             //actually starts next stage
-            if (!refs.isEmpty()) {
-                refs.forEach(a ->
+            if (!subjects.isEmpty()) {
+                subjects.forEach(a ->
                         a.tell(new StagingWatcher(task, sender)));
             } else {
                 task.getTerminalActor().tell(this);
@@ -497,6 +501,18 @@ public class StagingActor extends ActorDefault {
          * @param ref the next stage reference
          */
         default void setNextStage(ActorRef ref) { }
+    }
+
+    /**
+     * the interface indicates that an {@link ActorRef} is not a subject,
+     *   i.e. it does not support receving {@link StagingWatcher},
+     *  but might be a collection of subjects
+     */
+    public interface StagingNonSubject {
+        /**
+         * @return subjects of actors which will receive {@link StagingWatcher}
+         */
+        Iterable<? extends ActorRef> getStagingSubjectActors();
     }
 
     /**

@@ -13,8 +13,14 @@ public class ActorRefRemoteSerializer<RefType extends ActorRef> extends Serializ
     protected ActorSystem remoteSystem;
 
     public ActorRefRemoteSerializer(ActorSystem remoteSystem) {
+        this(remoteSystem, true);
+    }
+
+    public ActorRefRemoteSerializer(ActorSystem remoteSystem, boolean immutable) {
+        super(true, immutable);
         this.remoteSystem = remoteSystem;
     }
+
 
     @Override
     public void write(Kryo kryo, Output output, RefType actorRef) {
@@ -59,4 +65,5 @@ public class ActorRefRemoteSerializer<RefType extends ActorRef> extends Serializ
         ActorAddress o = (ActorAddress)  kryo.readClassAndObject(input);
         return (RefType) ActorRefRemote.get(remoteSystem, o);
     }
+
 }

@@ -15,7 +15,6 @@ import csl.actor.util.FileSplitter;
 import csl.actor.util.PathModifier;
 import csl.actor.util.StagingActor;
 
-import java.io.Serializable;
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -357,11 +356,11 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
             } else {
                 fileSplitter.openLineIterator(split).forEachRemaining(line ->
                         processMessage(new Message<>(this, this, line)));
-                getSystem().getLogger().log("read finish: %s : %s", split, this);
+                config.log("read finish: %s : %s", split, this);
             }
             ActorRefShuffle.flush(nextStageActor(), this);
         } catch (Exception ex) {
-            getSystem().getLogger().log(true, 0, ex, "splitter=%s split=%s", fileSplitter, split);
+            config.log(ex, "splitter=%s split=%s", fileSplitter, split);
         }
     }
 
@@ -408,7 +407,11 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
         return new ActorKelpSerializable<>((SelfType) this);
     }
 
-    public Serializable toInternalState() {
+    /**
+     * @return a serializable object which will be set to {@link ActorKelpSerializable#internalState}.
+     *    The default impl. uses {@link ActorKelpSerializable#getBuilder(Class)}
+     */
+    public Object toInternalState() {
         try {
             return ActorKelpSerializable.getBuilder(getClass())
                     .toState(getPersistentFile().getSerializer(), this);
@@ -417,10 +420,17 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
         }
     }
 
-    public void setInternalState(Serializable data) {
+    /**
+     * @param data a serialized state created by {@link #toInternalState()}
+     */
+    public void setInternalState(Object data) {
+        setInternalState(data, true);
+    }
+
+    public void setInternalState(Object data, boolean needToCopy) {
         try {
             ActorKelpSerializable.getBuilder(getClass())
-                    .setState(this, data);
+                    .setState(getPersistentFile().getSerializer(), this, data, needToCopy);
         } catch (Exception ex) {
             throw new RuntimeException(ex);
         }
@@ -431,11 +441,11 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
         another.mergeTo((SelfType) this);
     }
 
-    public void mergeInternalState(ActorKelpSerializable<SelfType> another, ActorKelpSerializable.MergingContext context, Serializable data) {
+    public void mergeInternalState(ActorKelpSerializable<SelfType> another, ActorKelpSerializable.MergingContext context, Object data) {
         mergeInternalState(context, data);
     }
 
-    public void mergeInternalState(ActorKelpSerializable.MergingContext context, Serializable data) {
+    public void mergeInternalState(ActorKelpSerializable.MergingContext context, Object data) {
         try {
             ActorKelpSerializable.getBuilder(getClass())
                     .merge(context, this, data);
@@ -473,7 +483,7 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
             @Override
             protected void logReducedSize(long size, long availableOnMemoryMessages, int consuming) {
                 if (config.logSplit) {
-                    config.log("%s reduceSize: %,d -> %,d", this, size, consuming);
+                    config.log("%s reduceSize: %,d - %,d -> %,d", this, size, consuming, (size - consuming));
                 }
             }
 

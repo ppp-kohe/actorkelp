@@ -24,7 +24,7 @@ public class ActorSystemKelp extends ActorSystemRemote {
     protected volatile ConfigKelp config = ConfigKelp.CONFIG_DEFAULT;
 
     public static ActorSystemKelp create(ConfigDeployment configDeployment) {
-        Function<ActorSystem, Kryo> kryoFactory = configDeployment.kryoBuilder(KryoBuilderKelp.class);
+        Function<ActorSystem, Kryo> kryoFactory = configDeployment.kryoBuilder(defaultBuilderType());
         return create(kryoFactory, configDeployment);
     }
 
@@ -32,12 +32,16 @@ public class ActorSystemKelp extends ActorSystemRemote {
         return new ActorSystemKelp(new ActorSystemDefaultForKelp(configDeployment, kryoFactory), kryoFactory);
     }
 
+    public static Class<KryoBuilderKelp> defaultBuilderType() {
+        return KryoBuilderKelp.class;
+    }
+
     public ActorSystemKelp() {
         this(new ConfigDeployment());
     }
 
     public ActorSystemKelp(ConfigDeployment configDeployment) {
-        this(new ActorSystemDefaultForKelp(configDeployment), configDeployment.kryoBuilder(KryoBuilderKelp.class));
+        this(new ActorSystemDefaultForKelp(configDeployment), configDeployment.kryoBuilder(defaultBuilderType()));
     }
 
     public ActorSystemKelp(ActorSystemDefault localSystem, Function<ActorSystem, Kryo> kryoFactory) {
@@ -52,7 +56,7 @@ public class ActorSystemKelp extends ActorSystemRemote {
         }
 
         public ActorSystemDefaultForKelp(ConfigDeployment configDeployment) {
-            this(configDeployment, configDeployment.kryoBuilder(KryoBuilderKelp.class));
+            this(configDeployment, configDeployment.kryoBuilder(defaultBuilderType()));
         }
 
         public ActorSystemDefaultForKelp(ConfigDeployment configDeployment, Function<ActorSystem, Kryo> kryoFactory) {

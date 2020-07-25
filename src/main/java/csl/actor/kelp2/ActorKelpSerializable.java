@@ -6,7 +6,9 @@ import csl.actor.kelp2.behavior.KeyHistograms;
 import csl.actor.remote.KryoBuilder;
 
 import java.io.Serializable;
-import java.lang.reflect.*;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Field;
+import java.lang.reflect.Type;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -17,10 +19,13 @@ public class ActorKelpSerializable<SelfType extends ActorKelp<SelfType>> impleme
     public ConfigKelp config;
     public Message<?>[] messages;
     public List<KeyHistograms.HistogramTree> histograms;
-    public Serializable internalState;
+    /** it is not Serializable, but it needs to have support of reading/writing/copying by a serializer */
+    public Object internalState;
     public int mergedCount;
     public Set<String> mergedActorNames;
     public int shuffleIndex;
+
+    public transient volatile boolean internalStateUsed = false;
 
     public ActorKelpSerializable() {}
 
@@ -56,7 +61,7 @@ public class ActorKelpSerializable<SelfType extends ActorKelp<SelfType>> impleme
     }
 
     protected void initMergedActorNames(SelfType actor) {
-        mergedActorNames = actor.getMergedActorNames();
+        mergedActorNames = new HashSet<>(actor.getMergedActorNames());
     }
 
     protected void initShuffleIndex(SelfType actor) {
@@ -74,6 +79,8 @@ public class ActorKelpSerializable<SelfType extends ActorKelp<SelfType>> impleme
     public void setHistograms(List<KeyHistograms.HistogramTree> histograms) {
         this.histograms = histograms;
     }
+
+    //////// restore
 
     public SelfType restore(ActorSystem system, long num, ConfigKelp config) throws Exception {
         SelfType a = create(system, restoreName(num), config);
@@ -111,7 +118,9 @@ public class ActorKelpSerializable<SelfType extends ActorKelp<SelfType>> impleme
     }
 
     protected void restoreInternalState(SelfType actor) {
-        actor.setInternalState(internalState);
+        boolean b = internalStateUsed;
+        internalStateUsed = true;
+        actor.setInternalState(internalState, b);
     }
 
     protected void restoreMergedCount(SelfType actor) {
@@ -258,7 +267,7 @@ public class ActorKelpSerializable<SelfType extends ActorKelp<SelfType>> impleme
             }
         }
 
-        public Serializable toState(KryoBuilder.SerializerFunction serializer, Object obj) throws Exception {
+        public Object toState(KryoBuilder.SerializerFunction serializer, Object obj) throws Exception {
             Object[] data = new Object[fields.size()];
             for (int i = 0, l = fields.size(); i < l; ++i) {
                 data[i] = fields.get(i).toState(serializer, obj);
@@ -266,12 +275,16 @@ public class ActorKelpSerializable<SelfType extends ActorKelp<SelfType>> impleme
             return data;
         }
 
-        public void setState(Object obj, Serializable d) throws Exception {
+        public void setState(KryoBuilder.SerializerFunction serializer, Object obj, Object d, boolean needToCopy) throws Exception {
             Object[] data = (Object[]) d;
             for (int i = 0, l = fields.size(); i < l; ++i) {
                 InternalStateField fld = fields.get(i);
                 if (!fld.isMergeOnly()) {
-                    fld.setState(obj, (Serializable) data[i]);
+                    if (needToCopy) {
+                        fld.setState(serializer, obj, data[i]);
+                    } else {
+                        fld.setState(obj, data[i]);
+                    }
                 }
             }
         }
@@ -281,10 +294,10 @@ public class ActorKelpSerializable<SelfType extends ActorKelp<SelfType>> impleme
             return getClass().getSimpleName() + "(" + type.getName() + ", fields[" + fields.size() + "]" + ")";
         }
 
-        public void merge(MergingContext context, Object obj, Serializable d) throws Exception {
+        public void merge(MergingContext context, Object obj, Object d) throws Exception {
             Object[] data = (Object[]) d;
             for (int i = 0, l = fields.size(); i < l; ++i) {
-                fields.get(i).merge(context, obj, (Serializable) data[i]);
+                fields.get(i).merge(context, obj, data[i]);
             }
         }
     }
@@ -312,11 +325,16 @@ public class ActorKelpSerializable<SelfType extends ActorKelp<SelfType>> impleme
             }
         }
 
-        public Serializable toState(KryoBuilder.SerializerFunction serializer, Object obj) throws Exception {
-            return (Serializable) serializer.copy(field.get(obj));
+        public Object toState(KryoBuilder.SerializerFunction serializer, Object obj) throws Exception {
+            return serializer.copy(field.get(obj));
         }
 
-        public void setState(Object obj, Serializable data) throws Exception {
+        public void setState(KryoBuilder.SerializerFunction serializer, Object obj, Object data) throws Exception {
+            Object setData = (serializer == null ? data : (serializer.copy(data)));
+            setState(obj, setData);
+        }
+
+        public void setState(Object obj, Object data) throws Exception {
             field.set(obj, data);
         }
 
@@ -333,7 +351,7 @@ public class ActorKelpSerializable<SelfType extends ActorKelp<SelfType>> impleme
             return mark.mergeOnly();
         }
 
-        public void merge(MergingContext context, Object obj, Serializable data) throws Exception {
+        public void merge(MergingContext context, Object obj, Object data) throws Exception {
             field.set(obj, merger.merge(context, field.get(obj), data));
         }
     }

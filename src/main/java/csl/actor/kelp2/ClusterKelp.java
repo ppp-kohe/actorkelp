@@ -24,12 +24,16 @@ public class ClusterKelp<ConfigType extends ConfigKelp> extends ClusterDeploymen
     }
 
     public ActorSystemKelp createSystemKelpPrimary(ConfigDeployment configDeployment) {
-        return ActorSystemKelp.create(configDeployment);
+        return ActorSystemKelp.create(configDeployment.kryoBuilder(defaultBuilderType()), configDeployment);
+    }
+
+    protected Class<? extends KryoBuilder> defaultBuilderType() {
+        return KryoBuilderKelp.class;
     }
 
     @Override
     protected ActorSystemRemote createAttachInitSystem() {
-        return ActorSystemKelp.create(KryoBuilder.builder(getBuilderType(attachKryoBuilderType, KryoBuilderKelp.class)), primary.getDeploymentConfig());
+        return ActorSystemKelp.create(KryoBuilder.builder(getBuilderType(attachKryoBuilderType, defaultBuilderType())), primary.getDeploymentConfig());
     }
 
     @Override
@@ -50,11 +54,11 @@ public class ClusterKelp<ConfigType extends ConfigKelp> extends ClusterDeploymen
         }
 
         public ActorSystemKelp createSystemKelpNode(String buildType, ConfigDeployment configDeployment) {
-            return ActorSystemKelp.create(KryoBuilder.builder(getBuilderType(buildType, defaultConfigType())), configDeployment);
+            return ActorSystemKelp.create(KryoBuilder.builder(getBuilderType(buildType, defaultBuilderType())), configDeployment);
         }
 
         @Override
-        protected Class<? extends KryoBuilder> defaultConfigType() {
+        protected Class<? extends KryoBuilder> defaultBuilderType() {
             return KryoBuilderKelp.class;
         }
     }

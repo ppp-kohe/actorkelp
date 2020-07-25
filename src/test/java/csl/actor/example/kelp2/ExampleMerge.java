@@ -45,7 +45,7 @@ public class ExampleMerge {
         }
 
         @Override
-        public void setInternalState(Serializable data) {
+        public void setInternalState(Object data) {
             super.setInternalState(data);
             logState("init");
         }
@@ -55,7 +55,7 @@ public class ExampleMerge {
         }
 
         @Override
-        public void mergeInternalState(ActorKelpSerializable<MyActor> s, ActorKelpSerializable.MergingContext context, Serializable data) {
+        public void mergeInternalState(ActorKelpSerializable<MyActor> s, ActorKelpSerializable.MergingContext context, Object data) {
             String msg = String.format("%2d + %2d : %s ", getShuffleIndex(), s.shuffleIndex, context);
 
             getSystem().getLogger().log("merge: %s", msg);

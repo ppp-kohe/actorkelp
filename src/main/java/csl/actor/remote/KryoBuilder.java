@@ -56,25 +56,54 @@ public class KryoBuilder {
     }
 
     public static Function<ActorSystem, Kryo> builder() {
-        return builder(KryoBuilder::new);
+        return builder(new Creator(KryoBuilder.class));
     }
 
     public static Function<ActorSystem, Kryo> builder(Supplier<KryoBuilder> builderCreator) {
-        return (sys) -> builderCreator.get().setSystem(sys).build();
+        return new Builder(builderCreator);
     }
 
     public static Function<ActorSystem, Kryo> builder(Class<? extends KryoBuilder> kryoBuilderType) {
         try {
-            Constructor<? extends KryoBuilder> cons = kryoBuilderType.getConstructor();
-            return KryoBuilder.builder(() -> {
-                try {
-                    return cons.newInstance();
-                } catch (Exception ex) {
-                    throw new RuntimeException(ex);
-                }
-            });
+            return KryoBuilder.builder(new Creator(kryoBuilderType));
         } catch (Exception ex) {
             throw new RuntimeException(ex);
+        }
+    }
+
+    public static class Builder implements Function<ActorSystem, Kryo> {
+        protected Supplier<KryoBuilder> creator;
+
+        public Builder(Supplier<KryoBuilder> creator) {
+            this.creator = creator;
+        }
+
+        @Override
+        public Kryo apply(ActorSystem actorSystem) {
+            return creator.get().setSystem(actorSystem).build();
+        }
+    }
+
+    public static class Creator implements Supplier<KryoBuilder> {
+        protected Class<? extends KryoBuilder> type;
+        protected Constructor<? extends KryoBuilder> cons;
+
+        public Creator(Class<? extends KryoBuilder> type) {
+            this.type = type;
+            try {
+                cons = type.getConstructor();
+            } catch (Exception ex) {
+                throw new RuntimeException(ex);
+            }
+        }
+
+        @Override
+        public KryoBuilder get() {
+            try {
+                return cons.newInstance();
+            } catch (Exception ex) {
+                throw new RuntimeException(ex);
+            }
         }
     }
 
@@ -131,13 +160,13 @@ public class KryoBuilder {
     }
 
     protected void buildRegisterActor(Kryo kryo) {
-        kryo.register(csl.actor.kelp2.ActorKelp.KelpStageRefWrapper.class, new csl.actor.kelp2.ActorKelp.KelpStageRefWrapperSerializer(system));
         buildRegisterActorRef(kryo);
         register(kryo, getActorClasses());
     }
 
     protected void buildRegisterActorRef(Kryo kryo) {
         kryo.addDefaultSerializer(ActorRef.class, new ActorRefRemoteSerializer<>(system)); //for sub-types
+         // subsequent kryo.register(t) obtains the default serializer. So the sub-types of ActorRef will use the serializer
     }
 
     public void register(Kryo kryo, List<Class<?>> types) {
