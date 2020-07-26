@@ -6,6 +6,8 @@ import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 import csl.actor.*;
 import csl.actor.cluster.ClusterCommands.ClusterUnit;
+import csl.actor.persist.MailboxPersistableReplacement;
+import csl.actor.persist.PersistentFileManager;
 import csl.actor.remote.ActorAddress;
 import csl.actor.remote.ActorRefRemote;
 import csl.actor.remote.ActorSystemRemote;
@@ -995,7 +997,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
             //temporary manager
             //TODO the serializedMailbxPath is expanded ?
             PersistentFileManager m = PersistentFileManager.createPersistentFile(serializedMailboxPath, a.getSystem());
-            MailboxPersistable.MessageOnStorage msg = new MailboxPersistable.MessageOnStorageFile(
+            MailboxPersistableReplacement.MessageOnStorage msg = new MailboxPersistableReplacement.MessageOnStorage(
                     new PersistentFileManager.PersistentFileReaderSource(serializedMailboxPath, 0, m));
             synchronized (msg) {
                 Message<?> next = msg.readNext();

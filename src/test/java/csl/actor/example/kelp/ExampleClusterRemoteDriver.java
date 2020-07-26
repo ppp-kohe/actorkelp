@@ -1,7 +1,7 @@
 package csl.actor.example.kelp;
 
-import csl.actor.kelp.ActorPlacementKelp;
-import csl.actor.kelp.ClusterKelp;
+import csl.actor.kelp_old.ActorPlacementKelp;
+import csl.actor.kelp_old.ClusterKelp;
 
 import java.nio.file.Files;
 import java.nio.file.Path;

@@ -1,9 +1,9 @@
 package csl.actor.example.exp.wordcount;
 
 import com.esotericsoftware.kryo.Kryo;
-import csl.actor.kelp.ActorPlacementKelp;
-import csl.actor.kelp.ClusterKelp;
-import csl.actor.kelp.FileMapper;
+import csl.actor.kelp_old.ActorPlacementKelp;
+import csl.actor.kelp_old.ClusterKelp;
+import csl.actor.kelp_old.FileMapper;
 import csl.actor.remote.KryoBuilder;
 
 import java.nio.file.Files;

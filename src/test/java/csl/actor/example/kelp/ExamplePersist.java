@@ -4,10 +4,10 @@ import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 import csl.actor.ActorBehavior;
 import csl.actor.ActorSystem;
-import csl.actor.kelp.PhaseShift;
-import csl.actor.kelp.ActorKelp;
-import csl.actor.kelp.Config;
-import csl.actor.kelp.KeyHistogramsPersistable;
+import csl.actor.kelp_old.PhaseShift;
+import csl.actor.kelp_old.ActorKelp;
+import csl.actor.kelp_old.Config;
+import csl.actor.kelp_old.KeyHistogramsPersistable;
 import csl.actor.remote.ActorSystemRemote;
 
 import java.io.Serializable;

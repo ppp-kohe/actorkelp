@@ -3,9 +3,9 @@ package csl.actor.example.kelp;
 import csl.actor.ActorBehavior;
 import csl.actor.ActorSystem;
 import csl.actor.ActorSystemDefault;
-import csl.actor.kelp.ActorKelp;
-import csl.actor.kelp.Config;
-import csl.actor.kelp.PhaseShift;
+import csl.actor.kelp_old.ActorKelp;
+import csl.actor.kelp_old.Config;
+import csl.actor.kelp_old.PhaseShift;
 
 import java.util.*;
 import java.util.function.BiPredicate;

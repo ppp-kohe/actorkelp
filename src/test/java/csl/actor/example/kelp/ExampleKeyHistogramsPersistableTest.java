@@ -3,10 +3,10 @@ package csl.actor.example.kelp;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 import csl.actor.ActorSystemDefault;
-import csl.actor.cluster.PersistentFileManager;
-import csl.actor.kelp.ActorBehaviorBuilderKelp;
-import csl.actor.kelp.KeyHistograms;
-import csl.actor.kelp.KeyHistogramsPersistable;
+import csl.actor.persist.PersistentFileManager;
+import csl.actor.kelp_old.ActorBehaviorBuilderKelp;
+import csl.actor.kelp_old.KeyHistograms;
+import csl.actor.kelp_old.KeyHistogramsPersistable;
 import csl.actor.remote.KryoBuilder;
 
 import java.io.ByteArrayInputStream;

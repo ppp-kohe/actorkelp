@@ -2,7 +2,7 @@ package csl.actor.example.kelp;
 
 import csl.actor.Actor;
 import csl.actor.util.ResponsiveCalls;
-import csl.actor.kelp.*;
+import csl.actor.kelp_old.*;
 
 import java.io.Serializable;
 import java.util.ArrayList;

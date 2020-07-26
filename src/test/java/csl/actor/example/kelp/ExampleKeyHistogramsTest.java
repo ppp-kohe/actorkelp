@@ -1,7 +1,7 @@
 package csl.actor.example.kelp;
 
 import csl.actor.ActorSystemDefault;
-import csl.actor.kelp.KeyHistograms;
+import csl.actor.kelp_old.KeyHistograms;
 
 import java.io.File;
 import java.util.*;

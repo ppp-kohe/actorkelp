@@ -6,8 +6,8 @@ import csl.actor.cluster.ClusterCommands;
 import csl.actor.cluster.ClusterDeployment;
 import csl.actor.cluster.ClusterHttp;
 import csl.actor.example.exp.wordcount.WordCount;
-import csl.actor.kelp.ClusterKelp;
-import csl.actor.kelp.Config;
+import csl.actor.kelp_old.ClusterKelp;
+import csl.actor.kelp_old.Config;
 
 public class ExampleClusterHttpToJson {
     @SuppressWarnings("unchecked")

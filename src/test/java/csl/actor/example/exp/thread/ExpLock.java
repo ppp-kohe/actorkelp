@@ -2,9 +2,9 @@ package csl.actor.example.exp.thread;
 
 import csl.actor.*;
 import csl.actor.example.kelp.DebugBehavior;
-import csl.actor.kelp.ActorBehaviorBuilderKelp;
-import csl.actor.kelp.KeyHistograms;
-import csl.actor.kelp.PhaseShift;
+import csl.actor.kelp_old.ActorBehaviorBuilderKelp;
+import csl.actor.kelp_old.KeyHistograms;
+import csl.actor.kelp_old.PhaseShift;
 
 import java.util.*;
 import java.util.concurrent.TimeUnit;

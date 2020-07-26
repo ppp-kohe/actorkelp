@@ -1,8 +1,8 @@
 package csl.actor.example.exp.wordcount;
 
-import csl.actor.kelp.ActorPlacementKelp;
-import csl.actor.kelp.ClusterKelp;
-import csl.actor.kelp.FileMapper;
+import csl.actor.kelp_old.ActorPlacementKelp;
+import csl.actor.kelp_old.ClusterKelp;
+import csl.actor.kelp_old.FileMapper;
 
 import java.nio.file.Path;
 import java.nio.file.Paths;

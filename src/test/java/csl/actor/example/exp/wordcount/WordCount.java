@@ -2,13 +2,12 @@ package csl.actor.example.exp.wordcount;
 
 import com.esotericsoftware.kryo.io.Output;
 import csl.actor.*;
-import csl.actor.cluster.ConfigDeployment;
 import csl.actor.util.FileSplitter;
-import csl.actor.kelp.PhaseShift;
-import csl.actor.kelp.ActorKelp;
-import csl.actor.kelp.Config;
-import csl.actor.kelp.FileMapper;
-import csl.actor.kelp.KelpRoutingSplit;
+import csl.actor.kelp_old.PhaseShift;
+import csl.actor.kelp_old.ActorKelp;
+import csl.actor.kelp_old.Config;
+import csl.actor.kelp_old.FileMapper;
+import csl.actor.kelp_old.KelpRoutingSplit;
 import csl.actor.remote.KryoBuilder;
 import csl.actor.util.PathModifier;
 

@@ -2,8 +2,8 @@ package csl.actor.example.exp.wordcount;
 
 import csl.actor.ActorSystemDefault;
 import csl.actor.util.PathModifier;
-import csl.actor.cluster.PersistentFileManager;
-import csl.actor.kelp.*;
+import csl.actor.persist.PersistentFileManager;
+import csl.actor.kelp_old.*;
 import csl.actor.remote.ActorSystemRemote;
 import csl.actor.remote.KryoBuilder;
 

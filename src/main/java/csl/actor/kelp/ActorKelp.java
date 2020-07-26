@@ -1,552 +1,501 @@
 package csl.actor.kelp;
 
+import com.esotericsoftware.kryo.Kryo;
+import com.esotericsoftware.kryo.io.Input;
+import com.esotericsoftware.kryo.io.Output;
 import csl.actor.*;
-import csl.actor.cluster.*;
-import csl.actor.kelp.KelpRoutingSplit.SplitPath;
-import csl.actor.util.ConfigBase;
+import csl.actor.cluster.ActorPlacement;
+import csl.actor.kelp.behavior.*;
+import csl.actor.persist.MailboxManageable;
+import csl.actor.persist.MailboxPersistableIncoming;
+import csl.actor.persist.PersistentFileManager;
+import csl.actor.remote.ActorAddress;
+import csl.actor.util.FileSplitter;
 import csl.actor.util.PathModifier;
-import csl.actor.util.ResponsiveCalls;
+import csl.actor.util.StagingActor;
 
-import java.io.Serializable;
-import java.time.Duration;
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
-/**
- * <h3>selecting constructor</h3>
- * <p>
- * by default, the primary constructor, {@link #ActorKelp(ActorSystem, String, Config, State)}
- *  is used at cloning in {@link ActorKelpSerializable#create(ActorSystem, String, Config, State)}.
- *  The your sub-class should just override the primary constructor and you can define another constructors for creating a router object.
- * </p>
- *
- * <h3>internal state and cloning process</h3>
- * <p>
- *     For typical impl. of internal state, implements
- *      <ol>
- *          <li>the primary constructor</li>
- *          <li>{@link #toSerializableInternalState()} and {@link #initSerializedInternalState(Serializable)}</li>
- *          <li>{@link #initMerged(ActorKelp)}</li>
- *          <li>{@link #initClone(ActorKelp)}</li>
- *      </ol>
- *
- * </p>
- * <p>
- *  a clone is created by {@link #internalCreateClone(ActorRef)}. it uses {@link Object#clone()}.
- *   Note the method cannot be used for remote nodes, but it first creates local sub-splits by the method.
- *   The method has a call of {@link #initClone(ActorKelp)} which is an empty impl..
- *   Your class can supply some init process for the local copy in the method.
- * </p>
- *
- * <p>
- *     The easiest way of customizing states is using {@link #toSerializableInternalState()}
- *      and {@link #initSerializedInternalState(Serializable)}.
- *      You can transfer any kind of {@link Serializable} object by those methods.
- * </p>
- *
- * <p>
- *    An actor is not {@link Serializable}, so it uses {@link ActorKelpSerializable} for remote sending.
- *    It is created by {@link #newSerializableState()}, and it just creates the instance.
- *    Your class can override the method for customizing the serializable class.
- * </p>
- *
- * <p>
- *     Cloning is a different step from splitting and merging.
- *     For merging, {@link #initMerged(ActorKelp)}
- * </p>
- *
- * <h3>using as unit</h3>
- * <p>
- * it can call {@link #setAsUnit()} in the constructor
- * </p>
- *
- * @param <SelfType> the self-type, e.g.
- *                  <code>class T extends ActorKelp&lt;T&gt;</code>
- */
-@SuppressWarnings("rawtypes")
 public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends ActorDefault
-        implements KeyHistogramsPersistable.HistogramTreePersistableConfig, PhaseShift.StageSupported, Cloneable {
-    protected Config config;
-    protected volatile ActorRef nextStage;
+        implements StagingActor.StagingSupported, ActorKelpFileReader<SelfType>, KelpStage<SelfType> {
+    protected ActorRef nextStage;
+    protected FileSplitter fileSplitter;
+    protected ConfigKelp config;
+    protected boolean original = true;
+    protected int shuffleIndex = -1;
+    protected int mergedCount = 1;
+    protected Set<String> mergedActorNames = Collections.emptySet();
 
-    protected volatile State state;
-
-    public static boolean logSkipTimeout = System.getProperty("csl.actor.logSkipTimeout", "true").equals("true");
-
-    public ActorKelp(ActorSystem system, String name, MailboxKelp mailbox, ActorBehavior behavior, Config config, State state) {
+    public ActorKelp(ActorSystem system, String name, Mailbox mailbox, ActorBehavior behavior, ConfigKelp config) {
         super(system, name, mailbox, behavior);
         if (config == null) {
-            this.config = Config.CONFIG_DEFAULT;
+            this.config = ConfigKelp.CONFIG_DEFAULT;
         } else {
             this.config = config;
         }
-        this.state = state;
     }
 
-    /**
-     * the primary constructor
-     * @param system the actor belonged to the system
-     * @param name the name of the actor, or null for anonymous
-     * @param config a config object, or null for {@link Config#CONFIG_DEFAULT}
-     * @param state the internal state
-     */
-    public ActorKelp(ActorSystem system, String name, Config config, State state) {
-        this(system, name, null, null, config, state);
-        this.state = state;
-        mailbox = initMailbox();
-        behavior = initBehavior();
+    public ActorKelp(ActorSystem system, String name, ConfigKelp config) {
+        this(system, name, null, null, config);
+        this.mailbox = initMailbox();
+        this.behavior = initBehavior();
     }
 
-    public ActorKelp(ActorSystem system, String name, Config config) {
-        this(system, name, config, (State) null);
-        state = initStateRouter();
-    }
-
-    public ActorKelp(ActorSystem system, String name) {
-        this(system, name, (Config) null);
-    }
-
-    public ActorKelp(ActorSystem system, Config config) {
+    public ActorKelp(ActorSystem system, ConfigKelp config) {
         this(system, null, config);
+        setNameRandom();
     }
 
     public ActorKelp(ActorSystem system) {
-        this(system, null, (Config) null);
+        this(system, null, (ConfigKelp) null);
+        setNameRandom();
     }
 
-    //////////////////////// config
-
-
-    public Config getConfig() {
-        return config;
+    public void setNameRandom() {
+        name = getClass().getSimpleName() + "_" + UUID.randomUUID();
+        system.register(this);
     }
 
-    public boolean routerAutoSplit() {
-        return config.routerAutoSplit;
-    }
-
-    public boolean routerAutoMerge() {
-        return config.routerAutoMerge;
-    }
-
-    public int mailboxTreeSize() {
-        return config.mailboxTreeSize;
-    }
-
-    public long traverseDelayTimeMs() {
-        return config.traverseDelayTimeMs;
-    }
-
-    protected double pruneLessThanNonZeroLeafRate() {
-        return config.pruneLessThanNonZeroLeafRate;
-    }
-
-    protected String persistMailboxPath() {
-        return config.persistMailboxPath;
-    }
-
-    protected boolean persistRuntimeCondition() {
-        return config.persistRuntimeCondition;
-    }
-
-    protected boolean persist() {
-        return config.persist;
-    }
-
-    protected long persistMailboxSizeLimit() {
-        return config.persistMailboxSizeLimit;
-    }
-
-    protected long persistMailboxOnMemorySize() {
-        return config.persistMailboxOnMemorySize;
-    }
-
-    protected int reduceRuntimeCheckingThreshold() {
-        return config.reduceRuntimeCheckingThreshold;
-    }
-
-    protected double reduceRuntimeRemainingBytesToSizeRatio() {
-        return config.reduceRuntimeRemainingBytesToSizeRatio;
-    }
-
-    @Override
-    public int histogramPersistHistoryEntrySize() { return config.histogramPersistHistoryEntrySize; }
-    @Override
-    public int histogramPersistHistoryEntryLimit() { return config.histogramPersistHistoryEntryLimit; }
-    @Override
-    public long histogramPersistSizeLimit() { return config.histogramPersistSizeLimit; }
-    @Override
-    public long histogramPersistOnMemorySize() { return config.histogramPersistOnMemorySize; }
-    @Override
-    public double histogramPersistSizeRatioThreshold() { return config.histogramPersistSizeRatioThreshold; }
-    @Override
-    public long histogramPersistRandomSeed() { return config.histogramPersistRandomSeed; }
-
-
-    protected int mailboxThreshold() {
-        return config.mailboxThreshold;
-    }
-
-    public float lowerBoundThresholdFactor() {
-        return config.lowerBoundThresholdFactor;
-    }
-
-    public int minSizeOfEachMailboxSplit() {
-        return config.minSizeOfEachMailboxSplit;
-    }
-
-    public int historyExceededLimit() {
-        return (int) (config.historyExceededLimitThresholdFactor * mailboxThreshold());
-    }
-
-    public int maxParallelRouting() {
-        return (int) Math.min(Integer.MAX_VALUE, (long) (mailboxThreshold() * (double) config.maxParallelRoutingThresholdFactor));
-    }
-
-    protected int historyEntrySize() {
-        return config.historyEntrySize;
-    }
-
-    public float mergeRatioThreshold() {
-        return config.mergeRatioThreshold;
-    }
-
-    public int historyEntryLimit() {
-        return (int) (mailboxThreshold() * config.historyEntryLimitThresholdFactor);
-    }
-
-    protected long pruneGreaterThanLeaf() {
-        return (long) config.pruneGreaterThanLeafThresholdFactor * mailboxThreshold();
-    }
-
-    protected long toLocalWaitMs() {
-        return config.toLocalWaitMs;
-    }
-
-    public boolean logSplit() {
-        return config.logSplit;
-    }
-
-    //////////////////////// init
-
-    protected KelpStateRouter initStateRouter() {
-        return new KelpStateRouter();
-    }
-
-    protected StateUnit initStateUnit(ActorRef router) {
-        return new StateUnit(router);
-    }
-
-    @Override
-    protected Mailbox initMailbox() {
-        PersistentFileManager m = getPersistentFile();
-        MailboxDefault mailbox = initMailboxDefault(m);
-        return new MailboxKelp(mailboxThreshold(), mailboxTreeSize(),
-                mailbox, initTreeFactory(mailbox, m));
-    }
-
-    protected MailboxDefault initMailboxDefault(PersistentFileManager m) {
-        if (initPersistentEnabled()) {
-            MailboxPersistable.PersistentConditionMailbox condMailbox;
-            if (persistRuntimeCondition()) {
-                condMailbox = new MailboxPersistable.PersistentConditionMailboxSampling(persistMailboxSizeLimit(), m.getLogger());
-            } else {
-                condMailbox = new MailboxPersistable.PersistentConditionMailboxSizeLimit(persistMailboxSizeLimit());
-            }
-            return new MailboxPersistable(m, condMailbox, persistMailboxOnMemorySize());
-        } else {
-            return new MailboxDefault();
+    public void setNameInternal(String name) {
+        if (this.name != null) {
+            system.unregister(this);
         }
-    }
-
-    protected KeyHistograms initTreeFactory(MailboxDefault mailbox, PersistentFileManager m) {
-        if (initPersistentEnabled()) {
-            KeyHistogramsPersistable.PersistentConditionHistogram condHist;
-            if (persistRuntimeCondition()) {
-                if (mailbox instanceof MailboxPersistable) {
-                    condHist = new KeyHistogramsPersistable.PersistentConditionHistogramSampling(
-                            histogramPersistSizeLimit(), histogramPersistSizeRatioThreshold(), (MailboxPersistable) mailbox, m.getLogger());
-                } else {
-                    condHist = new KeyHistogramsPersistable.PersistentConditionHistogramSampling(
-                            histogramPersistSizeLimit(), histogramPersistSizeRatioThreshold(), m.getLogger());
-                }
-            } else {
-                condHist = new KeyHistogramsPersistable.PersistentConditionHistogramSizeLimit(this);
-            }
-            return new KeyHistogramsPersistable(this, m, condHist);
-        } else {
-            return new KeyHistograms(m);
-        }
-    }
-
-    protected PersistentFileManager getPersistentFile() {
-        String path = persistMailboxPath();
-        return PersistentFileManager.getPersistentFile(system, () -> path);
-    }
-
-    protected boolean initPersistentEnabled() {
-        return persist();
-    }
-
-    protected Mailbox initMailboxForClone() {
-        return getMailboxAsKelp().create();
+        this.name = name;
+        system.register(this);
     }
 
     /**
-     * @param m the merging instance, which will be discarded. So you can close any resources in m in the method.
+     * @return true if the instance is manually created and not a suffle entry
      */
-    protected void initMerged(SelfType m) { }
+    public boolean isOriginal() {
+        return original;
+    }
 
-    protected void initClone(SelfType original) { }
+    public void setOriginal(boolean original) {
+        this.original = original;
+    }
+
+    public int getShuffleIndex() {
+        return shuffleIndex;
+    }
+
+    public void setShuffleIndex(int shuffleIndex) {
+        this.shuffleIndex = shuffleIndex;
+    }
+
+    public void setMergedCount(int mergedCount) {
+        this.mergedCount = mergedCount;
+    }
+
+    public int getMergedCount() {
+        return mergedCount;
+    }
+
+    public void setMergedActorNames(Set<String> mergedActorNames) {
+        this.mergedActorNames = mergedActorNames;
+    }
+
+    public Set<String> getMergedActorNames() {
+        return mergedActorNames;
+    }
+
+    ///////////// config
+
+
+    public ConfigKelp getConfig() {
+        return config;
+    }
+
+    public String getMailboxPath() {
+        return config.mailboxPath;
+    }
+
+    public boolean isPersist() {
+        return config.persist;
+    }
+
+    public boolean isPersistRuntimeCondition() {
+        return config.persistRuntimeCondition;
+    }
+
+    public long getMailboxOnMemorySize() {
+        return config.mailboxOnMemorySize;
+    }
+
+    public long getSplitLength() {
+        return config.splitLength;
+    }
+
+    public int getReduceRuntimeCheckingThreshold() {
+        return config.reduceRuntimeCheckingThreshold;
+    }
+
+    public double getReduceRuntimeRemainingBytesToSizeRatio() {
+        return config.reduceRuntimeRemainingBytesToSizeRatio;
+    }
+
+    public long getTraverseDelayTimeMs() {
+        return config.traverseDelayTimeMs;
+    }
+
+    public long getPruneGreaterThanLeaf() {
+        return (long) config.pruneGreaterThanLeafThresholdFactor * getMailboxThreshold();
+    }
+
+    public double getPruneLessThanNonZeroLeafRate() {
+        return config.pruneLessThanNonZeroLeafRate;
+    }
+
+    public int getShuffleBufferSize() {
+        return config.shuffleBufferSize;
+    }
+
+    public int getShufflePartitions() {
+        return config.shufflePartitions;
+    }
+
+    public boolean isShuffleHostIncludePort() {
+        return config.shuffleHostIncludePort;
+    }
+
+    public int getShuffleBufferSizeFile() {
+        return config.shuffleBufferSizeFile;
+    }
+
+    public int getMailboxThreshold() {
+        return config.mailboxThreshold;
+    }
+    public int getMailboxTreeSize() {
+        return config.mailboxTreeSize;
+    }
+
+    ///////////////
+
+    protected PersistentFileManager getPersistentFile() {
+        return PersistentFileManager.getPersistentFile(system, getMailboxPath());
+    }
+
+    protected Mailbox initMailbox() {
+        PersistentFileManager m = getPersistentFile();
+        MailboxDefault mbox = initMailboxDefault(m);
+        return initMailboxKelp(mbox, initTreeFactory(mbox, m));
+    }
+
+    protected MailboxDefault initMailboxDefault(PersistentFileManager m) {
+        if (isPersist()) {
+            return new MailboxPersistableIncoming(m, getMailboxOnMemorySize());
+        } else {
+            return new MailboxManageable.MailboxDefaultManageable(m);
+        }
+    }
+
+    protected KeyHistograms initTreeFactory(MailboxDefault mbox, PersistentFileManager m) {
+        return KeyHistogramsPersistable.createTreeFactory(
+                isPersist(), isPersistRuntimeCondition(), mbox, m,
+                new KeyHistogramsPersistable.HistogramTreePersistableConfigKelp(config));
+    }
+
+    protected MailboxKelp initMailboxKelp(MailboxDefault m, KeyHistograms treeFactory) {
+        return new MailboxKelp(getMailboxTreeSize(), m, treeFactory);
+    }
+
+    public MailboxKelp getMailboxAsKelp() {
+        return (MailboxKelp) super.getMailbox();
+    }
 
     @Override
     protected ActorBehaviorBuilderKelp behaviorBuilder() {
-        return new ActorBehaviorBuilderKelp((ps) -> getMailboxAsKelp().initMessageEntries(ps));
+        return new ActorBehaviorBuilderKelp(getMailboxAsKelp()::initMessageEntries);
     }
 
-    @SuppressWarnings("unchecked")
-    public SelfType setAsUnit() {
-        state = initStateUnit(null);
-        return (SelfType) this;
-    }
-
-    ////////////////////////
-
-    public MailboxKelp getMailboxAsKelp() {
-        return (MailboxKelp) mailbox;
-    }
-
-    public ActorRef router() {
-        if (state instanceof KelpStateRouter) {
-            return this;
-        } else if (state instanceof StateUnit) {
-            return routerOrThis(((StateUnit) state).getRouter());
-        } else if (state instanceof StateCanceled) {
-            return routerOrThis(((StateCanceled) state).getRouter());
-        } else {
-            return this;
-        }
-    }
-
-    private ActorRef routerOrThis(ActorRef router) {
-        if (router == null) {
-            return this;
-        } else {
-            return router;
-        }
-    }
-
-    public boolean hasRemainingProcesses() {
-        return isRouterParallelRouting() || getMailboxAsKelp().hasRemainingProcesses();
-    }
-
-    public boolean isRouterParallelRouting() {
-        return state instanceof KelpStateRouter && !((KelpStateRouter) state).isNonParallelRouting();
-    }
-
-    //////////////////////// internal state
-
-    public State getState() {
-        return state;
-    }
-
-    public interface State {
-        long getProcessCount();
-        void processMessage(ActorKelp self, Message<?> message);
-        boolean processMessagePhase(ActorKelp self, Message<?> message);
-    }
-
-    public static class StateUnit implements State, Serializable {
+    public static class MessageBundle<DataType> extends Message<List<DataType>> {
         public static final long serialVersionUID = 1L;
-        protected ActorRef router;
-        protected long processCount;
 
-        public StateUnit(ActorRef router) {
-            this.router = router;
-        }
-
-        public ActorRef getRouter() {
-            return router;
+        public MessageBundle(ActorRef target, ActorRef sender, Iterable<? extends DataType> items) {
+            super(target, sender, toList(items));
         }
 
         @Override
-        public long getProcessCount() {
-            return processCount;
-        }
-
-        @SuppressWarnings("unchecked")
-        @Override
-        public void processMessage(ActorKelp self, Message<?> message) {
-            processCount++;
-            self.processMessageBehavior(message);
-        }
-
-        @Override
-        public boolean processMessagePhase(ActorKelp self, Message<?> message) {
-            Object val = message.getData();
-            if (val instanceof PhaseShift) {
-                ((PhaseShift) val).accept(self, message.getSender());
-                return true;
-            } else if (val instanceof PhaseShift.PhaseShiftIntermediate) {
-                PhaseShift.PhaseShiftIntermediate event = (PhaseShift.PhaseShiftIntermediate) val;
-                if (event.getType().equals(PhaseShift.PhaseShiftIntermediateType.PhaseIntermediateFinishLeaf)) {
-                    self.processPhaseEnd(event.getKey());
-                }
-                event.accept(self, phaseTarget(self), message.getSender());
-                return true;
-            } else if (val instanceof CancelChange) {
-                processMessage(self, message);
-                return true;
-            } else {
-                return false;
-            }
-        }
-
-        ActorRef phaseTarget(ActorKelp self) {
-            return router == null ? self : router;
+        public Message<List<DataType>> renewTarget(ActorRef target) {
+            return new MessageBundle<>(target, sender, data);
         }
 
         @Override
         public String toString() {
-            return getClass().getSimpleName() + (router == null ? "" : ("(router=" + router + ")"));
-        }
-    }
-
-    public static class StateCanceled implements State {
-        protected ActorRef router;
-        protected long processCount;
-
-        public StateCanceled(ActorRef router, long processCount) {
-            this.router = router;
-            this.processCount = processCount;
-        }
-
-        public ActorRef getRouter() {
-            return router;
+            return getClass().getSimpleName() + "(" +
+                    toStringData(Objects::toString) + " : " + target + " <- " + sender + ")";
         }
 
         @Override
-        public long getProcessCount() {
-            return processCount;
+        public String toString(Function<Object, Object> dataToStr) {
+            return getClass().getSimpleName() + "(" +
+                    toStringData(dataToStr) + " : " + target + " <- " + sender + ")";
         }
 
-        @Override
-        public void processMessage(ActorKelp self, Message<?> message) {
-            processCount++;
-            router.tell(message.getData(), message.getSender());
-        }
-
-        @Override
-        public boolean processMessagePhase(ActorKelp self, Message<?> message) {
-            Object val = message.getData();
-            if (val instanceof PhaseShift) {
-                ((PhaseShift) val).accept(self, message.getSender());
-                return true;
-            } else if (val instanceof PhaseShift.PhaseShiftIntermediate) {
-                ((PhaseShift.PhaseShiftIntermediate) val).accept(self, router, message.getSender());
-                return true;
-            } else if (val instanceof CancelChange) {
-                processMessage(self, message);
-                return true;
+        public String toStringData(Function<Object,Object> dataToStr) {
+            if (data == null) {
+                return "null";
+            } else if (data.isEmpty()) {
+                return "[0]{}";
             } else {
-                return false;
+                return String.format("[%,d]{%s, ...}", data.size(),
+                        dataToStr.apply(data.get(0)));
             }
         }
-
     }
 
-    /////////////////////////// process
+    public static <DataType> List<DataType> toList(Iterable<? extends DataType> items) {
+        ArrayList<DataType> list = new ArrayList<>();
+        for (DataType t : items) {
+            list.add(t);
+        }
+        list.trimToSize();
+        return list;
+    }
+
+    @Override
+    public void setNextStage(ActorRef nextStage) {
+        this.nextStage = nextStage;
+    }
+
+    @Override
+    public ActorRef nextStageActor() {
+        return nextStage;
+    }
+
+    @Override
+    public Iterable<? extends ActorRef> nextStageActors() {
+        if (nextStage instanceof ActorRefShuffle) {
+            return ((ActorRefShuffle) nextStage).getMemberActors();
+        } else if (nextStage != null) {
+            return Collections.singletonList(nextStage);
+        } else {
+            return Collections.emptyList();
+        }
+    }
+
+    ///// processes
+
 
     @Override
     public boolean processMessageNext() {
-        boolean pr = isRouterParallelRouting();
-        try {
-            if (!pr && getMailboxAsKelp().processHistogram(this)) {
-                return true;
-            }
+        if (getMailboxAsKelp().processHistogram(this)) {
+            return true;
+        } else {
             return super.processMessageNext();
-        } catch (Throwable th) {
-            throw new RuntimeException(String.format("%s: parallelRouting=%s", this, pr), th);
         }
     }
 
     @Override
     public void processMessage(Message<?> message) {
-        if (isNoRoutingMessage(message)) {
-            if (isRouterParallelRouting()) {
-                processMessageDelayWhileParallelRouting(message);
-            } else {
-                if (!processMessagePhase(message)) {
-                    processMessageBehavior(message);
-                }
-            }
-        } else {
-            state.processMessage(this, message);
-        }
-    }
-
-    public void processMessageBehavior(Message<?> message) {
-        if (getSystem() instanceof ActorSystemCluster) {
-            ((ActorSystemCluster) getSystem()).awaits(message,
-                    ConfigBase.lazyToString(() -> "processMessageBehavior: " + this));
-        }
         processPrune();
-        Object data = message.getData();
-        if (data instanceof MailboxKelp.TraversalProcess) {
-            getMailboxAsKelp()
-                    .processTraversal(this,
-                            ((MailboxKelp.TraversalProcess) data).entryId,
-                            reducedSize());
-        } else {
-            super.processMessage(message);
+        super.processMessage(message);
+    }
+
+    public void processMessageBundle(MessageBundle<Object> mb) {
+        processMessageBundle(this, mb);
+    }
+
+    public static void processMessageBundle(Actor self, MessageBundle<Object> mb) {
+        mb.getData().forEach(d ->
+                self.processMessage(new Message<>(self, mb.getSender(), d)));
+    }
+
+    public void processStagingCompleted(StagingActor.StagingCompleted comp) {
+        processStagingCompleted(this, comp);
+    }
+
+    public static void processStagingCompleted(Actor self,
+                                               StagingActor.StagingCompleted data) {
+        if (self instanceof StagingActor.StagingSupported) {
+            ActorRefShuffle.flush(((StagingActor.StagingSupported) self).nextStageActor(), self);
         }
+        if (self instanceof ActorKelp<?>) {
+            ((ActorKelp<?>) self).processStagingCompletedImpl(data);
+        }
+        data.accept(self);
     }
 
-    protected void processMessageDelayWhileParallelRouting(Message<?> message) {
-        getSystem().send(message);
+    public void processStagingCompletedImpl(StagingActor.StagingCompleted comp) {
+        //clear mailbox
+        Mailbox defaultMailbox = getMailboxAsKelp().getMailbox();
+        if (defaultMailbox instanceof MailboxPersistableIncoming) {
+            ((MailboxPersistableIncoming) defaultMailbox).delete();
+        }
+
+        //clear histogram
+        //TODO avoid multiple execution?
+        getMailboxAsKelp()
+                .processStageEnd(this, comp.getTask().getKey(), getReducedSize());
     }
 
-    protected boolean processMessagePhase(Message<?> message) {
-        return getState().processMessagePhase(this, message);
+    public void processPrune() {
+        getMailboxAsKelp().prune(
+                getPruneGreaterThanLeaf(),
+                getPruneLessThanNonZeroLeafRate());
     }
 
-    protected boolean isNoRoutingMessage(Message<?> message) {
-        Object data = message.getData();
-        return data instanceof MessageNoRouting ||
-                data instanceof MailboxKelp.TraversalProcess ||
-                isNoRoutingMessagePhase(message) ||
-                (data instanceof CallableMessage<?,?> &&
-                        !(data instanceof MessageNoRouting.Routing));
-    }
-
-    protected boolean isNoRoutingMessagePhase(Message<?> message) {
-        Object data = message.getData();
-        return data instanceof PhaseShift ||
-                data instanceof PhaseShift.PhaseCompleted ||
-                data instanceof PhaseShift.PhaseShiftIntermediate;
-
-    }
+    ///// file reader
 
     @Override
-    public ActorRef nextStage() {
-        return nextStage;
+    public CompletableFuture<StagingActor.StagingCompleted> startReading(String path, Instant startTime, Consumer<StagingActor> setup) {
+        tell(new FileSplitter.FileSplit(path));
+        StagingActor sa = StagingActor.staging(system)
+                .withStartTime(startTime)
+                .withWatcherSleepTimeMs(3);
+        setup.accept(sa);
+        return sa.start(this);
     }
 
-    public CompletableFuture<CallableMessage.CallableResponseVoid> setNextStage(ActorRef nextStage) {
-        return ResponsiveCalls.sendTaskConsumer(this, (a) -> a.nextStage = nextStage);
+    public void processFileSplit(FileSplitter.FileSplit split) {
+        if (fileSplitter == null) {
+            fileSplitter = FileSplitter.getWithSplitLength(getSplitLength(), PathModifier.getPathModifier(system));
+        }
+        try {
+            if (split.getFileLength() == 0) {
+                fileSplitter.splitIterator(split.getPath())
+                        .forEachRemaining(this::processFileSplitForEachNext);
+            } else {
+                fileSplitter.openLineIterator(split).forEachRemaining(line ->
+                        processMessage(new Message<>(this, this, line)));
+                config.log("read finish: %s : %s", split, this);
+            }
+            ActorRefShuffle.flush(nextStageActor(), this);
+        } catch (Exception ex) {
+            config.log(ex, "splitter=%s split=%s", fileSplitter, split);
+        }
     }
 
-    public MailboxKelp.ReducedSize reducedSize() {
-        return new MailboxKelp.ReducedSizeDefault(reduceRuntimeCheckingThreshold(), reduceRuntimeRemainingBytesToSizeRatio()) {
+    protected void processFileSplitForEachNext(FileSplitter.FileSplit split) {
+        if (nextStage != null) {
+            nextStage.tell(split);
+        } else {
+            tell(split); //process by self
+        }
+    }
+
+    /**
+     * default reader class
+     */
+    public static class FileReader extends ActorKelp<FileReader> {
+        public FileReader(ActorSystem system, String name, ConfigKelp config) {
+            super(system, name, config);
+        }
+
+        public FileReader(ActorSystem system, ConfigKelp config) {
+            super(system, config);
+        }
+
+        public FileReader(ActorSystem system) {
+            super(system);
+        }
+
+        @Override
+        protected ActorBehavior initBehavior() {
+            return behaviorBuilder()
+                    .build();
+        }
+
+        @Override
+        public int getShuffleBufferSizeMax() {
+            return getShuffleBufferSizeFile();
+        }
+    }
+
+    ///// serializable
+
+    @SuppressWarnings("unchecked")
+    public ActorKelpSerializable<SelfType> toSerializable() {
+        return new ActorKelpSerializable<>((SelfType) this);
+    }
+
+    /**
+     * @return a serializable object which will be set to {@link ActorKelpSerializable#internalState}.
+     *    The default impl. uses {@link ActorKelpSerializable#getBuilder(Class)}
+     */
+    public Object toInternalState() {
+        try {
+            return ActorKelpSerializable.getBuilder(getClass())
+                    .toState(getPersistentFile().getSerializer(), this);
+        } catch (Exception ex) {
+            throw new RuntimeException(ex);
+        }
+    }
+
+    /**
+     * @param data a serialized state created by {@link #toInternalState()}
+     */
+    public void setInternalState(Object data) {
+        setInternalState(data, true);
+    }
+
+    public void setInternalState(Object data, boolean needToCopy) {
+        try {
+            ActorKelpSerializable.getBuilder(getClass())
+                    .setState(getPersistentFile().getSerializer(), this, data, needToCopy);
+        } catch (Exception ex) {
+            throw new RuntimeException(ex);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    public void merge(ActorKelpSerializable<SelfType> another) {
+        another.mergeTo((SelfType) this);
+    }
+
+    public void mergeInternalState(ActorKelpSerializable<SelfType> another, ActorKelpSerializable.MergingContext context, Object data) {
+        mergeInternalState(context, data);
+    }
+
+    public void mergeInternalState(ActorKelpSerializable.MergingContext context, Object data) {
+        try {
+            ActorKelpSerializable.getBuilder(getClass())
+                    .merge(context, this, data);
+        } catch (Exception ex) {
+            throw new RuntimeException(ex);
+        }
+    }
+
+    @Target(ElementType.FIELD)
+    @Retention(RetentionPolicy.RUNTIME)
+    public @interface TransferredState {
+        MergerOpType mergeType() default MergerOpType.Default;
+        Class<? extends ActorKelpMergerFunctions.MergerFunction<?>> mergeFunc()
+                default ActorKelpMergerFunctions.MergerFunctionDefault.class;
+        boolean mergeOnly() default false;
+    }
+
+    public @interface Merger { }
+
+    public enum MergerOpType {
+        Default,
+        Add,
+        Multiply,
+        Mean,
+        Max,
+        Min,
+        None;
+    }
+
+
+    ////// reducedSize
+
+    public MailboxKelp.ReducedSize getReducedSize() {
+        return new MailboxKelp.ReducedSizeDefault(getReduceRuntimeCheckingThreshold(), getReduceRuntimeRemainingBytesToSizeRatio()) {
             @Override
             protected void logReducedSize(long size, long availableOnMemoryMessages, int consuming) {
                 if (config.logSplit) {
-                    config.log("%s reduceSize: %,d -> %,d", this, size, consuming);
+                    config.log("%s reduceSize: %,d - %,d -> %,d", this, size, consuming, (size - consuming));
                 }
             }
 
@@ -560,285 +509,7 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
         };
     }
 
-
-    public void processPrune() {
-        getMailboxAsKelp().prune(
-                pruneGreaterThanLeaf(),
-                pruneLessThanNonZeroLeafRate());
-    }
-
-    public void processPhaseEnd(Object phaseKey) {
-        getMailboxAsKelp()
-                .processPhase(this, phaseKey, reducedSize());
-    }
-
-    /////////////////////////// methods for state
-
-    public KelpRoutingSplit internalCreateSplitNode(KelpRoutingSplit.SplitOrMergeContext context,
-                                                    KelpRoutingSplit old,
-                                                    ActorKelp target, SplitPath path, int height) {
-        try {
-            target.getMailboxAsKelp().lockRemainingProcesses();
-
-            ActorRef routerRef = router();
-            ActorKelp a1 = target.internalCreateClone(routerRef);
-            ActorKelp a2 = target.internalCreateClone(routerRef);
-            List<Object> splitPoints = target.getMailboxAsKelp()
-                    .splitMessageHistogramIntoReplicas(a1.getMailboxAsKelp(), a2.getMailboxAsKelp());
-            if (routerRef != target) {
-                target.internalCancel();
-            }
-            return internalCreateSplitNode(context, old, splitPoints, a1, a2, path, height);
-        } finally {
-            target.getMailboxAsKelp().unlockRemainingProcesses(target);
-        }
-    }
-
-    public KelpRoutingSplit internalCreateSplitNode(KelpRoutingSplit.SplitOrMergeContext context,
-                                                    KelpRoutingSplit old,
-                                                    List<Object> splitPoints, ActorKelp a1, ActorKelp a2, SplitPath path, int height) {
-        KelpRoutingSplit s1 = internalCreateSplitLeaf(context, old, a1, path.add(true), height);
-        KelpRoutingSplit s2 = internalCreateSplitLeaf(context, old, a2, path.add(false), height);
-
-        return newSplitNode(splitPoints, s1, s2, path);
-    }
-
-    public KelpRoutingSplit internalCreateSplitLeaf(KelpRoutingSplit.SplitOrMergeContext context,
-                                                    KelpRoutingSplit old,
-                                                    ActorKelp actor, SplitPath path, int height) {
-        if (path.depth() >= height) {
-            internalCreateSplitLeafNewName(actor, path);
-            ActorRef a = place(actor.getPlacement(), actor);
-            if (a == this) {
-                return null;
-            } else {
-                return newSplitLeaf(context, old, a, path);
-            }
-        } else {
-            if (height <= 1 && actor == this) {
-                return null;
-            } else {
-                internalCreateSplitLeafNewName(actor, path);
-                return newSplitLeaf(context, old, actor, path).split(context, height);
-            }
-        }
-    }
-
-    public void internalCreateSplitLeafNewName(ActorKelp actor, SplitPath path) {
-        String name = actor.name;
-        if (name != null) {
-            int ni = name.lastIndexOf("#");
-            if (ni >= 0) {
-                name = name.substring(0, ni);
-            }
-            name += "#" + path.toBinaryString();
-            if (!(actor.state instanceof KelpStateRouter)) { //router
-                actor.name = name;
-                actor.getSystem().register(actor);
-            }
-        }
-    }
-
-    private KelpRoutingSplit newSplitLeaf(KelpRoutingSplit.SplitOrMergeContext context,
-                                          KelpRoutingSplit old,
-                                          ActorRef actor, SplitPath path) {
-        KelpRoutingSplit s = newSplitLeaf(actor, path);
-        context.split(s, old);
-        return s;
-    }
-
-    public KelpRoutingSplit newSplitNode(List<Object> splitPoints, KelpRoutingSplit s1, KelpRoutingSplit s2, SplitPath path) {
-        return new KelpRoutingSplit.RoutingSplitNode(splitPoints, s1, s2, path, historyEntrySize());
-    }
-
-    public KelpRoutingSplit.RoutingSplitLeaf newSplitLeaf(ActorRef actor, SplitPath path) {
-        return new KelpRoutingSplit.RoutingSplitLeaf(actor, path);
-    }
-
-
-    public Message<?> internalPollForParallelRouting() {
-        return mailbox.poll();
-    }
-
-    public void internalMerge(SelfType merged) {
-        getMailboxAsKelp().lockRemainingProcesses();
-        merged.getMailboxAsKelp().lockRemainingProcesses();
-        getMailboxAsKelp()
-                .merge(merged.getMailboxAsKelp());
-        if (this.name != null) {
-            getSystem().register(this); //re-register this for this.name == merged.name
-        }
-        merged.internalCancel();
-        try {
-            initMerged(merged);
-        } finally {
-            merged.getMailboxAsKelp().unlockRemainingProcesses(merged);
-            getMailboxAsKelp().unlockRemainingProcesses(this);
-        }
-    }
-
-    @SuppressWarnings("unchecked")
-    public ActorKelp internalCreateClone(ActorRef router) {
-        try {
-            ActorKelp a = (ActorKelp) super.clone();
-            //if the actor has the name, it copies the reference to the name,
-            // but it does not register the actor
-            a.processLock = new AtomicBoolean(false);
-            a.mailbox = a.initMailboxForClone();
-            a.behavior = a.initBehavior(); //recreate behavior with initMessageEntry by ActorBehaviorBuilderKeyValue
-            a.state = a.initStateUnit(router);
-            a.initClone(this);
-            return a;
-        } catch (CloneNotSupportedException ce) {
-            throw new RuntimeException(ce);
-        }
-    }
-
-    public ActorKelp toLocal(ActorRef ref) {
-        if (ref instanceof ActorKelp) {
-            return (ActorKelp) ref;
-        }
-        try {
-            ActorKelpSerializable state = ResponsiveCalls.sendTask(system, ref,
-                    new CallableToLocalSerializable())
-                    .get(toLocalWaitMs(), TimeUnit.MILLISECONDS);
-            return state.create(system, -1);
-        } catch (Throwable ex) {
-            errorToLocal(ex, "toLocal", ref);
-            return null;
-        }
-    }
-
-    protected static Map<String, Instant> errorRecords = new HashMap<>();
-
-    protected void errorToLocal(Throwable ex, String info, ActorRef ref) {
-        if (logSkipTimeout && ex instanceof TimeoutException) {
-            //here, the error means failure of split or merge, and the typical reason is busyness of the target, which can be ignored
-            return;
-        }
-        synchronized (this) {
-            Instant last = errorRecords.get(info);
-            Instant now = Instant.now();
-            if (last == null || Duration.ofSeconds(30).minus(Duration.between(last, now)).isNegative()) {
-                errorRecords.put(info, now);
-                config.log(ex, "%s: %s", info, ref);
-            }
-        }
-    }
-
-    public static class CallableToLocalSerializable implements CallableMessage<ActorKelp, ActorKelpSerializable> {
-        public static final long serialVersionUID = 1L;
-        @Override
-        public ActorKelpSerializable call(ActorKelp self) {
-            self.getMailboxAsKelp().lockRemainingProcesses();
-            try {
-                return self.toSerializable(-1);
-            } finally {
-                self.getMailboxAsKelp().terminateAfterSerialized();
-                self.internalCancel();
-                self.getMailboxAsKelp().unlockRemainingProcesses(self);
-            }
-        }
-    }
-
-    public void internalCancel() { //remaining messages are processed by the canceled state
-        state = new StateCanceled(router(), state == null ? 0 : state.getProcessCount());
-        this.name = this.name + ".canceled." + Instant.now().getNano();
-        getSystem().register(this);
-        router().tell(new CancelChange(this, CanceledChangeType.CancelAdded));
-    }
-
-    public static class CancelChange implements Serializable, MessageNoRouting {
-        public static final long serialVersionUID = 1L;
-        protected ActorRef canceledActor;
-        protected Object data;
-
-        public CancelChange(ActorRef canceledActor, Object data) {
-            this.canceledActor = canceledActor;
-            this.data = data;
-        }
-
-        public ActorRef getCanceledActor() {
-            return canceledActor;
-        }
-
-        public Object getData() {
-            return data;
-        }
-
-        @Override
-        public String toString() {
-            return getClass().getSimpleName() + "(" + data + ", " + canceledActor + ")";
-        }
-    }
-
-    public enum CanceledChangeType {
-        CancelAdded,
-        CancelFinished,
-    }
-
-    /////////////////////////// split or merge APIs
-
-    public CompletableFuture<Integer> routerGetMaxHeight() {
-        return ResponsiveCalls.<ActorKelp, Integer>sendTask(getSystem(), router(), (a) -> {
-            State state = a.getState();
-            if (state instanceof KelpStateRouter) {
-                return ((KelpStateRouter) state).getMaxHeight(a);
-            } else {
-                return 1;
-            }
-        });
-    }
-
-    public CompletableFuture<CallableMessage.CallableResponseVoid> routerSplit(int height) {
-        return ResponsiveCalls.<ActorKelp>sendTaskConsumer(getSystem(), router(), (a) -> {
-            State state = a.state;
-            if (state instanceof KelpStateRouter) {
-                ((KelpStateRouter) state).split(a, height);
-            }
-        });
-    }
-
-    public CompletableFuture<CallableMessage.CallableResponseVoid> routerMergeInactive() {
-        return ResponsiveCalls.<ActorKelp>sendTaskConsumer(getSystem(), router(), (a) -> {
-            State state = a.state;
-            if (state instanceof KelpStateRouter) {
-                ((KelpStateRouter) state).mergeInactive(a);
-            }
-        });
-    }
-
-    public CompletableFuture<CallableMessage.CallableResponseVoid> routerSplitOrMerge(int height) {
-        return ResponsiveCalls.<ActorKelp>sendTaskConsumer(getSystem(), router(), (a) -> {
-            State state = a.state;
-            if (state instanceof KelpStateRouter) {
-                ((KelpStateRouter) state).splitOrMerge(a, height);
-            }
-        });
-    }
-
-    protected void afterSplitOrMerge(KelpRoutingSplit.SplitOrMergeContextDefault context) {
-        if (logSplit() && context.hasChanges()) {
-            String msg = context.getMessage();
-            if (context.isMergedToRoot() || context.isSplitFromRoot()) {
-                printStatus(msg);
-            } else {
-                printStatus(msg, context.getNewSplitsSorted());
-            }
-        }
-    }
-
-
-    /////////////////////////// remote placement and serialization
-
-    public static ActorRef place(ActorPlacement placement, ActorKelp a) {
-        if (placement != null) {
-            return placement.place(a);
-        } else {
-            a.getSystem().send(new Message.MessageNone(a));
-            return a;
-        }
-    }
+    //// shuffle
 
     public ActorPlacement getPlacement() {
         Actor placement = getSystem().resolveActorLocalNamed(
@@ -850,231 +521,144 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
         }
     }
 
-    public ActorKelpSerializable toSerializable(long num) {
-        return initSerializableState(newSerializableState(), num);
+    public ActorRefShuffleKelp<SelfType> shuffle() {
+        return shuffle(Integer.MAX_VALUE);
     }
 
-    protected ActorKelpSerializable newSerializableState() {
-        return new ActorKelpSerializable();
-    }
+    @SuppressWarnings("unchecked")
+    public ActorRefShuffleKelp<SelfType> shuffle(int bufferSizeMax) {
+        ActorKelpSerializable<SelfType> serialized = toSerializable(); //TODO without mailbox
+        ActorPlacement place = getPlacement();
 
-    protected ActorKelpSerializable initSerializableState(ActorKelpSerializable state, long num) {
-        state.actorType = getClass();
-        String n = getName();
-        if (n == null) {
-            n = "$" + num;
-        }
-        state.name = n;
-        state.config = config;
-        state.router = router();
-        state.nextStage = nextStage;
-        MailboxKelp r = getMailboxAsKelp();
-        r.serializeTo(state);
-        state.internalState = toSerializableInternalState();
-        return state;
-    }
+        int partitions = getShufflePartitions();
+        int bufferSize = Math.min(bufferSizeMax, getShuffleBufferSize());
+        boolean hostIncludePort = isShuffleHostIncludePort();
 
-    protected Serializable toSerializableInternalState() {
-        return null;
-    }
-
-    protected void initSerializedInternalState(Serializable s) { }
-
-    public String getOutputFileHeader() {
-        String n = getName();
-        if (n == null) {
-            n = getClass().getSimpleName() + "-" + Integer.toHexString(System.identityHashCode(this));
-        }
-        return "%h-" + PathModifier.toOutputFileComponent(true, 30, n);
-    }
-
-
-    public static class ActorKelpSerializable implements Serializable {
-        public static final long serialVersionUID = 1L;
-        public Class<? extends ActorKelp> actorType;
-        public String name;
-        public Message<?>[] messages;
-        public List<KeyHistograms.HistogramTree> histograms;
-        public Config config;
-        public ActorRef router;
-        public Serializable internalState;
-        public ActorRef nextStage;
-
-        public ActorKelp create(ActorSystem system, long num) throws Exception {
-            return init(create(system, name(num), config(), state(router)));
-        }
-
-        protected String name(long num) {
-            return name == null ? ("$" + num) : name;
-        }
-
-        protected Config config() {
-            return config == null ? Config.CONFIG_DEFAULT : config;
-        }
-
-        protected State state(ActorRef router) {
-            return new StateUnit(router);
-        }
-
-        protected ActorKelp init(ActorKelp a) {
-            a.getMailboxAsKelp().deserializeFrom(this);
-            a.initSerializedInternalState(internalState);
-            a.setNextStage(nextStage);
-            return a;
-        }
-
-        protected ActorKelp create(ActorSystem system, String name, Config config, State state) throws Exception {
-            return actorType.getConstructor(ActorSystem.class, String.class, Config.class, State.class)
-                    .newInstance(system, name, config, state);
-        }
-    }
-
-    /////////////////////////// print status
-
-    public void printStatus() {
-        printStatus("");
-    }
-
-    public void printStatus(String head) {
-        printStatus(config.getLogger(), head);
-    }
-
-    public void printStatus(String head, List<KelpRoutingSplit> newSplits) {
-        printStatus(config.getLogger(), head, newSplits);
-    }
-
-    public void log(String str) {
-        config.log("%s", str);
-    }
-
-    public void log(String str, Object... args) {
-        config.log(str, args);
-    }
-
-    public void log(Throwable ex, String str) {
-        config.log(ex, "%s", str);
-    }
-
-    public void log(Throwable ex, String str, Object... args) {
-        config.log(ex, str, args);
-    }
-
-    @Override
-    public void logPhase(String str, Object... args) {
-        config.log(config.logColorPhase, str, args);
-    }
-
-    public ConfigBase.FormatAndArgs logMessage(String str, Object... args) {
-        return config.logMessage(str, args);
-    }
-
-    public void printStatus(ActorSystem.SystemLogger out, String head) {
-        ConfigBase.FormatAndArgs fa = toStringStatus(head);
-        int color = config.getLogColorDefault();
-        out.log(true, color, fa.format, fa.args);
-        if (state instanceof KelpStateRouter) {
-            KelpStateRouter sr = (KelpStateRouter) state;
-            printStatus(sr.getSplit(), out);
-        }
-    }
-
-    public void printStatus(ActorSystem.SystemLogger out, String head, List<KelpRoutingSplit> newSplits) {
-        ConfigBase.FormatAndArgs fa = toStringStatus(head);
-        int color = config.getLogColorDefault();
-        out.log(true, color, fa.format, fa.args);
-        int i = 0;
-        for (KelpRoutingSplit s : newSplits) {
-            if (s instanceof KelpRoutingSplit.RoutingSplitLeaf) {
-                ActorRef r = ((KelpRoutingSplit.RoutingSplitLeaf) s).getActor();
-                out.log(true, color, " %d: %s %d:leaf: %s", i, s.getPath(), s.getDepth(), r);
-                ++i;
-            }
-        }
-    }
-
-    public ConfigBase.FormatAndArgs toStringStatus(String head) {
-        String str = toString();
-        if (state instanceof KelpStateRouter) {
-            KelpStateRouter sr = (KelpStateRouter) state;
-            return logMessage("%s router %s \n" +
-                            "   threshold=%,d height=%,d/%,d parallelRouting=%s",
-                    head,
-                    str,
-                    mailboxThreshold(),
-                    sr.getHeight(),
-                    sr.getMaxHeight(),
-                    !sr.isNonParallelRouting());
-        } else if (state instanceof StateUnit) {
-            return logMessage("%s leaf %s", head, str);
-        } else {
-            return logMessage("%s %s %s", state, head, str);
-        }
-    }
-
-    @Override
-    public String toStringContents() {
-        String nm = super.toStringContents();
-        return String.format("%s %s, %s, %s",
-                nm.isEmpty() ? "" : (nm + ","),
+        return createShuffle(
                 getSystem(),
-                toStringState(),
-                toStringMailboxStatus());
+                ActorRefShuffle.createEntries(
+                        IntStream.range(0, partitions)
+                            .mapToObj(i -> createAndPlaceShuffle(place, serialized, i))
+                            .collect(Collectors.toList()),
+                        bufferSize,
+                        ActorRefShuffle.refToHost(hostIncludePort)),
+                getKeyExtractors(),
+                bufferSize,
+                hostIncludePort,
+                (Class<SelfType>) getClass());
     }
 
-    public String toStringState() {
-        if (state instanceof KelpStateRouter) {
-            return "router";
-        } else if (state instanceof StateUnit) {
-            return "leaf";
-        } else if (state instanceof StateCanceled) {
-            return "canceled";
-        } else if (state == null){
-            return "null";
-        } else {
-            return state.getClass().getName();
+    protected ActorRefShuffleKelp<SelfType> createShuffle(ActorSystem system, Map<ActorAddress, List<ActorRefShuffle.ShuffleEntry>> entries,
+                                                          List<ActorKelpFunctions.KeyExtractor<?, ?>> keyExtractors, int bufferSize, boolean hostIncludePort,
+                                                          Class<SelfType> actorType) {
+        return new ActorRefShuffleKelp<>(system, entries, keyExtractors, bufferSize, hostIncludePort, actorType, config);
+    }
+
+    @SuppressWarnings("unchecked")
+    public List<ActorKelpFunctions.KeyExtractor<?,?>> getKeyExtractors() {
+        return getMailboxAsKelp().getEntries().stream()
+                .map(HistogramEntry::getProcessor)
+                .filter(ActorBehaviorKelp.ActorBehaviorMatchKey.class::isInstance)
+                .map(ActorBehaviorKelp.ActorBehaviorMatchKey.class::cast)
+                .flatMap(p -> ((List<ActorKelpFunctions.KeyExtractor<?,?>>) p.getKeyExtractors()).stream())
+                .collect(Collectors.toList());
+    }
+
+    protected ActorRef createAndPlaceShuffle(ActorPlacement place, ActorKelpSerializable<SelfType> serialized, int i) {
+        try {
+            Actor a = serialized.restoreShuffle(system, i, getConfig());
+            if (place != null) {
+                return place.place(a);
+            } else {
+                return a;
+            }
+        } catch (Exception ex) {
+            throw new RuntimeException(ex);
         }
     }
 
-    public String toStringMailboxStatus() {
-        return String.format("queue=%,d %s",
-                getMailboxAsKelp().size(),
-                getMailboxAsKelp().getEntries().stream()
-                        .map(MailboxKelp.HistogramEntry::getTree)
-                        .map(t -> String.format("leaf=%,d nonZeroLeaf=%,d valuesInTree=%,d treeHeight=%,d completed=%,d",
-                                t.getLeafSize(),
-                                t.getLeafSizeNonZero(),
-                                t.getTreeSize(),
-                                t.getTreeHeight(),
-                                t.getCompleted().size()))
-                        .collect(Collectors.joining(", ", "[", "]")));
-    }
+    /**
+     * called when creation as a shuffle member
+     */
+    public void initShuffle() { }
 
-    protected void printStatus(KelpRoutingSplit s, ActorSystem.SystemLogger out) {
-        String idt = "  ";
-        if (s != null) {
-            for (int i = 0; i < s.getDepth(); ++i) {
-                idt += "  ";
+    public static class ActorRefShuffleKelp<ActorType extends ActorKelp<ActorType>> extends ActorRefShuffle implements KelpStage<ActorType> {
+        public static final long serialVersionUID = 1L;
+        protected Class<?> actorType;
+        protected ConfigKelp config;
+
+        public ActorRefShuffleKelp() {
+        }
+
+        public ActorRefShuffleKelp(ActorSystem system, Map<ActorAddress, List<ShuffleEntry>> entries,
+                                   List<ActorKelpFunctions.KeyExtractor<?, ?>> keyExtractors, int bufferSize, boolean hostIncludePort,
+                                   Class<ActorType> actorType, ConfigKelp config) {
+            super(system, entries, keyExtractors, bufferSize, hostIncludePort);
+            this.actorType = actorType;
+            this.config = config;
+        }
+
+        @Override
+        public <NextActorType extends Actor> KelpStage<NextActorType> connects(Class<NextActorType> actorType, ActorRef ref) {
+            ref = connectStageInitialActor(ref, Integer.MAX_VALUE);
+            try {
+                connectStageWithoutInit(ref).get();
+            } catch (Exception ex) {
+                throw new RuntimeException(ex);
+            }
+            return toKelpStage(system, actorType, ref);
+        }
+
+        @Override
+        public void write(Kryo kryo, Output output) {
+            super.write(kryo, output);
+            kryo.writeClass(output, actorType);
+        }
+
+        @Override
+        public void read(Kryo kryo, Input input) {
+            super.read(kryo, input);
+            actorType = kryo.readClass(input).getType();
+        }
+
+        public ActorType merge() {
+            try (ActorKelpMerger<ActorType> m = new ActorKelpMerger<>(system, config)) {
+                return m.mergeToLocalSync(getMemberActors());
             }
         }
-        int color = config.getLogColorDefault();
-        if (s == null) {
-            out.log(true, color, "%s null", idt);
-        } else if (s instanceof KelpRoutingSplit.RoutingSplitNode) {
-            KelpRoutingSplit.RoutingSplitNode sn = (KelpRoutingSplit.RoutingSplitNode) s;
-            out.log(true, color, "%s %d:node: %s proced=%,d history=%s", idt, sn.getDepth(), Arrays.stream(sn.getSplitPoints())
-                .map(Objects::toString)
-                .map(l -> l.length() > 100 ? l.substring(0, 100) + "..." : l)
-                .collect(Collectors.joining(", ", "[", "]")),
-                sn.getProcessCount(),
-                sn.getHistory().toList().stream()
-                    .map(h -> String.format("(%,d:%,d)", h.left.get(), h.right.get()))
-                    .collect(Collectors.joining(", ", "{", "}")));
-            printStatus(sn.getLeft(), out);
-            printStatus(sn.getRight(), out);
-        } else if (s instanceof KelpRoutingSplit.RoutingSplitLeaf) {
-            ActorRef r = ((KelpRoutingSplit.RoutingSplitLeaf) s).getActor();
-            out.log(true, color, "%s %d:leaf: proced=%,d %s", idt, s.getDepth(), s.getProcessCount(), r);
+    }
+
+    @Override
+    public <NextActorType extends Actor> KelpStage<NextActorType> connects(Class<NextActorType> actorType, ActorRef ref) {
+        ref = ActorRefShuffle.connectStageInitialActor(system, ref, getShuffleBufferSizeMax());
+        if (ref instanceof ActorRefShuffle) {
+            ref = ((ActorRefShuffle) ref).use();
+        }
+        setNextStage(ref);
+        return toKelpStage(system, actorType, ref);
+    }
+
+    public int getShuffleBufferSizeMax() {
+        return Integer.MAX_VALUE;
+    }
+
+    @SuppressWarnings("unchecked")
+    public static <NextActorType extends Actor> KelpStage<NextActorType> toKelpStage(ActorSystem system, Class<NextActorType> actorType, ActorRef ref) {
+        if (ref instanceof ActorRefShuffleKelp<?>) {
+            return (KelpStage<NextActorType>) ref;
+        } else {
+            return new KelpStageRefWrapper<>(system, actorType, ref);
         }
     }
 
+    @Override
+    public List<ActorRef> getMemberActors() {
+        return Collections.emptyList();
+    }
+
+    @SuppressWarnings("unchecked")
+    @Override
+    public SelfType merge() {
+        return (SelfType) this;
+    }
 }

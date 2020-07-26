@@ -3,10 +3,10 @@ package csl.actor.example.kelp;
 import csl.actor.Actor;
 import csl.actor.ActorBehavior;
 import csl.actor.Message;
-import csl.actor.kelp.ActorBehaviorBuilderKelp;
-import csl.actor.kelp.ActorBehaviorKelp;
-import csl.actor.kelp.KeyHistograms;
-import csl.actor.kelp.MailboxKelp;
+import csl.actor.kelp_old.ActorBehaviorBuilderKelp;
+import csl.actor.kelp_old.ActorBehaviorKelp;
+import csl.actor.kelp_old.KeyHistograms;
+import csl.actor.kelp_old.MailboxKelp;
 
 import java.util.List;
 import java.util.function.BiConsumer;

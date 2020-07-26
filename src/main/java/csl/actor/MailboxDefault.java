@@ -32,6 +32,7 @@ public class MailboxDefault implements Mailbox, Cloneable {
         return queue.isEmpty();
     }
 
+    @Override
     public ConcurrentLinkedQueue<Message<?>> getQueue() {
         return queue;
     }

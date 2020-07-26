@@ -1,10 +1,9 @@
 package csl.actor.example.kelp2;
 
 import csl.actor.*;
-import csl.actor.kelp2.*;
+import csl.actor.kelp.*;
 import csl.actor.util.ResponsiveCalls;
 
-import java.io.Serializable;
 import java.lang.reflect.Type;
 import java.util.Random;
 

@@ -14,8 +14,35 @@ import java.util.Map;
 import java.util.WeakHashMap;
 import java.util.regex.Pattern;
 
+/**
+ * {@link #setPathModifierWithBaseDir(ActorSystem, String)} :
+ * baseDir + (subPath with replacing "%a" or "%h")
+ *  <ul>
+ *      <li><code>%a</code> : <code>app-uu-MM-dd-%07h</code>.
+ *         the string "app" and the UTC date uu-MM-dd and the UTC time (milliseconds) of the day as hex</li>
+ *      <li><code>%h</code> : <code>host-port</code>.
+ *        the host name up to 18 chars and the port is up to 8 chars. Non word chars are replaced to "-"</li>
+ *  </ul>
+ *
+ *  example:
+ *  <pre>
+ *      PathModifier pm = PathModifier.setPathModifierWithBaseDir("/mnt/mydir_on_h1")
+ *                        .setHost("h1", 3000).setApp("myapp");
+ *      String path = pm.expandPath("%a/%h/out.txt"); //=> "myapp-20-07-26-5265bff/h1-3000/out.txt"
+ *        //the expandPath does not include the baseDir
+ *        //So it can transfer to another host and apply the path to get(path)
+ *      ...
+ *      //in another host
+ *      PathModifier pm = PathModifier.setPathModifierWithBaseDir("/mnt/mydir_on_h2")
+ *                        .setHost("h2", 3000).setApp("myapp");
+ *      String path = ...; //transferred from the h1 as "myapp-20-07-26-5265bff/h1-3000/out.txt"
+ *      String p2 = pm.expandPath(path); //p2.equals(path)
+ *
+ *      pm.get(path); //=> "/mnt/mydir_on_h2/myapp-20-07-26-5265bff/h1-3000/out.txt"
+ *  </pre>
+ */
 public interface PathModifier {
-    Path get(String path);
+    Path get(String expandedPath);
 
     default Path getExpanded(String path) {
         return get(expandPath(path));
@@ -64,8 +91,8 @@ public interface PathModifier {
         }
 
         @Override
-        public Path get(String path) {
-            return Paths.get(baseDir, expandPath(path)).normalize();
+        public Path get(String expandedPath) {
+            return Paths.get(baseDir, expandPath(expandedPath)).normalize();
         }
 
         @Override

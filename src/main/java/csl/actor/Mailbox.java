@@ -1,5 +1,7 @@
 package csl.actor;
 
+import java.util.Queue;
+
 public interface Mailbox {
     void offer(Message<?> message);
     Message<?> poll();
@@ -9,4 +11,6 @@ public interface Mailbox {
      * @return a new empty clone
      */
     Mailbox create();
+
+    Queue<Message<?>> getQueue();
 }

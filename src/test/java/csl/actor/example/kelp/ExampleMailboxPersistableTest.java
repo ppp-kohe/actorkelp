@@ -1,11 +1,11 @@
 package csl.actor.example.kelp;
 
 import csl.actor.*;
-import csl.actor.cluster.PersistentFileManager;
+import csl.actor.persist.PersistentFileManager;
 import csl.actor.example.ExampleSerialize2;
-import csl.actor.kelp.Config;
-import csl.actor.cluster.MailboxPersistable;
-import csl.actor.kelp.PhaseShift;
+import csl.actor.kelp_old.Config;
+import csl.actor.persist.MailboxPersistableReplacement;
+import csl.actor.kelp_old.PhaseShift;
 import csl.actor.util.ResponsiveCalls;
 import csl.actor.remote.KryoBuilder;
 
@@ -33,16 +33,15 @@ public class ExampleMailboxPersistableTest {
             KryoBuilder.SerializerPool p = new KryoBuilder.SerializerPoolDefault(system);
             PersistentFileManager manager = new PersistentFileManager(
                     "target/debug-persist", p, Paths::get, system.getLogger());
-            MailboxPersistable.MessagePersistentFile mp = new MailboxPersistable.MessagePersistentFile(manager);
 
             ExampleSerialize2.MyActor a = new ExampleSerialize2.MyActor(system, "hello", Config.CONFIG_DEFAULT);
 
-            MailboxPersistable.MessageOnStorage s;
-            try (MailboxPersistable.MessagePersistentWriter w = mp.get()) {
-                s = w.reader();
-                w.save(new Message<>(a, a, "hello"));
-                w.save(new Message<>(a, a, 1234));
-                w.save(new Message<>(a, a, CallableMessage.callableMessage((self) -> "hello")));
+            MailboxPersistableReplacement.MessageOnStorage s;
+            try (PersistentFileManager.PersistentFileWriter w = manager.createWriter("mailbox")) {
+                s = new MailboxPersistableReplacement.MessageOnStorage(w.createReaderSourceFromCurrentPosition());
+                w.write(new Message<>(a, a, "hello"));
+                w.write(new Message<>(a, a, 1234));
+                w.write(new Message<>(a, a, CallableMessage.callableMessage((self) -> "hello")));
             }
 
             Message<?> m = s.readNext();
@@ -70,41 +69,40 @@ public class ExampleMailboxPersistableTest {
             KryoBuilder.SerializerPool p = new KryoBuilder.SerializerPoolDefault(system);
             PersistentFileManager manager = new PersistentFileManager(
                     "target/debug-persist", p, Paths::get, system.getLogger());
-            MailboxPersistable.MessagePersistentFile mp = new MailboxPersistable.MessagePersistentFile(manager);
 
             ExampleSerialize2.MyActor a = new ExampleSerialize2.MyActor(system, "hello", Config.CONFIG_DEFAULT);
 
             int blockSize = 3;
 
-            MailboxPersistable.MessageOnStorage s;
-            try (MailboxPersistable.MessagePersistentWriter w = mp.get()) {
-                s = w.reader();
+            MailboxPersistableReplacement.MessageOnStorage s;
+            try (PersistentFileManager.PersistentFileWriter w = manager.createWriter("mailbox")) {
+                s = new MailboxPersistableReplacement.MessageOnStorage(w.createReaderSourceFromCurrentPosition());
                 for (int i = 0; i < blockSize; ++i) {
-                    w.save(new Message<>(a, a, "" + i));
+                    w.write(new Message<>(a, a, "" + i));
                 }
             }
 
-            MailboxPersistable.MessageOnStorage s2;
-            try (MailboxPersistable.MessagePersistentWriter w = mp.get()) {
-                s2 = w.reader();
+            MailboxPersistableReplacement.MessageOnStorage s2;
+            try (PersistentFileManager.PersistentFileWriter w = manager.createWriter("mailbox")) {
+                s2 = new MailboxPersistableReplacement.MessageOnStorage(w.createReaderSourceFromCurrentPosition());
                 for (int i = 0; i < blockSize; ++i) {
-                    w.save(new Message<>(a, a, "r1-" + i));
+                    w.write(new Message<>(a, a, "r1-" + i));
                 }
-                w.save(s);
+                w.write(s);
                 for (int i = 0; i < blockSize; ++i) {
-                    w.save(new Message<>(a, a, "r2-" + i));
+                    w.write(new Message<>(a, a, "r2-" + i));
                 }
             }
 
-            MailboxPersistable.MessageOnStorage s3;
-            try (MailboxPersistable.MessagePersistentWriter w = mp.get()) {
-                s3 = w.reader();
+            MailboxPersistableReplacement.MessageOnStorage s3;
+            try (PersistentFileManager.PersistentFileWriter w = manager.createWriter("mailbox")) {
+                s3 = new MailboxPersistableReplacement.MessageOnStorage(w.createReaderSourceFromCurrentPosition());
                 for (int i = 0; i < blockSize; ++i) {
-                    w.save(new Message<>(a, a, "r3-" + i));
+                    w.write(new Message<>(a, a, "r3-" + i));
                 }
-                w.save(s2);
+                w.write(s2);
                 for (int i = 0; i < blockSize; ++i) {
-                    w.save(new Message<>(a, a, "r4-" + i));
+                    w.write(new Message<>(a, a, "r4-" + i));
                 }
             }
 
@@ -170,7 +168,7 @@ public class ExampleMailboxPersistableTest {
                 (sys, comp) -> {
                     try {
                         ResponsiveCalls.<TestActor>sendTaskConsumer(sys, a, (self) -> {
-                                TestMailboxPersistable  m = (TestMailboxPersistable) self.getMailbox();
+                                TestMailboxPersistableReplacement m = (TestMailboxPersistableReplacement) self.getMailbox();
                                 System.err.println("persist: " + m.persistCount);
                                 self.log();
 
@@ -204,7 +202,7 @@ public class ExampleMailboxPersistableTest {
 
         @Override
         protected Mailbox initMailbox() {
-            return new TestMailboxPersistable(PersistentFileManager.getPersistentFile(system, () -> "target/debug-persist"),
+            return new TestMailboxPersistableReplacement(PersistentFileManager.getPersistentFile(system, "target/debug-persist"),
                     5_000,
                     100);
         }
@@ -234,11 +232,11 @@ public class ExampleMailboxPersistableTest {
         }
     }
 
-    public static class TestMailboxPersistable extends MailboxPersistable {
+    public static class TestMailboxPersistableReplacement extends MailboxPersistableReplacement {
         public long persistCount;
         Message<?> prev;
 
-        public TestMailboxPersistable(PersistentFileManager manager, long sizeLimit, long onMemorySize) {
+        public TestMailboxPersistableReplacement(PersistentFileManager manager, long sizeLimit, long onMemorySize) {
             super(manager, sizeLimit, onMemorySize);
         }
 
@@ -286,8 +284,8 @@ public class ExampleMailboxPersistableTest {
                 (sys, comp) -> {
                     try {
                         ResponsiveCalls.<TestActorForSpeed>sendTaskConsumer(sys, a, (self) -> {
-                            if (self.getMailbox() instanceof TestMailboxPersistable) {
-                                TestMailboxPersistable m = (TestMailboxPersistable) self.getMailbox();
+                            if (self.getMailbox() instanceof TestMailboxPersistableReplacement) {
+                                TestMailboxPersistableReplacement m = (TestMailboxPersistableReplacement) self.getMailbox();
                                 System.err.println("persist: " + m.persistCount);
                             }
                             self.log();
@@ -318,7 +316,7 @@ public class ExampleMailboxPersistableTest {
         @Override
         protected Mailbox initMailbox() {
             if (persist) {
-                return new TestMailboxPersistable(PersistentFileManager.getPersistentFile(system, () -> "target/debug-persist"),
+                return new TestMailboxPersistableReplacement(PersistentFileManager.getPersistentFile(system, "target/debug-persist"),
                         100_000,
                         100);
             } else {

@@ -4,9 +4,8 @@ import csl.actor.ActorBehavior;
 import csl.actor.ActorDefault;
 import csl.actor.ActorRef;
 import csl.actor.ActorSystem;
-import csl.actor.kelp2.ActorSystemKelp;
+import csl.actor.kelp.ActorSystemKelp;
 import csl.actor.remote.ActorRefRemote;
-import csl.actor.remote.ActorSystemRemote;
 
 public class ExampleActorSystemKelp {
     public static void main(String[] args) throws Exception {
