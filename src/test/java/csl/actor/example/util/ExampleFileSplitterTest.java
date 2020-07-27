@@ -1,5 +1,6 @@
-package csl.actor.example.cluster;
+package csl.actor.example.util;
 
+import csl.actor.example.TestTool;
 import csl.actor.util.FileSplitter;
 
 import java.nio.file.Files;
@@ -38,13 +39,11 @@ public class ExampleFileSplitterTest {
             Text e = texts.get(i);
             Text a = data.get(i);
             if (!e.data.equals(a.data)) {
-                log("invalid : " + e + "\n       vs " + a);
+                new TestTool().printError("invalid : " + e + "\n       vs " + a);
                 throw new RuntimeException();
             }
         }
-        if (data.size() != texts.size()) {
-            throw new RuntimeException("error size");
-        }
+        TestTool.assertEquals("size", data.size(), texts.size());
     }
 
     static void log(String str) {

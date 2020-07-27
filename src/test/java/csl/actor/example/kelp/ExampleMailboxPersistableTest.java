@@ -1,8 +1,9 @@
 package csl.actor.example.kelp;
 
 import csl.actor.*;
+import csl.actor.kelp.ConfigKelp;
 import csl.actor.persist.PersistentFileManager;
-import csl.actor.example.ExampleSerialize2;
+import csl.actor.example.ExampleSerializeKelp;
 import csl.actor.kelp_old.Config;
 import csl.actor.persist.MailboxPersistableReplacement;
 import csl.actor.kelp_old.PhaseShift;
@@ -34,7 +35,7 @@ public class ExampleMailboxPersistableTest {
             PersistentFileManager manager = new PersistentFileManager(
                     "target/debug-persist", p, Paths::get, system.getLogger());
 
-            ExampleSerialize2.MyActor a = new ExampleSerialize2.MyActor(system, "hello", Config.CONFIG_DEFAULT);
+            ExampleSerializeKelp.MyActor a = new ExampleSerializeKelp.MyActor(system, "hello", ConfigKelp.CONFIG_DEFAULT);
 
             MailboxPersistableReplacement.MessageOnStorage s;
             try (PersistentFileManager.PersistentFileWriter w = manager.createWriter("mailbox")) {
@@ -70,7 +71,7 @@ public class ExampleMailboxPersistableTest {
             PersistentFileManager manager = new PersistentFileManager(
                     "target/debug-persist", p, Paths::get, system.getLogger());
 
-            ExampleSerialize2.MyActor a = new ExampleSerialize2.MyActor(system, "hello", Config.CONFIG_DEFAULT);
+            ExampleSerializeKelp.MyActor a = new ExampleSerializeKelp.MyActor(system, "hello", ConfigKelp.CONFIG_DEFAULT);
 
             int blockSize = 3;
 

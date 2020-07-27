@@ -1,6 +1,7 @@
-package csl.actor.example.exp.thread;
+package csl.actor.example.exp;
 
 import csl.actor.*;
+import csl.actor.util.ConfigBase;
 
 import java.io.FileWriter;
 import java.io.PrintWriter;
@@ -20,9 +21,33 @@ public class ExpThreadTest {
         new ExpThreadTest().run(args);
     }
 
+    public static class ConfigExpThread extends ConfigBase {
+        public static final long serialVersionUID = -1L;
+
+        @CommandArgumentOption(value = "-n", help = "iteration number")
+        public int n = 10_000;
+
+        @CommandArgumentOption(value = "--threadFactor", abbrev = "-tf", help = "factor for available-processors")
+        public float threadFactor = 1.0f;
+
+        @CommandArgumentOption(help = "empty means no-output")
+        public String csvFile = "target/msgassoc-time.csv";
+
+        public int vecLen = 100;
+
+        public int kMeansDataSize = 100;
+        public int kMeansK = 10;
+        public int kMeansLoop = 100;
+        public double kMeansThreshold = 0.001;
+    }
+
     public void run(String... args) {
-        int n = Integer.parseInt(args[0].replaceAll("[_,]", ""));
-        int ps = Runtime.getRuntime().availableProcessors();
+        if (config.readArgs(args).contains("--help")) {
+            return;
+        }
+
+        int n = config.n;
+        int ps = (int) (config.threadFactor * Runtime.getRuntime().availableProcessors());
         for (int i = 2; i <= ps * 2; ++i) {
             create().runActor(n, ps, i, 2);
         }
@@ -32,13 +57,13 @@ public class ExpThreadTest {
         create().runActor(n, ps, ps / 2, 1);
         create().runActor(n, ps, ps / 2, 2);
         create().runActor(n, ps, ps / 2, 4);
-
     }
 
     public ExpThreadTest create() {
         return new ExpThreadTest();
     }
 
+    ConfigExpThread config = new ConfigExpThread();
     int num;
     ConcurrentLinkedQueue<Object> queue;
     ExecutorService service;
@@ -96,7 +121,7 @@ public class ExpThreadTest {
             log(String.format("finish: %,d: %s", i.get(), d));
             service.shutdownNow();
             finish = true;
-            save(self.title, d);
+            save(config.csvFile, self.title, d);
         }
     }
     protected ThreadComp createThreadComp(int th, String title) {
@@ -136,7 +161,7 @@ public class ExpThreadTest {
         };
         start = Instant.now();
 
-        FinishActor fa = new FinishActor(sys, num, title("a", threads, readThreads, routerThreads));
+        FinishActor fa = new FinishActor(sys, num, title("a", threads, readThreads, routerThreads), config.csvFile);
 
         List<ReadActor> as = new ArrayList<>();
         for (int r = 0; r < readThreads; ++r) {
@@ -175,8 +200,8 @@ public class ExpThreadTest {
                 threads, readThreads, routerThreads);
     }
 
-    static String file = "target/msgassoc-time.csv";
-    static void save(String title, Duration d) {
+
+    public static void save(String file, String title, Duration d) {
         long milli = d.getNano() / 1_000_000L;
         double s = d.getSeconds() + (milli / (double) 1000);
         try (PrintWriter w = new PrintWriter(new FileWriter(file, true))) {
@@ -191,11 +216,13 @@ public class ExpThreadTest {
         int num;
         Instant start;
         String title;
-        public FinishActor(ActorSystem system, int num, String title) {
+        String file;
+        public FinishActor(ActorSystem system, int num, String title, String file) {
             super(system);
             this.num = num;
             start = Instant.now();
             this.title = title;
+            this.file = file;
         }
 
         @Override
@@ -211,7 +238,7 @@ public class ExpThreadTest {
                 Duration d = Duration.between(start, Instant.now());
                 log(String.format("finish: %,d: %s", count, d));
                 getSystem().close();
-                save(title, d);
+                save(file, title, d);
             }
         }
     }

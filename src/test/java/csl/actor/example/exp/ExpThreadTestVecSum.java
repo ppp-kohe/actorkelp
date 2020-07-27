@@ -1,4 +1,4 @@
-package csl.actor.example.exp.thread;
+package csl.actor.example.exp;
 
 import csl.actor.ActorRef;
 import csl.actor.ActorSystem;
@@ -18,21 +18,20 @@ public class ExpThreadTestVecSum extends ExpThreadTest {
 
     @Override
     protected ThreadComp createThreadComp(int th, String title) {
-        return new ThreadCompVecSum(th, title);
+        return new ThreadCompVecSum(th, title, config.vecLen);
     }
 
     @Override
     ReadActor newReadActor(ActorSystem sys, int r, ActorRef fa) {
-        return new ReadActorVecSum(sys, r, fa);
+        return new ReadActorVecSum(sys, r, fa, config.vecLen);
     }
 
-    static int vecSize = 2048;
-
     static class ThreadCompVecSum extends ThreadComp {
-        double[] vec = new double[vecSize];
+        double[] vec;
         Random rand = new Random();
-        public ThreadCompVecSum(int th, String title) {
+        public ThreadCompVecSum(int th, String title, int vecSize) {
             super(th, title);
+            vec = new double[vecSize];
         }
 
         double sum() {
@@ -62,10 +61,11 @@ public class ExpThreadTestVecSum extends ExpThreadTest {
 
 
     static class ReadActorVecSum extends ExpThreadTest.ReadActor {
-        double[] vec = new double[vecSize];
+        double[] vec;
         Random rand = new Random();
-        public ReadActorVecSum(ActorSystem system, int n, ActorRef target) {
+        public ReadActorVecSum(ActorSystem system, int n, ActorRef target, int vecSize) {
             super(system, n, target);
+            vec = new double[vecSize];
         }
 
         @Override

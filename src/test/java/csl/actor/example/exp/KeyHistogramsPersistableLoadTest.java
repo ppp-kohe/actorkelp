@@ -1,9 +1,11 @@
-package csl.actor.example.exp.wordcount;
+package csl.actor.example.exp;
 
 import csl.actor.ActorSystemDefault;
+import csl.actor.kelp.behavior.KeyHistograms;
+import csl.actor.kelp.behavior.KeyHistogramsPersistable;
 import csl.actor.util.PathModifier;
 import csl.actor.persist.PersistentFileManager;
-import csl.actor.kelp_old.*;
+import csl.actor.kelp.*;
 import csl.actor.remote.ActorSystemRemote;
 import csl.actor.remote.KryoBuilder;
 
@@ -79,7 +81,7 @@ public class KeyHistogramsPersistableLoadTest {
                             src.newSource(pos));
                 }
                 tree = new KeyHistogramsPersistable.HistogramTreePersistable(h,
-                        new ActorBehaviorBuilderKelp.KeyComparatorDefault<>(), 1000,
+                        new ActorKelpFunctions.KeyComparatorDefault<>(), 1000,
                         new KeyHistogramsPersistable.HistogramTreePersistableConfig() {}, pm,
                         new KeyHistogramsPersistable.PersistentConditionHistogramSizeLimit(1, 1));
                 long c = run(h);

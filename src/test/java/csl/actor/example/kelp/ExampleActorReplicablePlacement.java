@@ -2,9 +2,9 @@ package csl.actor.example.kelp;
 
 import csl.actor.*;
 import csl.actor.cluster.ActorPlacement;
+import csl.actor.example.TestToolRemote;
 import csl.actor.kelp_old.PhaseShift;
 import csl.actor.util.ResponsiveCalls;
-import csl.actor.example.ExampleRemote;
 import csl.actor.kelp_old.*;
 import csl.actor.remote.ActorAddress;
 import csl.actor.remote.ActorRefRemote;
@@ -27,8 +27,8 @@ public class ExampleActorReplicablePlacement {
         ActorPlacementKelp p = new ActorPlacementKelp(system,
                 new ActorPlacement.PlacementStrategyRoundRobin(0));
 
-        ExampleRemote.setMvnClasspath();
-        ExampleRemote.launchJava("-Dcsl.actor.debug.color=106", Follower.class.getName(), "10001", Integer.toString(serverPort));
+        TestToolRemote.setMvnClasspath();
+        TestToolRemote.launchJava("-Dcsl.actor.debug.color=106", Follower.class.getName(), "10001", Integer.toString(serverPort));
         Thread.sleep(5000);
 
         ActorRefRemote.get(system, "localhost", 10001, "recv")

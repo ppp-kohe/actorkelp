@@ -371,8 +371,19 @@ public class ConfigBase implements Serializable, ToJson {
     @Retention(RetentionPolicy.RUNTIME)
     @Target(ElementType.FIELD)
     public @interface CommandArgumentOption {
+        /**
+         * @return a command line option, like "--option"
+         */
         String value() default "";
+
+        /**
+         * @return a command line option for the shorter version, like "-o"
+         */
         String abbrev() default "";
+
+        /**
+         * @return a command line help message.
+         */
         String help() default "";
     }
 

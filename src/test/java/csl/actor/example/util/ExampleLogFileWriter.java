@@ -1,4 +1,4 @@
-package csl.actor.example.cluster;
+package csl.actor.example.util;
 
 import csl.actor.ActorSystemDefault;
 import csl.actor.util.LogFileWriter;

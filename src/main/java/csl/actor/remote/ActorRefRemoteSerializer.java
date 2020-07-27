@@ -63,6 +63,9 @@ public class ActorRefRemoteSerializer<RefType extends ActorRef> extends Serializ
     @Override
     public RefType read(Kryo kryo, Input input, Class<? extends RefType> aClass) {
         ActorAddress o = (ActorAddress)  kryo.readClassAndObject(input);
+        if (remoteSystem instanceof ActorSystemRemote) {
+            o = ((ActorSystemRemote) remoteSystem).normalizeHostAddress(o);
+        }
         return (RefType) ActorRefRemote.get(remoteSystem, o);
     }
 

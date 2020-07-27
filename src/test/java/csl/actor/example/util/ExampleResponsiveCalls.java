@@ -1,6 +1,7 @@
-package csl.actor.example.cluster;
+package csl.actor.example.util;
 
 import csl.actor.*;
+import csl.actor.example.TestTool;
 import csl.actor.util.ResponsiveCalls;
 import csl.actor.remote.ActorSystemRemote;
 
@@ -17,6 +18,7 @@ public class ExampleResponsiveCalls {
             String data = ResponsiveCalls.<String>send(sys, ActorRefLocalNamed.get(sys, "res"), "hello")
                     .get();
             System.out.println(Instant.now() + ": response: " + data);
+            TestTool.assertEquals("send.get", "res:hello", data);
 
             //dead-letter
             try {
@@ -34,6 +36,7 @@ public class ExampleResponsiveCalls {
             new ResponsiveCalls.ResponsiveCallableActor(host2);
             String s = ResponsiveCalls.sendHostTask(host1, host2.getServerAddress(), (a) -> "hello").get();
             System.out.println(Instant.now() + ": callable: " + s);
+            TestTool.assertEquals("sendHostTask", "hello", s);
 
             System.out.println(Instant.now() + ": finish");
         }

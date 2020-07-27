@@ -2,7 +2,7 @@ package csl.actor.example;
 
 import csl.actor.*;
 
-public class Example {
+public class ExampleActor {
     public static void main(String[] args) {
         ActorSystemDefault sys = new ActorSystemDefault();
         ActorRef root = new MyActor(sys, null);

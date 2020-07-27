@@ -42,6 +42,8 @@ public class ActorSystemRemote implements ActorSystem, KryoBuilder.SerializerFac
     public static int debugLogMsgColorConnect = ActorSystem.systemPropertyColor("csl.actor.debugMsg.color.connect", 161);
     public static int debugLogMsgColorDeliver = ActorSystem.systemPropertyColor("csl.actor.debugMsg.color.deliver", 160);
 
+    protected List<Function<ActorAddress,ActorAddress>> addressNormalizers;
+
     public ActorSystemRemote() {
         this(new ActorSystemDefaultForRemote(), KryoBuilder.builder());
     }
@@ -55,6 +57,7 @@ public class ActorSystemRemote implements ActorSystem, KryoBuilder.SerializerFac
     protected void init() {
         initConnectionMap();
         initSerializer();
+        initAddressNormalizers();
         initServerAndClient();
     }
 
@@ -64,6 +67,11 @@ public class ActorSystemRemote implements ActorSystem, KryoBuilder.SerializerFac
 
     protected void initSerializer() {
         serializer = new KryoBuilder.SerializerPoolDefault(this);
+    }
+
+    protected void initAddressNormalizers() {
+        addressNormalizers = new ArrayList<>();
+        addressNormalizers.add(new NormalizerLocalhost());
     }
 
     public Kryo createSerializer() {
@@ -685,4 +693,38 @@ public class ActorSystemRemote implements ActorSystem, KryoBuilder.SerializerFac
     }
 
     public static final boolean CLOSE_EACH_WRITE = false;
+
+    public List<Function<ActorAddress, ActorAddress>> getAddressNormalizers() {
+        return addressNormalizers;
+    }
+
+    public ActorAddress normalizeHostAddress(ActorAddress host) {
+        for (Function<ActorAddress, ActorAddress> f : addressNormalizers) {
+            ActorAddress h = f.apply(host);
+            if (h != null) {
+                host = h;
+            }
+        }
+        return host;
+    }
+
+    public static class NormalizerLocalhost implements Function<ActorAddress, ActorAddress> {
+        @Override
+        public ActorAddress apply(ActorAddress actorAddress) {
+            ActorAddress.ActorAddressRemote host = actorAddress.getHostAddress();
+            if (host != null) {
+                String h = host.getHost();
+                if (h.equals("[0:0:0:0:0:0:0:1]") || h.equals("[::1]") ||
+                        h.equals("0.0.0.0")) {
+                    if (actorAddress instanceof ActorAddress.ActorAddressRemoteActor) {
+                        return ActorAddress.ActorAddressRemoteActor.get("localhost", host.getPort(),
+                                ((ActorAddress.ActorAddressRemoteActor) actorAddress).getActorName());
+                    } else if (actorAddress instanceof ActorAddress.ActorAddressRemote) {
+                        return ActorAddress.ActorAddressRemoteActor.get("localhost", host.getPort());
+                    }
+                }
+            }
+            return actorAddress;
+        }
+    }
 }

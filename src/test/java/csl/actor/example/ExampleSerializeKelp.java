@@ -1,8 +1,12 @@
 package csl.actor.example;
 
 import csl.actor.*;
+import csl.actor.kelp.ActorKelp;
+import csl.actor.kelp.ActorKelpFunctions;
+import csl.actor.kelp.ActorKelpSerializable;
+import csl.actor.kelp.ConfigKelp;
 import csl.actor.persist.PersistentFileManager;
-import csl.actor.kelp_old.*;
+import csl.actor.kelp.behavior.*;
 import csl.actor.remote.ActorAddress;
 import csl.actor.remote.KryoBuilder;
 
@@ -12,18 +16,20 @@ import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
-public class ExampleSerialize2 extends ExampleSerialize {
+public class ExampleSerializeKelp extends ExampleSerialize {
     public static void main(String[] args) throws Exception {
-        new ExampleSerialize2().run();
+        new ExampleSerializeKelp().run();
     }
     KryoBuilder.SerializerPoolDefault p;
     ActorSystemDefault system;
+
+    TestToolSerialize ts = new TestToolSerialize();
+
     public void run() {
         system = new ActorSystemDefault();
         p = new KryoBuilder.SerializerPoolDefault(system);
 
         runNodeTreeData();
-        runStateLeaf();
         runHistogramLeafList();
         runActorAddressRemote();
         runActorAddressRemoteActor();
@@ -43,7 +49,7 @@ public class ExampleSerialize2 extends ExampleSerialize {
         d.size = 123456789;
         d.keyEnd = "word";
 
-        writeRead(p, d, (a,b) ->
+        ts.writeRead(p, d, (a,b) ->
                 a != b &&
                 a.height == b.height &&
                         a.leaf == b.leaf &&
@@ -53,12 +59,6 @@ public class ExampleSerialize2 extends ExampleSerialize {
         );
     }
 
-    private void runStateLeaf() {
-        ExampleActor a = new ExampleActor(system, "a");
-        ActorKelp.StateUnit leaf = new ActorKelp.StateUnit(a);
-        writeRead(p, leaf, (s,c) -> c.getRouter().asLocal().equals(a));
-    }
-
     private void runHistogramLeafList() {
         KeyHistograms.HistogramLeafList l = new KeyHistograms.HistogramLeafList();
         l.add(null, "hello");
@@ -66,7 +66,7 @@ public class ExampleSerialize2 extends ExampleSerialize {
         for (int i = 0; i < 1000; i++) {
             l.add(null, i);
         }
-        writeRead(p, l, false, (a,b) ->
+        ts.writeRead(p, l, false, (a,b) ->
                 a.count() == b.count() &&
                 toList(a).equals(toList(b)));
     }
@@ -78,16 +78,16 @@ public class ExampleSerialize2 extends ExampleSerialize {
     }
 
     private void runActorAddressRemote() {
-        writeRead(p, ActorAddress.ActorAddressRemote.get("hello", 12345));
+        ts.writeRead(p, ActorAddress.ActorAddressRemote.get("hello", 12345));
     }
 
     private void runActorAddressRemoteActor() {
-        writeRead(p, ActorAddress.ActorAddressRemote.get("hello", 12345, "world"));
+        ts.writeRead(p, ActorAddress.ActorAddressRemote.get("hello", 12345, "world"));
     }
 
     private void runCallableMessage() {
         String data = this.toString();
-        writeRead(p, CallableMessage.callableMessage((a) -> "HELLO" + data), false,
+        ts.writeRead(p, CallableMessage.callableMessage((a) -> "HELLO" + data), false,
                 (src,dst) ->
                 src.call(null, null).equals(dst.call(null, null)));
     }
@@ -95,13 +95,13 @@ public class ExampleSerialize2 extends ExampleSerialize {
     private void runCallableFailure() {
         RuntimeException e = new RuntimeException("error");
         e.fillInStackTrace();
-        writeRead(p, new CallableMessage.CallableFailure(e), (a,b) ->
+        ts.writeRead(p, new CallableMessage.CallableFailure(e), (a,b) ->
                 a.getError().toString().equals(b.getError().toString()));
     }
 
     private void runHistogramTree() {
         KeyHistograms.HistogramTree tree = new KeyHistograms.HistogramTree(null,
-                new ActorBehaviorBuilderKelp.KeyComparatorDefault<>(), 10,
+                new ActorKelpFunctions.KeyComparatorDefault<>(), 10,
                 PersistentFileManager.getPersistentFile(null, ""));
 
         List<Object> os = values();
@@ -116,7 +116,7 @@ public class ExampleSerialize2 extends ExampleSerialize {
             tree.put(key, ctx);
             ++i;
         }
-        writeRead(p, tree, false, (a,b) -> checkTree(a, "pre") && checkTree(b, "post"));
+        ts.writeRead(p, tree, false, (a,b) -> checkTree(a, "pre") && checkTree(b, "post"));
     }
 
     String keyString = "abcdefghijklmnopqrstuw";
@@ -212,14 +212,14 @@ public class ExampleSerialize2 extends ExampleSerialize {
     }
 
     private void runActorReplicableSerializableState() {
-        Config c = new Config();
+        ConfigKelp c = new ConfigKelp();
         c.mailboxThreshold = 123456;
         c.mailboxTreeSize = 10;
         MyActor a = new MyActor(system, "hello", c);
         a.getMailbox().offer(new Message<>(a, null, "msg1"));
         a.getMailbox().offer(new Message<>(a, null, "msg2"));
         a.getMailbox().offer(new Message<>(a, null, "msg3"));
-        MailboxKelp.HistogramEntry e = a.getMailboxAsKelp().getEntries().get(0);
+        HistogramEntry e = a.getMailboxAsKelp().getEntries().get(0);
 
 
         for (Object o : values()) {
@@ -227,8 +227,8 @@ public class ExampleSerialize2 extends ExampleSerialize {
         }
         checkTree(e.getTree(), "actor-construction");
 
-        ActorKelp.ActorKelpSerializable s = a.toSerializable(123);
-        writeRead(p, s, false, (pre,post) ->
+        ActorKelpSerializable<?> s = a.toSerializable();
+        ts.writeRead(p, s, false, (pre,post) ->
                 check("post.name", MyActor.class, post.actorType) &&
                 check("post.name", "hello", post.name) &&
                 check("post.size", 1, post.histograms.size()) &&
@@ -243,7 +243,7 @@ public class ExampleSerialize2 extends ExampleSerialize {
     }
 
     public static class MyActor extends ActorKelp<MyActor> {
-        public MyActor(ActorSystem system, String name, Config config) {
+        public MyActor(ActorSystem system, String name, ConfigKelp config) {
             super(system, name, config);
         }
 
@@ -252,7 +252,7 @@ public class ExampleSerialize2 extends ExampleSerialize {
             return behaviorBuilder()
                     .matchKey(String.class, s -> "" + s.charAt(0))
                     .reduce((k,ls) -> ls)
-                    .forEachKeyList(0, (k,vs) -> System.out.println(vs))
+                    .forEachKeyList(0, (k,vs) -> System.err.println(vs))
                     .build();
         }
     }

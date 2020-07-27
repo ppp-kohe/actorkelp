@@ -52,7 +52,7 @@ public class DebugBehavior {
     }
 
     public static class DebugMatchKey1<KeyType,ParamType1,ValueType1> extends ActorBehaviorKelp.ActorBehaviorMatchKey1<KeyType,ParamType1,ValueType1> {
-        private final DebugThreadChecker checker = new DebugThreadChecker(this);
+        private final DebugThreadCheckTool checker = new DebugThreadCheckTool(this);
 
         public DebugMatchKey1(int matchKeyEntryId, KeyHistograms.KeyComparator<KeyType> keyComparator, ActorBehaviorBuilderKelp.KeyExtractor<KeyType, ParamType1> keyExtractorFromValue1, Function<ParamType1, ValueType1> valueExtractorFromValue1, BiConsumer<KeyType, ValueType1> handler) {
             super(matchKeyEntryId, keyComparator, keyExtractorFromValue1, valueExtractorFromValue1, handler);
@@ -96,7 +96,7 @@ public class DebugBehavior {
     }
 
     public static class DebugMatchKey2<KeyType,ParamType1,ParamType2,ValueType1,ValueType2> extends ActorBehaviorKelp.ActorBehaviorMatchKey2<KeyType,ParamType1, ParamType2,ValueType1,ValueType2> {
-        private final DebugThreadChecker checker = new DebugThreadChecker(this);
+        private final DebugThreadCheckTool checker = new DebugThreadCheckTool(this);
         public DebugMatchKey2(int matchKeyEntryId, KeyHistograms.KeyComparator<KeyType> keyComparator, ActorBehaviorBuilderKelp.KeyExtractor<KeyType, ParamType1> keyExtractorFromValue1, ActorBehaviorBuilderKelp.KeyExtractor<KeyType, ParamType2> keyExtractorFromValue2, Function<ParamType1, ValueType1> valueExtractorFromValue1, Function<ParamType2, ValueType2> valueExtractorFromValue2, ActorBehaviorBuilderKelp.TriConsumer<KeyType, ValueType1, ValueType2> handler) {
             super(matchKeyEntryId, keyComparator, keyExtractorFromValue1, keyExtractorFromValue2, valueExtractorFromValue1, valueExtractorFromValue2, handler);
         }
@@ -138,7 +138,7 @@ public class DebugBehavior {
     }
 
     public static class DebugMatchKey3<KeyType,ParamType1,ParamType2,ParamType3,ValueType1,ValueType2,ValueType3> extends ActorBehaviorKelp.ActorBehaviorMatchKey3<KeyType,ParamType1,ParamType2,ParamType3,ValueType1,ValueType2,ValueType3> {
-        private final DebugThreadChecker checker = new DebugThreadChecker(this);
+        private final DebugThreadCheckTool checker = new DebugThreadCheckTool(this);
         public DebugMatchKey3(int matchKeyEntryId, KeyHistograms.KeyComparator<KeyType> keyComparator, ActorBehaviorBuilderKelp.KeyExtractor<KeyType, ParamType1> keyExtractorFromValue1, ActorBehaviorBuilderKelp.KeyExtractor<KeyType, ParamType2> keyExtractorFromValue2, ActorBehaviorBuilderKelp.KeyExtractor<KeyType, ParamType3> keyExtractorFromValue3, Function<ParamType1, ValueType1> valueExtractorFromValue1, Function<ParamType2, ValueType2> valueExtractorFromValue2, Function<ParamType3, ValueType3> valueExtractorFromValue3, ActorBehaviorBuilderKelp.QuadConsumer<KeyType, ValueType1, ValueType2, ValueType3> handler) {
             super(matchKeyEntryId, keyComparator, keyExtractorFromValue1, keyExtractorFromValue2, keyExtractorFromValue3, valueExtractorFromValue1, valueExtractorFromValue2, valueExtractorFromValue3, handler);
         }
@@ -180,7 +180,7 @@ public class DebugBehavior {
     }
 
     public static class DebugMatchKey4<KeyType,ParamType1,ParamType2,ParamType3,ParamType4,ValueType1,ValueType2,ValueType3,ValueType4> extends ActorBehaviorKelp.ActorBehaviorMatchKey4<KeyType,ParamType1,ParamType2,ParamType3,ParamType4,ValueType1,ValueType2,ValueType3,ValueType4> {
-        private final DebugThreadChecker checker = new DebugThreadChecker(this);
+        private final DebugThreadCheckTool checker = new DebugThreadCheckTool(this);
         public DebugMatchKey4(int matchKeyEntryId, KeyHistograms.KeyComparator<KeyType> keyComparator, ActorBehaviorBuilderKelp.KeyExtractor<KeyType, ParamType1> keyExtractorFromValue1, ActorBehaviorBuilderKelp.KeyExtractor<KeyType, ParamType2> keyExtractorFromValue2, ActorBehaviorBuilderKelp.KeyExtractor<KeyType, ParamType3> keyExtractorFromValue3, ActorBehaviorBuilderKelp.KeyExtractor<KeyType, ParamType4> keyExtractorFromValue4, Function<ParamType1, ValueType1> valueExtractorFromValue1, Function<ParamType2, ValueType2> valueExtractorFromValue2, Function<ParamType3, ValueType3> valueExtractorFromValue3, Function<ParamType4, ValueType4> valueExtractorFromValue4, ActorBehaviorBuilderKelp.QuintConsumer<KeyType, ValueType1, ValueType2, ValueType3, ValueType4> handler) {
             super(matchKeyEntryId, keyComparator, keyExtractorFromValue1, keyExtractorFromValue2, keyExtractorFromValue3, keyExtractorFromValue4, valueExtractorFromValue1, valueExtractorFromValue2, valueExtractorFromValue3, valueExtractorFromValue4, handler);
         }
@@ -222,7 +222,7 @@ public class DebugBehavior {
     }
 
     public static class DebugMatchKeyList<KeyType,ParamType,ValueType> extends ActorBehaviorKelp.ActorBehaviorMatchKeyList<KeyType,ParamType,ValueType> {
-        private final DebugThreadChecker checker = new DebugThreadChecker(this);
+        private final DebugThreadCheckTool checker = new DebugThreadCheckTool(this);
 
         public DebugMatchKeyList(int matchKeyEntryId, int threshold, KeyHistograms.KeyComparator<KeyType> keyComparator, ActorBehaviorBuilderKelp.KeyExtractor<KeyType, ParamType> keyExtractorFromValue, Function<ParamType, ValueType> valueExtractorFromValue, BiConsumer<KeyType, List<ValueType>> handler) {
             super(matchKeyEntryId, threshold, keyComparator, keyExtractorFromValue, valueExtractorFromValue, handler);
@@ -265,7 +265,7 @@ public class DebugBehavior {
     }
 
     public static class DebugMatchKeyListFuture<KeyType,ParamType,ValueType> extends ActorBehaviorKelp.ActorBehaviorMatchKeyListFuture<KeyType,ParamType,ValueType> {
-        private final DebugThreadChecker checker = new DebugThreadChecker(this);
+        private final DebugThreadCheckTool checker = new DebugThreadCheckTool(this);
 
         public DebugMatchKeyListFuture(int matchKeyEntryId, int requiredSize, KeyHistograms.KeyComparator<KeyType> keyComparator, BiFunction<KeyType, List<ValueType>, Iterable<ValueType>> keyValuesReducer, ActorBehaviorBuilderKelp.KeyExtractor<KeyType, ParamType> keyExtractorFromValue, Function<ParamType, ValueType> valueExtractorFromValue, BiConsumer<KeyType, List<ValueType>> handler) {
             super(matchKeyEntryId, requiredSize, keyComparator, keyValuesReducer, keyExtractorFromValue, valueExtractorFromValue, handler);
@@ -308,7 +308,7 @@ public class DebugBehavior {
     }
 
     public static class DebugMatchKeyListFuturePhase<KeyType,ParamType,ValueType> extends ActorBehaviorKelp.ActorBehaviorMatchKeyListFuturePhase<KeyType,ParamType,ValueType> {
-        private final DebugThreadChecker checker = new DebugThreadChecker(this);
+        private final DebugThreadCheckTool checker = new DebugThreadCheckTool(this);
 
         public DebugMatchKeyListFuturePhase(int matchKeyEntryId, int requiredSize, KeyHistograms.KeyComparator<KeyType> keyComparator, BiFunction<KeyType, List<ValueType>, Iterable<ValueType>> keyValuesReducer, ActorBehaviorBuilderKelp.KeyExtractor<KeyType, ParamType> keyExtractorFromValue, Function<ParamType, ValueType> valueExtractorFromValue, BiConsumer<KeyType, List<ValueType>> handler) {
             super(matchKeyEntryId, requiredSize, keyComparator, keyValuesReducer, keyExtractorFromValue, valueExtractorFromValue, handler);
@@ -365,7 +365,7 @@ public class DebugBehavior {
 
     public static class DebugNodeLeaf1 extends ActorBehaviorKelp.HistogramNodeLeaf1 {
         public static final long serialVersionUID = 1L;
-        private final DebugThreadChecker checker = new DebugThreadChecker(this);
+        private final DebugThreadCheckTool checker = new DebugThreadCheckTool(this);
         public DebugNodeLeaf1(Object key, KeyHistograms.HistogramPutContext context, int height) {
             super(key, context, height);
         }
@@ -399,7 +399,7 @@ public class DebugBehavior {
 
     public static class DebugNodeLeaf2 extends ActorBehaviorKelp.HistogramNodeLeaf2 {
         public static final long serialVersionUID = 1L;
-        private final DebugThreadChecker checker = new DebugThreadChecker(this);
+        private final DebugThreadCheckTool checker = new DebugThreadCheckTool(this);
         public DebugNodeLeaf2(Object key, KeyHistograms.HistogramPutContext context, int height) {
             super(key, context, height);
         }
@@ -433,7 +433,7 @@ public class DebugBehavior {
 
     public static class DebugNodeLeaf3 extends ActorBehaviorKelp.HistogramNodeLeaf3 {
         public static final long serialVersionUID = 1L;
-        private final DebugThreadChecker checker = new DebugThreadChecker(this);
+        private final DebugThreadCheckTool checker = new DebugThreadCheckTool(this);
         public DebugNodeLeaf3(Object key, KeyHistograms.HistogramPutContext context, int height) {
             super(key, context, height);
         }
@@ -466,7 +466,7 @@ public class DebugBehavior {
 
     public static class DebugNodeLeaf4 extends ActorBehaviorKelp.HistogramNodeLeaf4 {
         public static final long serialVersionUID = 1L;
-        private final DebugThreadChecker checker = new DebugThreadChecker(this);
+        private final DebugThreadCheckTool checker = new DebugThreadCheckTool(this);
         public DebugNodeLeaf4(Object key, KeyHistograms.HistogramPutContext context, int height) {
             super(key, context, height);
         }
@@ -499,7 +499,7 @@ public class DebugBehavior {
 
     public static class DebugNodeLeafList extends ActorBehaviorKelp.HistogramNodeLeafList {
         public static final long serialVersionUID = 1L;
-        private final DebugThreadChecker checker = new DebugThreadChecker(this);
+        private final DebugThreadCheckTool checker = new DebugThreadCheckTool(this);
         public DebugNodeLeafList(Object key, KeyHistograms.HistogramPutContext context, int height) {
             super(key, context, height);
         }
@@ -532,7 +532,7 @@ public class DebugBehavior {
 
     public static class DebugNodeLeafListReducible extends ActorBehaviorKelp.HistogramNodeLeafListReducible {
         public static final long serialVersionUID = 1L;
-        private final DebugThreadChecker checker = new DebugThreadChecker(this);
+        private final DebugThreadCheckTool checker = new DebugThreadCheckTool(this);
         public DebugNodeLeafListReducible(Object key, KeyHistograms.HistogramPutContext context, int height) {
             super(key, context, height);
         }
@@ -578,7 +578,7 @@ public class DebugBehavior {
 
     public static class DebugNodeLeafListReducibleForPhase extends ActorBehaviorKelp.HistogramNodeLeafListReducibleForPhase {
         public static final long serialVersionUID = 1L;
-        private final DebugThreadChecker checker = new DebugThreadChecker(this);
+        private final DebugThreadCheckTool checker = new DebugThreadCheckTool(this);
         public DebugNodeLeafListReducibleForPhase(Object key, KeyHistograms.HistogramPutContext context, int height) {
             super(key, context, height);
         }
@@ -625,7 +625,7 @@ public class DebugBehavior {
 
     public static class DebugLeafList extends KeyHistograms.HistogramLeafList {
         public static final long serialVersionUID = 1L;
-        private final DebugThreadChecker checker = new DebugThreadChecker(this);
+        private final DebugThreadCheckTool checker = new DebugThreadCheckTool(this);
 
         @Override
         public void add(KeyHistograms.HistogramTree tree, Object value) {
@@ -654,79 +654,4 @@ public class DebugBehavior {
         }
     }
 
-    public static final class DebugThreadChecker {
-        private volatile Thread thread;
-        private Object target;
-        private StackTraceElement[] lastError;
-
-        public DebugThreadChecker(Object target) {
-            this.target = target;
-        }
-
-        public boolean before() {
-            Thread current = Thread.currentThread();
-            Thread t = thread;
-            if (t == current) {
-                return false; //recursion
-            } else if (t == null) {
-                thread = current;
-                return true;
-            } else {
-                thread = current;
-                lastError = t.getStackTrace();
-                return false;
-            }
-        }
-
-        public boolean after(boolean i) {
-            Thread current = Thread.currentThread();
-            Thread t = thread;
-            if (i) {
-                if (t != current) {
-                    System.err.println("!!! DebugThreadChecker " + objStr() + ": after error: " + current);
-                    print(current);
-                    print(t);
-                    i = false;
-                }
-                thread = null;
-            } else {
-                //error
-                if (t == current) {
-                    System.err.println("!!! DebugThreadChecker " + objStr() + ": recursion: " + current);
-                    print(t);
-                } else {
-                    System.err.println("!!! DebugThreadChecker " + objStr() + ": before error: " + current + " vs " + t);
-                    print(current);
-                    print(t);
-                }
-            }
-            return i;
-        }
-        private String objStr() {
-            return target.getClass().getSimpleName() + "@" + Integer.toHexString(System.identityHashCode(target));
-        }
-
-        private void print(Thread t) {
-            StringBuilder buf = new StringBuilder();
-            if (t != null) {
-                buf.append(t).append(":\n");
-                for (StackTraceElement e : t.getStackTrace()) {
-                    buf.append("  ").append(e).append("\n");
-                }
-            } else {
-                buf.append(" null\n");
-            }
-            buf.append("==========");
-            System.err.println(buf);
-        }
-
-        public void error(boolean i, Exception e) {
-            Thread current = Thread.currentThread();
-            Thread t = thread;
-            System.err.println("!!! DebugThreadChecker " + objStr() + ": exception, flag=" + i + " : " + e);
-            print(current);
-            print(t);
-        }
-
-    }
 }

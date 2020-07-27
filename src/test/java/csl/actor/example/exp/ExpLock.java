@@ -1,10 +1,11 @@
-package csl.actor.example.exp.thread;
+package csl.actor.example.exp;
 
 import csl.actor.*;
-import csl.actor.example.kelp.DebugBehavior;
-import csl.actor.kelp_old.ActorBehaviorBuilderKelp;
-import csl.actor.kelp_old.KeyHistograms;
-import csl.actor.kelp_old.PhaseShift;
+import csl.actor.example.kelp.DebugThreadCheckTool;
+import csl.actor.kelp.ActorKelpFunctions;
+import csl.actor.kelp.behavior.ActorBehaviorBuilderKelp;
+import csl.actor.kelp.behavior.KeyHistograms;
+import csl.actor.util.StagingActor;
 
 import java.util.*;
 import java.util.concurrent.TimeUnit;
@@ -55,7 +56,7 @@ public class ExpLock {
         long count;
         long next;
         LinkedList<String> last = new LinkedList<>();
-        final DebugBehavior.DebugThreadChecker checker = new DebugBehavior.DebugThreadChecker(this);
+        final DebugThreadCheckTool checker = new DebugThreadCheckTool(this);
         public EndActor(ActorSystem system, String name, long max) {
             super(system, name);
             this.max = max;
@@ -70,10 +71,6 @@ public class ExpLock {
         protected ActorBehavior initBehavior() {
             return behaviorBuilder()
                     .match(String.class, this::receive)
-                    .match(PhaseShift.PhaseCompleted.class, c -> {
-                        System.err.println(String.format("phase end  : %,d, queue=%,d : %s", count, ((MailboxCount) mailbox).getCount(), last));
-                        getSystem().close();
-                    })
                     .build();
         }
         void receive(String s) {
@@ -118,7 +115,7 @@ public class ExpLock {
 
     public static class TreeActor extends ActorDefault {
         Random rand = new Random();
-        final DebugBehavior.DebugThreadChecker checker = new DebugBehavior.DebugThreadChecker(this);
+        final DebugThreadCheckTool checker = new DebugThreadCheckTool(this);
 
         List<Actor> children = new ArrayList<>();
         BiFunction<ActorSystem,ActorRef,Actor> leafNew;
@@ -134,19 +131,7 @@ public class ExpLock {
             return behaviorBuilder()
                     .match(String.class, this::receive)
                     .match(Setting.class, this::set)
-                    .match(PhaseShift.class, this::shift)
-                    .match(PhaseShift.PhaseCompleted.class, s -> s.redirectTo(next))
                     .build();
-        }
-
-        public void shift(PhaseShift s) {
-            for (Actor a : children) {
-                if (!a.isEmptyMailbox()) {
-                    s.retry(this, null);
-                    return;
-                }
-            }
-            s.accept(this, null);
         }
 
         public void set(Setting s) {
@@ -238,7 +223,7 @@ public class ExpLock {
         public MapActor(ActorSystem system, ActorRef end) {
             super(system);
             this.end = end;
-            tree = new KeyHistograms.HistogramTree(new ActorBehaviorBuilderKelp.KeyComparatorDefault<>());
+            tree = new KeyHistograms.HistogramTree(new ActorKelpFunctions.KeyComparatorDefault<>());
         }
 
         @Override
@@ -246,7 +231,7 @@ public class ExpLock {
             return behaviorBuilder()
                     .match(String.class, this::receive).build();
         }
-        DebugBehavior.DebugThreadChecker leafChecker = new DebugBehavior.DebugThreadChecker(this);
+        DebugThreadCheckTool leafChecker = new DebugThreadCheckTool(this);
 
         KeyHistograms.HistogramTree tree;
 
@@ -282,7 +267,7 @@ public class ExpLock {
         public LeafActor(ActorSystem system, ActorRef end) {
             super(system);
             this.end = end;
-            tree = new KeyHistograms.HistogramTree(new ActorBehaviorBuilderKelp.KeyComparatorDefault<>());
+            tree = new KeyHistograms.HistogramTree(new ActorKelpFunctions.KeyComparatorDefault<>());
         }
 
         @Override
@@ -290,7 +275,7 @@ public class ExpLock {
             return behaviorBuilder()
                     .match(String.class, this::receive).build();
         }
-        DebugBehavior.DebugThreadChecker leafChecker = new DebugBehavior.DebugThreadChecker(this);
+        DebugThreadCheckTool leafChecker = new DebugThreadCheckTool(this);
 
         KeyHistograms.HistogramTree tree;
 

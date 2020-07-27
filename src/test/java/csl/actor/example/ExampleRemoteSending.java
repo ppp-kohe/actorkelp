@@ -9,7 +9,7 @@ import csl.actor.remote.ActorSystemRemote;
 import csl.actor.remote.ObjectMessageClient;
 import csl.actor.remote.ObjectMessageServer;
 
-public class ExampleRemote2 {
+public class ExampleRemoteSending {
     public static void main(String[] args) throws Exception {
         ActorSystemRemote.debugLog = true;
         ObjectMessageServer.debugTraceLog = true;

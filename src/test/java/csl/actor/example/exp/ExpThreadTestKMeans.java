@@ -1,4 +1,4 @@
-package csl.actor.example.exp.thread;
+package csl.actor.example.exp;
 
 import csl.actor.ActorRef;
 import csl.actor.ActorSystem;
@@ -19,18 +19,20 @@ public class ExpThreadTestKMeans extends ExpThreadTest {
 
     @Override
     ReadActor newReadActor(ActorSystem sys, int r, ActorRef fa) {
-        return new ReadActorKMeans(sys, r, fa);
+        return new ReadActorKMeans(sys, r, fa, config);
     }
 
     static class ReadActorKMeans extends ExpThreadTest.ReadActor {
         double diff;
-        public ReadActorKMeans(ActorSystem system, int n, ActorRef target) {
+        ConfigExpThread config;
+        public ReadActorKMeans(ActorSystem system, int n, ActorRef target, ConfigExpThread config) {
             super(system, n, target);
+            this.config = config;
         }
 
         @Override
         void receive(Object s) {
-            diff = kMeans();
+            diff = kMeans(config);
             super.receive(diff);
         }
 
@@ -54,7 +56,7 @@ public class ExpThreadTestKMeans extends ExpThreadTest {
 
     @Override
     public Object process(ThreadComp tc, Object o) {
-        o = ((ThreadCompKMeans) tc).diff = kMeans();
+        o = ((ThreadCompKMeans) tc).diff = kMeans(config);
         return super.process(tc, o);
     }
 
@@ -71,26 +73,31 @@ public class ExpThreadTestKMeans extends ExpThreadTest {
     }
 
 
-    public static double kMeans() {
+    public static double kMeans(ConfigExpThread config) {
+        int array = config.kMeansDataSize;
+        int vecLen = config.vecLen;
+        int kSize = config.kMeansK;
+        int loop = config.kMeansLoop;
+        double diffLimit = config.kMeansThreshold;
 
         Random rand = new Random();
 
-        List<Data> data = IntStream.range(0, 100)
+        List<Data> data = IntStream.range(0, array)
                 .mapToObj(Data::new)
-                .map(d -> d.set(rand))
+                .map(d -> d.set(vecLen, rand))
                 .collect(Collectors.toList());
 
         List<Integer> is = IntStream.range(0, data.size())
                 .boxed().collect(Collectors.toList());
         Collections.shuffle(is, rand);
-        List<Data> ks = is.subList(0, 10).stream()
+        List<Data> ks = is.subList(0, kSize).stream()
                 .map(i -> data.get(i).copy())
                 .collect(Collectors.toList());
         List<Data> iks = ks;
         IntStream.range(0, iks.size()).forEach(i -> iks.get(i).n = i);
 
         double diff = 0;
-        for (int i = 0; i < 100; ++i) {
+        for (int i = 0; i < loop; ++i) {
             List<Data> prev = ks;
             TreeMap<Integer,List<Data>> map = new TreeMap<>();
             data.forEach(d ->
@@ -101,7 +108,7 @@ public class ExpThreadTestKMeans extends ExpThreadTest {
             diff = IntStream.range(0, prev.size())
                     .mapToDouble(j -> prev.get(j).distance(nks.get(j)))
                     .average().orElse(0);
-            if (diff < 0.001){
+            if (diff < diffLimit){
                 break;
             }
 
@@ -117,8 +124,8 @@ public class ExpThreadTestKMeans extends ExpThreadTest {
         public Data(int n) {
             this.n = n;
         }
-        public Data set(Random rand) {
-            vec = rand.doubles(100).toArray();
+        public Data set(int len, Random rand) {
+            vec = rand.doubles(len).toArray();
             return this;
         }
         public double distance(Data d) {

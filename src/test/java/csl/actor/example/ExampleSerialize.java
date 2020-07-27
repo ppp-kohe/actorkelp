@@ -1,12 +1,11 @@
 package csl.actor.example;
 
-import com.esotericsoftware.kryo.io.Input;
-import com.esotericsoftware.kryo.io.Output;
 import csl.actor.*;
-import csl.actor.remote.*;
+import csl.actor.remote.ActorAddress;
+import csl.actor.remote.ActorRefRemote;
+import csl.actor.remote.ActorSystemRemote;
+import csl.actor.remote.KryoBuilder;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.math.BigInteger;
 import java.net.URL;
@@ -16,9 +15,6 @@ import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZonedDateTime;
 import java.util.*;
-import java.util.function.BiPredicate;
-import java.util.function.Consumer;
-import java.util.function.Function;
 import java.util.regex.Pattern;
 
 public class ExampleSerialize {
@@ -31,47 +27,49 @@ public class ExampleSerialize {
         sys.setServerAddress(ActorAddress.get("hello-world", 12345));
         KryoBuilder.SerializerFunction k = sys.getSerializer();
 
-        writeRead(k, "hello");
-        writeRead(k, 12345);
-        writeRead(k, Boolean.TRUE);
-        writeRead(k, new int[] {10, 20, 30}, Arrays::equals);
-        writeRead(k, new String[] {"hello", "world"}, Arrays::equals);
-        writeRead(k, new File("hello/world"));
-        writeRead(k, new BigInteger(Long.MAX_VALUE + "" + Long.MAX_VALUE));
-        writeRead(k, getClass());
-        writeRead(k, OffsetDateTime.now());
-        writeRead(k, ZonedDateTime.now());
-        writeRead(k, Instant.now());
-        writeRead(k, Duration.ofSeconds(Integer.MAX_VALUE, 1000));
-        writeRead(k, Arrays.asList("hello", "world"));
-        writeRead(k, new HashSet<>(Arrays.asList("hello", "world")));
+        TestToolSerialize ts = new TestToolSerialize();
 
-        writeRead(k, null);
+        ts.writeRead(k, "hello");
+        ts.writeRead(k, 12345);
+        ts.writeRead(k, Boolean.TRUE);
+        ts.writeRead(k, new int[] {10, 20, 30}, Arrays::equals);
+        ts.writeRead(k, new String[] {"hello", "world"}, Arrays::equals);
+        ts.writeRead(k, new File("hello/world"));
+        ts.writeRead(k, new BigInteger(Long.MAX_VALUE + "" + Long.MAX_VALUE));
+        ts.writeRead(k, getClass());
+        ts.writeRead(k, OffsetDateTime.now());
+        ts.writeRead(k, ZonedDateTime.now());
+        ts.writeRead(k, Instant.now());
+        ts.writeRead(k, Duration.ofSeconds(Integer.MAX_VALUE, 1000));
+        ts.writeRead(k, Arrays.asList("hello", "world"));
+        ts.writeRead(k, new HashSet<>(Arrays.asList("hello", "world")));
+
+        ts.writeRead(k, null);
 
         Map<String,Object> map = new HashMap<>();
         map.put("hello", 123);
         map.put("world", 456);
-        writeRead(k, map);
-        writeRead(k, new URL("http://www.w3c.org"));
-        writeRead(k, ByteBuffer.wrap(new byte[] {1, 2, 3}));
-        writeRead(k, Pattern.compile("hello.*?world"), (l,r) -> l.toString().equals(r.toString()));
+        ts.writeRead(k, map);
+        ts.writeRead(k, new URL("http://www.w3c.org"));
+        ts.writeRead(k, ByteBuffer.wrap(new byte[] {1, 2, 3}));
+        ts.writeRead(k, Pattern.compile("hello.*?world"), (l,r) -> l.toString().equals(r.toString()));
 
         EnumMap<MyEnum,String> em = new EnumMap<>(MyEnum.class);
         em.put(MyEnum.Hello, "hello");
         em.put(MyEnum.World, "world");
-        writeRead(k, em);
+        ts.writeRead(k, em);
 
         BitSet bs = new BitSet(130);
         bs.set(10);
         bs.set(20);
         bs.set(129);
-        writeRead(k, bs);
+        ts.writeRead(k, bs);
 
-        writeRead(k, ActorAddress.get("hello", 12345));
+        ts.writeRead(k, ActorAddress.get("hello", 12345));
 
         ActorRef a = new ExampleActor(sys, "hello");
-        writeRead(k, a, (l,r) -> {
-            System.out.println("ExampleActor de-serialized form: " + l + " vs " + r);
+        ts.writeRead(k, a, (l,r) -> {
+            System.err.println("ExampleActor de-serialized form: " + l + " vs " + r);
             if (r instanceof ActorRefRemote) {
                 ActorAddress ad = ((ActorRefRemote) r).getAddress();
                 return ad.equals(sys.getServerAddress().getActor("hello"));
@@ -82,12 +80,12 @@ public class ExampleSerialize {
 
         ActorSystemRemote.TransferredMessage msg = new ActorSystemRemote.TransferredMessage(123,
                 ActorRefRemote.get(sys, "hello-world", 33333, "hello"));
-        writeRead(k, msg, (l,r) ->
+        ts.writeRead(k, msg, (l,r) ->
             l.id == r.id && l.body.equals(r.body));
 
         ActorSystemRemote.TransferredMessage msg2 = new ActorSystemRemote.TransferredMessage(123,
                 new Message<>(ActorRefRemote.get(sys, "hello-world", 33333, "hello"), null, "hello"));
-        writeRead(k, msg2, (l,r) ->
+        ts.writeRead(k, msg2, (l,r) ->
                 l.id == r.id && ((Message<?>)l.body).getTarget().equals(((Message<?>)r.body).getTarget())
                         && ((Message<?>)l.body).getData().equals(((Message<?>)r.body).getData()));
 
@@ -95,7 +93,7 @@ public class ExampleSerialize {
         Container c = new Container();
         c.items.add(new ContElem("aaa"));
         c.items.add(new ContElemEx("bbb"));
-        writeRead(k, c, (l, r) ->
+        ts.writeRead(k, c, (l, r) ->
             l.items.size() == r.items.size() &&
                     l.items.get(0).value.equals(r.items.get(0).value) &&
                     l.items.get(1).value.equals(r.items.get(1).value) &&
@@ -115,68 +113,6 @@ public class ExampleSerialize {
 
     enum MyEnum {
         Hello, World
-    }
-
-    public <E> void writeRead(KryoBuilder.SerializerFunction k, E obj) {
-        writeRead(k, obj, true, Objects::equals);
-    }
-
-    public <E> void writeRead(KryoBuilder.SerializerFunction k, E obj, BiPredicate<E,E> p) {
-        writeRead(k, obj, true, p);
-    }
-
-    @SuppressWarnings("unchecked")
-    public <E> void writeRead(KryoBuilder.SerializerFunction k, E obj, boolean printAll, BiPredicate<E,E> p) {
-        System.out.println("----------- " + (obj == null ? "null" : obj.getClass().getName()));
-        byte[] data = write(o -> k.write(o, obj));
-        if (printAll) {
-            print(data);
-        } else {
-            System.out.print(String.format("[%,d] ", data.length));
-            print(Arrays.copyOf(data, Math.min(30, data.length)));
-        }
-        E r = (E) read(data, k::read);
-        System.out.println(r);
-        System.out.println(p.test(obj, r) ? formatColor(76,"[OK]") : formatColor(196, "DIFF"));
-    }
-
-    private String formatColor(int c, String s) {
-        return String.format("\033[38;5;%dm%s\033[0m",c, s);
-    }
-
-    public byte[] write(Consumer<Output> p) {
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        try {
-            Output output = new Output(out);
-            p.accept(output);
-            output.flush();
-            out.close();
-        } catch (Exception ex) {
-            throw new RuntimeException(ex);
-        }
-        return out.toByteArray();
-    }
-
-    public void print(byte[] data) {
-        StringBuilder buf = new StringBuilder();
-        for (byte b : data) {
-            buf.append(String.format("%2h", 0xFF & b)).append(":");
-            char c = (char) b;
-            if (Character.isLetterOrDigit(c)) {
-                buf.append("'");
-                buf.append(c);
-                buf.append("'");
-            } else {
-                buf.append(b);
-            }
-            buf.append("  ");
-        }
-        System.out.println(buf);
-    }
-
-    public Object read(byte[] d, Function<Input, Object> gen) {
-        Input input = new Input(new ByteArrayInputStream(d));
-        return gen.apply(input);
     }
 
     public static class Container {

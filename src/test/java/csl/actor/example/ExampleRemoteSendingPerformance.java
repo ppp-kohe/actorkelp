@@ -16,7 +16,7 @@ import java.util.Random;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
-public class ExpRemoteSending {
+public class ExampleRemoteSendingPerformance {
     public static void main(String[] args) throws Exception {
         int msgBytes = 1000_000;
         int msgs = 1_000;
@@ -25,8 +25,8 @@ public class ExpRemoteSending {
 
         PrimaryActor primaryActor = new PrimaryActor(s2);
 
-        ExampleRemote.setMvnClasspath();
-        ExampleRemote.launchJava(Receiver.class.getName(), Integer.toString(msgs));
+        TestToolRemote.setMvnClasspath();
+        TestToolRemote.launchJava(Receiver.class.getName(), Integer.toString(msgs));
 
         List<long[]> data = new ArrayList<>();
         Random r = new Random(12345);
