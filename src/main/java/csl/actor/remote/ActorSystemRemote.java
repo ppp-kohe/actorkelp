@@ -585,7 +585,7 @@ public class ActorSystemRemote implements ActorSystem, KryoBuilder.SerializerFac
             getSystem().logDebug("receive close-notice: %s", notice);
             ActorSystemRemote remote = getSystem();
             remote.getConnectionMap().values().stream()
-                .filter(a -> a.getAddress().equals(notice.getAddress()))
+                .filter(a -> a.getAddress().getHostAddress().equals(notice.getAddress().getHostAddress()))
                 .forEach(a -> close(notice, a));
         }
 

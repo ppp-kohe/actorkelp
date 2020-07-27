@@ -80,7 +80,7 @@ public class ExpRemoteSending {
         public static void main(String[] args) {
             int msgs = Integer.parseInt(args[0]);
             ActorSystemRemote s1 = new ActorSystemRemote();
-            s1.startWithoutWait(20000);
+            s1.startWithoutWaitLocalhost(20000);
             new ActorReceiver(s1, "r", msgs);
 
             ActorAddress.get("localhost", 20001).getActor("primary").ref(s1)
