@@ -116,6 +116,14 @@ public class ActorRefShuffle implements ActorRef, Serializable, Cloneable, KryoS
         return bufferSize;
     }
 
+    public boolean isHostIncludePort() {
+        return hostIncludePort;
+    }
+
+    public List<KeyExtractor<?, ?>> getKeyExtractors() {
+        return keyExtractors;
+    }
+
     public ActorRefShuffle use() {
         Map<ActorAddress, List<ShuffleEntry>> es = new HashMap<>(entries.size());
         entries.forEach((k,v) ->

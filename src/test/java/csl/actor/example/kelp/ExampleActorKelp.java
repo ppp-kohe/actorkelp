@@ -3,12 +3,14 @@ package csl.actor.example.kelp;
 import csl.actor.ActorBehavior;
 import csl.actor.ActorSystem;
 import csl.actor.ActorSystemDefault;
-import csl.actor.kelp_old.ActorKelp;
-import csl.actor.kelp_old.Config;
-import csl.actor.kelp_old.PhaseShift;
+import csl.actor.example.TestTool;
+import csl.actor.kelp.ActorKelp;
+import csl.actor.kelp.ActorSystemKelp;
+import csl.actor.kelp.ConfigKelp;
+import csl.actor.kelp.KelpStage;
+import csl.actor.util.StagingActor;
 
 import java.util.*;
-import java.util.function.BiPredicate;
 
 public class ExampleActorKelp {
     public static void main(String[] args) throws Exception {
@@ -18,21 +20,19 @@ public class ExampleActorKelp {
 
     public void runUnit() throws Exception {
         System.err.println("-------- runUnit");
-        ActorSystem system = new ActorSystemDefault();
+        ActorSystem system = new ActorSystemKelp.ActorSystemDefaultForKelp();
         MyActor a = new MyActor(system, "a");
-        a.setAsUnit();
         test(a);
     }
 
     public void runRouter() throws Exception {
         System.err.println("-------- runRouter");
-        ActorSystem system = new ActorSystemDefault();
+        ActorSystem system = new ActorSystemKelp.ActorSystemDefaultForKelp();
         MyActor a = new MyActor(system, "a");
-        a.routerSplit(2);
-        test(a);
+        test(a.shuffle());
     }
 
-    public void test(MyActor a) throws Exception {
+    public void test(KelpStage<MyActor> a) throws Exception {
         ActorSystem system = a.getSystem();
         String key = "abcdefghijk";
         for (int i = 0; i < 100; ++i) {
@@ -40,19 +40,14 @@ public class ExampleActorKelp {
             a.tell(k + i);
         }
 
-        PhaseShift.start(system, a).get();
+        StagingActor.staging(system).start(a).get();
 
-        a.routerSplitOrMerge(0).get();
+        MyActor am = a.merge();
 
-        a.record.forEach((k, v)->
+        am.record.forEach((k, v)->
                 System.err.println(k + ": " + v));
-        check(a.count, 100, Objects::equals);
+        TestTool.assertEquals("count", 100, am.count);
         system.close();
-    }
-
-    private <E> void check(E r, E obj, BiPredicate<E, E> p) {
-        System.err.println(r);
-        System.err.println(p.test(r, obj) ? formatColor(76,"[OK]") :  (formatColor(196, "DIFF") + " : " + obj));
     }
 
     private String formatColor(int c, String s) {
@@ -60,15 +55,15 @@ public class ExampleActorKelp {
     }
 
     public static class MyActor extends ActorKelp<MyActor> {
-        public Map<String, List<String>> record = new LinkedHashMap<>();
-        public int count;
+        @TransferredState(mergeType = MergerOpType.Add) public Map<String, List<String>> record = new LinkedHashMap<>();
+        @TransferredState(mergeType = MergerOpType.Add) public int count;
 
-        public MyActor(ActorSystem system, String name, Config config, State state) {
-            super(system, name, config, state);
+        public MyActor(ActorSystem system, String name, ConfigKelp config) {
+            super(system, name, config);
         }
 
         public MyActor(ActorSystem system, String name) {
-            super(system, name);
+            this(system, name, new ConfigKelp());
         }
 
         @Override
@@ -80,15 +75,9 @@ public class ExampleActorKelp {
         }
 
         @Override
-        protected void initClone(MyActor original) {
+        public void initShuffle() {
             record = new LinkedHashMap<>();
             count = 0;
-        }
-
-        @Override
-        protected void initMerged(MyActor m) {
-            record.putAll(m.record);
-            count += m.count;
         }
 
         public void process(String k, String v) {

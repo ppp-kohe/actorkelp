@@ -48,6 +48,8 @@ public interface KelpStage<ActorType extends Actor> extends ActorRef {
 
     default void flush() {}
 
+    ActorSystem getSystem();
+
     class KelpStageRefWrapper<ActorType extends Actor> implements KelpStage<ActorType>, Serializable, KryoSerializable, StagingActor.StagingNonSubject {
         public static final long serialVersionUID = 1L;
         protected transient ActorSystem system;

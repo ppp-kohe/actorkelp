@@ -1,27 +1,41 @@
 package csl.actor.example;
 
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiPredicate;
 
 public class TestTool {
+    public static AtomicInteger fail = new AtomicInteger();
+    protected boolean printOk;
+
+    public TestTool() {
+        this(true);
+    }
+
+    public TestTool(boolean printOk) {
+        this.printOk = printOk;
+    }
 
     public static <E> void assertEquals(String msg, E expected, E actual) {
         assertEquals(msg, expected, actual, Objects::deepEquals);
     }
 
     public static <E> void assertEquals(String msg, E expected, E actual, BiPredicate<E,E> p) {
-        if (p.test(expected, actual)) {
-            new TestTool().printOk(msg + " : " + actual);
-        } else {
-            new TestTool().printError(msg + " : " + expected + ", " + actual);
-        }
+        new TestTool().check(msg, expected, actual, p);
     }
 
     public static void assertTrue(String msg, boolean b) {
-        if (b) {
-            new TestTool().printOk(msg);
+        new TestTool().check(msg, true, b, Boolean::equals);
+    }
+
+    public <E> void check(String msg, E expected, E actual, BiPredicate<E,E> p) {
+        if (p.test(expected, actual)) {
+            if (printOk) {
+                printOk(msg + " : " + actual);
+            }
         } else {
-            new TestTool().printError(msg);
+            fail.incrementAndGet();
+            printError(msg + " : " + expected + ", " + actual);
         }
     }
 

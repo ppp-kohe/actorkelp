@@ -1,7 +1,8 @@
 package csl.actor.example.kelp;
 
 import csl.actor.ActorSystemDefault;
-import csl.actor.kelp_old.KeyHistograms;
+import csl.actor.kelp.ActorSystemKelp;
+import csl.actor.kelp.behavior.KeyHistograms;
 
 import java.io.File;
 import java.util.*;
@@ -487,8 +488,8 @@ public class ExampleKeyHistogramsTest {
     }
 
     public void save(String fileName, KeyHistograms.HistogramTree tree) {
-        try (ActorSystemDefault sys = new ActorSystemDefault()) {
-            ActorToGraph.save(sys, tree, new File(fileName));
+        try (ActorSystemDefault sys = new ActorSystemKelp.ActorSystemDefaultForKelp()) {
+            TestToolActorToGraph.save(sys, tree, new File(fileName));
         }
     }
 
@@ -538,8 +539,8 @@ public class ExampleKeyHistogramsTest {
         ctx.putPosition = 0;
         tree.put("ccc", ctx);
 
-        try (ActorSystemDefault sys = new ActorSystemDefault()) {
-            ActorToGraph.save(sys, tree, new File("target/msgassoc-debug/split-before.dot"));
+        try (ActorSystemDefault sys = new ActorSystemKelp.ActorSystemDefaultForKelp()) {
+            TestToolActorToGraph.save(sys, tree, new File("target/msgassoc-debug/split-before.dot"));
         }
 
 

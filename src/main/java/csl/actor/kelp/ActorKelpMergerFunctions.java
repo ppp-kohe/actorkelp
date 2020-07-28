@@ -222,8 +222,10 @@ public class ActorKelpMergerFunctions {
     public static class MergerAddList implements MergerFunction<Collection<?>> {
         @Override
         public Object merge(ActorKelpSerializable.MergingContext context, Collection<?> l, Collection<?> r) {
-            List<Object> list = new ArrayList<>(l);
-            list.addAll(r);
+            List<Object> list = (l == null ? new ArrayList<>() : new ArrayList<>(l));
+            if (r != null) {
+                list.addAll(r);
+            }
             return list;
         }
     }
@@ -231,8 +233,10 @@ public class ActorKelpMergerFunctions {
     public static class MergerAddSet implements MergerFunction<Collection<?>> {
         @Override
         public Object merge(ActorKelpSerializable.MergingContext context, Collection<?> l, Collection<?> r) {
-            Set<Object> list = new HashSet<>(l);
-            list.addAll(r);
+            Set<Object> list = (l == null ? new HashSet<>() : new HashSet<>(l));
+            if (r != null) {
+                list.addAll(r);
+            }
             return list;
         }
     }

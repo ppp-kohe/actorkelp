@@ -40,6 +40,7 @@ public class ActorKelpSerializable<SelfType extends ActorKelp<SelfType>> impleme
         initMergedCount(actor);
         initMergedActorNames(actor);
         initShuffleIndex(actor);
+        initMailbox(actor);
         initInternalState(actor);
     }
 
@@ -68,6 +69,10 @@ public class ActorKelpSerializable<SelfType extends ActorKelp<SelfType>> impleme
         shuffleIndex = actor.getShuffleIndex();
     }
 
+    protected void initMailbox(SelfType actor) {
+        actor.getMailboxAsKelp().serializeTo(this);
+    }
+
     protected void initInternalState(SelfType actor) {
         internalState = actor.toInternalState();
     }
@@ -87,6 +92,7 @@ public class ActorKelpSerializable<SelfType extends ActorKelp<SelfType>> impleme
         restoreSetNonOriginal(a);
         restoreSetShuffleIndex(a, num);
         restoreMergedCount(a);
+        restoreMailbox(a);
         restoreInternalState(a);
         return a;
     }
@@ -115,6 +121,10 @@ public class ActorKelpSerializable<SelfType extends ActorKelp<SelfType>> impleme
             num = shuffleIndex;
         }
         actor.setShuffleIndex((int) num);
+    }
+
+    protected void restoreMailbox(SelfType actor) {
+        actor.getMailboxAsKelp().deserializeFrom(this);
     }
 
     protected void restoreInternalState(SelfType actor) {

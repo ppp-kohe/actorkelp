@@ -2,12 +2,12 @@ package csl.actor.example.kelp;
 
 import csl.actor.example.TestTool;
 
-public final class DebugThreadCheckTool {
+public final class TestToolThreadChecker {
     private volatile Thread thread;
     private Object target;
     private StackTraceElement[] lastError;
 
-    public DebugThreadCheckTool(Object target) {
+    public TestToolThreadChecker(Object target) {
         this.target = target;
     }
 

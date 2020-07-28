@@ -2,17 +2,19 @@ package csl.actor.example.kelp;
 
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
+import csl.actor.ActorSystem;
 import csl.actor.ActorSystemDefault;
+import csl.actor.example.TestTool;
+import csl.actor.kelp.ActorKelpFunctions;
+import csl.actor.kelp.ActorSystemKelp;
+import csl.actor.kelp.behavior.KeyHistograms;
+import csl.actor.kelp.behavior.KeyHistogramsPersistable;
 import csl.actor.persist.PersistentFileManager;
-import csl.actor.kelp_old.ActorBehaviorBuilderKelp;
-import csl.actor.kelp_old.KeyHistograms;
-import csl.actor.kelp_old.KeyHistogramsPersistable;
 import csl.actor.remote.KryoBuilder;
 
 import java.io.ByteArrayInputStream;
 import java.nio.file.Paths;
 import java.util.Objects;
-import java.util.function.BiPredicate;
 
 public class ExampleKeyHistogramsPersistableTest {
     public static void main(String[] args) {
@@ -34,21 +36,23 @@ public class ExampleKeyHistogramsPersistableTest {
         }
         String data = buf.toString(); //500
 
-        KryoBuilder.SerializerPoolDefault pool = new KryoBuilder.SerializerPoolDefault(null);
-        out.reset();
-        pool.write(out, data);
-        pool.write(out, data);
-        out.flush();
-        System.err.println(String.format("after write: pos=%,d total=%,d capacity=%,d",
-                out.position(), out.total(), out.getBuffer().length));
+        try (ActorSystem sys = new ActorSystemKelp.ActorSystemDefaultForKelp()) {
+            KryoBuilder.SerializerPool pool = new KryoBuilder.SerializerPoolDefault(sys);
+            out.reset();
+            pool.write(out, data);
+            pool.write(out, data);
+            out.flush();
+            System.err.println(String.format("after write: pos=%,d total=%,d capacity=%,d",
+                    out.position(), out.total(), out.getBuffer().length));
 
-        ByteArrayInputStream in = new ByteArrayInputStream(out.getBuffer(), 0, out.position());
-        Input input = new Input(in, 10);
-        print(input, "");
-        Object o = pool.read(input);
-        print(input, o);
-        o = pool.read(input);
-        print(input, o);
+            ByteArrayInputStream in = new ByteArrayInputStream(out.getBuffer(), 0, out.position());
+            Input input = new Input(in, 10);
+            print(input, "");
+            Object o = pool.read(input);
+            print(input, o);
+            o = pool.read(input);
+            print(input, o);
+        }
     }
 
     private void print(Input input, Object data) {
@@ -59,83 +63,74 @@ public class ExampleKeyHistogramsPersistableTest {
 
     public void runPersistTree() {
         System.err.println("------------- runPersistTree");
-        KeyHistogramsPersistable kh = new KeyHistogramsPersistable(new Conf(Long.MAX_VALUE), new PersistentFileManager("target/debug-persist",
-                new KryoBuilder.SerializerPoolDefault(null), Paths::get, new ActorSystemDefault.SystemLoggerErr()));
-        KeyHistogramsPersistable.HistogramTreePersistable tree = kh.create(new ActorBehaviorBuilderKelp.KeyComparatorDefault<>(), 3);
+        try (ActorSystem sys = new ActorSystemKelp.ActorSystemDefaultForKelp()) {
+            KryoBuilder.SerializerPool sp = new KryoBuilder.SerializerPoolDefault(sys);
+            KeyHistogramsPersistable kh = new KeyHistogramsPersistable(new Conf(Long.MAX_VALUE), new PersistentFileManager("target/debug-persist",
+                    sp, Paths::get, new ActorSystemDefault.SystemLoggerErr()));
+            KeyHistogramsPersistable.HistogramTreePersistable tree = kh.create(new ActorKelpFunctions.KeyComparatorDefault<>(), 3);
 
-        KeyHistograms.HistogramPutContextMap ctx = new KeyHistograms.HistogramPutContextMap();
-        input(tree, ctx);
+            KeyHistograms.HistogramPutContextMap ctx = new KeyHistograms.HistogramPutContextMap();
+            input(tree, ctx);
 
-//        try (ActorSystemDefault sys = new ActorSystemDefault()) {
-//            ActorToGraph save = new ActorToGraph(sys, new File("target/debug-persist/tree.dot"), null)
-//                    .setSaveLeafNode(true);
-//            save.save(null, tree, 0);
-//            save.finish();
-//        }
-
-
-        tree.persistTree(tree.getTreeSize());
-        check(tree, ctx);
+            tree.persistTree(tree.getTreeSize());
+            check(tree, ctx);
+        }
     }
     public void runPersistLargeLeaves() {
         System.err.println("------------- runPersistLargeLeaves");
-        KeyHistogramsPersistable kh = new KeyHistogramsPersistable(new Conf(Long.MAX_VALUE), new PersistentFileManager("target/debug-persist",
-                new KryoBuilder.SerializerPoolDefault(null), Paths::get, new ActorSystemDefault.SystemLoggerErr()));
-        KeyHistogramsPersistable.HistogramTreePersistable tree = kh.create(new ActorBehaviorBuilderKelp.KeyComparatorDefault<>(), 3);
 
-        KeyHistograms.HistogramPutContextMap ctx = new KeyHistograms.HistogramPutContextMap();
-        input(tree, ctx);
+        try (ActorSystem sys = new ActorSystemKelp.ActorSystemDefaultForKelp()) {
+            KryoBuilder.SerializerPool sp = new KryoBuilder.SerializerPoolDefault(sys);
 
-        tree.persistLargeLeaves();
-        check(tree, ctx);
+            KeyHistogramsPersistable kh = new KeyHistogramsPersistable(new Conf(Long.MAX_VALUE), new PersistentFileManager("target/debug-persist",
+                    sp, Paths::get, new ActorSystemDefault.SystemLoggerErr()));
+            KeyHistogramsPersistable.HistogramTreePersistable tree = kh.create(new ActorKelpFunctions.KeyComparatorDefault<>(), 3);
+
+            KeyHistograms.HistogramPutContextMap ctx = new KeyHistograms.HistogramPutContextMap();
+            input(tree, ctx);
+
+            tree.persistLargeLeaves();
+            check(tree, ctx);
+        }
     }
 
     public void runAuto() {
         System.err.println("------------- runAuto");
-        KeyHistogramsPersistable kh = new KeyHistogramsPersistable(new Conf(1000), new PersistentFileManager("target/debug-persist",
-                new KryoBuilder.SerializerPoolDefault(null), Paths::get, new ActorSystemDefault.SystemLoggerErr()));
-        KeyHistogramsPersistable.HistogramTreePersistable tree = kh.create(new ActorBehaviorBuilderKelp.KeyComparatorDefault<>(), 3);
 
-        KeyHistograms.HistogramPutContextMap ctx = new KeyHistograms.HistogramPutContextMap();
-        input(tree, ctx);
+        try (ActorSystem sys = new ActorSystemKelp.ActorSystemDefaultForKelp()) {
+            KryoBuilder.SerializerPool sp = new KryoBuilder.SerializerPoolDefault(sys);
+            KeyHistogramsPersistable kh = new KeyHistogramsPersistable(new Conf(1000), new PersistentFileManager("target/debug-persist",
+                    sp, Paths::get, new ActorSystemDefault.SystemLoggerErr()));
+            KeyHistogramsPersistable.HistogramTreePersistable tree = kh.create(new ActorKelpFunctions.KeyComparatorDefault<>(), 3);
 
-//        try (ActorSystemDefault sys = new ActorSystemDefault()) {
-//            ActorToGraph save = new ActorToGraph(sys, new File("target/debug-persist/tree.dot"), null)
-//                    .setSaveLeafNode(true);
-//            save.save(null, tree, 0);
-//            save.finish();
-//        }
+            KeyHistograms.HistogramPutContextMap ctx = new KeyHistograms.HistogramPutContextMap();
+            input(tree, ctx);
 
-
-        check(tree, ctx);
+            check(tree, ctx);
+        }
     }
 
     public void runAutoSerialize() {
         System.err.println("------------- runAutoSerialize");
-        KryoBuilder.SerializerPool sp = new KryoBuilder.SerializerPoolDefault(null);
-        KeyHistogramsPersistable kh = new KeyHistogramsPersistable(new Conf(1000), new PersistentFileManager("target/debug-persist",
-                sp, Paths::get, new ActorSystemDefault.SystemLoggerErr()));
-        KeyHistogramsPersistable.HistogramTreePersistable tree = kh.create(new ActorBehaviorBuilderKelp.KeyComparatorDefault<>(), 3);
+        try (ActorSystem sys = new ActorSystemKelp.ActorSystemDefaultForKelp()) {
+            KryoBuilder.SerializerPool sp = new KryoBuilder.SerializerPoolDefault(sys);
+            KeyHistogramsPersistable kh = new KeyHistogramsPersistable(new Conf(1000), new PersistentFileManager("target/debug-persist",
+                    sp, Paths::get, new ActorSystemDefault.SystemLoggerErr()));
+            KeyHistogramsPersistable.HistogramTreePersistable tree = kh.create(new ActorKelpFunctions.KeyComparatorDefault<>(), 3);
 
-        KeyHistograms.HistogramPutContextMap ctx = new KeyHistograms.HistogramPutContextMap();
-        input(tree, ctx);
+            KeyHistograms.HistogramPutContextMap ctx = new KeyHistograms.HistogramPutContextMap();
+            input(tree, ctx);
 
-//        try (ActorSystemDefault sys = new ActorSystemDefault()) {
-//            ActorToGraph save = new ActorToGraph(sys, new File("target/debug-persist/tree.dot"), null)
-//                    .setSaveLeafNode(true);
-//            save.save(null, tree, 0);
-//            save.finish();
-//        }
-
-        Output out = new Output(1_000_000);
-        sp.write(out, tree);
-        long n = out.total();
-        byte[] data = out.getBuffer();
-        System.err.println(String.format("persisted: %,d bytes", n));
-        Input in = new Input(data, 0, (int) n);
-        KeyHistogramsPersistable.HistogramTreePersistable p = (KeyHistogramsPersistable.HistogramTreePersistable) sp.read(in);
-        p.init(kh.getPersistent());
-        check(p, ctx);
+            Output out = new Output(1_000_000);
+            sp.write(out, tree);
+            long n = out.total();
+            byte[] data = out.getBuffer();
+            System.err.println(String.format("persisted: %,d bytes", n));
+            Input in = new Input(data, 0, (int) n);
+            KeyHistogramsPersistable.HistogramTreePersistable p = (KeyHistogramsPersistable.HistogramTreePersistable) sp.read(in);
+            p.init(kh.getPersistent());
+            check(p, ctx);
+        }
     }
 
 
@@ -181,12 +176,12 @@ public class ExampleKeyHistogramsPersistableTest {
 
     private void check(KeyHistogramsPersistable.HistogramTreePersistable tree, KeyHistograms.HistogramPutContextMap ctx) {
         //loading
-        log(String.format("persisted: %,d / %,d", tree.getPersistedSize(), tree.getTreeSize()));
+        log(String.format("persisted: %,d / %,d", tree.getTreeSize(), tree.getPersistedSize()));
         load(tree, tree.getRoot(), ctx);
-        check("persisted after read", tree.getPersistedSize(), 0L, Objects::equals);
-        check("size after read", tree.getTreeSize(), 0L, Objects::equals);
-        if (fail == 0) {
-            System.err.println(formatColor(76, "[OK]"));
+        TestTool.assertEquals("persisted after read", 0L, tree.getPersistedSize(), Objects::equals);
+        TestTool.assertEquals("size after read", 0L, tree.getTreeSize(), Objects::equals);
+        if (TestTool.fail.get() == 0) {
+            new TestTool().printOk("");
         }
     }
 
@@ -214,26 +209,14 @@ public class ExampleKeyHistogramsPersistableTest {
                 if (o == null) {
                     break;
                 }
-                check(node + " key " + size, "" + o.toString().charAt(0), node.keyStart().toString(), Objects::equals);
+                new TestTool(false).check(node + " key " + size, node.keyStart().toString(), "" + o.toString().charAt(0), Objects::equals);
                 int num = Integer.parseInt(o.toString().substring(1));
-                check(node + " value " + size, num, prevNum, (next,prev) -> next > prev);
+                new TestTool(false).check(node + " value " + size, prevNum, num, (prev, next) -> next > prev);
                 prevNum = num;
                 ++size;
             }
-            check(node + " size", size, nodeSize, Objects::equals);
+            TestTool.assertEquals(node + " size", nodeSize, size, Objects::equals);
         }
-    }
-    private <E> void check(String msg, E r, E obj, BiPredicate<E, E> p) {
-        if (p.test(r, obj)) {
-            //System.out.println(formatColor(76, "[OK]"));
-        } else {
-            ++fail;
-            System.err.println(msg + " : " + formatColor(196, "DIFF") + " : " + r + " vs " + obj);
-        }
-    }
-
-    private String formatColor(int c, String s) {
-        return String.format("\033[38;5;%dm%s\033[0m",c, s);
     }
 
     public void log(String str) {
@@ -248,17 +231,17 @@ public class ExampleKeyHistogramsPersistableTest {
         }
 
         @Override
-        public long histogramPersistSizeLimit() {
+        public long getHistogramPersistSizeLimit() {
             return limit;
         }
 
         @Override
-        public long histogramPersistOnMemorySize() {
+        public long getHistogramPersistOnMemorySize() {
             return 3;
         }
 
         @Override
-        public long histogramPersistRandomSeed() {
+        public long getHistogramPersistRandomSeed() {
             return 1235;
         }
     }

@@ -33,7 +33,7 @@ public class ExampleResponsiveCalls {
         try (ActorSystemRemote host1 = new ActorSystemRemote().startWithoutWait(50000);
              ActorSystemRemote host2 = new ActorSystemRemote().startWithoutWait(50001)) {
 
-            new ResponsiveCalls.ResponsiveCallableActor(host2);
+            ResponsiveCalls.initCallableTarget(host2);
             String s = ResponsiveCalls.sendHostTask(host1, host2.getServerAddress(), (a) -> "hello").get();
             System.out.println(Instant.now() + ": callable: " + s);
             TestTool.assertEquals("sendHostTask", "hello", s);

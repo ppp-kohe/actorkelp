@@ -3,17 +3,19 @@ package csl.actor.example.kelp;
 import csl.actor.*;
 import csl.actor.cluster.ActorPlacement;
 import csl.actor.example.TestToolRemote;
-import csl.actor.kelp_old.PhaseShift;
+import csl.actor.kelp.ActorKelp;
+import csl.actor.kelp.ActorPlacementKelp;
+import csl.actor.kelp.ConfigKelp;
 import csl.actor.util.ResponsiveCalls;
-import csl.actor.kelp_old.*;
 import csl.actor.remote.ActorAddress;
 import csl.actor.remote.ActorRefRemote;
 import csl.actor.remote.ActorSystemRemote;
 import csl.actor.remote.KryoBuilder;
+import csl.actor.util.StagingActor;
 
 import java.util.Arrays;
 
-public class ExampleActorReplicablePlacement {
+public class ExampleActorPlacementKelp {
     public static ActorSystemRemote createSystem() {
         return new ActorSystemRemote(new ActorSystemDefault.ActorSystemDefaultUnlimited(), KryoBuilder.builder());
     }
@@ -24,7 +26,7 @@ public class ExampleActorReplicablePlacement {
         int serverPort = 10000;
         system.startWithoutWait(serverPort);
 
-        ActorPlacementKelp p = new ActorPlacementKelp(system,
+        ActorPlacementKelp<ConfigKelp> p = new ActorPlacementKelp<>(system,
                 new ActorPlacement.PlacementStrategyRoundRobin(0));
 
         TestToolRemote.setMvnClasspath();
@@ -34,9 +36,7 @@ public class ExampleActorReplicablePlacement {
         ActorRefRemote.get(system, "localhost", 10001, "recv")
                 .tell(ActorRefRemote.get(system, "localhost", 10001, "recv"), null);
 
-        TestActor a = new TestActor(system, "hello", new Config());
-
-        a.routerSplit(2).get();
+        TestActor a = new TestActor(system, "hello", new ConfigKelp());
 
         ActorRef ref = ResponsiveCalls.sendTask(system, a, TestActor::move).get();
         for (int i = 0; i < 100; ++i) {
@@ -45,69 +45,37 @@ public class ExampleActorReplicablePlacement {
             }
         }
 
-        PhaseShift.start(system, ref).get();
+        StagingActor.staging(system).start(ref).get();
         p.close();
         Thread.sleep(3000);
         system.close();
     }
 
     public static class TestActor extends ActorKelp<TestActor> {
-        long[] model;
-        public TestActor(ActorSystem system, String name, Config config) {
+        @TransferredState long[] model;
+        public TestActor(ActorSystem system, String name, ConfigKelp config) {
             super(system, name, config);
             model = new long[1000];
             Arrays.fill(model, 123);
-        }
-
-        public TestActor(ActorSystem system, String name, Config config, State state) {
-            super(system, name, config, state);
-            model = new long[1000];
-            Arrays.fill(model, 123);
-        }
-
-        @Override
-        protected void initClone(TestActor original) {
-            super.initClone(original);
-            System.err.println("clone");
         }
 
         @Override
         protected ActorBehavior initBehavior() {
             return behaviorBuilder()
                     .matchKey(Integer.class, i-> i)
-                    .forEachKeyList(5, (k,vs) -> System.out.println(getSystem() + " : " + vs))
+                    .forEachKeyList(5, (k,vs) -> config.log("%s : %s -> %s", getSystem(), k, vs))
                     .matchWithSender(String.class, this::info)
                     .build();
         }
 
-        @Override
-        public ActorKelpSerializable toSerializable(long num) {
-            System.err.println("toSerializable");
-            return super.toSerializable(num);
-        }
-
-        @Override
-        protected ActorKelpSerializable newSerializableState() {
-            return new ExampleActorReplicablePlacement.State(model);
-        }
-
         public ActorRef move() {
-            ActorRef ref = place(getPlacement(), this);
-            System.out.println(getSystem() + " : place " + ref);
+            ActorRef ref = getPlacement().place(this);
+            config.log("%s : place -> %s", this, ref);
             return ref;
         }
 
         public void info(String n, ActorRef sender) {
             System.err.println(getSystem() + ": " + n + " from: " + sender);
-        }
-    }
-
-    static class State extends ActorKelp.ActorKelpSerializable {
-        public static final long serialVersionUID = 1L;
-        long[] model;
-
-        public State(long[] model) {
-            this.model = model;
         }
     }
 
@@ -122,8 +90,9 @@ public class ExampleActorReplicablePlacement {
 
             new RecvActor(system, "recv");
 
-            ActorPlacementKelp p = new ActorPlacementKelp(system,
+            ActorPlacementKelp<ConfigKelp> p = new ActorPlacementKelp<>(system,
                     new ActorPlacement.PlacementStrategyUndertaker());
+            p.setShutdownWaitMsAfterAllMembersLeft(2000);
             Thread.sleep(3000);
             p.join(ActorAddress.get("localhost", joinPort));
         }
@@ -142,7 +111,7 @@ public class ExampleActorReplicablePlacement {
         }
 
         void recv(ActorRef r, ActorRef s) {
-            System.out.println(this + " ! " + r + " from " + s);
+            getSystem().getLogger().log("%s ! %s from %s", this, r, s);
         }
     }
 }

@@ -1,4 +1,4 @@
-package csl.actor.example.kelp2;
+package csl.actor.example.kelp;
 
 import csl.actor.ActorBehavior;
 import csl.actor.ActorDefault;

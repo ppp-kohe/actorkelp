@@ -18,6 +18,10 @@ public class ActorKelpFunctions {
 
     public interface KeyExtractorFunction<ValueType, KeyType> extends Function<ValueType, KeyType>, Serializable {
         long serialVersionUID = 1L;
+
+        static <T> KeyExtractorFunction<T,T> identity() {
+            return k -> k;
+        }
     }
 
     public static class KeyExtractorClass<KeyType, ValueType> implements KeyExtractor<KeyType, ValueType> {

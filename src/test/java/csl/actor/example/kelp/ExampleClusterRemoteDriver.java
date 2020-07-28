@@ -1,7 +1,8 @@
 package csl.actor.example.kelp;
 
-import csl.actor.kelp_old.ActorPlacementKelp;
-import csl.actor.kelp_old.ClusterKelp;
+import csl.actor.kelp.ActorPlacementKelp;
+import csl.actor.kelp.ClusterKelp;
+import csl.actor.kelp.ConfigKelp;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -68,8 +69,8 @@ public class ExampleClusterRemoteDriver {
 
     public static class TestMain {
         public static void main(String[] args) throws Exception {
-            ClusterKelp cluster = ClusterKelp.create();
-            ActorPlacementKelp place = cluster.deploy(args[0]);
+            ClusterKelp<ConfigKelp> cluster = ClusterKelp.create();
+            ActorPlacementKelp<ConfigKelp> place = cluster.deploy(args[0]);
             System.out.println(place + " : " + Arrays.toString(args));
             Thread.sleep(10_000);
             cluster.shutdownAll();

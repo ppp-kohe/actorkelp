@@ -11,6 +11,7 @@ import csl.actor.util.ToJson;
 import java.io.Serializable;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
@@ -27,6 +28,9 @@ public interface ActorPlacement {
         protected volatile int totalThreads;
         protected AtomicLong createdActors = new AtomicLong();
         protected long createdActorsNextLog = 1;
+
+        protected long shutdownWaitMsAfterAllMembersLeft = -1L; //minus value: never
+        protected volatile ScheduledFuture<?> shutdownAfterWait;
 
         public static boolean debugLog = System.getProperty("csl.actor.debug", "false").equals("true");
 
@@ -116,9 +120,13 @@ public interface ActorPlacement {
             }
         }
 
+        /**
+         * @return normalized address
+         */
         public ActorAddress.ActorAddressRemoteActor getSelfAddress() {
             if (getSystem() instanceof ActorSystemRemote) {
-                return ((ActorSystemRemote) getSystem()).getServerAddress().getActor(getName());
+                ActorSystemRemote system = (ActorSystemRemote) getSystem();
+                return system.normalizeHostAddress(system.getServerAddress()).getActor(getName());
             } else {
                 return null;
             }
@@ -295,7 +303,34 @@ public interface ActorPlacement {
 
         public void receiveLeave(LeaveEntry l) {
             log("receive leave: %s", l);
-            cluster.removeIf(e -> e.getPlacementActor().equals(l.getPlacementActor()));
+            if (cluster.removeIf(e -> e.getPlacementActor().equals(l.getPlacementActor()))) {
+                if (cluster.isEmpty()) {
+                    allMemberLeft();
+                }
+            }
+        }
+
+        public void allMemberLeft() {
+            if (shutdownWaitMsAfterAllMembersLeft >= 0) {
+                log("all members left: schedule system close after %,d ms", shutdownWaitMsAfterAllMembersLeft);
+                if (shutdownAfterWait != null) {
+                    shutdownAfterWait.cancel(true);
+                }
+                shutdownAfterWait = getSystem().getScheduledExecutor()
+                        .schedule(this::shutdownAfterWait, shutdownWaitMsAfterAllMembersLeft, TimeUnit.MILLISECONDS);
+            }
+        }
+
+        public void setShutdownWaitMsAfterAllMembersLeft(long shutdownWaitMsAfterAllMembersLeft) {
+            this.shutdownWaitMsAfterAllMembersLeft = shutdownWaitMsAfterAllMembersLeft;
+        }
+
+        public void shutdownAfterWait() {
+            if (cluster.isEmpty()) {
+                log("all members left: system close");
+                shutdownAfterWait = null;
+                getSystem().close();
+            }
         }
 
         @Override

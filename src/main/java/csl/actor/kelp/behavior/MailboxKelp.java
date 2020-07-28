@@ -292,7 +292,7 @@ public class MailboxKelp implements Mailbox, Cloneable {
 
     @SuppressWarnings({"unchecked", "rawtypes"})
     public void serializeTo(ActorKelpSerializable state) {
-        state.setMessages(mailbox.getQueue().toArray(new Message[0])); //TODO mailbox serialization form: queue and saved file
+        state.setMessages(mailbox.getQueue().toArray(new Message[0]));
         state.setHistograms(Arrays.stream(entries)
                 .map(HistogramEntry::getTree)
                 .collect(Collectors.toList()));

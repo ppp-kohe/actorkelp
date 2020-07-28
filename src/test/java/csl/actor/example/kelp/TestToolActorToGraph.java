@@ -1,11 +1,15 @@
 package csl.actor.example.kelp;
 
 import csl.actor.*;
-import csl.actor.kelp_old.PhaseShift;
+import csl.actor.kelp.behavior.ActorBehaviorKelp;
+import csl.actor.kelp.behavior.HistogramEntry;
+import csl.actor.kelp.behavior.KeyHistograms;
+import csl.actor.kelp.behavior.MailboxKelp;
 import csl.actor.util.ResponsiveCalls;
-import csl.actor.kelp_old.*;
+import csl.actor.kelp.*;
 import csl.actor.remote.ActorRefRemote;
 import csl.actor.remote.ActorSystemRemote;
+import csl.actor.util.StagingActor;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -16,21 +20,21 @@ import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
-public class ActorToGraph extends ActorDefault {
+public class TestToolActorToGraph extends ActorDefault {
     protected List<GraphNode> nodes = new ArrayList<>();
     protected Map<String,GraphNode> nodeMap = new HashMap<>();
     protected Map<String,List<GraphEdge>> edgeMap = new HashMap<>();
     protected boolean saveLeafNode;
 
-    public ActorToGraph(ActorSystem system) {
-        super(system, ActorToGraph.class.getName());
+    public TestToolActorToGraph(ActorSystem system) {
+        super(system, TestToolActorToGraph.class.getName());
     }
 
     public static void save(ActorSystem system, Object a, File file) {
-        ActorToGraph ag = new ActorToGraph(system);
+        TestToolActorToGraph ag = new TestToolActorToGraph(system);
         ag.tell(a);
         try {
-            PhaseShift.start(system, ag).get(100, TimeUnit.SECONDS);
+            StagingActor.staging(system).start(ag).get(100, TimeUnit.SECONDS);
             ResponsiveCalls.sendTaskConsumer(ag, self -> self.save(file)).get();
         } catch (Exception ex) {
             throw new RuntimeException(ex);
@@ -214,24 +218,10 @@ public class ActorToGraph extends ActorDefault {
         public void createNodeKelp(GraphNode n, ActorKelp<?> ag) {
             List<List<String>> table = n.tableLabel;
             for (int i = 0, size = ag.getMailboxAsKelp().getEntrySize(); i < size; ++i) {
-                MailboxKelp.HistogramEntry e = ag.getMailboxAsKelp().getEntries().get(i);
+                HistogramEntry e = ag.getMailboxAsKelp().getEntries().get(i);
                 table.add(Arrays.asList("t" + i + ".processor", idStr(e.getProcessor())));
 
                 createNodeHistTree(n, e.getTree(), i);
-            }
-
-            ActorKelp.State s = ag.getState();
-            n.tableLabel.add(Arrays.asList("state", s.getClass().getSimpleName()));
-            n.tableLabel.add(Arrays.asList("state.procs", String.format("%,d", s.getProcessCount())));
-            if (s instanceof KelpStateRouter) {
-                KelpStateRouter sr = (KelpStateRouter) s;
-                n.tableLabel.add(Arrays.asList("height", String.format("%,d", sr.getHeight())));
-                n.tableLabel.add(Arrays.asList("maxHeight", String.format("%,d", sr.getMaxHeight())));
-                createNodeSplit(n, sr.getSplit(), "");
-            } else if (s instanceof ActorKelp.StateUnit) {
-                n.tableLabel.add(Arrays.asList("router", actorStr(((ActorKelp.StateUnit) s).getRouter())));
-            } else if (s instanceof ActorKelp.StateCanceled) {
-                n.tableLabel.add(Arrays.asList("router", actorStr(((ActorKelp.StateCanceled) s).getRouter())));
             }
         }
 
@@ -333,39 +323,6 @@ public class ActorToGraph extends ActorDefault {
             GraphNode n = new GraphNode("histLeaf:" + Instant.now());
             n.tableLabel = table;
             return createEdge(from, n);
-        }
-
-        public void createNodeSplit(GraphNode from, KelpRoutingSplit s, String edgeLabel) {
-            if (s == null) {
-                GraphNode n = createNode("null:" + Instant.now());
-                n.label = "null";
-                createEdge(from, n);
-            } else if (s instanceof KelpRoutingSplit.RoutingSplitNode) {
-                KelpRoutingSplit.RoutingSplitNode st = (KelpRoutingSplit.RoutingSplitNode) s;
-                GraphNode n = createNode("splitNode:" + Instant.now());
-                n.tableLabel = new ArrayList<>();
-                n.tableLabel.add(Arrays.asList("split.procs", String.format("%,d", st.getProcessCount())));
-                n.tableLabel.add(Arrays.asList("path", st.getPath().toString()));
-                n.tableLabel.add(Arrays.asList("split", limitString(Objects.toString(st.getSplitPoints()))));
-                n.tableLabel.add(Arrays.asList("depth", Integer.toString(s.getDepth())));
-                n.tableLabel.add(Arrays.asList("ratioAll", String.format("%4.2f", st.getHistory().ratioAll())));
-
-                int hi = 0;
-                for (KelpRoutingSplit.RoutingHistory h : st.getHistory().toList()) {
-                    n.tableLabel.add(Arrays.asList("hist" + hi, String.format("%4.2f", h.ratio()), String.format("%,d", h.left.get()), String.format("%,d", h.right.get())));
-                    ++hi;
-                }
-
-                createNodeSplit(n, st.getLeft(), "left");
-                createNodeSplit(n, st.getRight(), "right");
-
-                createEdge(from, n).label = edgeLabel;
-            } else if (s instanceof KelpRoutingSplit.RoutingSplitLeaf) {
-                ActorRef ref = ((KelpRoutingSplit.RoutingSplitLeaf) s).getActor();
-                GraphNode n = createNode(getId(ref));
-                createEdge(from, n).label = edgeLabel + " dep:" + s.getDepth();
-                actorToGraph.tell(ref);
-            }
         }
 
         protected String limitString(String s) {

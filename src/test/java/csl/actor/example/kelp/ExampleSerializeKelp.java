@@ -1,19 +1,15 @@
-package csl.actor.example;
+package csl.actor.example.kelp;
 
 import csl.actor.*;
-import csl.actor.kelp.ActorKelp;
-import csl.actor.kelp.ActorKelpFunctions;
-import csl.actor.kelp.ActorKelpSerializable;
-import csl.actor.kelp.ConfigKelp;
+import csl.actor.example.ExampleSerialize;
+import csl.actor.example.TestToolSerialize;
+import csl.actor.kelp.*;
 import csl.actor.persist.PersistentFileManager;
 import csl.actor.kelp.behavior.*;
 import csl.actor.remote.ActorAddress;
 import csl.actor.remote.KryoBuilder;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Objects;
+import java.util.*;
 import java.util.stream.Collectors;
 
 public class ExampleSerializeKelp extends ExampleSerialize {
@@ -26,7 +22,7 @@ public class ExampleSerializeKelp extends ExampleSerialize {
     TestToolSerialize ts = new TestToolSerialize();
 
     public void run() {
-        system = new ActorSystemDefault();
+        system = new ActorSystemKelp.ActorSystemDefaultForKelp();
         p = new KryoBuilder.SerializerPoolDefault(system);
 
         runNodeTreeData();
@@ -37,6 +33,7 @@ public class ExampleSerializeKelp extends ExampleSerialize {
         runCallableFailure();
         runHistogramTree();
         runActorReplicableSerializableState();
+        runShuffle();
 
         system.close();
     }
@@ -255,5 +252,12 @@ public class ExampleSerializeKelp extends ExampleSerialize {
                     .forEachKeyList(0, (k,vs) -> System.err.println(vs))
                     .build();
         }
+    }
+
+    private void runShuffle() {
+        new TestToolSerialize().writeRead(p, new ActorRefShuffle(system,
+                new HashMap<>(), new ArrayList<>(), 10, true),
+                (ex,ac) -> ac.getMemberActors().isEmpty() && ex.getBufferSize() == ac.getBufferSize() &&
+                                ex.isHostIncludePort() == ac.isHostIncludePort());
     }
 }

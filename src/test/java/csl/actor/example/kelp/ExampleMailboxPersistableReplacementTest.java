@@ -1,25 +1,24 @@
 package csl.actor.example.kelp;
 
 import csl.actor.*;
+import csl.actor.example.TestTool;
+import csl.actor.kelp.ActorSystemKelp;
 import csl.actor.kelp.ConfigKelp;
 import csl.actor.persist.PersistentFileManager;
-import csl.actor.example.ExampleSerializeKelp;
-import csl.actor.kelp_old.Config;
 import csl.actor.persist.MailboxPersistableReplacement;
-import csl.actor.kelp_old.PhaseShift;
 import csl.actor.util.ResponsiveCalls;
 import csl.actor.remote.KryoBuilder;
+import csl.actor.util.StagingActor;
 
 import java.nio.file.Paths;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
-import java.util.concurrent.TimeUnit;
 import java.util.function.BiPredicate;
 
-public class ExampleMailboxPersistableTest {
+public class ExampleMailboxPersistableReplacementTest {
     public static void main(String[] args) throws Exception {
-        new ExampleMailboxPersistableTest().run();
+        new ExampleMailboxPersistableReplacementTest().run();
     }
     public void run() throws Exception {
         runPersistentFileManager();
@@ -30,7 +29,7 @@ public class ExampleMailboxPersistableTest {
 
     private void runPersistentFileManager() throws Exception {
         System.err.println("------------ runPersistentFileManager");
-        try (ActorSystem system = new ActorSystemDefault()) {
+        try (ActorSystem system = new ActorSystemKelp.ActorSystemDefaultForKelp()) {
             KryoBuilder.SerializerPool p = new KryoBuilder.SerializerPoolDefault(system);
             PersistentFileManager manager = new PersistentFileManager(
                     "target/debug-persist", p, Paths::get, system.getLogger());
@@ -66,7 +65,7 @@ public class ExampleMailboxPersistableTest {
 
     private void runPersistentFileManagerRecursive() throws Exception {
         System.err.println("------------ runPersistentFileManagerRecursive");
-        try (ActorSystem system = new ActorSystemDefault()) {
+        try (ActorSystem system = new ActorSystemKelp.ActorSystemDefaultForKelp()) {
             KryoBuilder.SerializerPool p = new KryoBuilder.SerializerPoolDefault(system);
             PersistentFileManager manager = new PersistentFileManager(
                     "target/debug-persist", p, Paths::get, system.getLogger());
@@ -153,7 +152,7 @@ public class ExampleMailboxPersistableTest {
 
     private void runMailboxPersistable() throws Exception {
         System.err.println("------------ runMailboxPersistable");
-        ActorSystemDefault system = new ActorSystemDefault();
+        ActorSystemDefault system = new ActorSystemKelp.ActorSystemDefaultForKelp();
         TestActor a = new TestActor(system, "a");
 
         int num = 100_000;
@@ -165,33 +164,26 @@ public class ExampleMailboxPersistableTest {
         }
         System.err.println(String.format("%s: finish input", Duration.between(start, Instant.now())));
 
-        PhaseShift.PhaseTerminalActor finishActor = new PhaseShift.PhaseTerminalActor(system, false,
-                (sys, comp) -> {
-                    try {
-                        ResponsiveCalls.<TestActor>sendTaskConsumer(sys, a, (self) -> {
-                                TestMailboxPersistableReplacement m = (TestMailboxPersistableReplacement) self.getMailbox();
-                                System.err.println("persist: " + m.persistCount);
-                                self.log();
+        StagingActor.staging(system)
+                .start(a).get();
 
-                                System.out.println(self.received.equals(inputs) ? formatColor(76,"[OK]") :
-                                        (formatColor(196, "DIFF") + " : " + self.received.size() + " vs " + inputs.size()));
-                                System.err.println("  equals as sets: " + new HashSet<>(self.received).equals(new HashSet<>(inputs)));
-                                for (int i = 0; i < num; ++i) {
-                                    if (!inputs.get(i).equals(self.received.get(i))) {
-                                        System.err.println("  DIFF: [" + i + "] " + self.received.get(i) + " vs " + inputs.get(i));
-                                        break;
-                                    }
-                                }
-                        }).get();
-                    } catch (Exception ex) {
-                        ex.printStackTrace();
-                    }
-                    System.err.println("finish");
-                    sys.close();
-                });
 
-        a.tell(new PhaseShift("", finishActor));
-        system.getExecutorService().awaitTermination(1, TimeUnit.HOURS);
+        ResponsiveCalls.<TestActor>sendTaskConsumer(system, a, (self) -> {
+            TestMailboxPersistableReplacement m = (TestMailboxPersistableReplacement) self.getMailbox();
+            System.err.println("persist: " + m.persistCount);
+            self.log();
+
+            TestTool.assertEquals("received", inputs, self.received);
+            System.err.println("  equals as sets: " + new HashSet<>(self.received).equals(new HashSet<>(inputs)));
+            for (int i = 0; i < num; ++i) {
+                if (!inputs.get(i).equals(self.received.get(i))) {
+                    new TestTool().printError("  DIFF: [" + i + "] " + self.received.get(i) + " vs " + inputs.get(i));
+                    break;
+                }
+            }
+        }).get();
+        system.close();
+        //system.getExecutorService().awaitTermination(1, TimeUnit.HOURS);
     }
 
     public static class TestActor extends ActorDefault {
@@ -229,7 +221,7 @@ public class ExampleMailboxPersistableTest {
         }
 
         public void log() {
-            System.err.println(String.format("n=%,d, data=%d", n, received.size()));
+            getSystem().getLogger().log("n=%,d, data=%d", n, received.size());
         }
     }
 
@@ -271,7 +263,7 @@ public class ExampleMailboxPersistableTest {
     }
 
     private void runPersistSpeed(boolean p) throws Exception {
-        ActorSystemDefault system = new ActorSystemDefault();
+        ActorSystemDefault system = new ActorSystemKelp.ActorSystemDefaultForKelp();
         TestActorForSpeed a = new TestActorForSpeed(system, "a", p);
 
         int num = 10_000_000;
@@ -281,25 +273,19 @@ public class ExampleMailboxPersistableTest {
         }
         System.err.println(String.format("%s: finish input", Duration.between(start, Instant.now())));
 
-        PhaseShift.PhaseTerminalActor finishActor = new PhaseShift.PhaseTerminalActor(system, false,
-                (sys, comp) -> {
-                    try {
-                        ResponsiveCalls.<TestActorForSpeed>sendTaskConsumer(sys, a, (self) -> {
-                            if (self.getMailbox() instanceof TestMailboxPersistableReplacement) {
-                                TestMailboxPersistableReplacement m = (TestMailboxPersistableReplacement) self.getMailbox();
-                                System.err.println("persist: " + m.persistCount);
-                            }
-                            self.log();
-                        }).get();
-                    } catch (Exception ex) {
-                        ex.printStackTrace();
-                    }
-                    System.err.println("finish");
-                    sys.close();
-                });
+        StagingActor.staging(system)
+                .start(a);
 
-        a.tell(new PhaseShift("", finishActor));
-        system.getExecutorService().awaitTermination(1, TimeUnit.HOURS);
+        ResponsiveCalls.<TestActorForSpeed>sendTaskConsumer(system, a, (self) -> {
+            if (self.getMailbox() instanceof TestMailboxPersistableReplacement) {
+                TestMailboxPersistableReplacement m = (TestMailboxPersistableReplacement) self.getMailbox();
+                System.err.println("persist: " + m.persistCount);
+            }
+            self.log();
+        }).get();
+
+        System.err.println("finish");
+        system.close();
     }
 
     public static class TestActorForSpeed extends ActorDefault {

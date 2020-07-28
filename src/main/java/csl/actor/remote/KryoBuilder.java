@@ -399,21 +399,27 @@ public class KryoBuilder {
     }
 
     public static class SerializerPoolDefault extends SerializerPool {
+        protected Function<ActorSystem, Kryo> defaultBuilder;
         public SerializerPoolDefault() {
             this(null);
         }
 
         public SerializerPoolDefault(ActorSystem system) {
+            this(system, KryoBuilder.builder());
+        }
+
+        public SerializerPoolDefault(ActorSystem system, Function<ActorSystem, Kryo> defaultBuilder) {
             super(new Pool<>(true, false, 8) {
                 @Override
                 protected Kryo create() {
                     if (system instanceof SerializerFactory) {
                         return ((SerializerFactory) system).createSerializer();
                     } else {
-                        return KryoBuilder.builder().apply(system); //TODO null system
+                        return defaultBuilder.apply(system); //TODO null system
                     }
                 }
             });
+            this.defaultBuilder = defaultBuilder;
             if (system != null) {
                 logger = system.getLogger();
             }

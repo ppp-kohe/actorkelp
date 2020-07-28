@@ -1,11 +1,9 @@
 package csl.actor.example.exp;
 
 import csl.actor.*;
-import csl.actor.example.kelp.DebugThreadCheckTool;
+import csl.actor.example.kelp.TestToolThreadChecker;
 import csl.actor.kelp.ActorKelpFunctions;
-import csl.actor.kelp.behavior.ActorBehaviorBuilderKelp;
 import csl.actor.kelp.behavior.KeyHistograms;
-import csl.actor.util.StagingActor;
 
 import java.util.*;
 import java.util.concurrent.TimeUnit;
@@ -56,7 +54,7 @@ public class ExpLock {
         long count;
         long next;
         LinkedList<String> last = new LinkedList<>();
-        final DebugThreadCheckTool checker = new DebugThreadCheckTool(this);
+        final TestToolThreadChecker checker = new TestToolThreadChecker(this);
         public EndActor(ActorSystem system, String name, long max) {
             super(system, name);
             this.max = max;
@@ -115,7 +113,7 @@ public class ExpLock {
 
     public static class TreeActor extends ActorDefault {
         Random rand = new Random();
-        final DebugThreadCheckTool checker = new DebugThreadCheckTool(this);
+        final TestToolThreadChecker checker = new TestToolThreadChecker(this);
 
         List<Actor> children = new ArrayList<>();
         BiFunction<ActorSystem,ActorRef,Actor> leafNew;
@@ -231,7 +229,7 @@ public class ExpLock {
             return behaviorBuilder()
                     .match(String.class, this::receive).build();
         }
-        DebugThreadCheckTool leafChecker = new DebugThreadCheckTool(this);
+        TestToolThreadChecker leafChecker = new TestToolThreadChecker(this);
 
         KeyHistograms.HistogramTree tree;
 
@@ -275,7 +273,7 @@ public class ExpLock {
             return behaviorBuilder()
                     .match(String.class, this::receive).build();
         }
-        DebugThreadCheckTool leafChecker = new DebugThreadCheckTool(this);
+        TestToolThreadChecker leafChecker = new TestToolThreadChecker(this);
 
         KeyHistograms.HistogramTree tree;
 

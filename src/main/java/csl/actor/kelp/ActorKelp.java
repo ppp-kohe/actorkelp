@@ -370,10 +370,15 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
                         processMessage(new Message<>(this, this, line)));
                 config.log("read finish: %s : %s", split, this);
             }
-            ActorRefShuffle.flush(nextStageActor(), this);
+            flush();
         } catch (Exception ex) {
             config.log(ex, "splitter=%s split=%s", fileSplitter, split);
         }
+    }
+
+    @Override
+    public void flush() {
+        ActorRefShuffle.flush(nextStageActor(), this);
     }
 
     protected void processFileSplitForEachNext(FileSplitter.FileSplit split) {
