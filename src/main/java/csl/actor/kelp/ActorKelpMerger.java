@@ -33,7 +33,7 @@ public class ActorKelpMerger<ActorType extends ActorKelp<ActorType>> implements 
             return (ActorType) ref;
         } else {
             try {
-                ActorKelpSerializable<?> k = toState(system, null, ref, false);
+                ActorKelpSerializable<?> k = toState(system, null, ref, false, isStateIncludeMailbox());
                 return (ActorType) (k == null ? null : k.restore(system, -1, config));
             } catch (Exception ex) {
                 throw new RuntimeException(ex);
@@ -53,7 +53,7 @@ public class ActorKelpMerger<ActorType extends ActorKelp<ActorType>> implements 
         if (members.isEmpty()) {
             return null;
         } else if (members.size() == 1) {
-            return CompletableFuture.completedFuture(members.get(0));
+            return CompletableFuture.completedFuture(mergeSingle(members.get(0)));
         } else if (members.size() == 2) {
             return mergeAsync(
                     CompletableFuture.completedFuture(members.get(0)),
@@ -64,6 +64,10 @@ public class ActorKelpMerger<ActorType extends ActorKelp<ActorType>> implements 
                     mergeAsync(members.subList(0, hs)),
                     mergeAsync(members.subList(hs, members.size())));
         }
+    }
+
+    public ActorRef mergeSingle(ActorRef ref) {
+        return ref;
     }
 
     public Future<ActorRef> mergeAsync(Future<ActorRef> l, Future<ActorRef> r) {
@@ -83,11 +87,19 @@ public class ActorKelpMerger<ActorType extends ActorKelp<ActorType>> implements 
 
     public ActorRef merge(ActorRef l, ActorRef r) {
         try {
-            return ResponsiveCalls.sendTask(system, l, new MergeTask(l, r)).get();
+            return ResponsiveCalls.sendTask(system, l, new MergeTask(l, r, isDisableAtMerging(), isStateIncludeMailbox())).get();
         } catch (Exception ex) {
             config.log(ex, "error: %s : ", l, r);
             return l;
         }
+    }
+
+    public boolean isDisableAtMerging() {
+        return true;
+    }
+
+    public boolean isStateIncludeMailbox() {
+        return true;
     }
 
     public static class MergeTask implements Serializable, CallableMessage<Actor, ActorRef> {
@@ -95,19 +107,23 @@ public class ActorKelpMerger<ActorType extends ActorKelp<ActorType>> implements 
 
         protected ActorRef l;
         protected ActorRef r;
+        protected boolean disable;
+        protected boolean stateIncludeMailbox;
 
         public MergeTask() {}
 
-        public MergeTask(ActorRef l, ActorRef r) {
+        public MergeTask(ActorRef l, ActorRef r, boolean disable, boolean stateIncludeMailbox) {
             this.l = l;
             this.r = r;
+            this.disable = disable;
+            this.stateIncludeMailbox = stateIncludeMailbox;
         }
 
         @SuppressWarnings({"unchecked", "rawtypes"})
         @Override
         public ActorRef call(Actor self) {
             try {
-                ActorKelpSerializable<?> anotherState = toState(self.getSystem(), l, r, true);
+                ActorKelpSerializable<?> anotherState = toState(self.getSystem(), l, r, disable, stateIncludeMailbox);
                 ((ActorKelp<?>) self).merge((ActorKelpSerializable) anotherState);
                 return self;
             } catch (Exception ex) {
@@ -117,11 +133,11 @@ public class ActorKelpMerger<ActorType extends ActorKelp<ActorType>> implements 
         }
     }
 
-    public static ActorKelpSerializable<?> toState(ActorSystem system, ActorRef l, ActorRef r, boolean disable) {
+    public static ActorKelpSerializable<?> toState(ActorSystem system, ActorRef replacement, ActorRef target, boolean disable, boolean stateIncludeMailbox) {
         try {
-            return ResponsiveCalls.sendTask(system, r, new ToStateTask(l, disable)).get();
+            return ResponsiveCalls.sendTask(system, target, new ToStateTask(replacement, disable, stateIncludeMailbox)).get();
         } catch (Exception ex) {
-            system.getLogger().log(true, 0, ex, "error: %s", r);
+            system.getLogger().log(true, 0, ex, "error: %s", target);
             return null;
         }
     }
@@ -129,27 +145,37 @@ public class ActorKelpMerger<ActorType extends ActorKelp<ActorType>> implements 
 
     public static class ToStateTask implements Serializable, CallableMessage<Actor, ActorKelpSerializable<?>> {
         public static final long serialVersionUID = -1;
-        protected ActorRef l;
+        protected ActorRef replacement;
         protected boolean disable;
+        protected boolean stateIncludeMailbox;
 
         public ToStateTask() {}
 
-        public ToStateTask(ActorRef l, boolean disable) {
-            this.l = l;
+        public ToStateTask(ActorRef replacement, boolean disable, boolean stateIncludeMailbox) {
+            this.replacement = replacement;
             this.disable = disable;
+            this.stateIncludeMailbox = stateIncludeMailbox;
         }
 
         @Override
         public ActorKelpSerializable<?> call(Actor another) {
             if (disable) {
-                new DelegateActor(another.getSystem(), another.getName(), l);
+                new DelegateActor(another.getSystem(), another.getName(), replacement);
 
                 //already merged actors
                 ((ActorKelp<?>) another).getMergedActorNames().forEach(n ->
-                        new DelegateActor(another.getSystem(), n, l));
+                        new DelegateActor(another.getSystem(), n, replacement));
             }
-            ActorKelpSerializable<?> s = ((ActorKelp<?>) another).toSerializable();
+            ActorKelpSerializable<?> s = ((ActorKelp<?>) another).toSerializable(stateIncludeMailbox);
             s.internalStateUsed = true;
+
+            if (disable) {
+                try {
+                    ((AutoCloseable) another).close();
+                } catch (Exception ex) {
+                    throw new RuntimeException(ex);
+                }
+            }
             return s;
         }
     }
@@ -171,5 +197,78 @@ public class ActorKelpMerger<ActorType extends ActorKelp<ActorType>> implements 
         public String toString() {
             return getClass().getSimpleName() + "(" + name + " -> " + target + ")";
         }
+    }
+
+    public static class ActorKelpCollector<ActorType extends ActorKelp<ActorType>> extends ActorKelpMerger<ActorType> {
+        public ActorKelpCollector(ActorSystem system, ConfigKelp config) {
+            super(system, config);
+        }
+
+        @Override
+        public boolean isDisableAtMerging() {
+            return false;
+        }
+
+        @Override
+        public boolean isStateIncludeMailbox() {
+            return false;
+        }
+
+        @Override
+        public ActorRef mergeSingle(ActorRef ref) {
+            if (ref instanceof ActorKelp<?>) {
+                ActorKelp<?> actor = (ActorKelp<?>) ref;
+                try {
+                    ActorKelpSerializable<?> state = ActorKelpMerger.toState(actor.getSystem(), null, ref, isDisableAtMerging(), isStateIncludeMailbox());
+                    return ActorKelpMerger.temporaryActor((ActorKelp<?>) ref, state);
+                } catch (Exception ex) {
+                    config.log(ex, "error: %s", ref);
+                    return ref;
+                }
+            } else {
+                return ref;
+            }
+        }
+
+        @Override
+        public ActorRef merge(ActorRef l, ActorRef r) {
+            try {
+                return ResponsiveCalls.sendTask(system, l, new MergeTaskForCollect(l, r, isDisableAtMerging(), isStateIncludeMailbox())).get();
+            } catch (Exception ex) {
+                config.log(ex, "error: %s, %s", l, r);
+                return l;
+            }
+        }
+    }
+
+    public static class MergeTaskForCollect extends MergeTask {
+        public static final long serialVersionUID = -1;
+
+        public MergeTaskForCollect() {
+        }
+
+        public MergeTaskForCollect(ActorRef l, ActorRef r, boolean disable, boolean stateIncludeMailbox) {
+            super(l, r, disable, stateIncludeMailbox);
+        }
+
+        @SuppressWarnings({"rawtypes", "unchecked"})
+        @Override
+        public ActorRef call(Actor self) {
+            try {
+                ActorKelpSerializable<?> anotherState = toState(self.getSystem(), l, r, disable, stateIncludeMailbox);
+                ActorKelp<?> tmp = temporaryActor((ActorKelp<?>) self, ((ActorKelp<?>) self).toSerializable(stateIncludeMailbox));
+                tmp.merge((ActorKelpSerializable) anotherState);
+                return tmp;
+            } catch (Exception ex) {
+                self.getSystem().getLogger().log(true, 0, ex, "error: %s", self);
+                return self;
+            }
+        }
+    }
+
+    public static ActorKelp<?> temporaryActor(ActorKelp<?> self, ActorKelpSerializable<?> state) throws Exception {
+        ActorKelp<?> tmp = state.create(self.getSystem(), null, self.getConfig());
+        tmp.setNameRandom();
+        return tmp;
     }
 }

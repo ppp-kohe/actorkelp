@@ -428,5 +428,6 @@ public class KryoBuilder {
 
     public interface SerializerFactory {
         Kryo createSerializer();
+        SerializerFunction getSerializer();
     }
 }

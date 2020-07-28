@@ -14,6 +14,14 @@ public class ExampleClusterRemoteDriver {
         String[] path = createConf("target/debug-remote-driver");
         ClusterKelp.run(path[1], TestMain.class.getName(), "hello", "world");
     }
+    public static class TestMain {
+        public static void main(String[] args) throws Exception {
+            try (ClusterKelp<ConfigKelp> cluster = ClusterKelp.createAndDeploy()) {
+                System.out.println(cluster + " : " + Arrays.toString(args));
+                Thread.sleep(10_000);
+            }
+        }
+    }
 
     static String[] createConf(String inputFile) throws Exception {
         Path inputPath = Paths.get(inputFile);
@@ -35,7 +43,6 @@ public class ExampleClusterRemoteDriver {
                 String.format("   baseDir \"%s\"\n", p0) +
                 "   logColor 102\n" +
                 "   logFile true\n" +
-                "   lowerBoundThresholdFactor 0\n" +
                 "   sharedDeploy false\n" +
                 "\n" +
                 "node follower1:\n" +
@@ -46,8 +53,6 @@ public class ExampleClusterRemoteDriver {
                 "   logColor 71\n" +
                 "   logFile true\n" +
                 "   persist true\n" +
-                "   persistMailboxOnMemorySize 1_000\n" +
-                "   lowerBoundThresholdFactor 0\n" +
                 "   sharedDeploy false\n" +
                 "\n" +
                 "node follower2:\n" +
@@ -58,8 +63,6 @@ public class ExampleClusterRemoteDriver {
                 "   logColor 72\n" +
                 "   logFile true\n" +
                 "   persist true\n" +
-                "   persistMailboxOnMemorySize 1_000\n" +
-                "   lowerBoundThresholdFactor 0\n" +
                 "   sharedDeploy false\n" +
                 "\n";
         Path confPath = dir.resolve("config.txt");
@@ -67,13 +70,4 @@ public class ExampleClusterRemoteDriver {
         return new String[] { inputPath.getFileName().toString(), confPath.toString() };
     }
 
-    public static class TestMain {
-        public static void main(String[] args) throws Exception {
-            ClusterKelp<ConfigKelp> cluster = ClusterKelp.create();
-            ActorPlacementKelp<ConfigKelp> place = cluster.deploy(args[0]);
-            System.out.println(place + " : " + Arrays.toString(args));
-            Thread.sleep(10_000);
-            cluster.shutdownAll();
-        }
-    }
 }

@@ -258,7 +258,7 @@ public class ActorRefShuffle implements ActorRef, Serializable, Cloneable, KryoS
     }
 
     public static ActorRef connectStageInitialActor(ActorSystem system, ActorRef next, int bufferSizeMax) {
-        if (next instanceof ActorKelp<?> && ((ActorKelp<?>) next).isOriginal()) {
+        if (next instanceof ActorKelp<?> && !((ActorKelp<?>) next).isUnit()) {
             return ((ActorKelp<?>) next).shuffle(bufferSizeMax);
         } else if (!(next instanceof Actor || next instanceof ActorRefShuffle)) { //remote or local ref
             try {
@@ -283,7 +283,7 @@ public class ActorRefShuffle implements ActorRef, Serializable, Cloneable, KryoS
 
         @Override
         public ActorRef call(Actor self) {
-            if (self instanceof ActorKelp<?> && ((ActorKelp<?>) self).isOriginal()) {
+            if (self instanceof ActorKelp<?> && !((ActorKelp<?>) self).isUnit()) {
                 return ((ActorKelp<?>) self).shuffle(bufferSizeMax);
             } else {
                 return self;

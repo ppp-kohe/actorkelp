@@ -22,11 +22,11 @@ public interface KelpStage<ActorType extends Actor> extends ActorRef {
     /**
      * set the nextStage property of each shuffle-members to the next actor.
      *  <ol>
-     *      <li>If the next is an original actor ({@link ActorKelp#isOriginal()}),
+     *      <li>If the next is an original actor ({@link ActorKelp#isUnit()}==false),
      *          it uses {@link ActorKelp#shuffle(int)} as the actual next</li>
-     *      <li>If the next is a remote (or local) reference,
+     *      <li>If the next is a remote (or local address) reference,
      *          it sends synchronous task for doing the first step. </li>
-     *      <li>If the next is a {@link ActorRefShuffle},
+     *      <li>If the next is an {@link ActorRefShuffle},
      *          it will copy the next for each shuffle-members, by using {@link ActorRefShuffle#use()}</li>
      *  </ol>
      * @param actor the next stage actor
@@ -42,7 +42,22 @@ public interface KelpStage<ActorType extends Actor> extends ActorRef {
 
     List<ActorRef> getMemberActors();
 
+    /**
+     * If the target is an {@link ActorKelp.ActorRefShuffleKelp},
+     * it collects state of member {@link ActorKelp}s
+     *  and returns as a local actor by merging.
+     *    It is a synchronous task.
+     * Each member actor become disabled.
+     * The actor's {@link AutoCloseable#close()} will be executed.
+     * @return the merged actor
+     */
     ActorType merge();
+
+    /**
+     * similar to {@link #merge()}, but disabling member actors.
+     * @return a temporary created merged actor
+     */
+    ActorType getMergedState();
 
     default void setSystemBySerializer(ActorSystem system) { }
 
@@ -135,8 +150,21 @@ public interface KelpStage<ActorType extends Actor> extends ActorRef {
         @Override
         public ActorType merge() {
             if (ActorKelp.class.isAssignableFrom(actorType)) {
-                return (ActorType) new ActorKelpMerger(system, new ConfigKelp())
-                        .mergeToLocalSync(getMemberActors());
+                try (ActorKelpMerger m = new ActorKelpMerger(system, new ConfigKelp())) {
+                    return (ActorType) m.mergeToLocalSync(getMemberActors());
+                }
+            } else {
+                return null;
+            }
+        }
+
+        @SuppressWarnings({"unchecked", "rawtypes"})
+        @Override
+        public ActorType getMergedState() {
+            if (ActorKelp.class.isAssignableFrom(actorType)) {
+                try (ActorKelpMerger.ActorKelpCollector m = new ActorKelpMerger.ActorKelpCollector(system, new ConfigKelp())) {
+                    return (ActorType) m.mergeToLocalSync(getMemberActors());
+                }
             } else {
                 return null;
             }

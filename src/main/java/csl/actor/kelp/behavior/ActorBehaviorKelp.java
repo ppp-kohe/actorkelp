@@ -5,10 +5,7 @@ import csl.actor.ActorBehavior;
 import csl.actor.Message;
 import csl.actor.kelp.ActorKelpFunctions.*;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
+import java.util.*;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.Function;
@@ -87,7 +84,10 @@ public class ActorBehaviorKelp {
             KeyHistograms.HistogramTree tree = m.getHistogram(matchKeyEntryId);
             HistogramNodeLeaf1 next = ((HistogramNodeLeaf1) tree.takeCompleted());
             if (next != null) {
-                return next.consume(tree, (BiConsumer<Object,Object>) handler);
+                if (next.consume(tree, (BiConsumer<Object,Object>) handler)) {
+                    tree.prune(); //always prune for clearing root node
+                    return true;
+                }
             }
             return false;
         }
@@ -127,6 +127,11 @@ public class ActorBehaviorKelp {
         public HistogramNodeLeafN(Object key, KeyHistograms.HistogramPutContext context, int height) {
             super(key, context, height);
         }
+
+        @Override
+        public HistogramNodeLeafN copy(Map<KeyHistograms.HistogramNode, KeyHistograms.HistogramNode> oldToNew) {
+            return (HistogramNodeLeafN) super.copy(oldToNew);
+        }
     }
 
 
@@ -136,6 +141,13 @@ public class ActorBehaviorKelp {
 
         public HistogramNodeLeaf1(Object key, KeyHistograms.HistogramPutContext context, int height) {
             super(key, context, height);
+        }
+
+        @Override
+        public HistogramNodeLeaf1 copy(Map<KeyHistograms.HistogramNode, KeyHistograms.HistogramNode> oldToNew) {
+            HistogramNodeLeaf1 node = (HistogramNodeLeaf1) super.copy(oldToNew);
+            node.values1 = (values1 == null ? null : values1.copy());
+            return node;
         }
 
         @Override
@@ -276,6 +288,14 @@ public class ActorBehaviorKelp {
 
         public HistogramNodeLeaf2(Object key, KeyHistograms.HistogramPutContext context, int height) {
             super(key, context, height);
+        }
+
+        @Override
+        public HistogramNodeLeaf2 copy(Map<KeyHistograms.HistogramNode, KeyHistograms.HistogramNode> oldToNew) {
+            HistogramNodeLeaf2 node = (HistogramNodeLeaf2) super.copy(oldToNew);
+            node.values1 = (values1 == null ? null : values1.copy());
+            node.values2 = (values2 == null ? null : values2.copy());
+            return node;
         }
 
         @Override
@@ -436,6 +456,15 @@ public class ActorBehaviorKelp {
 
         public HistogramNodeLeaf3(Object key, KeyHistograms.HistogramPutContext context, int height) {
             super(key, context, height);
+        }
+
+        @Override
+        public HistogramNodeLeaf3 copy(Map<KeyHistograms.HistogramNode, KeyHistograms.HistogramNode> oldToNew) {
+            HistogramNodeLeaf3 node = (HistogramNodeLeaf3) super.copy(oldToNew);
+            node.values1 = (values1 == null ? null : values1.copy());
+            node.values2 = (values2 == null ? null : values2.copy());
+            node.values3 = (values3 == null ? null : values3.copy());
+            return node;
         }
 
         @Override
@@ -618,6 +647,16 @@ public class ActorBehaviorKelp {
         }
 
         @Override
+        public HistogramNodeLeaf4 copy(Map<KeyHistograms.HistogramNode, KeyHistograms.HistogramNode> oldToNew) {
+            HistogramNodeLeaf4 node = (HistogramNodeLeaf4) super.copy(oldToNew);
+            node.values1 = (values1 == null ? null : values1.copy());
+            node.values2 = (values2 == null ? null : values2.copy());
+            node.values3 = (values3 == null ? null : values3.copy());
+            node.values4 = (values4 == null ? null : values4.copy());
+            return node;
+        }
+
+        @Override
         protected void initStruct(KeyHistograms.HistogramPutContext context) {
             values1 = context.createEmptyList();
             values2 = context.createEmptyList();
@@ -753,6 +792,13 @@ public class ActorBehaviorKelp {
         protected KeyHistograms.HistogramLeafList values;
         public HistogramNodeLeafList(Object key, KeyHistograms.HistogramPutContext context, int height) {
             super(key, context, height);
+        }
+
+        @Override
+        public HistogramNodeLeafList copy(Map<KeyHistograms.HistogramNode, KeyHistograms.HistogramNode> oldToNew) {
+            HistogramNodeLeafList node = (HistogramNodeLeafList) super.copy(oldToNew);
+            node.values = (values == null ? null : values.copy());
+            return node;
         }
 
         @Override
@@ -909,6 +955,12 @@ public class ActorBehaviorKelp {
         }
 
         @Override
+        public HistogramNodeLeafListReducible copy(Map<KeyHistograms.HistogramNode, KeyHistograms.HistogramNode> oldToNew) {
+            HistogramNodeLeafListReducible node = (HistogramNodeLeafListReducible) super.copy(oldToNew);
+            return node;
+        }
+
+        @Override
         protected boolean completedAfterPut(KeyHistograms.HistogramPutContext context) {
             return false; //processed by processTraversal
         }
@@ -1023,6 +1075,11 @@ public class ActorBehaviorKelp {
         public static final long serialVersionUID = 1L;
         public HistogramNodeLeafListReducibleForStageEnd(Object key, KeyHistograms.HistogramPutContext context, int height) {
             super(key, context, height);
+        }
+        @Override
+        public HistogramNodeLeafListReducibleForStageEnd copy(Map<KeyHistograms.HistogramNode, KeyHistograms.HistogramNode> oldToNew) {
+            HistogramNodeLeafListReducibleForStageEnd node = (HistogramNodeLeafListReducibleForStageEnd) super.copy(oldToNew);
+            return node;
         }
 
         @Override

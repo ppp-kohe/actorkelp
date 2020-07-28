@@ -27,11 +27,11 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends ActorDefault
-        implements StagingActor.StagingSupported, ActorKelpFileReader<SelfType>, KelpStage<SelfType> {
+        implements StagingActor.StagingSupported, ActorKelpFileReader<SelfType>, KelpStage<SelfType>, AutoCloseable {
     protected ActorRef nextStage;
     protected FileSplitter fileSplitter;
     protected ConfigKelp config;
-    protected boolean original = true;
+    protected boolean unit = true;
     protected int shuffleIndex = -1;
     protected int mergedCount = 1;
     protected Set<String> mergedActorNames = Collections.emptySet();
@@ -75,14 +75,28 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
     }
 
     /**
-     * @return true if the instance is manually created and not a suffle entry
+     * @return true if the instance is not manually created and a shuffle entry
      */
-    public boolean isOriginal() {
-        return original;
+    public boolean isUnit() {
+        return unit;
     }
 
-    public void setOriginal(boolean original) {
-        this.original = original;
+    /**
+     * it can mark the actor as an processing unit, and
+     *   at stage connection, it suppresses {@link #shuffle()}
+     * <pre>
+     *     pre.connects(new MyKelpActor().asUnit());
+     * </pre>
+     * @return this
+     */
+    @SuppressWarnings("unchecked")
+    public SelfType asUnit() {
+        setUnit(true);
+        return (SelfType) this;
+    }
+
+    public void setUnit(boolean unit) {
+        this.unit = unit;
     }
 
     public int getShuffleIndex() {
@@ -390,6 +404,15 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
     }
 
     /**
+     * do {@link #flush()}.
+     * a sub-class can override the method for disabling the actor at merging
+     */
+    @Override
+    public void close() {
+        flush();
+    }
+
+    /**
      * default reader class
      */
     public static class FileReader extends ActorKelp<FileReader> {
@@ -419,9 +442,13 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
 
     ///// serializable
 
-    @SuppressWarnings("unchecked")
     public ActorKelpSerializable<SelfType> toSerializable() {
-        return new ActorKelpSerializable<>((SelfType) this);
+        return toSerializable(true);
+    }
+
+    @SuppressWarnings("unchecked")
+    public ActorKelpSerializable<SelfType> toSerializable(boolean includeMailbox) {
+        return new ActorKelpSerializable<>((SelfType) this, includeMailbox);
     }
 
     /**
@@ -479,8 +506,6 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
                 default ActorKelpMergerFunctions.MergerFunctionDefault.class;
         boolean mergeOnly() default false;
     }
-
-    public @interface Merger { }
 
     public enum MergerOpType {
         Default,
@@ -626,9 +651,21 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
             actorType = kryo.readClass(input).getType();
         }
 
+        @Override
         public ActorType merge() {
             try (ActorKelpMerger<ActorType> m = new ActorKelpMerger<>(system, config)) {
                 return m.mergeToLocalSync(getMemberActors());
+            }
+        }
+
+        @Override
+        public ActorType getMergedState() {
+            if (ActorKelp.class.isAssignableFrom(actorType)) {
+                try (ActorKelpMerger.ActorKelpCollector<ActorType> m = new ActorKelpMerger.ActorKelpCollector<>(system, config)) {
+                    return m.mergeToLocalSync(getMemberActors());
+                }
+            } else {
+                return null;
             }
         }
     }
@@ -665,5 +702,12 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
     @Override
     public SelfType merge() {
         return (SelfType) this;
+    }
+
+    @Override
+    public SelfType getMergedState() {
+        try (ActorKelpMerger<SelfType> m = new ActorKelpMerger.ActorKelpCollector<>(system, config)) {
+            return m.mergeToLocalSync(Collections.singletonList(this));
+        }
     }
 }

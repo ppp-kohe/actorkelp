@@ -34,7 +34,7 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 public class ClusterDeployment<AppConfType extends ConfigBase,
-        PlaceType extends ClusterDeployment.ActorPlacementForCluster<AppConfType>> {
+        PlaceType extends ClusterDeployment.ActorPlacementForCluster<AppConfType>> implements AutoCloseable {
     public static String NON_DRIVER_SYMBOL_CONF = "-";
     public static String NON_DRIVER_PROPERTY_CONF = "csl.actor.cluster.conf";
     public static String NON_DRIVER_FILE_CONF = "cluster-config.txt"; //under appDir
@@ -77,10 +77,18 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
     }
 
     public void runAsRemoteDriver(String... args) throws Exception {
+        if (args.length < 2 || args[0].equals("--help")) {
+            showHelp();
+            return;
+        }
         String primaryMainType = args[0];
         String configFilePath = args[1];
         List<String> primaryMainArgs = Arrays.asList(args).subList(2, args.length);
         runAsRemoteDriver(configFilePath, primaryMainType, primaryMainArgs);
+    }
+
+    public void showHelp() {
+        System.err.println("<configFilePath> <primaryMainType> <primaryMainArgs>...");
     }
 
     public void runAsRemoteDriver(String configFilePath, String primaryMainType, List<String> primaryMainArgs) throws Exception {
@@ -250,8 +258,8 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         }
     }
 
-    public PlaceType deployAsNonDriver() {
-        return deploy("-");
+    public PlaceType deploy() {
+        return deploy(NON_DRIVER_SYMBOL_CONF);
     }
 
     public List<ClusterUnit<AppConfType>> loadConfigFile(String confFile) {
@@ -273,7 +281,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
 
     @SafeVarargs
     @SuppressWarnings("varargs")
-    public final PlaceType deploy(ClusterCommands.ClusterUnit<AppConfType>... units) {
+    public final PlaceType deployUnits(ClusterCommands.ClusterUnit<AppConfType>... units) {
         try {
             return deploy(Arrays.asList(units));
         } catch (Exception ex) {
@@ -509,7 +517,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         if (unit.getDeploymentConfig().primary) {
             String args = "";
             if (unit.getDeploymentConfig().configPathAsPrimaryFirstArgument) {
-                args += "- ";
+                args += NON_DRIVER_SYMBOL_CONF + " ";
             }
             args += primaryMainArgs.stream()
                     .map(this::escape)
@@ -1074,6 +1082,13 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         if (http != null) {
             http.close();
         }
+    }
+
+    /**
+     * do {@link #shutdownAll()}
+     */
+    public void close() {
+        shutdownAll();
     }
 
     /////////

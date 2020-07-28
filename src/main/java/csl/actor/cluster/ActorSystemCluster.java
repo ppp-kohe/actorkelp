@@ -39,9 +39,11 @@ public class ActorSystemCluster extends ActorSystemRemote implements PersistentF
 
     public static class ActorSystemDefaultForCluster extends ActorSystemDefaultForRemote implements KryoBuilder.SerializerFactory {
         protected Function<ActorSystem, Kryo> kryoBuilder;
+        protected KryoBuilder.SerializerPoolDefault serializer;
 
         public ActorSystemDefaultForCluster(Function<ActorSystem, Kryo> kryoBuilder) {
             this.kryoBuilder = kryoBuilder;
+            serializer = new KryoBuilder.SerializerPoolDefault(this);
         }
 
         @Override
@@ -67,13 +69,20 @@ public class ActorSystemCluster extends ActorSystemRemote implements PersistentF
         public Kryo createSerializer() {
             return kryoBuilder.apply(this);
         }
+
+        @Override
+        public KryoBuilder.SerializerFunction getSerializer() {
+            return serializer;
+        }
     }
 
     public static class ActorSystemDefaultForClusterThrottle extends ActorSystemDefaultForRemote implements KryoBuilder.SerializerFactory {
         protected Function<ActorSystem, Kryo> kryoBuilder;
+        protected KryoBuilder.SerializerPoolDefault serializer;
 
         public ActorSystemDefaultForClusterThrottle(Function<ActorSystem, Kryo> kryoBuilder) {
             this.kryoBuilder = kryoBuilder;
+            serializer = new KryoBuilder.SerializerPoolDefault(this);
         }
 
         @Override
@@ -98,6 +107,11 @@ public class ActorSystemCluster extends ActorSystemRemote implements PersistentF
         @Override
         public Kryo createSerializer() {
             return kryoBuilder.apply(this);
+        }
+
+        @Override
+        public KryoBuilder.SerializerFunction getSerializer() {
+            return serializer;
         }
     }
 

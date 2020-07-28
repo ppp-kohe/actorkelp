@@ -1,12 +1,17 @@
 package csl.actor.kelp.behavior;
 
+import com.esotericsoftware.kryo.io.Input;
+import com.esotericsoftware.kryo.io.Output;
 import csl.actor.Actor;
 import csl.actor.Mailbox;
 import csl.actor.MailboxDefault;
 import csl.actor.Message;
 import csl.actor.kelp.ActorKelpFunctions.KeyComparator;
 import csl.actor.kelp.ActorKelpSerializable;
+import csl.actor.kelp.KryoBuilderKelp;
+import csl.actor.remote.KryoBuilder;
 
+import java.io.ByteArrayOutputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -291,17 +296,25 @@ public class MailboxKelp implements Mailbox, Cloneable {
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})
-    public void serializeTo(ActorKelpSerializable state) {
+    public void serializeTo(Actor owner, ActorKelpSerializable state) {
         state.setMessages(mailbox.getQueue().toArray(new Message[0]));
         state.setHistograms(Arrays.stream(entries)
-                .map(HistogramEntry::getTree)
+                .map(e -> copyTree(owner, e.getTree()))
                 .collect(Collectors.toList()));
     }
 
-    public void deserializeFrom(ActorKelpSerializable<?> state) {
+    protected KeyHistograms.HistogramTree copyTree(Actor owner, KeyHistograms.HistogramTree tree) {
+        return tree.copy();
+    }
+
+    public void deserializeFrom(Actor owner, ActorKelpSerializable<?> state) {
         mailbox.getQueue().addAll(Arrays.asList(state.messages));
+        boolean copy = state.internalStateUsed;
         int i = 0;
         for (KeyHistograms.HistogramTree t : state.histograms) {
+            if (copy) {
+                t = copyTree(owner, t);
+            }
             entries[i].setTree(treeFactory.init(t));
             ++i;
         }

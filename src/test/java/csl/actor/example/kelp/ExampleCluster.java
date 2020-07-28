@@ -6,7 +6,6 @@ import csl.actor.kelp.*;
 import csl.actor.util.StagingActor;
 
 import java.nio.file.Paths;
-import java.util.function.Function;
 
 public class ExampleCluster {
     public static void main(String[] args) throws Exception {
@@ -16,7 +15,7 @@ public class ExampleCluster {
         String debugFlag = "false";
 
         ClusterKelp<ConfigKelp> d = ClusterKelp.create();
-        d.deploy(d.primary()
+        d.deployUnits(d.primary()
                     .edit(c -> c.getDeploymentConfig().baseDir = dir)
                     .edit(c -> c.getDeploymentConfig().httpHost = "0.0.0.0"),
                 d.node("localhost", 30001)

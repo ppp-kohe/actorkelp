@@ -359,6 +359,22 @@ public class KeyHistogramsPersistable extends KeyHistograms {
             output.writeLong(this.persistedSize);
         }
 
+        @Override
+        public HistogramTree copy() {
+            HistogramTreePersistable p = (HistogramTreePersistable) super.copy();
+            if (history != null) {
+                p.history = history.copy();
+            }
+            if (random != null) {
+                if (randomSeed == 0) {
+                    p.random = new Random();
+                } else {
+                    p.random = new Random(randomSeed);
+                }
+            }
+            return p;
+        }
+
         ////// config
 
         @Override
@@ -898,6 +914,31 @@ public class KeyHistogramsPersistable extends KeyHistograms {
         public int[] indexHistogram = new int[10];
         public PutIndexHistory next;
 
+        public PutIndexHistory copy() {
+            PutIndexHistory h = this;
+            PutIndexHistory copy = null;
+            PutIndexHistory copyTop = null;
+            while (true) {
+                PutIndexHistory nextCopy = new PutIndexHistory();
+                PutIndexHistory src = h;
+                Arrays.setAll(nextCopy.indexHistogram, i -> src.indexHistogram[i]);
+                nextCopy.count = src.count;
+                if (copy != null) {
+                    copy.next = nextCopy;
+                } else {
+                    copyTop = nextCopy;
+                }
+                copy = nextCopy;
+
+                h = h.next;
+                if (h == this) {
+                    break;
+                }
+            }
+            copy.next = copyTop;
+            return copyTop;
+        }
+
         public void add(float v) {
             int len = indexHistogram.length;
             indexHistogram[Math.max(0, Math.min(len - 1, (int) (len * v)))]++;
@@ -936,6 +977,11 @@ public class KeyHistogramsPersistable extends KeyHistograms {
 
     public static class HistogramLeafListPersistable extends HistogramLeafList { //does not override iterator()
         public static final long serialVersionUID = 1L;
+
+        @Override
+        public HistogramLeafListPersistable copy() {
+            return (HistogramLeafListPersistable) super.copy();
+        }
 
         @Override
         public Object poll(HistogramTree tree) {
@@ -1006,6 +1052,16 @@ public class KeyHistogramsPersistable extends KeyHistograms {
             this.value = source;
             this.source = source;
             this.remainingCount = source.remainingSize;
+        }
+
+        @Override
+        public HistogramLeafCellOnStorageFile copy() {
+            HistogramLeafCellOnStorageFile cell = (HistogramLeafCellOnStorageFile) super.copy();
+            if (reader != null) {
+                cell.reader = source.createReader();
+                cell.reader.position(reader.position());
+            }
+            return cell;
         }
 
         public PersistentFileReaderSourceWithSize getSource() {
@@ -1167,6 +1223,11 @@ public class KeyHistogramsPersistable extends KeyHistograms {
         }
 
         @Override
+        public HistogramNodeTreeOnStorage copy(Map<HistogramNode, HistogramNode> oldToNew) {
+            return (HistogramNodeTreeOnStorage) super.copy(oldToNew);
+        }
+
+        @Override
         public void initPersistent(PersistentFileManager persistent) {
             if (source.getManager() == null) {
                 source.setManager(persistent);
@@ -1318,6 +1379,11 @@ public class KeyHistogramsPersistable extends KeyHistograms {
             super(data.keyStart, null, data.height);
             this.source = source;
             this.size = data.size;
+        }
+        @Override
+        public HistogramNodeLeafOnStorage copy(Map<KeyHistograms.HistogramNode, KeyHistograms.HistogramNode> oldToNew) {
+            HistogramNodeLeafOnStorage node = (HistogramNodeLeafOnStorage) super.copy(oldToNew);
+            return node;
         }
 
         @Override

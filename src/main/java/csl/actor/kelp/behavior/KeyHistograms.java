@@ -4,8 +4,8 @@ import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.KryoSerializable;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
-import csl.actor.persist.PersistentFileManager;
 import csl.actor.kelp.ActorKelpFunctions.KeyComparator;
+import csl.actor.persist.PersistentFileManager;
 
 import java.io.Serializable;
 import java.util.*;
@@ -34,7 +34,7 @@ public class KeyHistograms {
         return tree.init(persistent);
     }
 
-    public static class HistogramTree implements Serializable, KryoSerializable {
+    public static class HistogramTree implements Serializable, KryoSerializable, Cloneable {
         public static final long serialVersionUID = 1L;
         protected HistogramNode root;
         protected KeyComparator<?> comparator;
@@ -293,6 +293,22 @@ public class KeyHistograms {
             output.writeInt(this.treeLimit);
         }
 
+        public HistogramTree copy() {
+            try {
+                HistogramTree tree = (HistogramTree) super.clone();
+                Map<HistogramNode,HistogramNode> leafMap = new IdentityHashMap<>();
+                if (root != null) {
+                    tree.root = root.copy(leafMap);
+                }
+                tree.completed = new LinkedList<>();
+                completed.forEach(i ->
+                        tree.completed.add((HistogramNodeLeaf) leafMap.get(i)));
+                return tree;
+            } catch (CloneNotSupportedException ce) {
+                throw new RuntimeException(ce);
+            }
+        }
+
         public HistogramTree init(PersistentFileManager persistent) {
             if (this.persistent == null) {
                 this.persistent = persistent;
@@ -415,6 +431,8 @@ public class KeyHistograms {
         boolean prune(HistogramTree tree, boolean countUpLeafSize);
 
         void initPersistent(PersistentFileManager persistent);
+
+        HistogramNode copy(Map<HistogramNode,HistogramNode> oldToNew);
     }
 
     @SuppressWarnings("unchecked")
@@ -424,7 +442,7 @@ public class KeyHistograms {
         return nodes;
     }
 
-    public static class HistogramNodeTree implements HistogramNode {
+    public static class HistogramNodeTree implements HistogramNode, Cloneable {
         public static final long serialVersionUID = 1L;
         protected HistogramNodeTree parent;
         protected List<HistogramNode> children;
@@ -444,6 +462,25 @@ public class KeyHistograms {
             this.children = new ArrayList<>(Math.min(200, capacity));
             this.children.addAll(Arrays.asList(children));
             updateChildren();
+        }
+
+        @Override
+        public HistogramNodeTree copy(Map<HistogramNode, HistogramNode> oldToNew) {
+            try {
+                HistogramNodeTree node = (HistogramNodeTree) super.clone();
+                oldToNew.put(this, node);
+
+                if (parent != null) {
+                    node.parent = (HistogramNodeTree) oldToNew.get(parent);
+                }
+                node.children = new ArrayList<>(children.size());
+                for (HistogramNode child : children) {
+                    node.children.add(child.copy(oldToNew));
+                }
+                return node;
+            } catch (CloneNotSupportedException ce){
+                throw new RuntimeException(ce);
+            }
         }
 
         /**
@@ -776,7 +813,7 @@ public class KeyHistograms {
     }
 
 
-    public static abstract class HistogramNodeLeaf implements HistogramNode {
+    public static abstract class HistogramNodeLeaf implements HistogramNode, Cloneable {
         public static final long serialVersionUID = 1L;
         protected HistogramNodeTree parent;
         protected Object key;
@@ -787,6 +824,20 @@ public class KeyHistograms {
             this.key = key;
             this.height = height;
             initStruct(context);
+        }
+
+        @Override
+        public HistogramNode copy(Map<HistogramNode, HistogramNode> oldToNew) {
+            try {
+                HistogramNodeLeaf node = (HistogramNodeLeaf) super.clone();
+                oldToNew.put(this, node);
+                if (parent != null) {
+                    node.parent = (HistogramNodeTree) oldToNew.get(parent);
+                }
+                return node;
+            } catch (CloneNotSupportedException ce) {
+                throw new RuntimeException(ce);
+            }
         }
 
         public void setSize(long size) {
@@ -925,6 +976,15 @@ public class KeyHistograms {
         }
 
         @Override
+        public HistogramNodeLeafMap copy(Map<KeyHistograms.HistogramNode, KeyHistograms.HistogramNode> oldToNew) {
+            HistogramNodeLeafMap node = (HistogramNodeLeafMap) super.copy(oldToNew);
+            node.values = new TreeMap<>();
+            values.forEach((k,v) ->
+                    node.values.put(k, v == null ? null : v.copy()));
+            return node;
+        }
+
+        @Override
         protected void initStruct(HistogramPutContext context) {
             values = new TreeMap<>();
         }
@@ -1022,10 +1082,34 @@ public class KeyHistograms {
         }
     }
 
-    public static class HistogramLeafList implements /*Iterable<Object>, */Serializable, KryoSerializable {
+    public static class HistogramLeafList implements /*Iterable<Object>, */Serializable, KryoSerializable, Cloneable {
         public static final long serialVersionUID = 1L;
         public HistogramLeafCell head;
         public HistogramLeafCell tail;
+
+        public HistogramLeafList copy() {
+            try {
+                HistogramLeafList list = (HistogramLeafList) super.clone();
+                if (head != null) {
+                    HistogramLeafCell cell = head;
+                    HistogramLeafCell lastCopy = null;
+                    while (cell != null) {
+                        HistogramLeafCell nextCopy = cell.copy();
+                        if (lastCopy == null) {
+                            lastCopy = nextCopy;
+                            list.head = lastCopy;
+                        } else {
+                            lastCopy.next = nextCopy;
+                            lastCopy = nextCopy;
+                        }
+                        cell = cell.next;
+                    }
+                }
+                return list;
+            } catch (CloneNotSupportedException ce) {
+                throw new RuntimeException(ce);
+            }
+        }
 
         public static HistogramLeafList add(HistogramLeafList list, HistogramTree tree, Object v) {
             if (list == null) {
@@ -1119,13 +1203,23 @@ public class KeyHistograms {
         public static final long serialVersionUID = 1L;
     }
 
-    public static class HistogramLeafCell implements Serializable, KryoSerializable {
+    public static class HistogramLeafCell implements Serializable, KryoSerializable, Cloneable {
         public static final long serialVersionUID = 1L;
         public Object value;
         public HistogramLeafCell next;
 
         public HistogramLeafCell(Object value) {
             this.value = value;
+        }
+
+        public HistogramLeafCell copy() {
+            try {
+                HistogramLeafCell cell = (HistogramLeafCell) super.clone();
+                cell.next = null;
+                return cell;
+            } catch (CloneNotSupportedException ce) {
+                throw new RuntimeException(ce);
+            }
         }
 
         @Override

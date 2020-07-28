@@ -149,7 +149,9 @@ public class ClusterKelp extends ClusterDeployment<Config, ActorPlacementKelp> {
         public String name;
         public String className;
         public String stateType;
+        @Deprecated
         public long processCount;
+        @Deprecated
         public String outputFileHeader;
 
         public int mailboxSize;
@@ -160,11 +162,16 @@ public class ClusterKelp extends ClusterDeployment<Config, ActorPlacementKelp> {
         public ActorRef nextStage;
 
         //router
+        @Deprecated
         public int maxHeight;
+        @Deprecated
         public int height;
+        @Deprecated
         public boolean parallelRouting;
+        @Deprecated
         public List<ActorRef> canceled;
         //router or PhaseTerminalActor
+        @Deprecated
         public List<PhaseStat> phase;
 
         public ActorStat set(Actor actor) {

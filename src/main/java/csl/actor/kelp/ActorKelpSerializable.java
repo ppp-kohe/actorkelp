@@ -25,11 +25,14 @@ public class ActorKelpSerializable<SelfType extends ActorKelp<SelfType>> impleme
     public Set<String> mergedActorNames;
     public int shuffleIndex;
 
+    public boolean includeMailbox;
+
     public transient volatile boolean internalStateUsed = false;
 
     public ActorKelpSerializable() {}
 
-    public ActorKelpSerializable(SelfType actor) {
+    public ActorKelpSerializable(SelfType actor, boolean includeMailbox) {
+        this.includeMailbox = includeMailbox;
         init(actor);
     }
 
@@ -70,7 +73,9 @@ public class ActorKelpSerializable<SelfType extends ActorKelp<SelfType>> impleme
     }
 
     protected void initMailbox(SelfType actor) {
-        actor.getMailboxAsKelp().serializeTo(this);
+        if (includeMailbox) {
+            actor.getMailboxAsKelp().serializeTo(actor, this);
+        }
     }
 
     protected void initInternalState(SelfType actor) {
@@ -113,7 +118,7 @@ public class ActorKelpSerializable<SelfType extends ActorKelp<SelfType>> impleme
     }
 
     protected void restoreSetNonOriginal(SelfType actor) {
-        actor.setOriginal(false);
+        actor.setUnit(false);
     }
 
     protected void restoreSetShuffleIndex(SelfType actor, long num) {
@@ -124,7 +129,9 @@ public class ActorKelpSerializable<SelfType extends ActorKelp<SelfType>> impleme
     }
 
     protected void restoreMailbox(SelfType actor) {
-        actor.getMailboxAsKelp().deserializeFrom(this);
+        if (includeMailbox) {
+            actor.getMailboxAsKelp().deserializeFrom(actor, this);
+        }
     }
 
     protected void restoreInternalState(SelfType actor) {
@@ -225,12 +232,16 @@ public class ActorKelpSerializable<SelfType extends ActorKelp<SelfType>> impleme
                 return constructor.newInstance(system, name, config);
             } else if (pc == 2) {
                 ActorKelp<?> obj = (ActorKelp<?>) constructor.newInstance(system, config);
-                obj.setNameInternal(name);
+                if (name != null) {
+                    obj.setNameInternal(name);
+                }
                 return obj;
             } else if (pc == 1) {
                 ActorKelp<?> obj = (ActorKelp<?>) constructor.newInstance(system);
                 //config will be discarded
-                obj.setNameInternal(name);
+                if (name != null) {
+                    obj.setNameInternal(name);
+                }
                 return obj;
             } else {
                 throw new RuntimeException("invalid constructor: " + constructor);

@@ -1,7 +1,5 @@
 package csl.actor.example.kelp;
 
-import csl.actor.ActorSystem;
-import csl.actor.ActorSystemDefault;
 import csl.actor.cluster.ClusterCommands;
 import csl.actor.cluster.ClusterDeployment;
 import csl.actor.cluster.ClusterHttp;
