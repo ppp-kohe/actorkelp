@@ -15,6 +15,7 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+@Deprecated
 public class ActorBehaviorBuilderKelp extends ActorBehaviorBuilder {
     protected Consumer<List<MailboxKelp.HistogramProcessor>> histogramProcessorsTarget;
     protected Map<Integer, MailboxKelp.HistogramProcessor> processors = new HashMap<>();

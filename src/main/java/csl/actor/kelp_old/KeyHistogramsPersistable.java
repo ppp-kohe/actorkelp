@@ -16,7 +16,7 @@ import java.io.RandomAccessFile;
 import java.io.Serializable;
 import java.nio.file.Path;
 import java.util.*;
-
+@Deprecated
 public class KeyHistogramsPersistable extends KeyHistograms {
     protected PersistentConditionHistogram condition;
     protected HistogramTreePersistableConfig config;

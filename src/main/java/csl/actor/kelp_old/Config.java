@@ -1,7 +1,7 @@
 package csl.actor.kelp_old;
 
 import csl.actor.util.ConfigBase;
-
+@Deprecated
 public class Config extends ConfigBase {
     public static final long serialVersionUID = 1L;
     public static final Config CONFIG_DEFAULT = new Config();

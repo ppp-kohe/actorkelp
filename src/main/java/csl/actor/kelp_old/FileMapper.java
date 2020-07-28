@@ -8,6 +8,7 @@ import csl.actor.util.PathModifier;
 
 import java.util.concurrent.CompletableFuture;
 
+@Deprecated
 public class FileMapper extends ActorKelp<FileMapper> {
     protected FileSplitter splitter;
     protected long splitCount;

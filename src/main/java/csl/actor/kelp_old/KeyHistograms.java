@@ -8,7 +8,7 @@ import csl.actor.persist.PersistentFileManager;
 
 import java.io.Serializable;
 import java.util.*;
-
+@Deprecated
 public class KeyHistograms {
     protected PersistentFileManager persistent;
 

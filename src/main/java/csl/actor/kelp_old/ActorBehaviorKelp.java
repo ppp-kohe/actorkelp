@@ -15,6 +15,7 @@ import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 
+@Deprecated
 public class ActorBehaviorKelp {
     @SuppressWarnings("unchecked")
     public static <KeyType> KeyType centerPointPrimitive(KeyType leftEnd, KeyType rightStart) {

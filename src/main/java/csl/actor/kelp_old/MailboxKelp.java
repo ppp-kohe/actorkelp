@@ -13,7 +13,7 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
-
+@Deprecated
 public class MailboxKelp implements Mailbox, Cloneable {
     protected MailboxDefault mailbox;
     protected int treeSize;
