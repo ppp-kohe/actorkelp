@@ -509,7 +509,7 @@ public class ActorSystemRemote implements ActorSystem, KryoBuilder.SerializerFac
                     this,
                     new ConnectionCloseNotice(remoteSystem.getServerAddress())));
             try {
-                Thread.sleep(3_000);
+                Thread.sleep(50);
             } catch (Exception ex) {
                 remoteSystem.getLogger().log(debugLog, debugLogColor, ex, "notifyAndClose wait");
             }
