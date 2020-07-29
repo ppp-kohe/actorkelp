@@ -31,7 +31,7 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
     protected ActorRef nextStage;
     protected FileSplitter fileSplitter;
     protected ConfigKelp config;
-    protected boolean unit = true;
+    protected boolean unit = false;
     protected int shuffleIndex = -1;
     protected int mergedCount = 1;
     protected Set<String> mergedActorNames = Collections.emptySet();

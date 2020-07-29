@@ -118,7 +118,7 @@ public class ActorKelpSerializable<SelfType extends ActorKelp<SelfType>> impleme
     }
 
     protected void restoreSetNonOriginal(SelfType actor) {
-        actor.setUnit(false);
+        actor.setUnit(true);
     }
 
     protected void restoreSetShuffleIndex(SelfType actor, long num) {
