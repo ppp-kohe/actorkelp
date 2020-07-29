@@ -1,21 +1,15 @@
 package csl.actor.kelp.behavior;
 
-import com.esotericsoftware.kryo.io.Input;
-import com.esotericsoftware.kryo.io.Output;
 import csl.actor.Actor;
 import csl.actor.Mailbox;
 import csl.actor.MailboxDefault;
 import csl.actor.Message;
 import csl.actor.kelp.ActorKelpFunctions.KeyComparator;
 import csl.actor.kelp.ActorKelpSerializable;
-import csl.actor.kelp.KryoBuilderKelp;
-import csl.actor.remote.KryoBuilder;
 
-import java.io.ByteArrayOutputStream;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Queue;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 public class MailboxKelp implements Mailbox, Cloneable {
@@ -23,6 +17,9 @@ public class MailboxKelp implements Mailbox, Cloneable {
     protected int treeSize;
     protected HistogramEntry[] entries;
     protected KeyHistograms treeFactory;
+
+    protected Mailbox controlMailbox;
+    protected Map<Object, ControlEntry> controlEntries = new ConcurrentHashMap<>();
 
     public MailboxKelp() {
         this(32);
@@ -41,6 +38,8 @@ public class MailboxKelp implements Mailbox, Cloneable {
         this.treeSize = treeSize;
         this.mailbox = mailbox;
         this.treeFactory = treeFactory;
+
+        controlMailbox = new MailboxDefault();
     }
 
     public Mailbox getMailbox() {
@@ -62,6 +61,7 @@ public class MailboxKelp implements Mailbox, Cloneable {
             for (int i = 0; i < size; ++i) {
                 m.entries[i] = entries[i].create();
             }
+            m.controlMailbox = controlMailbox.create();
             return m;
         } catch (CloneNotSupportedException cne) {
             throw new RuntimeException(cne);
@@ -70,17 +70,57 @@ public class MailboxKelp implements Mailbox, Cloneable {
 
     @Override
     public void offer(Message<?> message) {
-        mailbox.offer(message);
+        if (isControlMessage(message)) {
+            controlMailbox.offer(message);
+        } else {
+            mailbox.offer(message);
+        }
+    }
+
+    public boolean isControlMessage(Message<?> message) {
+        return message != null && message.getData() instanceof MessageControl;
+    }
+
+    public interface MessageControl {
+        void control(Message<?> message, MailboxKelp mbox);
+    }
+
+    public static class ControlEntry {
+        protected Object key;
+
+        public ControlEntry(Object key) {
+            this.key = key;
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    public <EntryType extends ControlEntry> EntryType getOrCreateControlEntry(Object key, Function<Object, EntryType> factory) {
+        return (EntryType) controlEntries.computeIfAbsent(key, factory);
+    }
+
+    public ControlEntry removeControlEntry(Object key) {
+        return controlEntries.remove(key);
     }
 
     @Override
     public Message<?> poll() {
-        return mailbox.poll();
+        if (!controlMailbox.isEmpty()) {
+            Message<?> m = controlMailbox.poll();
+            if (m != null) {
+                ((MessageControl) m.getData()).control(m, this);
+                return m;
+            }
+        }
+        if (controlEntries.isEmpty()) {
+            return mailbox.poll();
+        } else {
+            return null;
+        }
     }
 
     @Override
     public boolean isEmpty() {
-        return mailbox.isEmpty();
+        return controlMailbox.isEmpty() && mailbox.isEmpty();
     }
 
     @Override

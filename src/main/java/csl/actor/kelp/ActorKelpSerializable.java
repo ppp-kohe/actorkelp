@@ -1,5 +1,6 @@
 package csl.actor.kelp;
 
+import csl.actor.ActorRef;
 import csl.actor.ActorSystem;
 import csl.actor.Message;
 import csl.actor.kelp.behavior.KeyHistograms;
@@ -24,6 +25,7 @@ public class ActorKelpSerializable<SelfType extends ActorKelp<SelfType>> impleme
     public int mergedCount;
     public Set<String> mergedActorNames;
     public int shuffleIndex;
+    public Set<ActorRef> shuffleOriginals;
 
     public boolean includeMailbox;
 
@@ -43,6 +45,7 @@ public class ActorKelpSerializable<SelfType extends ActorKelp<SelfType>> impleme
         initMergedCount(actor);
         initMergedActorNames(actor);
         initShuffleIndex(actor);
+        initShuffleOriginals(actor);
         initMailbox(actor);
         initInternalState(actor);
     }
@@ -78,6 +81,10 @@ public class ActorKelpSerializable<SelfType extends ActorKelp<SelfType>> impleme
         }
     }
 
+    protected void initShuffleOriginals(SelfType actor) {
+        shuffleOriginals = new HashSet<>(actor.getShuffleOriginals());
+    }
+
     protected void initInternalState(SelfType actor) {
         internalState = actor.toInternalState();
     }
@@ -97,9 +104,14 @@ public class ActorKelpSerializable<SelfType extends ActorKelp<SelfType>> impleme
         restoreSetNonOriginal(a);
         restoreSetShuffleIndex(a, num);
         restoreMergedCount(a);
+        restoreShuffleOriginals(a);
         restoreMailbox(a);
         restoreInternalState(a);
         return a;
+    }
+
+    public void restore(SelfType a) {
+        restoreInternalState(a);
     }
 
     public SelfType restoreShuffle(ActorSystem system, long num, ConfigKelp config) throws Exception {
@@ -126,6 +138,10 @@ public class ActorKelpSerializable<SelfType extends ActorKelp<SelfType>> impleme
             num = shuffleIndex;
         }
         actor.setShuffleIndex((int) num);
+    }
+
+    protected void restoreShuffleOriginals(SelfType actor) {
+        actor.getShuffleOriginals().addAll(shuffleOriginals);
     }
 
     protected void restoreMailbox(SelfType actor) {

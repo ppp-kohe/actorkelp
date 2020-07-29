@@ -1,10 +1,12 @@
 package csl.actor.kelp;
 
 import csl.actor.*;
+import csl.actor.kelp.behavior.MailboxKelp;
 import csl.actor.util.ResponsiveCalls;
 
 import java.io.Serializable;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -27,8 +29,8 @@ public class ActorKelpMerger<ActorType extends ActorKelp<ActorType>> implements 
     }
 
     @SuppressWarnings("unchecked")
-    public ActorType mergeToLocalSync(List<? extends ActorRef> mebers) {
-        ActorRef ref = mergeSync(mebers);
+    public ActorType mergeToLocalSync(List<? extends ActorRef> members) {
+        ActorRef ref = mergeSync(members);
         if (ref instanceof Actor) {
             return (ActorType) ref;
         } else {
@@ -159,14 +161,15 @@ public class ActorKelpMerger<ActorType extends ActorKelp<ActorType>> implements 
 
         @Override
         public ActorKelpSerializable<?> call(Actor another) {
+            ActorKelp<?> kelp = (ActorKelp<?>) another;
             if (disable) {
                 new DelegateActor(another.getSystem(), another.getName(), replacement);
 
                 //already merged actors
-                ((ActorKelp<?>) another).getMergedActorNames().forEach(n ->
+                kelp.getMergedActorNames().forEach(n ->
                         new DelegateActor(another.getSystem(), n, replacement));
             }
-            ActorKelpSerializable<?> s = ((ActorKelp<?>) another).toSerializable(stateIncludeMailbox);
+            ActorKelpSerializable<?> s = kelp.toSerializable(stateIncludeMailbox);
             s.internalStateUsed = true;
 
             if (disable) {
@@ -199,76 +202,4 @@ public class ActorKelpMerger<ActorType extends ActorKelp<ActorType>> implements 
         }
     }
 
-    public static class ActorKelpCollector<ActorType extends ActorKelp<ActorType>> extends ActorKelpMerger<ActorType> {
-        public ActorKelpCollector(ActorSystem system, ConfigKelp config) {
-            super(system, config);
-        }
-
-        @Override
-        public boolean isDisableAtMerging() {
-            return false;
-        }
-
-        @Override
-        public boolean isStateIncludeMailbox() {
-            return false;
-        }
-
-        @Override
-        public ActorRef mergeSingle(ActorRef ref) {
-            if (ref instanceof ActorKelp<?>) {
-                ActorKelp<?> actor = (ActorKelp<?>) ref;
-                try {
-                    ActorKelpSerializable<?> state = ActorKelpMerger.toState(actor.getSystem(), null, ref, isDisableAtMerging(), isStateIncludeMailbox());
-                    return ActorKelpMerger.temporaryActor((ActorKelp<?>) ref, state);
-                } catch (Exception ex) {
-                    config.log(ex, "error: %s", ref);
-                    return ref;
-                }
-            } else {
-                return ref;
-            }
-        }
-
-        @Override
-        public ActorRef merge(ActorRef l, ActorRef r) {
-            try {
-                return ResponsiveCalls.sendTask(system, l, new MergeTaskForCollect(l, r, isDisableAtMerging(), isStateIncludeMailbox())).get();
-            } catch (Exception ex) {
-                config.log(ex, "error: %s, %s", l, r);
-                return l;
-            }
-        }
-    }
-
-    public static class MergeTaskForCollect extends MergeTask {
-        public static final long serialVersionUID = -1;
-
-        public MergeTaskForCollect() {
-        }
-
-        public MergeTaskForCollect(ActorRef l, ActorRef r, boolean disable, boolean stateIncludeMailbox) {
-            super(l, r, disable, stateIncludeMailbox);
-        }
-
-        @SuppressWarnings({"rawtypes", "unchecked"})
-        @Override
-        public ActorRef call(Actor self) {
-            try {
-                ActorKelpSerializable<?> anotherState = toState(self.getSystem(), l, r, disable, stateIncludeMailbox);
-                ActorKelp<?> tmp = temporaryActor((ActorKelp<?>) self, ((ActorKelp<?>) self).toSerializable(stateIncludeMailbox));
-                tmp.merge((ActorKelpSerializable) anotherState);
-                return tmp;
-            } catch (Exception ex) {
-                self.getSystem().getLogger().log(true, 0, ex, "error: %s", self);
-                return self;
-            }
-        }
-    }
-
-    public static ActorKelp<?> temporaryActor(ActorKelp<?> self, ActorKelpSerializable<?> state) throws Exception {
-        ActorKelp<?> tmp = state.create(self.getSystem(), null, self.getConfig());
-        tmp.setNameRandom();
-        return tmp;
-    }
 }

@@ -158,11 +158,11 @@ public interface KelpStage<ActorType extends Actor> extends ActorRef {
             }
         }
 
-        @SuppressWarnings({"unchecked", "rawtypes"})
+        @SuppressWarnings({"unchecked"})
         @Override
         public ActorType getMergedState() {
             if (ActorKelp.class.isAssignableFrom(actorType)) {
-                try (ActorKelpMerger.ActorKelpCollector m = new ActorKelpMerger.ActorKelpCollector(system, new ConfigKelp())) {
+                try (ActorKelpMergerSharing<?> m = new ActorKelpMergerSharing<>(system, new ConfigKelp())) {
                     return (ActorType) m.mergeToLocalSync(getMemberActors());
                 }
             } else {

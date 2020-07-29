@@ -35,6 +35,7 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
     protected int shuffleIndex = -1;
     protected int mergedCount = 1;
     protected Set<String> mergedActorNames = Collections.emptySet();
+    protected Set<ActorRef> shuffleOriginals = new HashSet<>(1);
 
     public ActorKelp(ActorSystem system, String name, Mailbox mailbox, ActorBehavior behavior, ConfigKelp config) {
         super(system, name, mailbox, behavior);
@@ -121,6 +122,10 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
 
     public Set<String> getMergedActorNames() {
         return mergedActorNames;
+    }
+
+    public Set<ActorRef> getShuffleOriginals() {
+        return shuffleOriginals;
     }
 
     ///////////// config
@@ -410,6 +415,7 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
     @Override
     public void close() {
         flush();
+        getMailboxAsKelp().terminateAfterSerialized();
     }
 
     /**
@@ -478,6 +484,11 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
         } catch (Exception ex) {
             throw new RuntimeException(ex);
         }
+    }
+
+    @SuppressWarnings("unchecked")
+    public void setSerializable(ActorKelpSerializable<SelfType> state) {
+        state.restore((SelfType) this);
     }
 
     @SuppressWarnings("unchecked")
@@ -557,19 +568,27 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
 
     @SuppressWarnings("unchecked")
     public ActorRefShuffleKelp<SelfType> shuffle(int bufferSizeMax) {
-        ActorKelpSerializable<SelfType> serialized = toSerializable(); //TODO without mailbox
+        ActorKelpMergerSharing.StateSharingActor sharingActor = new ActorKelpMergerSharing.StateSharingActor(system, config);
+        shuffleOriginals.add(sharingActor);
+
+        ActorKelpSerializable<SelfType> serialized = toSerializable();
         ActorPlacement place = getPlacement();
 
         int partitions = getShufflePartitions();
         int bufferSize = Math.min(bufferSizeMax, getShuffleBufferSize());
         boolean hostIncludePort = isShuffleHostIncludePort();
 
+        List<ActorRef> entries =
+                IntStream.range(0, partitions)
+                        .mapToObj(i -> createAndPlaceShuffle(place, serialized, i))
+                        .collect(Collectors.toList());
+
+        sharingActor.getMembers().addAll(entries);
+
         return createShuffle(
                 getSystem(),
                 ActorRefShuffle.createEntries(
-                        IntStream.range(0, partitions)
-                            .mapToObj(i -> createAndPlaceShuffle(place, serialized, i))
-                            .collect(Collectors.toList()),
+                        entries,
                         bufferSize,
                         ActorRefShuffle.refToHost(hostIncludePort)),
                 getKeyExtractors(),
@@ -661,7 +680,7 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
         @Override
         public ActorType getMergedState() {
             if (ActorKelp.class.isAssignableFrom(actorType)) {
-                try (ActorKelpMerger.ActorKelpCollector<ActorType> m = new ActorKelpMerger.ActorKelpCollector<>(system, config)) {
+                try (ActorKelpMergerSharing<ActorType> m = new ActorKelpMergerSharing<>(system, config)) {
                     return m.mergeToLocalSync(getMemberActors());
                 }
             } else {
@@ -706,8 +725,14 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
 
     @Override
     public SelfType getMergedState() {
-        try (ActorKelpMerger<SelfType> m = new ActorKelpMerger.ActorKelpCollector<>(system, config)) {
+        try (ActorKelpMergerSharing<SelfType> m = new ActorKelpMergerSharing<>(system, config)) {
             return m.mergeToLocalSync(Collections.singletonList(this));
         }
+    }
+
+    public void shareStateToOtherShuffleMembers() {
+        //asynchronous: it needs to stop self processing
+        getShuffleOriginals().forEach(m ->
+                m.tell(new ActorKelpMergerSharing.StateSharingRequest(this)));
     }
 }
