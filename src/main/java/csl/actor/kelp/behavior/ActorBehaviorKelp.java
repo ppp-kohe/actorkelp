@@ -85,7 +85,9 @@ public class ActorBehaviorKelp {
             HistogramNodeLeaf1 next = ((HistogramNodeLeaf1) tree.takeCompleted());
             if (next != null) {
                 if (next.consume(tree, (BiConsumer<Object,Object>) handler)) {
-                    tree.prune(); //always prune for clearing root node
+                    if (tree.getTreeSize() == 0) {
+                        tree.prune(); //always prune for clearing root node
+                    }
                     return true;
                 }
             }

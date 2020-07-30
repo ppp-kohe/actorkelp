@@ -6,8 +6,11 @@ import csl.actor.cluster.ClusterHttp;
 import csl.actor.kelp.ConfigKelp;
 
 public class ExampleClusterHttpToJson {
+
+    @SuppressWarnings("unchecked")
     public static void main(String[] args) throws Exception {
-        ClusterHttp c = new ClusterHttp(new ClusterDeployment<>(
+        ClusterHttp c = new ClusterHttp(
+                new ClusterDeployment<>(
                 ConfigKelp.class, ClusterDeployment.ActorPlacementForCluster.class));
         Object o = c.jsonConverter(Object.class).apply(
                 new ClusterCommands.ClusterUnit<>()

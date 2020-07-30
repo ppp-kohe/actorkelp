@@ -25,11 +25,24 @@ public class ActorSystemKelp extends ActorSystemRemote {
 
     public static ActorSystemKelp create(ConfigDeployment configDeployment) {
         Function<ActorSystem, Kryo> kryoFactory = configDeployment.kryoBuilder(defaultBuilderType());
-        return create(kryoFactory, configDeployment);
+        return create(configDeployment, kryoFactory);
     }
 
-    public static ActorSystemKelp create(Function<ActorSystem, Kryo> kryoFactory, ConfigDeployment configDeployment) {
+    public static ActorSystemKelp create(ConfigDeployment configDeployment, Function<ActorSystem, Kryo> kryoFactory) {
         return new ActorSystemKelp(new ActorSystemDefaultForKelp(configDeployment, kryoFactory), kryoFactory);
+    }
+
+    public static ActorSystemDefaultForKelp createLocal() {
+        return createLocal(new ConfigDeployment());
+    }
+
+    public static ActorSystemDefaultForKelp createLocal(ConfigDeployment configDeployment) {
+        Function<ActorSystem, Kryo> kryoFactory = configDeployment.kryoBuilder(defaultBuilderType());
+        return createLocal(configDeployment, kryoFactory);
+    }
+
+    public static ActorSystemDefaultForKelp createLocal(ConfigDeployment configDeployment, Function<ActorSystem, Kryo> kryoFactory) {
+        return new ActorSystemDefaultForKelp(configDeployment, kryoFactory);
     }
 
     public static Class<KryoBuilderKelp> defaultBuilderType() {

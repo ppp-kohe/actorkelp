@@ -237,6 +237,10 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
         return new ActorBehaviorBuilderKelp(getMailboxAsKelp()::initMessageEntries);
     }
 
+    public static <T> ActorKelpFunctions.KeyExtractorFunction<T,T> identity() { //utility for builder
+        return ActorKelpFunctions.KeyExtractorFunction.identity();
+    }
+
     public static class MessageBundle<DataType> extends Message<List<DataType>> {
         public static final long serialVersionUID = 1L;
 
@@ -306,19 +310,20 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
     ///// processes
 
 
-    @Override
-    public boolean processMessageNext() {
-        if (getMailboxAsKelp().processHistogram(this)) {
-            return true;
-        } else {
-            return super.processMessageNext();
-        }
-    }
+//    @Override
+//    public boolean processMessageNext() {
+//        if (getMailboxAsKelp().processHistogram(this)) {
+//            return true;
+//        } else {
+//            return super.processMessageNext();
+//        }
+//    }
 
     @Override
     public void processMessage(Message<?> message) {
         processPrune();
         super.processMessage(message);
+        getMailboxAsKelp().processHistogram(this); //ActorBehaviorMatchKey1 immediately process and prune a single value
     }
 
     public void processMessageBundle(MessageBundle<Object> mb) {

@@ -4,10 +4,12 @@ import csl.actor.ActorRef;
 import csl.actor.ActorRefLocalNamed;
 import csl.actor.ActorSystem;
 import csl.actor.ActorSystemDefault;
+import csl.actor.kelp.ConfigKelp;
 import csl.actor.remote.ActorAddress;
 import csl.actor.remote.ActorRefRemote;
 import csl.actor.remote.ActorRefRemoteSerializer;
 import csl.actor.remote.ObjectMessageServer;
+import csl.actor.util.ConfigBase;
 import csl.actor.util.ToJson;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
@@ -116,7 +118,7 @@ public class ClusterHttp implements Closeable {
         }
 
         @Override
-        protected void initChannel(SocketChannel ch) throws Exception {
+        protected void initChannel(SocketChannel ch) {
             ChannelPipeline p = ch.pipeline();
             if (ssl != null) {
                 p.addLast(ssl.newHandler(ch.alloc()));
@@ -138,12 +140,12 @@ public class ClusterHttp implements Closeable {
         }
 
         @Override
-        public void channelReadComplete(ChannelHandlerContext ctx) throws Exception {
+        public void channelReadComplete(ChannelHandlerContext ctx) {
             ctx.flush();
         }
 
         @Override
-        protected void channelRead0(ChannelHandlerContext ctx, HttpObject msg) throws Exception {
+        protected void channelRead0(ChannelHandlerContext ctx, HttpObject msg) {
             if (msg instanceof HttpRequest) {
                 HttpRequest req = (HttpRequest) msg;
 
@@ -214,7 +216,7 @@ public class ClusterHttp implements Closeable {
         }
 
         @Override
-        public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
+        public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
             logger.log(logHttp, logColorHttp, cause, "handler error");
             ctx.close();
         }
