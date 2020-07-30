@@ -14,8 +14,10 @@ import csl.actor.util.ResponsiveCalls;
 import csl.actor.util.StagingActor;
 
 import java.io.Serializable;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.function.BiFunction;
 
 public interface KelpStage<ActorType extends Actor> extends ActorRef {
 
@@ -54,10 +56,29 @@ public interface KelpStage<ActorType extends Actor> extends ActorRef {
     ActorType merge();
 
     /**
-     * similar to {@link #merge()}, but disabling member actors.
-     * @return a temporary created merged actor
+     * similar to {@link #merge()}, but just collecting and merging states.
+     * @return a temporary created merged actor (or this)
      */
     ActorType getMergedState();
+
+
+    default <StateType> List<StateType> collectStates(ActorKelpStateSharing.ToStateFunction<ActorType, StateType> toState) {
+        return getMergedState(ActorKelpStateSharing.factory((a) -> {
+            List<StateType> sl = new ArrayList<>();
+            sl.add(toState.apply(a));
+            return sl;
+        }, (l,r) -> {
+            l.addAll(r);
+            return l;
+        }));
+    }
+
+    default <StateType> StateType getMergedState(ActorKelpStateSharing.ToStateFunction<ActorType, StateType> toState,
+                                                 ActorKelpStateSharing.MergerOperator<StateType> merger) {
+        return getMergedState(ActorKelpStateSharing.factory(toState, merger));
+    }
+
+    <StateType> StateType getMergedState(BiFunction<ActorSystem,ConfigKelp, ? extends ActorKelpStateSharing<ActorType,StateType>> factory);
 
     default void setSystemBySerializer(ActorSystem system) { }
 
@@ -167,6 +188,13 @@ public interface KelpStage<ActorType extends Actor> extends ActorRef {
                 }
             } else {
                 return null;
+            }
+        }
+
+        @Override
+        public <StateType> StateType getMergedState(BiFunction<ActorSystem, ConfigKelp, ? extends ActorKelpStateSharing<ActorType, StateType>> factory) {
+            try (ActorKelpStateSharing<ActorType, StateType> m = factory.apply(system, new ConfigKelp())) {
+                return m.mergeSync(getMemberActors());
             }
         }
 

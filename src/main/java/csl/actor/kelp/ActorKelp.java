@@ -21,6 +21,7 @@ import java.lang.annotation.Target;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -573,7 +574,7 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
 
     @SuppressWarnings("unchecked")
     public ActorRefShuffleKelp<SelfType> shuffle(int bufferSizeMax) {
-        ActorKelpMergerSharing.StateSharingActor sharingActor = new ActorKelpMergerSharing.StateSharingActor(system, config);
+        ActorKelpStateSharing.StateSharingActor sharingActor = new ActorKelpStateSharing.StateSharingActor(system, config);
         shuffleOriginals.add(sharingActor);
 
         ActorKelpSerializable<SelfType> serialized = toSerializable();
@@ -692,6 +693,13 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
                 return null;
             }
         }
+
+        @Override
+        public <StateType> StateType getMergedState(BiFunction<ActorSystem, ConfigKelp, ? extends ActorKelpStateSharing<ActorType, StateType>> factory) {
+            try (ActorKelpStateSharing<ActorType, StateType> m = factory.apply(system, new ConfigKelp())) {
+                return m.mergeSync(getMemberActors());
+            }
+        }
     }
 
     @Override
@@ -735,9 +743,16 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
         }
     }
 
+    @Override
+    public <StateType> StateType getMergedState(BiFunction<ActorSystem, ConfigKelp, ? extends ActorKelpStateSharing<SelfType, StateType>> factory) {
+        try (ActorKelpStateSharing<SelfType, StateType> m = factory.apply(system, new ConfigKelp())) {
+            return m.mergeSync(Collections.singletonList(this));
+        }
+    }
+
     public void shareStateToOtherShuffleMembers() {
         //asynchronous: it needs to stop self processing
         getShuffleOriginals().forEach(m ->
-                m.tell(new ActorKelpMergerSharing.StateSharingRequest(this)));
+                m.tell(new ActorKelpStateSharing.StateSharingRequest(this, ActorKelpMergerSharing.class)));
     }
 }

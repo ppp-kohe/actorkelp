@@ -67,7 +67,7 @@ public class ExampleActor extends ActorDefault {
 
 ## Remote Actor
 
-The library supports remote actors. It can launch multiple processes on different hosts and communicating each other.
+The library supports remote actors for distribution. It can launch multiple processes on different hosts and communicating each other.
 
 ```java
 import csl.actor.*;
@@ -79,7 +79,7 @@ public class ExampleRemote extends ActorDefault {
         ActorSystemRemote system = new ActorSystemRemote();
         system.startWithoutWait(port);
 
-        if (port == 3000) {
+        if (port == 3000) { 
             new ExampleRemote(system, "a");
         } else {
             ExampleRemote b = new ExampleRemote(system, "b");
