@@ -461,42 +461,6 @@ public class ClusterHttp implements Closeable {
     }
 
     public void write(Consumer<String> out, Object json) {
-        if (json == null) {
-            out.accept("null");
-        } else if (json instanceof List<?>) {
-            out.accept("[");
-            boolean first = true;
-            for (Object o : (List<?>) json) {
-                if (first) {
-                    first = false;
-                } else {
-                    out.accept(",");
-                }
-                write(out, o);
-            }
-            out.accept("]");
-        } else if (json instanceof Map<?,?>) {
-            out.accept("{");
-            boolean first = true;
-            for (Map.Entry<?,?> e : ((Map<?,?>) json).entrySet()) {
-                if (first) {
-                    first = false;
-                } else {
-                    out.accept(",");
-                }
-                write(out, e.getKey());
-                out.accept(":");
-                write(out, e.getValue());
-            }
-            out.accept("}");
-        } else if (json instanceof String) {
-            out.accept(new ClusterCommands.CommandToken(ClusterCommands.CommandTokenType.String, (String) json).toSource());
-        } else if (json instanceof Number) {
-            out.accept(Objects.toString(json));
-        } else if (json instanceof Boolean) {
-            out.accept(Objects.toString(json));
-        } else {
-            out.accept(new ClusterCommands.CommandToken(ClusterCommands.CommandTokenType.String, Objects.toString(json)).toSource());
-        }
+        ToJson.write(out, json);
     }
 }

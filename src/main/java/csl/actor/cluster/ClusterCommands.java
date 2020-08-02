@@ -290,31 +290,7 @@ public class ClusterCommands<AppConfType extends ConfigBase> {
 
         public String toSource() {
             if (type.equals(CommandTokenType.String)) {
-                StringBuilder buf = new StringBuilder();
-                buf.append("\"");
-                for (char c : data.toCharArray()) {
-                    if (c == '\n') {
-                        buf.append("\\").append("n");
-                    } else if (c == '\t') {
-                        buf.append("\\").append("t");
-                    } else if (c == '\f') {
-                        buf.append("\\").append("f");
-                    } else if (c == '\r') {
-                        buf.append("\\").append("r");
-                    } else if (c == '\b') {
-                        buf.append("\\").append("b");
-                    } else if (c == '\"') {
-                        buf.append("\\").append("\"");
-                    } else if (c == '\\') {
-                        buf.append("\\").append("\\");
-                    } else if (Character.isISOControl(c)) {
-                        buf.append(String.format("\\u%04x", (int) c));
-                    } else {
-                        buf.append(c);
-                    }
-                }
-                buf.append("\"");
-                return buf.toString();
+                return ToJson.toSourceString(data);
             } else {
                 return data;
             }
