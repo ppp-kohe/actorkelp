@@ -28,8 +28,16 @@ public class ConfigBase implements Serializable, ToJson {
     @SuppressWarnings("unchecked")
     public static <ConfType extends ConfigBase> ConfType readConfig(Class<ConfType> type, String propHead, Map<Object, Object> properties) {
         try {
-            return (ConfType) type.getConstructor().newInstance()
+            return (ConfType) createConfig(type)
                     .read(propHead, properties);
+        } catch (Exception ex) {
+            throw new RuntimeException(ex);
+        }
+    }
+
+    public static <ConfType extends ConfigBase> ConfType createConfig(Class<ConfType> type) {
+        try {
+            return type.getConstructor().newInstance();
         } catch (Exception ex) {
             throw new RuntimeException(ex);
         }
@@ -80,9 +88,17 @@ public class ConfigBase implements Serializable, ToJson {
         }
     }
 
-    public void readProperty(Field f, Object v) throws Exception {
+    public void readProperty(Field f, Object v) {
         Class<?> type = f.getType();
-        f.set(this, readValue(f, type, v));
+        set(f, readValue(f, type, v));
+    }
+
+    public void set(Field f, Object value) {
+        try {
+            f.set(this, value);
+        } catch (Exception ex) {
+            throw new RuntimeException(ex);
+        }
     }
 
     public Object readValue(Field f, Class<?> type, Object v) {
@@ -153,6 +169,33 @@ public class ConfigBase implements Serializable, ToJson {
             throw new RuntimeException(ex);
         }
     }
+
+    public void mergeChangedFields(ConfigBase another) {
+        mergeChangedFields(another, createDefault());
+    }
+
+    public void mergeChangedFields(ConfigBase another, ConfigBase baseConfig) {
+        baseConfig.getChangedFields(another)
+                .forEach(f -> set(f, another.get(f)));
+    }
+
+    public List<Field> getChangedFields(ConfigBase another) {
+        return Arrays.stream(getClass().getFields())
+                .filter(ConfigBase::isConfigProperty)
+                .filter(f -> isChangedField(f, another))
+                .collect(Collectors.toList());
+    }
+
+    protected boolean isChangedField(Field f, ConfigBase another) {
+        return f.getDeclaringClass().isInstance(another) &&
+                Objects.equals(get(f), another.get(f));
+    }
+
+    public ConfigBase createDefault() {
+        return createConfig(getClass());
+    }
+
+    /////////
 
     public Map<String,Object> toJson(Function<Object, Object> valueConverter) {
         LinkedHashMap<String,Object> vs = new LinkedHashMap<>();

@@ -67,8 +67,7 @@ public class ClusterCommands<AppConfType extends ConfigBase> {
 
             block.getClusterLines()
                     .forEach(cs -> set(conf, cs));
-            unit.setAppConfig((AppConfType) Class.forName(conf.configType).getConstructor()
-                    .newInstance());
+            unit.setAppConfig(ConfigBase.createConfig((Class<AppConfType>) Class.forName(conf.configType)));
 
             unit.setAppConfigLogHeader();
 

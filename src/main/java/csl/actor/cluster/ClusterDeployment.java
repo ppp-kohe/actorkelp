@@ -39,6 +39,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
     public static String NON_DRIVER_PROPERTY_CONF = "csl.actor.cluster.conf";
     public static String NON_DRIVER_FILE_CONF = "cluster-config.txt"; //under appDir
     public static String NON_DRIVER_PROPERTY_APP_NAME = "csl.actor.cluster.appName";
+    public static String NON_DRIVER_PROPERTY_FLAG = "csl.actor.cluster.driver";
 
     protected String primaryMainType; //for remoteDriver
     protected List<String> primaryMainArgs = new ArrayList<>(); //for remoteDriver
@@ -243,12 +244,29 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
     }
 
     /**
+     *  {@link #deploy(String)} with the special symbol "-" {@link #NON_DRIVER_SYMBOL_CONF}
+     * @return a created instance of {@link ActorPlacementForCluster}
+     */
+    public PlaceType deploy() {
+        return deploy(NON_DRIVER_SYMBOL_CONF);
+    }
+
+    /**
      *
+     *  {@link #deploy(String, ConfigBase)} )} with the special symbol "-" {@link #NON_DRIVER_SYMBOL_CONF}
+     * @param mergedConf the mergedConf for all unit's appConfig
+     * @return a created instance of {@link ActorPlacementForCluster}
+     */
+    public PlaceType deploy(AppConfType mergedConf) {
+        return deploy(NON_DRIVER_SYMBOL_CONF, mergedConf);
+    }
+
+    /**
+     * {@link #deploy(List)} with units from {@link #loadConfigFile(String)} which loads the confFile
      * @param confFile a cluster commands file parsed by {@link ClusterCommands#loadConfigFile(String)}, or
-     *                   special symbol "-" ({@link #NON_DRIVER_SYMBOL_CONF}) for non-driver mode
-     *                   and then it loads from the system property {@link #NON_DRIVER_PROPERTY_CONF}.
+     *                   special symbol "-" ({@link #NON_DRIVER_SYMBOL_CONF}) and then it loads from the system property {@link #NON_DRIVER_PROPERTY_CONF}.
      *
-     * @return the created instance of {@link ActorPlacementForCluster}
+     * @return a created instance of {@link ActorPlacementForCluster}
      */
     public PlaceType deploy(String confFile) {
         try {
@@ -258,17 +276,67 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         }
     }
 
-    public PlaceType deploy() {
-        return deploy(NON_DRIVER_SYMBOL_CONF);
+    /**
+     * {@link #deploy(List)} with units from {@link #loadConfigFile(String, ConfigBase)} which loads the confFile with merging the mergedConf
+     * @param confFile a cluster commands file parsed by {@link ClusterCommands#loadConfigFile(String)} )}, or
+     *                   special symbol "-" ({@link #NON_DRIVER_SYMBOL_CONF}) and then it loads from the system property {@link #NON_DRIVER_PROPERTY_CONF}.
+     * @param mergedConf the mergedConf for all unit's appConfig
+     * @return a created instance of {@link ActorPlacementForCluster}
+     */
+    public PlaceType deploy(String confFile, AppConfType mergedConf) {
+        try {
+            return deploy(loadConfigFile(confFile, mergedConf));
+        } catch (Exception ex) {
+            throw new RuntimeException(ex);
+        }
     }
 
+    /**
+     * if the confFile is "-" {@link #NON_DRIVER_SYMBOL_CONF}, it loads the path obttained from from the property {@link #NON_DRIVER_PROPERTY_CONF}.
+     *  Also, it changes the {@link #isDriverMode()} flag from {@link #NON_DRIVER_PROPERTY_FLAG}.
+     *  <p>
+     *  If no conf file supplied by {@link #NON_DRIVER_PROPERTY_CONF} with {@link #NON_DRIVER_SYMBOL_CONF}
+     *    (or the property is the empty string ""),
+     *     then it just returns a single primary unit created by {@link #primary()}
+     *  </p>
+     *  <p>
+     *      Note: the default value of {@link #isDriverMode()} is true.
+     *       This means that a regular java process using the cluster class runs as driver-mode.
+     *       However, {@link #deploy(List)} does NOT launch a new process for the primary unit,
+     *       which is different behavior from {@link #deployAsRemoteDriver(List)}.
+     *  </p>
+     * @param confFile the source file of configuration parsed by {@link ClusterCommands#loadConfigFile(String)}
+     * @return loaded units
+     */
     public List<ClusterUnit<AppConfType>> loadConfigFile(String confFile) {
+        boolean fromProperty = false;
         if (confFile.equals(NON_DRIVER_SYMBOL_CONF)) {
-            setDriverMode(false);
-            confFile = System.getProperty(NON_DRIVER_PROPERTY_CONF, NON_DRIVER_FILE_CONF);
+            confFile = System.getProperty(NON_DRIVER_PROPERTY_CONF, "");
+            fromProperty = true;
         }
+        setDriverMode(System.getProperty(NON_DRIVER_PROPERTY_FLAG, Boolean.toString(driverMode)).equals("true"));
         confFile = confFile.replaceAll("/", File.separator);
-        return new ClusterCommands<>(defaultConfType).loadConfigFile(confFile);
+        if (fromProperty && confFile.isEmpty()) {
+            return Collections.singletonList(primary());
+        } else {
+            return new ClusterCommands<>(defaultConfType).loadConfigFile(confFile);
+        }
+    }
+
+    /**
+     * load units by {@link #loadConfigFile(String)} and merge a config to all unit's appConfig
+     * @param confFile the conf file
+     * @param mergedConf the merged app conf
+     * @return loaded units
+     */
+    public List<ClusterUnit<AppConfType>> loadConfigFile(String confFile, AppConfType mergedConf) {
+        List<ClusterUnit<AppConfType>> units = loadConfigFile(confFile);
+        if (mergedConf != null) {
+            ConfigBase base = mergedConf.createDefault();
+            units.forEach(u ->
+                    u.getAppConfig().mergeChangedFields(mergedConf, base));
+        }
+        return units;
     }
 
     public String getUnitMainType(ClusterUnit<AppConfType> unit) {
@@ -483,34 +551,39 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
             PathModifier.PathModifierHost pmh = (PathModifier.PathModifierHost) pm;
             String app = pmh.getApp();
             if (app != null) {
-                pathProps += escape("-Dcsl.actor.path.app=" + app) + " ";
+                pathProps += propertyOption("csl.actor.path.app", app);
             }
         }
 
-        if (unit.getDeploymentConfig().primary) {
-            pathProps += escape("-D" + NON_DRIVER_PROPERTY_CONF + "=" +
-                    getAppName() + "/" + NON_DRIVER_FILE_CONF) + " "; //suppose the working dir is baseDir
+        if (unit.getDeploymentConfig().primary) { //if the class launches a process for a primary unit, the process runs as non-driver
+            pathProps += propertyOption(NON_DRIVER_PROPERTY_CONF,
+                            getAppName() + "/" + NON_DRIVER_FILE_CONF) +  //suppose the working dir is baseDir
+                         propertyOption(NON_DRIVER_PROPERTY_FLAG, false);
         }
 
         String additionalOpt = unit.getDeploymentConfig().javaVmOption;
 
-        return escape("-Dcsl.actor.logColor=" + unit.getAppConfig().get("logColor")) + " " +
-                escape("-Dcsl.actor.logFile=" + unit.getDeploymentConfig().logFile) + " " +
-                escape("-Dcsl.actor.logFilePath=" + unit.getDeploymentConfig().logFilePath) + " " +
-                escape("-Dcsl.actor.logFilePreserveColor=" + unit.getDeploymentConfig().logFilePreserveColor) + " " +
-                escape("-Dcsl.actor.kryoBuilderType=" + unit.getDeploymentConfig().kryoBuilderType) + " " +
-                escape("-Dcsl.actor.throttle=" + unit.getDeploymentConfig().throttle) + " " +
+        return propertyOption("csl.actor.logColor", unit.getAppConfig().get("logColor"))  +
+                propertyOption("csl.actor.logFile", unit.getDeploymentConfig().logFile)  +
+                propertyOption("csl.actor.logFilePath", unit.getDeploymentConfig().logFilePath)  +
+                propertyOption("csl.actor.logFilePreserveColor", unit.getDeploymentConfig().logFilePreserveColor)  +
+                propertyOption("csl.actor.kryoBuilderType", unit.getDeploymentConfig().kryoBuilderType)  +
+                propertyOption("csl.actor.throttle", unit.getDeploymentConfig().throttle)  +
 
-                escape("-Dcsl.actor.systemThroughput" + unit.getDeploymentConfig().systemThroughput) + " " +
-                escape("-Dcsl.actor.systemServerWorkerThreadsFactor" + unit.getDeploymentConfig().systemServerWorkerThreadsFactor) + " " +
-                escape("-Dcsl.actor.systemServerLeaderThreads" + unit.getDeploymentConfig().systemServerLeaderThreads) + " " +
-                escape("-Dcsl.actor.systemClientThreadsFactor" + unit.getDeploymentConfig().systemClientThreadsFactor) + " " +
-                escape("-Dcsl.actor.systemThreadFactor" + unit.getDeploymentConfig().systemThreadFactor) + " " +
+                propertyOption("csl.actor.systemThroughput", unit.getDeploymentConfig().systemThroughput) +
+                propertyOption("csl.actor.systemServerWorkerThreadsFactor", unit.getDeploymentConfig().systemServerWorkerThreadsFactor) +
+                propertyOption("csl.actor.systemServerLeaderThreads", unit.getDeploymentConfig().systemServerLeaderThreads) +
+                propertyOption("csl.actor.systemClientThreadsFactor", unit.getDeploymentConfig().systemClientThreadsFactor) +
+                propertyOption("csl.actor.systemThreadFactor", unit.getDeploymentConfig().systemThreadFactor) +
 
-                escape("-D" + NON_DRIVER_PROPERTY_APP_NAME + "=" + getAppName()) + " " +
+                propertyOption(NON_DRIVER_PROPERTY_APP_NAME, getAppName()) +
                 pathProps +
                 getJavaCommandOptionsClassPath(unit) + " " +
                 additionalOpt;
+    }
+
+    protected String propertyOption(String name, Object value) {
+        return escape("-D" + name + "=" + value) + " ";
     }
 
     protected String getJavaCommandArgs(ClusterUnit<AppConfType> unit) throws Exception {

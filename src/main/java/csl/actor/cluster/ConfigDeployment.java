@@ -26,7 +26,7 @@ public class ConfigDeployment extends ConfigBase {
     public String host = "localhost";
     public int port = 38888;
     public String configType = ""; //empty means the default: "csl.actor.kelp.ConfigKelp";
-    public String baseDir = "target/debug";
+    public String baseDir = "target/kelp";
     public boolean primary = false;
     public boolean sharedDeploy = true;
     public long joinTimeoutMs = 10_000;
@@ -60,7 +60,7 @@ public class ConfigDeployment extends ConfigBase {
     }
 
     @Override
-    public void readProperty(Field f, Object v) throws Exception {
+    public void readProperty(Field f, Object v) {
         if (f.getName().equals("host") && v instanceof String && v.toString().contains(":")) {
             //host and port
             String[] hp = v.toString().split(":");
@@ -84,7 +84,7 @@ public class ConfigDeployment extends ConfigBase {
             } else {
                 type = (Class<? extends ConfigBase>) Class.forName(configType);
             }
-            return type.getConstructor().newInstance();
+            return createConfig(type);
         } catch (Exception ex) {
             throw new RuntimeException(ex);
         }
