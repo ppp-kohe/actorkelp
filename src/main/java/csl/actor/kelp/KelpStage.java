@@ -1,23 +1,19 @@
 package csl.actor.kelp;
 
-import com.esotericsoftware.kryo.Kryo;
-import com.esotericsoftware.kryo.KryoSerializable;
-import com.esotericsoftware.kryo.io.Input;
-import com.esotericsoftware.kryo.io.Output;
-import com.esotericsoftware.kryo.serializers.DefaultSerializers;
 import csl.actor.Actor;
 import csl.actor.ActorRef;
 import csl.actor.ActorSystem;
 import csl.actor.Message;
-import csl.actor.remote.ActorRefRemoteSerializer;
-import csl.actor.util.ResponsiveCalls;
+import csl.actor.kelp.shuffle.ActorKelpStateSharing;
+import csl.actor.kelp.shuffle.ActorRefShuffle;
 import csl.actor.util.StagingActor;
 
-import java.io.Serializable;
+import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 import java.util.function.BiFunction;
+import java.util.function.Consumer;
 
 public interface KelpStage<ActorType extends Actor> extends ActorRef {
 
@@ -84,186 +80,73 @@ public interface KelpStage<ActorType extends Actor> extends ActorRef {
 
     default void flush() {}
 
+    default void flush(ActorRef sender) {}
+
     ActorSystem getSystem();
 
-    class KelpStageRefWrapper<ActorType extends Actor> implements KelpStage<ActorType>, Serializable, KryoSerializable, StagingActor.StagingNonSubject {
-        public static final long serialVersionUID = 1L;
-        protected transient ActorSystem system;
-        protected Class<ActorType> actorType;
-        protected ActorRef ref;
-
-        public KelpStageRefWrapper() {}
-
-        public KelpStageRefWrapper(ActorSystem system, Class<ActorType> actorType, ActorRef ref) {
-            this.system = system;
-            this.actorType = actorType;
-            this.ref = ref;
-        }
-
-        @Override
-        public <NextActorType extends Actor> KelpStage<NextActorType> connects(Class<NextActorType> nextActorType, ActorRef next) {
-            if (ref instanceof KelpStage<?>) {
-                return ((KelpStage<?>) ref).connects(nextActorType, next);
-            } else if (this.actorType.isInstance(KelpStage.class)) {
-                return connectsKelpStageSend(nextActorType, next);
-            } else if (this.actorType.isInstance(StagingActor.StagingSupported.class)) {
-                return connectsStagingSend(nextActorType, next);
-            } else {
-                throw new RuntimeException("unsupported: (" + actorType + ", " + ref +
-                        ").connects(" + nextActorType + ", " + next + ")");
-            }
-        }
-
-
-        @SuppressWarnings("unchecked")
-        public <NextActorType extends Actor> KelpStage<NextActorType> connectsKelpStageSend(Class<NextActorType> nextActorType, ActorRef next) {
-            try {
-                return ResponsiveCalls.sendTask(system, ref, (self) ->
-                        ((KelpStage<NextActorType>) self).connects(nextActorType, next)).get();
-            } catch (Exception ex) {
-                throw new RuntimeException(ex);
-            }
-        }
-
-        public <NextActorType extends Actor> KelpStage<NextActorType> connectsStagingSend(Class<NextActorType> nextActorType, ActorRef next) {
-            ActorRef nextRef = ActorRefShuffle.connectStageInitialActor(system, next, getShuffleBufferSizeMax());
-            try {
-                ResponsiveCalls.sendTaskConsumer(system, ref, (self) ->
-                        ((StagingActor.StagingSupported) self).setNextStage(
-                                nextRef));
-            } catch (Exception ex) {
-                throw new RuntimeException(ex);
-            }
-            return ActorKelp.toKelpStage(system, nextActorType, nextRef);
-        }
-
-        public int getShuffleBufferSizeMax() {
-            return Integer.MAX_VALUE;
-        }
-
-        public void setSystem(ActorSystem system) {
-            this.system = system;
-        }
-
-        public ActorSystem getSystem() {
-            return system;
-        }
-
-        @Override
-        public List<ActorRef> getMemberActors() {
-            return Collections.singletonList(ref);
-        }
-
-        @SuppressWarnings("unchecked")
-        @Override
-        public void read(Kryo kryo, Input input) {
-            actorType = (Class<ActorType>) kryo.readClass(input).getType();
-            ref = (ActorRef) kryo.readClassAndObject(input);
-        }
-
-        @Override
-        public void write(Kryo kryo, Output output) {
-            kryo.writeClass(output, actorType);
-            kryo.writeClassAndObject(output, ref);
-        }
-
-        @SuppressWarnings({"unchecked", "rawtypes"})
-        @Override
-        public ActorType merge() {
-            if (ActorKelp.class.isAssignableFrom(actorType)) {
-                try (ActorKelpMerger m = new ActorKelpMerger(system, new ConfigKelp())) {
-                    return (ActorType) m.mergeToLocalSync(getMemberActors());
-                }
-            } else {
-                return null;
-            }
-        }
-
-        @SuppressWarnings({"unchecked"})
-        @Override
-        public ActorType getMergedState() {
-            if (ActorKelp.class.isAssignableFrom(actorType)) {
-                try (ActorKelpMergerSharing<?> m = new ActorKelpMergerSharing<>(system, new ConfigKelp())) {
-                    return (ActorType) m.mergeToLocalSync(getMemberActors());
-                }
-            } else {
-                return null;
-            }
-        }
-
-        @Override
-        public <StateType> StateType getMergedState(BiFunction<ActorSystem, ConfigKelp, ? extends ActorKelpStateSharing<ActorType, StateType>> factory) {
-            try (ActorKelpStateSharing<ActorType, StateType> m = factory.apply(system, new ConfigKelp())) {
-                return m.mergeSync(getMemberActors());
-            }
-        }
-
-        @Override
-        public void tellMessage(Message<?> message) {
-            ref.tellMessage(message);
-        }
-
-        @Override
-        public String toString() {
-            return getClass().getSimpleName() + "(" + this.actorType.getName() + ", " + ref + ")";
-        }
-
-        @Override
-        public List<ActorRef> getStagingSubjectActors() {
-            flush();
-            return getMemberActors();
-        }
+    default int getShuffleSize() {
+        return 1;
     }
 
-    int BYTE_MARK_REF = 0;
-    int BYTE_MARK_SHUFFLE = 1;
+    interface ShuffleMember extends ActorRef {
+        int getIndex();
+        ActorRef getActor();
+        void flush();
+        void flush(ActorRef sender);
+    }
 
-    class KelpStageSerializer extends ActorRefRemoteSerializer<ActorRef> {
-        protected DefaultSerializers.KryoSerializableSerializer serializer;
+    ////forEach
 
-        public KelpStageSerializer(ActorSystem system) {
-            super(system);
-            serializer = new DefaultSerializers.KryoSerializableSerializer();
-        }
+    void forEach(Consumer<KelpStage.ShuffleMember> task);
 
-        @Override
-        public void write(Kryo kryo, Output output, ActorRef ref) {
-            if ((ref instanceof KelpStage && ref instanceof KryoSerializable) ||
-                ref instanceof ActorRefShuffle) { //ActorRefShuffle is KryoSerializable but not a KelpStage
-                output.writeByte(BYTE_MARK_SHUFFLE);
-                serializer.write(kryo, output, (KryoSerializable) ref);
-            } else {
-                output.writeByte(BYTE_MARK_REF);
-                super.write(kryo, output, ref);
-            }
-        }
+    default void forEachTell(Object msg) {
+        forEach(s -> s.tell(msg));
+    }
 
-        @SuppressWarnings("unchecked")
-        @Override
-        public ActorRef read(Kryo kryo, Input input, Class<? extends ActorRef> aClass) {
-            int n = input.readByte();
-            if (n == BYTE_MARK_SHUFFLE) {
-                ActorRef r = (ActorRef) serializer.read(kryo, input, (Class<? extends KryoSerializable>) aClass);
-                if (r != null) {
-                    if (r instanceof KelpStage<?>) {
-                        ((KelpStage<?>) r).setSystemBySerializer(getRemoteSystem());
-                    } else if (r instanceof ActorRefShuffle) {
-                        ((ActorRefShuffle) r).setSystemBySerializer(getRemoteSystem());
-                    }
-                }
-                return r;
-            } else {
-                return super.read(kryo, input, aClass);
-            }
-        }
+    default CompletableFuture<StagingActor.StagingCompleted> sync() {
+        return sync(Instant.now());
+    }
 
-        @Override
-        public ActorRef copy(Kryo kryo, ActorRef original) {
-            if (original instanceof ActorRefShuffle) {
-                return ((ActorRefShuffle) original).use();
-            } else {
-                return original;
-            }
+    default CompletableFuture<StagingActor.StagingCompleted> sync(Instant startTime) {
+        return StagingActor.staging(getSystem())
+                .withStartTime(startTime)
+                .startActors(getMemberActors());
+    }
+
+    default CompletableFuture<StagingActor.StagingCompleted> forEachTellSync(Instant startTime, Consumer<ShuffleMember> task) {
+        forEach(task);
+        return sync(startTime);
+    }
+
+    default CompletableFuture<StagingActor.StagingCompleted> forEachTellSync(Consumer<KelpStage.ShuffleMember> task) {
+        forEach(task);
+        return sync();
+    }
+
+    default CompletableFuture<StagingActor.StagingCompleted> forEachTellSync(Instant startTime, Object msg) {
+        forEachTell(msg);
+        return sync(startTime);
+    }
+
+    default CompletableFuture<StagingActor.StagingCompleted> forEachTellSync(Object msg) {
+        forEachTell(msg);
+        return sync();
+    }
+
+
+    default boolean isMessageBroadcasted(Message<?> message) {
+        return isMessageBroadcastedImpl(message);
+    }
+
+    static boolean isMessageBroadcastedImpl(Message<?> message) {
+        if (message instanceof Message.MessageNone) {
+            return true;
+        } else {
+            Object data = message.getData();
+            return data instanceof StagingActor.StagingWatcher ||
+                    data instanceof StagingActor.StagingCompleted ||
+                    data instanceof StagingActor.StagingHandlerCompleted ||
+                    data instanceof StagingActor.StagingNotification;
         }
     }
 }

@@ -4,6 +4,7 @@ import csl.actor.*;
 import csl.actor.example.ExampleSerialize;
 import csl.actor.example.TestToolSerialize;
 import csl.actor.kelp.*;
+import csl.actor.kelp.shuffle.ActorRefShuffle;
 import csl.actor.persist.PersistentFileManager;
 import csl.actor.kelp.behavior.*;
 import csl.actor.remote.ActorAddress;
@@ -90,7 +91,7 @@ public class ExampleSerializeKelp extends ExampleSerialize {
     }
 
     private void runCallableFailure() {
-        RuntimeException e = new RuntimeException("error");
+        RuntimeException e = new RuntimeException("intended-error");
         e.fillInStackTrace();
         ts.writeRead(p, new CallableMessage.CallableFailure(e), (a,b) ->
                 a.getError().toString().equals(b.getError().toString()));

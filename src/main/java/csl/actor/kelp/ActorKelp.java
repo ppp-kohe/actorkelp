@@ -6,6 +6,7 @@ import com.esotericsoftware.kryo.io.Output;
 import csl.actor.*;
 import csl.actor.cluster.ActorPlacement;
 import csl.actor.kelp.behavior.*;
+import csl.actor.kelp.shuffle.*;
 import csl.actor.persist.MailboxManageable;
 import csl.actor.persist.MailboxPersistableIncoming;
 import csl.actor.persist.PersistentFileManager;
@@ -635,7 +636,21 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
     /**
      * called when creation as a shuffle member
      */
-    public void initShuffle() { }
+    public void initRestoreShuffle() { }
+
+    /**
+     * called when creation as a merged state
+     */
+    public void initRestoreMerge() { }
+
+    /**
+     * called when creation as a placement process
+     */
+    public void initRestorePlace() { }
+
+    public void initRestorePlaceLocal() {
+        initRestorePlace();
+    }
 
     public static class ActorRefShuffleKelp<ActorType extends ActorKelp<ActorType>> extends ActorRefShuffle implements KelpStage<ActorType> {
         public static final long serialVersionUID = 1L;
@@ -661,7 +676,7 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
             } catch (Exception ex) {
                 throw new RuntimeException(ex);
             }
-            return toKelpStage(system, actorType, ref);
+            return toKelpStage(system, actorType, ref, getBufferSize());
         }
 
         @Override
@@ -709,7 +724,7 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
             ref = ((ActorRefShuffle) ref).use();
         }
         setNextStage(ref);
-        return toKelpStage(system, actorType, ref);
+        return toKelpStage(system, actorType, ref, getShuffleBufferSize());
     }
 
     public int getShuffleBufferSizeMax() {
@@ -717,17 +732,19 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
     }
 
     @SuppressWarnings("unchecked")
-    public static <NextActorType extends Actor> KelpStage<NextActorType> toKelpStage(ActorSystem system, Class<NextActorType> actorType, ActorRef ref) {
+    public static <NextActorType extends Actor> KelpStage<NextActorType> toKelpStage(ActorSystem system,
+                                                                                     Class<NextActorType> actorType,
+                                                                                     ActorRef ref, int bufferSizeForSingle) {
         if (ref instanceof ActorRefShuffleKelp<?>) {
             return (KelpStage<NextActorType>) ref;
         } else {
-            return new KelpStageRefWrapper<>(system, actorType, ref);
+            return new ActorRefShuffleSingle<>(system, actorType, ref, bufferSizeForSingle);
         }
     }
 
     @Override
     public List<ActorRef> getMemberActors() {
-        return Collections.emptyList();
+        return Collections.singletonList(this);
     }
 
     @SuppressWarnings("unchecked")
@@ -754,5 +771,10 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
         //asynchronous: it needs to stop self processing
         getShuffleOriginals().forEach(m ->
                 m.tell(new ActorKelpStateSharing.StateSharingRequest(this, ActorKelpMergerSharing.class)));
+    }
+
+    @Override
+    public void forEach(Consumer<ShuffleMember> task) {
+        task.accept(new ActorRefShuffle.ShuffleEntry(this, 0, -1));
     }
 }

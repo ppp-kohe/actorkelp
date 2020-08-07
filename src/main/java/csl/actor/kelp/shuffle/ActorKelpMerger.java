@@ -1,6 +1,9 @@
-package csl.actor.kelp;
+package csl.actor.kelp.shuffle;
 
 import csl.actor.*;
+import csl.actor.kelp.ActorKelp;
+import csl.actor.kelp.ActorKelpSerializable;
+import csl.actor.kelp.ConfigKelp;
 import csl.actor.kelp.behavior.MailboxKelp;
 import csl.actor.util.ResponsiveCalls;
 
@@ -36,7 +39,7 @@ public class ActorKelpMerger<ActorType extends ActorKelp<ActorType>> implements 
         } else {
             try {
                 ActorKelpSerializable<?> k = toState(system, null, ref, false, isStateIncludeMailbox());
-                return (ActorType) (k == null ? null : k.restore(system, -1, config));
+                return (ActorType) (k == null ? null : k.restoreMerge(system, config));
             } catch (Exception ex) {
                 throw new RuntimeException(ex);
             }

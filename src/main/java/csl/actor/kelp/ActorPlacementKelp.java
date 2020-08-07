@@ -1,6 +1,7 @@
 package csl.actor.kelp;
 
 import csl.actor.Actor;
+import csl.actor.ActorRef;
 import csl.actor.ActorSystem;
 import csl.actor.Message;
 import csl.actor.cluster.ClusterDeployment;
@@ -37,11 +38,19 @@ public class ActorPlacementKelp<ConfigType extends ConfigKelp> extends ClusterDe
     }
 
     @Override
+    protected ActorRef placeLocal(Actor a) {
+        if (a instanceof ActorKelp<?>) {
+            ((ActorKelp<?>) a).initRestorePlaceLocal();
+        }
+        return super.placeLocal(a);
+    }
+
+    @Override
     public Actor fromSerializable(Serializable s, long num) {
         if (s instanceof ActorKelpSerializable<?>) {
             try {
                 ActorKelpSerializable<?> actorSrc = (ActorKelpSerializable<?>) s;
-                Actor a = actorSrc.restore(getSystem(), num, getConfig(actorSrc));
+                Actor a = actorSrc.restorePlace(getSystem(), num, getConfig(actorSrc));
                 a.tellMessage(new Message.MessageNone(a));
                 return a;
             } catch (Exception ex) {

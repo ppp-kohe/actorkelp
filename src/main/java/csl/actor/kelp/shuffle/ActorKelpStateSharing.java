@@ -1,6 +1,7 @@
-package csl.actor.kelp;
+package csl.actor.kelp.shuffle;
 
 import csl.actor.*;
+import csl.actor.kelp.ConfigKelp;
 import csl.actor.kelp.behavior.MailboxKelp;
 import csl.actor.util.ResponsiveCalls;
 
@@ -8,7 +9,6 @@ import java.io.Serializable;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;

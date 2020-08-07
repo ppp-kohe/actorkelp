@@ -99,6 +99,24 @@ public class ActorKelpSerializable<SelfType extends ActorKelp<SelfType>> impleme
 
     //////// restore
 
+    public SelfType restorePlace(ActorSystem sytem, long num, ConfigKelp config) throws Exception {
+        SelfType a = restore(sytem, num, config);
+        restoreInitPlace(a);
+        return a;
+    }
+
+    public SelfType restoreShuffle(ActorSystem system, long num, ConfigKelp config) throws Exception {
+        SelfType a = restore(system, num, config);
+        restoreInitShuffle(a);
+        return a;
+    }
+
+    public SelfType restoreMerge(ActorSystem sytem, ConfigKelp config) throws Exception {
+        SelfType a = restore(sytem, -1, config);
+        restoreInitMerge(a);
+        return a;
+    }
+
     public SelfType restore(ActorSystem system, long num, ConfigKelp config) throws Exception {
         SelfType a = create(system, restoreName(num), config);
         restoreSetNonOriginal(a);
@@ -114,18 +132,13 @@ public class ActorKelpSerializable<SelfType extends ActorKelp<SelfType>> impleme
         restoreInternalState(a);
     }
 
-    public SelfType restoreShuffle(ActorSystem system, long num, ConfigKelp config) throws Exception {
-        SelfType a = restore(system, num, config);
-        restoreInitShuffle(a);
-        return a;
-    }
 
     protected String restoreName(long num) {
         return name == null ? ("$" + num) : name + "$" + num;
     }
 
     @SuppressWarnings("unchecked")
-    protected SelfType create(ActorSystem system, String name, ConfigKelp config) throws Exception {
+    public SelfType create(ActorSystem system, String name, ConfigKelp config) throws Exception {
         return (SelfType) getConstructor(actorType).create(system, name, config);
     }
 
@@ -165,7 +178,15 @@ public class ActorKelpSerializable<SelfType extends ActorKelp<SelfType>> impleme
     }
 
     protected void restoreInitShuffle(SelfType actor) {
-        actor.initShuffle();
+        actor.initRestoreShuffle();
+    }
+
+    protected void restoreInitMerge(SelfType actor) {
+        actor.initRestoreMerge();
+    }
+
+    protected void restoreInitPlace(SelfType actor) {
+        actor.initRestorePlace();
     }
 
     public void mergeTo(SelfType actor) {

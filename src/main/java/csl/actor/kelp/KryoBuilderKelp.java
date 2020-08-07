@@ -8,6 +8,10 @@ import csl.actor.kelp.behavior.ActorBehaviorKelp;
 import csl.actor.kelp.behavior.HistogramEntry;
 import csl.actor.kelp.behavior.KeyHistograms;
 import csl.actor.kelp.behavior.KeyHistogramsPersistable;
+import csl.actor.kelp.shuffle.ActorKelpMerger;
+import csl.actor.kelp.shuffle.ActorRefShuffle;
+import csl.actor.kelp.shuffle.ActorRefShuffleSingle;
+import csl.actor.kelp.shuffle.KelpStageSerializer;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -21,11 +25,11 @@ public class KryoBuilderKelp extends KryoBuilderCluster {
     }
 
     protected void buildRegisterActorRef(Kryo kryo) {
-        KelpStage.KelpStageSerializer ss = new KelpStage.KelpStageSerializer(system);
+        KelpStageSerializer ss = new KelpStageSerializer(system);
         kryo.addDefaultSerializer(ActorRef.class, ss); //for sub-types
 
         kryo.register(ActorRefShuffle.class, ss);
-        kryo.register(KelpStage.KelpStageRefWrapper.class, ss);
+        kryo.register(ActorRefShuffleSingle.class, ss);
     }
 
     @Override

@@ -1,7 +1,10 @@
-package csl.actor.kelp;
+package csl.actor.kelp.shuffle;
 
 import csl.actor.ActorRef;
 import csl.actor.ActorSystem;
+import csl.actor.kelp.ActorKelp;
+import csl.actor.kelp.ActorKelpSerializable;
+import csl.actor.kelp.ConfigKelp;
 
 import java.util.List;
 import java.util.UUID;
@@ -37,7 +40,7 @@ public class ActorKelpMergerSharing<ActorType extends ActorKelp<ActorType>> exte
         try {
             share = false;
             ActorKelpSerializable<ActorType> k = mergeSync(members);
-            return (k == null ? null : k.restore(system, -1, config));
+            return (k == null ? null : k.restoreMerge(system, config));
         } catch (Exception ex) {
             throw new RuntimeException(ex);
         }
