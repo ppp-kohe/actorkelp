@@ -245,9 +245,9 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
 
     /**
      *  {@link #deploy(String)} with the special symbol "-" {@link #NON_DRIVER_SYMBOL_CONF}
-     * @return a created instance of {@link ActorPlacementForCluster}
+     * @return a created system
      */
-    public PlaceType deploy() {
+    public ActorSystemRemote deploy() {
         return deploy(NON_DRIVER_SYMBOL_CONF);
     }
 
@@ -255,9 +255,9 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
      *
      *  {@link #deploy(String, ConfigBase)} )} with the special symbol "-" {@link #NON_DRIVER_SYMBOL_CONF}
      * @param mergedConf the mergedConf for all unit's appConfig
-     * @return a created instance of {@link ActorPlacementForCluster}
+     * @return a created system
      */
-    public PlaceType deploy(AppConfType mergedConf) {
+    public ActorSystemRemote deploy(AppConfType mergedConf) {
         return deploy(NON_DRIVER_SYMBOL_CONF, mergedConf);
     }
 
@@ -266,9 +266,9 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
      * @param confFile a cluster commands file parsed by {@link ClusterCommands#loadConfigFile(String)}, or
      *                   special symbol "-" ({@link #NON_DRIVER_SYMBOL_CONF}) and then it loads from the system property {@link #NON_DRIVER_PROPERTY_CONF}.
      *
-     * @return a created instance of {@link ActorPlacementForCluster}
+     * @return a created system
      */
-    public PlaceType deploy(String confFile) {
+    public ActorSystemRemote deploy(String confFile) {
         try {
             return deploy(loadConfigFile(confFile));
         } catch (Exception ex) {
@@ -281,9 +281,9 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
      * @param confFile a cluster commands file parsed by {@link ClusterCommands#loadConfigFile(String)} )}, or
      *                   special symbol "-" ({@link #NON_DRIVER_SYMBOL_CONF}) and then it loads from the system property {@link #NON_DRIVER_PROPERTY_CONF}.
      * @param mergedConf the mergedConf for all unit's appConfig
-     * @return a created instance of {@link ActorPlacementForCluster}
+     * @return a created system
      */
-    public PlaceType deploy(String confFile, AppConfType mergedConf) {
+    public ActorSystemRemote deploy(String confFile, AppConfType mergedConf) {
         try {
             return deploy(loadConfigFile(confFile, mergedConf));
         } catch (Exception ex) {
@@ -349,7 +349,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
 
     @SafeVarargs
     @SuppressWarnings("varargs")
-    public final PlaceType deployUnits(ClusterCommands.ClusterUnit<AppConfType>... units) {
+    public final ActorSystemRemote deployUnits(ClusterCommands.ClusterUnit<AppConfType>... units) {
         try {
             return deploy(Arrays.asList(units));
         } catch (Exception ex) {
@@ -357,11 +357,11 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         }
     }
 
-    public PlaceType deploy(List<ClusterCommands.ClusterUnit<AppConfType>> units) throws Exception {
+    public ActorSystemRemote deploy(List<ClusterCommands.ClusterUnit<AppConfType>> units) throws Exception {
         deployPrimary(units);
         deployNodes(units);
         awaitNodes();
-        return getPrimaryPlace();
+        return getSystem();
     }
 
     public void deployPrimary(List<ClusterUnit<AppConfType>> units) throws Exception {
