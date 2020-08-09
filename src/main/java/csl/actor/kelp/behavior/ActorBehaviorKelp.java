@@ -3,19 +3,26 @@ package csl.actor.kelp.behavior;
 import csl.actor.Actor;
 import csl.actor.ActorBehavior;
 import csl.actor.Message;
+import csl.actor.kelp.ActorKelp;
+import csl.actor.kelp.ActorKelpFunctions;
 import csl.actor.kelp.ActorKelpFunctions.*;
 
+import java.io.Serializable;
 import java.util.*;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 
 public class ActorBehaviorKelp {
+    public interface ExtractorsAndDispatcherFactory {
+        KeyExtractorsAndDispatcher createExtractorsAndDispatcher(ActorKelp<?> self);
+    }
 
     public static abstract class ActorBehaviorMatchKey<KeyType> extends KeyHistograms.HistogramPutContext
-            implements ActorBehavior, HistogramProcessor {
+            implements ActorBehavior, HistogramProcessor, ExtractorsAndDispatcherFactory {
         protected int matchKeyEntryId;
         protected KeyComparator<KeyType> keyComparator;
+        protected ActorKelpFunctions.DispatcherFactory dispatcher;
 
         public ActorBehaviorMatchKey(int matchKeyEntryId, int requiredSize, KeyComparator<KeyType> keyComparator) {
             this.putRequiredSize = requiredSize;
@@ -37,6 +44,51 @@ public class ActorBehaviorKelp {
 
         public abstract List<KeyExtractor<KeyType,?>> getKeyExtractors();
         public abstract Object getHandler();
+
+        public ActorKelpFunctions.DispatcherFactory getDispatcher() {
+            return dispatcher;
+        }
+
+        public void setDispatcher(ActorKelpFunctions.DispatcherFactory dispatcher) {
+            this.dispatcher = dispatcher;
+        }
+
+        @SuppressWarnings({"unchecked", "rawtypes"})
+        @Override
+        public KeyExtractorsAndDispatcher createExtractorsAndDispatcher(ActorKelp<?> self) {
+            return new KeyExtractorsAndDispatcher((List<KeyExtractor<?,?>>) (List) getKeyExtractors(),
+                    self.createDispatcher(getDispatcher()));
+        }
+    }
+
+    public static class KeyExtractorsAndDispatcher implements Serializable, Cloneable {
+        public static final long serialVersionUID = -1;
+        protected List<KeyExtractor<?,?>> keyExtractors;
+        protected KelpDispatcher dispatcher;
+
+        public KeyExtractorsAndDispatcher(List<KeyExtractor<?, ?>> keyExtractors, KelpDispatcher dispatcher) {
+            this.keyExtractors = keyExtractors;
+            this.dispatcher = dispatcher;
+        }
+
+        public KelpDispatcher getDispatcher() {
+            return dispatcher;
+        }
+
+        public List<KeyExtractor<?, ?>> getKeyExtractors() {
+            return keyExtractors;
+        }
+
+        public KeyExtractorsAndDispatcher copy() {
+            try {
+                KeyExtractorsAndDispatcher d = (KeyExtractorsAndDispatcher) super.clone();
+                d.keyExtractors = new ArrayList<>(keyExtractors);
+                d.dispatcher = dispatcher.copy();
+                return d;
+            } catch (CloneNotSupportedException e) {
+                throw new RuntimeException(e);
+            }
+        }
     }
 
     public static class ActorBehaviorMatchKey1<KeyType, ParamType1, ValueType1> extends ActorBehaviorMatchKey<KeyType> {

@@ -4,6 +4,7 @@ import csl.actor.Actor;
 import csl.actor.ActorRef;
 import csl.actor.ActorSystem;
 import csl.actor.Message;
+import csl.actor.kelp.behavior.KelpDispatcher;
 import csl.actor.kelp.shuffle.ActorKelpStateSharing;
 import csl.actor.kelp.shuffle.ActorRefShuffle;
 import csl.actor.kelp.shuffle.ActorRefShuffleKelp;
@@ -16,7 +17,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 
-public interface KelpStage<ActorType extends Actor> extends ActorRef {
+public interface KelpStage<ActorType extends Actor> extends ActorRef, KelpDispatcher.DispatchRef {
 
     /**
      * set the nextStage property of each shuffle-members to the next actor.
@@ -85,20 +86,13 @@ public interface KelpStage<ActorType extends Actor> extends ActorRef {
 
     ActorSystem getSystem();
 
-    default int getShuffleSize() {
+    default int getDispatchUnitSize() {
         return 1;
-    }
-
-    interface ShuffleMember extends ActorRef {
-        int getIndex();
-        ActorRef getActor();
-        void flush();
-        void flush(ActorRef sender);
     }
 
     ////forEach
 
-    void forEach(Consumer<KelpStage.ShuffleMember> task);
+    void forEach(Consumer<KelpDispatcher.DispatchUnit> task);
 
     default void forEachTell(Object msg) {
         forEach(s -> s.tell(msg));
@@ -114,12 +108,12 @@ public interface KelpStage<ActorType extends Actor> extends ActorRef {
                 .startActors(getMemberActors());
     }
 
-    default CompletableFuture<StagingActor.StagingCompleted> forEachTellSync(Instant startTime, Consumer<ShuffleMember> task) {
+    default CompletableFuture<StagingActor.StagingCompleted> forEachTellSync(Instant startTime, Consumer<KelpDispatcher.DispatchUnit> task) {
         forEach(task);
         return sync(startTime);
     }
 
-    default CompletableFuture<StagingActor.StagingCompleted> forEachTellSync(Consumer<KelpStage.ShuffleMember> task) {
+    default CompletableFuture<StagingActor.StagingCompleted> forEachTellSync(Consumer<KelpDispatcher.DispatchUnit> task) {
         forEach(task);
         return sync();
     }

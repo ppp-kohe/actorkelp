@@ -1,5 +1,7 @@
 package csl.actor.kelp;
 
+import csl.actor.kelp.behavior.KelpDispatcher;
+
 import java.io.Serializable;
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -131,6 +133,10 @@ public class ActorKelpFunctions {
         public KeyType centerPoint(KeyType leftEnd, KeyType rightStart) {
             return centerPointPrimitive(leftEnd, rightStart);
         }
+    }
+
+    public interface DispatcherFactory extends Serializable {
+        KelpDispatcher create();
     }
 
     @SuppressWarnings("unchecked")

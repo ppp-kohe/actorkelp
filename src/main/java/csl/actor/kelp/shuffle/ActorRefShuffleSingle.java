@@ -11,6 +11,7 @@ import csl.actor.Message;
 import csl.actor.kelp.ActorKelp;
 import csl.actor.kelp.ConfigKelp;
 import csl.actor.kelp.KelpStage;
+import csl.actor.kelp.behavior.KelpDispatcher;
 import csl.actor.util.ResponsiveCalls;
 import csl.actor.util.StagingActor;
 
@@ -160,7 +161,17 @@ public class ActorRefShuffleSingle<ActorType extends Actor> implements KelpStage
     }
 
     @Override
-    public void forEach(Consumer<ShuffleMember> task) {
+    public void forEach(Consumer<KelpDispatcher.DispatchUnit> task) {
         task.accept(entry);
+    }
+
+    @Override
+    public List<? extends KelpDispatcher.DispatchUnit> getDispatchUnits() {
+        return Collections.singletonList(entry);
+    }
+
+    @Override
+    public KelpDispatcher.DispatchUnit getDispatchUnit(int index) {
+        return index == 0 ? entry : null;
     }
 }

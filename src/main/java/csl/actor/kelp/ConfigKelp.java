@@ -23,7 +23,7 @@ public class ConfigKelp extends ConfigBase {
     public int shuffleBufferSize = 512;
     public int shuffleBufferSizeFile = 0;
     public int shufflePartitions = 30;
-    public boolean shuffleHostIncludePort = false;
+    @Deprecated public boolean shuffleHostIncludePort = false;
     public long splitLength = 32 * 1024L * 1024L;
 
 

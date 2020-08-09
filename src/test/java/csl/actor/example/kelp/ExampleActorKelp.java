@@ -8,6 +8,7 @@ import csl.actor.kelp.ActorKelp;
 import csl.actor.kelp.ActorSystemKelp;
 import csl.actor.kelp.ConfigKelp;
 import csl.actor.kelp.KelpStage;
+import csl.actor.kelp.behavior.KelpDispatcher;
 import csl.actor.util.StagingActor;
 
 import java.util.*;

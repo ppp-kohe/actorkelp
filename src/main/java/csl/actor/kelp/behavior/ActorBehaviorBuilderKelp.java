@@ -6,6 +6,7 @@ import csl.actor.kelp.ActorKelpFunctions.*;
 import csl.actor.kelp.behavior.ActorBehaviorKelp.ActorBehaviorMatchKeyList;
 import csl.actor.kelp.behavior.ActorBehaviorKelp.ActorBehaviorMatchKeyListFuture;
 import csl.actor.kelp.behavior.ActorBehaviorKelp.ActorBehaviorMatchKeyListFutureStageEnd;
+import csl.actor.kelp.shuffle.ActorRefShuffle;
 import csl.actor.util.FileSplitter;
 import csl.actor.util.StagingActor;
 
@@ -21,9 +22,14 @@ public class ActorBehaviorBuilderKelp extends ActorBehaviorBuilder {
     protected Map<Integer, HistogramProcessor> processors = new HashMap<>();
     protected ActorBehaviorMatchKeyFactory matchKeyFactory = new ActorBehaviorMatchKeyFactory();
 
+    protected List<ActorBehaviorKelp.ExtractorsAndDispatcherFactory> extractorsAndDispatchers = new ArrayList<>();
+    protected Consumer<List<ActorBehaviorKelp.ExtractorsAndDispatcherFactory>> extractorsAndDispatchersTarget;
+
     public ActorBehaviorBuilderKelp(
-            Consumer<List<HistogramProcessor>> histogramProcessorsTarget) {
+            Consumer<List<HistogramProcessor>> histogramProcessorsTarget,
+            Consumer<List<ActorBehaviorKelp.ExtractorsAndDispatcherFactory>> extractorsAndDispatchersTarget) {
         this.histogramProcessorsTarget = histogramProcessorsTarget;
+        this.extractorsAndDispatchersTarget = extractorsAndDispatchersTarget;
     }
 
     public ActorBehaviorBuilderKelp matchKeyFactory(ActorBehaviorMatchKeyFactory matchKeyFactory) {
@@ -53,14 +59,32 @@ public class ActorBehaviorBuilderKelp extends ActorBehaviorBuilder {
         return this;
     }
 
+    public <DataType> ActorBehaviorBuilderKelp match(Class<DataType> dataType, DispatcherFactory dispatcher, Consumer<DataType> handler) {
+        return matchWithSender(dataType, dispatcher, (data,sender) -> handler.accept(data));
+    }
+
+    public <DataType> ActorBehaviorBuilderKelp matchWithSender(Class<DataType> dataType, DispatcherFactory dispatcher, BiConsumer<DataType, ActorRef> handler) {
+        with(new ActorBehaviorMatchWithDispatcher<>(dataType, handler, dispatcher));
+        return this;
+    }
+
+    public ActorBehaviorBuilderKelp matchAny(DispatcherFactory dispatcher, BiConsumer<Object, ActorRef> handler) {
+        with(new ActorBehaviorAnyWithDispatcher(handler, dispatcher));
+        return this;
+    }
+
     @Override
     public ActorBehaviorBuilderKelp with(ActorBehavior behavior) {
+        if (behavior instanceof ActorBehaviorKelp.ExtractorsAndDispatcherFactory) {
+            extractorsAndDispatchers.add((ActorBehaviorKelp.ExtractorsAndDispatcherFactory) behavior);
+        }
         super.with(behavior);
         return this;
     }
 
     @Override
     public ActorBehavior build() {
+        withTop(new ActorBehaviorDispatcher());
         with(new ActorBehaviorBundle());
         with(new ActorBehaviorKelpCompleted());
         with(new ActorBehaviorKelpFileSplit());
@@ -70,7 +94,60 @@ public class ActorBehaviorBuilderKelp extends ActorBehaviorBuilder {
                     .sorted(Map.Entry.comparingByKey())
                     .map(Map.Entry::getValue)
                     .collect(Collectors.toList()));
+        extractorsAndDispatchersTarget.accept(extractorsAndDispatchers);
         return b;
+    }
+
+    private void withTop(ActorBehavior behavior) {
+        if (this.behavior == null || this.behavior.equals(BEHAVIOR_NOTHING)) {
+            this.behavior = behavior;
+        } else {
+            this.behavior = new ActorBehaviorOr(behavior, this.behavior);
+        }
+    }
+
+
+    public static class ActorBehaviorMatchWithDispatcher<DataType> extends ActorBehaviorMatch<DataType> implements ActorBehaviorKelp.ExtractorsAndDispatcherFactory {
+        protected DispatcherFactory dispatcher;
+
+        public ActorBehaviorMatchWithDispatcher(Class<DataType> dataType, BiConsumer<DataType, ActorRef> handler, DispatcherFactory dispatcher) {
+            super(dataType, handler);
+            this.dispatcher = dispatcher;
+        }
+
+        @Override
+        public ActorBehaviorKelp.KeyExtractorsAndDispatcher createExtractorsAndDispatcher(ActorKelp<?> self) {
+            return new ActorBehaviorKelp.KeyExtractorsAndDispatcher(Collections.singletonList(ActorRefShuffle.DEFAULT_KEY_EXTRACTOR),
+                    self.createDispatcher(dispatcher));
+        }
+    }
+
+    public static class ActorBehaviorAnyWithDispatcher extends ActorBehaviorAny implements ActorBehaviorKelp.ExtractorsAndDispatcherFactory {
+        protected DispatcherFactory dispatcher;
+
+        public ActorBehaviorAnyWithDispatcher(BiConsumer<Object, ActorRef> handler, DispatcherFactory dispatcher) {
+            super(handler);
+            this.dispatcher = dispatcher;
+        }
+
+        @Override
+        public ActorBehaviorKelp.KeyExtractorsAndDispatcher createExtractorsAndDispatcher(ActorKelp<?> self) {
+            return new ActorBehaviorKelp.KeyExtractorsAndDispatcher(Collections.singletonList(ActorRefShuffle.DEFAULT_KEY_EXTRACTOR),
+                    self.createDispatcher(dispatcher));
+        }
+    }
+
+    public static class ActorBehaviorDispatcher implements ActorBehavior {
+        @Override
+        public boolean process(Actor self, Message<?> message) {
+            if (message != null && message.getClass().equals(Message.class) && self instanceof ActorKelp<?>) { //not yet accepted by disptacher
+                ActorRefShuffle.tellMessageShuffle((ActorKelp<?>) self,
+                        ((ActorKelp<?>) self).getKeyExtractorAndDispatchers(), message);
+                return true;
+            } else {
+                return false;
+            }
+        }
     }
 
     public static class ActorBehaviorBundle implements ActorBehavior {
@@ -184,6 +261,7 @@ public class ActorBehaviorBuilderKelp extends ActorBehaviorBuilder {
     public static class KelpMatchKey<KeyType> {
         protected ActorBehaviorBuilderKelp builder;
         protected KeyComparator<KeyType> keyComparator;
+        protected DispatcherFactory dispatcherFactory;
 
         public KelpMatchKey(ActorBehaviorBuilderKelp builder) {
             this(builder, new KeyComparatorDefault<>());
@@ -201,7 +279,16 @@ public class ActorBehaviorBuilderKelp extends ActorBehaviorBuilder {
 
         protected ActorBehaviorBuilderKelp action(Function<Integer, ActorBehavior> behaviorFactory) {
             int id = builder.nextMatchKeyEntry();
-            return builder.withProcessor(id, behaviorFactory.apply(id));
+            ActorBehavior b = behaviorFactory.apply(id);
+            if (b instanceof ActorBehaviorKelp.ActorBehaviorMatchKey && dispatcherFactory != null) {
+                ((ActorBehaviorKelp.ActorBehaviorMatchKey<?>) b).setDispatcher(dispatcherFactory);
+            }
+            return builder.withProcessor(id, b);
+        }
+
+        public KelpMatchKey<KeyType> dispatch(DispatcherFactory dispatcherFactory) {
+            this.dispatcherFactory = dispatcherFactory;
+            return this;
         }
 
     }
@@ -260,6 +347,12 @@ public class ActorBehaviorBuilderKelp extends ActorBehaviorBuilder {
         @Override
         public KelpMatchKey1<KeyType, ParamType, ValueType> sort(KeyComparator<KeyType> keyComparator) {
             super.sort(keyComparator);
+            return this;
+        }
+
+        @Override
+        public KelpMatchKey1<KeyType, ParamType, ValueType> dispatch(DispatcherFactory dispatcherFactory) {
+            super.dispatch(dispatcherFactory);
             return this;
         }
 
@@ -362,6 +455,12 @@ public class ActorBehaviorBuilderKelp extends ActorBehaviorBuilder {
             return this;
         }
 
+        @Override
+        public KelpMatchKey2<KeyType, ParamType1, ParamType2, ValueType1, ValueType2> dispatch(DispatcherFactory dispatcherFactory) {
+            super.dispatch(dispatcherFactory);
+            return this;
+        }
+
         @SuppressWarnings("unchecked")
         public KelpMatchKeyList<KeyType, Object> reduce(BiFunction<KeyType, List<Object>, Iterable<Object>> keyValuesReducer) {
             return new KelpMatchKeyList<>(builder, keyComparator, keyValuesReducer,
@@ -439,6 +538,12 @@ public class ActorBehaviorBuilderKelp extends ActorBehaviorBuilder {
         @Override
         public KelpMatchKey3<KeyType, ParamType1, ParamType2, ParamType3, ValueType1, ValueType2, ValueType3> sort(KeyComparator<KeyType> keyComparator) {
             super.sort(keyComparator);
+            return this;
+        }
+
+        @Override
+        public KelpMatchKey3<KeyType, ParamType1, ParamType2, ParamType3, ValueType1, ValueType2, ValueType3> dispatch(DispatcherFactory dispatcherFactory) {
+            super.dispatch(dispatcherFactory);
             return this;
         }
 
@@ -530,6 +635,12 @@ public class ActorBehaviorBuilderKelp extends ActorBehaviorBuilder {
         @Override
         public KelpMatchKey4<KeyType, ParamType1, ParamType2, ParamType3, ParamType4, ValueType1, ValueType2, ValueType3, ValueType4> sort(KeyComparator<KeyType> keyComparator) {
             super.sort(keyComparator);
+            return this;
+        }
+
+        @Override
+        public KelpMatchKey4<KeyType, ParamType1, ParamType2, ParamType3, ParamType4, ValueType1, ValueType2, ValueType3, ValueType4> dispatch(DispatcherFactory dispatcherFactory) {
+            super.dispatch(dispatcherFactory);
             return this;
         }
 
@@ -627,6 +738,12 @@ public class ActorBehaviorBuilderKelp extends ActorBehaviorBuilder {
         @Override
         public KelpMatchKeyList<KeyType, ValueType> sort(KeyComparator<KeyType> keyComparator) {
             super.sort(keyComparator);
+            return this;
+        }
+
+        @Override
+        public KelpMatchKeyList<KeyType, ValueType> dispatch(DispatcherFactory dispatcherFactory) {
+            super.dispatch(dispatcherFactory);
             return this;
         }
 
