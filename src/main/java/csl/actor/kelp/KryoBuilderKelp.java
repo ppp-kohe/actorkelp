@@ -8,10 +8,7 @@ import csl.actor.kelp.behavior.ActorBehaviorKelp;
 import csl.actor.kelp.behavior.HistogramEntry;
 import csl.actor.kelp.behavior.KeyHistograms;
 import csl.actor.kelp.behavior.KeyHistogramsPersistable;
-import csl.actor.kelp.shuffle.ActorKelpMerger;
-import csl.actor.kelp.shuffle.ActorRefShuffle;
-import csl.actor.kelp.shuffle.ActorRefShuffleSingle;
-import csl.actor.kelp.shuffle.KelpStageSerializer;
+import csl.actor.kelp.shuffle.*;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -37,7 +34,7 @@ public class KryoBuilderKelp extends KryoBuilderCluster {
         List<Class<?>> cs = new ArrayList<>(super.getActorClasses());
 
         cs.addAll(Arrays.asList(
-                ActorKelp.ActorRefShuffleKelp.class,
+                ActorRefShuffleKelp.class,
                 ActorKelp.MessageBundle.class,
 
                 ActorKelpFunctions.KeyComparator.class,

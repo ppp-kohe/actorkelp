@@ -28,7 +28,7 @@ import java.util.regex.Pattern;
  *  <pre>
  *      PathModifier pm = PathModifier.setPathModifierWithBaseDir("/mnt/mydir_on_h1")
  *                        .setHost("h1", 3000).setApp("myapp");
- *      String path = pm.expandPath("%a/%h/out.txt"); //=> "myapp-20-07-26-5265bff/h1-3000/out.txt"
+ *      String path = pm.expandPath("%a/%h/out.txt"); //=&gt; "myapp-20-07-26-5265bff/h1-3000/out.txt"
  *        //the expandPath does not include the baseDir
  *        //So it can transfer to another host and apply the path to get(path)
  *      ...
@@ -38,7 +38,7 @@ import java.util.regex.Pattern;
  *      String path = ...; //transferred from the h1 as "myapp-20-07-26-5265bff/h1-3000/out.txt"
  *      String p2 = pm.expandPath(path); //p2.equals(path)
  *
- *      pm.get(path); //=> "/mnt/mydir_on_h2/myapp-20-07-26-5265bff/h1-3000/out.txt"
+ *      pm.get(path); //=&gt; "/mnt/mydir_on_h2/myapp-20-07-26-5265bff/h1-3000/out.txt"
  *  </pre>
  */
 public interface PathModifier {

@@ -199,7 +199,7 @@ public class ActorRefShuffle implements ActorRef, Serializable, Cloneable, KryoS
 
     /**
      * @param hash hashCode
-     * @param size a max+1 value, >= 0 , usually relatively smaller than hash
+     * @param size a max+1 value, &gt;= 0 , usually relatively smaller than hash
      * @return the index within size
      */
     public static int hashMod(int hash, int size) {

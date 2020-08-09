@@ -6,6 +6,7 @@ import csl.actor.ActorSystem;
 import csl.actor.Message;
 import csl.actor.kelp.shuffle.ActorKelpStateSharing;
 import csl.actor.kelp.shuffle.ActorRefShuffle;
+import csl.actor.kelp.shuffle.ActorRefShuffleKelp;
 import csl.actor.util.StagingActor;
 
 import java.time.Instant;
@@ -41,7 +42,7 @@ public interface KelpStage<ActorType extends Actor> extends ActorRef {
     List<ActorRef> getMemberActors();
 
     /**
-     * If the target is an {@link ActorKelp.ActorRefShuffleKelp},
+     * If the target is an {@link ActorRefShuffleKelp},
      * it collects state of member {@link ActorKelp}s
      *  and returns as a local actor by merging.
      *    It is a synchronous task.
@@ -59,7 +60,7 @@ public interface KelpStage<ActorType extends Actor> extends ActorRef {
 
 
     default <StateType> List<StateType> collectStates(ActorKelpStateSharing.ToStateFunction<ActorType, StateType> toState) {
-        return getMergedState(ActorKelpStateSharing.factory((a) -> {
+        return merge(ActorKelpStateSharing.factory((a) -> {
             List<StateType> sl = new ArrayList<>();
             sl.add(toState.apply(a));
             return sl;
@@ -71,10 +72,10 @@ public interface KelpStage<ActorType extends Actor> extends ActorRef {
 
     default <StateType> StateType getMergedState(ActorKelpStateSharing.ToStateFunction<ActorType, StateType> toState,
                                                  ActorKelpStateSharing.MergerOperator<StateType> merger) {
-        return getMergedState(ActorKelpStateSharing.factory(toState, merger));
+        return merge(ActorKelpStateSharing.factory(toState, merger));
     }
 
-    <StateType> StateType getMergedState(BiFunction<ActorSystem,ConfigKelp, ? extends ActorKelpStateSharing<ActorType,StateType>> factory);
+    <StateType> StateType merge(BiFunction<ActorSystem,ConfigKelp, ? extends ActorKelpStateSharing<ActorType,StateType>> factory);
 
     default void setSystemBySerializer(ActorSystem system) { }
 

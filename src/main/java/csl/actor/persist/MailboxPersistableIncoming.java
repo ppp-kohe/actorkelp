@@ -66,7 +66,7 @@ public class MailboxPersistableIncoming extends MailboxDefault implements Mailbo
             persistLock.lock();
             try {
                 if (writer == null) {
-                    writer = manager.createWriter("mbox");
+                    writer = manager.createWriterForHead("mbox");
                     source = writer.createReaderSourceFromCurrentPosition();
                 }
                 writer.write(message);

@@ -19,7 +19,7 @@ import java.util.function.BiConsumer;
  *     Duration d = StagingActor.staging(system)
  *         .withStartTime(instant)
  *         .withId(filePath)
- *         .withHandler(MyActor.class, (self) -> completionTask)
+ *         .withHandler(MyActor.class, (self) -&gt; completionTask)
  *         .start(topActor)
  *         .get().getElapsedTime();
  * </pre>
@@ -66,7 +66,7 @@ import java.util.function.BiConsumer;
  *                         -&gt; s.tell(StagingNotification(...,false,1,a4))
  *                            s.tell(c4_1)
  *                              -&gt; s.completed(c4_1)
- *                                  -&gt; finshed:4 < started:5, nothing happen
+ *                                  -&gt; finshed:4 &lt; started:5, nothing happen
  *                 ... -&gt; receive StagingCompleted c4_2  //started=5, finished=5
  *                         -&gt; s.tell(StagingNotification(...,false,1,a4))
  *                            s.tell(c4_2)
@@ -362,7 +362,7 @@ public class StagingActor extends ActorDefault {
      *      class A extends ActorDefault {
      *         Object lastCompleted;
      *        ...
-     *          .match(StageCompleted.class, c -> {
+     *          .match(StageCompleted.class, c -&gt; {
      *              if (!Objects.equals(lastCompleted, c.getTask().getKey())) {
      *                  lastCompleted = c.getTask().getKey();
      *                  //doing completion task...
@@ -505,7 +505,7 @@ public class StagingActor extends ActorDefault {
 
     /**
      * the interface indicates that an {@link ActorRef} is not a subject,
-     *   i.e. it does not support receving {@link StagingWatcher},
+     *   i.e. it does not support receiving {@link StagingWatcher},
      *  but might be a collection of subjects
      */
     public interface StagingNonSubject {

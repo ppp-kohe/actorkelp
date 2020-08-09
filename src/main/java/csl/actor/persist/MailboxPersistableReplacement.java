@@ -45,7 +45,7 @@ public class MailboxPersistableReplacement extends MailboxDefault implements Mai
     }
 
     public PersistentFileWriter createWriter() {
-        return persistentManager.createWriter("mailbox");
+        return persistentManager.createWriterForHead("mailbox");
     }
 
     public ConcurrentLinkedQueue<Message<?>> getQueue() {

@@ -479,7 +479,7 @@ public class KeyHistogramsPersistable extends KeyHistograms {
             if (root != null) {
                 PersistentFileManager m = getPersistent();
                 if (m != null) {
-                    try (PersistentFileManager.PersistentFileWriter w = m.createWriter("histleaf")) {
+                    try (PersistentFileManager.PersistentFileWriter w = m.createWriterForHead("histleaf")) {
                         long prevPersist = this.persistedSize;
                         persistLargeLeaves(root, w, keepSize);
                         logPersisted(String.format("Histogram(%h) persistLargeLeaves(keep=%,d)",
@@ -607,7 +607,7 @@ public class KeyHistogramsPersistable extends KeyHistograms {
         public void persistTree(long persistingLimit, float... distribution) {
             PersistentFileManager m = getPersistent();
             if (m != null) { //it does not checks persistingLimit>0, persistTreeNode might save some sub-trees even under the condition
-                try (TreeWriting w = new TreeWriting(m, m.createPath("histtree"))) {
+                try (TreeWriting w = new TreeWriting(m, m.createExpandedPathForHead("histtree"))) {
                     logPersistedTreeBefore(persistingLimit, w);
                     long prevPersisted = persistedSize;
                     persistTreeNode(root, 0, 1f, distribution, persistingLimit, w);
@@ -812,10 +812,10 @@ public class KeyHistogramsPersistable extends KeyHistograms {
             this.manager = manager;
             this.serializer = manager.getSerializer();
             this.pathExpanded = pathExpanded;
-            Path p = manager.getPath(pathExpanded);
+            Path p = manager.getPathForExpandedPath(pathExpanded, true);
             filePath = p;
             manager.openForWrite(p);
-            dataStore = new RandomAccessFile(manager.getPath(pathExpanded).toFile(), "rw");
+            dataStore = new RandomAccessFile(manager.getPathForExpandedPath(pathExpanded, true).toFile(), "rw");
             out = new Output(4096, Integer.MAX_VALUE);
         }
 
@@ -1531,7 +1531,7 @@ public class KeyHistogramsPersistable extends KeyHistograms {
      *   NodeTreeData (true, keyStart, keyEnd, height, size),
      *   Class nodeType,
      *   long listCount,
-     *   long listPointer[0..listCount-1] (&list0, &list1, ..., &list(listCount-1)),
+     *   long listPointer[0..listCount-1] (&amp;list0, &amp;list1, ..., &amp;list(listCount-1)),
      *   long listSizes[0..listCount-1],
      *   HistogramLeafCell list0, ..., HistogramLeafCellSerializedEnd,
      *   HistogramLeafCell list1, ..., HistogramLeafCellSerializedEnd,

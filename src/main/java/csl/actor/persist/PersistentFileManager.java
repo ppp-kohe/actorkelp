@@ -21,8 +21,19 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.WeakHashMap;
 
+/**
+ * <ul>
+ *     <li><i>path</i>: <code>pathModifier.baseDir / </code><i>pathExpanded</i>
+ *     </li>
+ *
+ *     <li><i>pathExpanded</i>: <code>expand(subPath / </code><i>filePath</i><code>)</code>
+ *     </li>
+ *
+ *     <li><i>filePath</i>: a sub-path, or head+number <i>head</i><code>-00001</code></li>
+ * </ul>
+ */
 public class PersistentFileManager {
-    protected String path;
+    protected String subPath;
     protected long fileCount;
     protected PathModifier pathModifier;
     protected ActorSystem.SystemLogger logger;
@@ -35,16 +46,16 @@ public class PersistentFileManager {
     public static boolean logDebugPersist = System.getProperty("csl.actor.persist.debug", "false").equals("true");
     public static int logColorPersist = ActorSystem.systemPropertyColor("csl.actor.persist.color", 94);
 
-    public static PersistentFileManager getPersistentFile(ActorSystem system, String path) {
+    public static PersistentFileManager getPersistentFile(ActorSystem system, String subPath) {
         synchronized (systemPersistent) {
             return systemPersistent.computeIfAbsent(system, s -> new HashMap<>())
-                .computeIfAbsent(path, p -> createPersistentFile(p, system));
+                .computeIfAbsent(subPath, p -> createPersistentFile(p, system));
         }
     }
 
-    public static PersistentFileManager createPersistentFile(String path, ActorSystem system) {
+    public static PersistentFileManager createPersistentFile(String subPath, ActorSystem system) {
         if (system instanceof PersistentFileManagerFactory) {
-            return ((PersistentFileManagerFactory) system).createFileManager(path);
+            return ((PersistentFileManagerFactory) system).createFileManager(subPath);
         } else {
             KryoBuilder.SerializerFunction serializer;
             if (system instanceof ActorSystemRemote) {
@@ -52,7 +63,7 @@ public class PersistentFileManager {
             } else {
                 serializer = new KryoBuilder.SerializerPoolDefault(system);
             }
-            return new PersistentFileManager(path, serializer, PathModifier.getPathModifier(system),
+            return new PersistentFileManager(subPath, serializer, PathModifier.getPathModifier(system),
                     system == null ? new ActorSystemDefault.SystemLoggerErr() : system.getLogger());
         }
     }
@@ -61,9 +72,9 @@ public class PersistentFileManager {
         PersistentFileManager createFileManager(String path);
     }
 
-    public PersistentFileManager(String path, KryoBuilder.SerializerFunction serializer,
+    public PersistentFileManager(String subPath, KryoBuilder.SerializerFunction serializer,
                                  PathModifier pathModifier, ActorSystem.SystemLogger logger) {
-        this.path = path;
+        this.subPath = subPath;
         this.serializer = serializer;
         this.pathModifier = pathModifier;
         this.logger = logger;
@@ -73,33 +84,48 @@ public class PersistentFileManager {
         return pathModifier;
     }
 
-    public synchronized PersistentFileWriter createWriter(String head) {
+    public PersistentFileWriter createWriterForHead(String head) {
+        return createWriterForPathExpanded(createExpandedPathForHead(head));
+    }
+
+    public PersistentFileWriter createWriterForFilePath(String filePath) {
+        return createWriterForPathExpanded(getPathExpandedForFilePath(filePath));
+    }
+
+    public PersistentFileWriter createWriterForPathExpanded(String pathExpanded) {
         try {
-            String path = createPath(head);
-            logger.log(logPersist, logColorPersist, "createWriter: %s", path);
-            return new PersistentFileWriter(path, this);
+            logger.log(logPersist, logColorPersist, "createWriter: %s", pathExpanded);
+            return new PersistentFileWriter(pathExpanded, this);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
     }
 
-    public synchronized String createPath(String head) {
+    /**
+     * @param head the prefix of <i>filePath</i>
+     * @return <i>pathExpanded</i>: <code>expand(subPath / </code><i>head</i>-00001<code>)</code>
+     */
+    public synchronized String createExpandedPathForHead(String head) {
         long c = fileCount;
         ++fileCount;
-        String p = Paths.get(path, String.format("%s-%05d", head, c)).toString();
-        while (Files.exists(pathModifier.get(p))) {
-            p = Paths.get(path, String.format("%s-%05d", head, c)).toString();
+        String p = Paths.get(subPath, String.format("%s-%05d", head, c)).toString();
+        while (Files.exists(pathModifier.getExpanded(p))) {
+            p = Paths.get(subPath, String.format("%s-%05d", head, c)).toString();
             ++fileCount;
             c = fileCount;
         }
         return pathModifier.expandPath(p);
     }
 
-    public Path getPath(String pathExpanded) {
+    public Path getPathForExpandedPath(String pathExpanded) {
+        return getPathForExpandedPath(pathExpanded, false);
+    }
+
+    public Path getPathForExpandedPath(String pathExpanded, boolean createParent) {
         Path p = pathModifier.get(pathExpanded);
         logger.log(logDebugPersist, logColorPersist, "getPath: %s -> %s", pathExpanded, p);
         Path dir = p.getParent();
-        if (dir != null && !Files.exists(dir)) {
+        if (createParent && dir != null && !Files.exists(dir)) {
             try {
                 Files.createDirectories(dir);
             } catch (Exception ex) {
@@ -132,6 +158,54 @@ public class PersistentFileManager {
         }
     }
 
+    public String getPathExpandedForFilePath(String filePath) {
+        return pathModifier.expandPath(Paths.get(subPath, filePath).toString());
+    }
+
+    public Path getPathForFilePath(String filePath) {
+        return getPathForExpandedPath(getPathExpandedForFilePath(filePath));
+    }
+
+    public Path getPathForFilePath(String filePath, boolean createParent) {
+        return getPathForExpandedPath(getPathExpandedForFilePath(filePath), createParent);
+    }
+
+    public PersistentFileReader createReaderForFilePath(String filePath) {
+        return createReaderForPathExpanded(getPathExpandedForFilePath(filePath));
+    }
+
+    public PersistentFileReader createReaderForFilePath(String filePath, long offset) {
+        return createReaderForPathExpanded(getPathExpandedForFilePath(filePath), offset);
+    }
+
+    public PersistentFileReader createReaderForPathExpanded(String pathExpanded) {
+        return createReaderForPathExpanded(pathExpanded, 0);
+    }
+
+    public PersistentFileReader createReaderForPathExpanded(String pathExpanded, long offset) {
+        try {
+            return new PersistentFileReader(pathExpanded, offset, this);
+        } catch (IOException ioe) {
+            throw new RuntimeException(ioe);
+        }
+    }
+
+    public PersistentFileReaderSource createReaderSourceForFilePath(String filePath) {
+        return createReaderSourceForPathExpanded(getPathExpandedForFilePath(filePath));
+    }
+
+    public PersistentFileReaderSource createReaderSourceForFilePath(String filePath, long offset) {
+        return createReaderSourceForPathExpanded(getPathExpandedForFilePath(filePath), offset);
+    }
+
+    public PersistentFileReaderSource createReaderSourceForPathExpanded(String pathExpanded) {
+        return createReaderSourceForPathExpanded(pathExpanded, 0);
+    }
+
+    public PersistentFileReaderSource createReaderSourceForPathExpanded(String pathExpanded, long offset) {
+        return new PersistentFileReaderSource(pathExpanded, offset, this);
+    }
+
     public static class PersistentFileEnd implements Serializable {
         public static final long serialVersionUID = 1L;
     }
@@ -146,7 +220,7 @@ public class PersistentFileManager {
         public PersistentFileWriter(String pathExpanded, PersistentFileManager manager) throws IOException  {
             this.pathExpanded = pathExpanded;
             this.manager = manager;
-            Path p = manager.getPath(pathExpanded);
+            Path p = manager.getPathForExpandedPath(pathExpanded, true);
             manager.openForWrite(p);
             this.filePath = p;
             output = new Output(Files.newOutputStream(p));
@@ -246,7 +320,7 @@ public class PersistentFileManager {
             this.pathExpanded = pathExpanded;
             this.manager = manager;
             this.serializer = manager.getSerializer();
-            inputStream = new FileInputStream(manager.getPath(pathExpanded).toFile()); //Files.newInputStream(path).skip(n) is slow
+            inputStream = new FileInputStream(manager.getPathForExpandedPath(pathExpanded, false).toFile()); //Files.newInputStream(path).skip(n) is slow
             this.offset = offset;
             inputStream.skip(offset);
             this.position = offset;
@@ -296,7 +370,7 @@ public class PersistentFileManager {
     }
 
     public String getPathInternal() {
-        return path;
+        return subPath;
     }
 
     public static class PersistentFileManagerSerializer extends Serializer<PersistentFileManager> {

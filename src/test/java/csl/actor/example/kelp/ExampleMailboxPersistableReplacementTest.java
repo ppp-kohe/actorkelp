@@ -37,7 +37,7 @@ public class ExampleMailboxPersistableReplacementTest {
             ExampleSerializeKelp.MyActor a = new ExampleSerializeKelp.MyActor(system, "hello", ConfigKelp.CONFIG_DEFAULT);
 
             MailboxPersistableReplacement.MessageOnStorage s;
-            try (PersistentFileManager.PersistentFileWriter w = manager.createWriter("mailbox")) {
+            try (PersistentFileManager.PersistentFileWriter w = manager.createWriterForHead("mailbox")) {
                 s = new MailboxPersistableReplacement.MessageOnStorage(w.createReaderSourceFromCurrentPosition());
                 w.write(new Message<>(a, a, "hello"));
                 w.write(new Message<>(a, a, 1234));
@@ -75,7 +75,7 @@ public class ExampleMailboxPersistableReplacementTest {
             int blockSize = 3;
 
             MailboxPersistableReplacement.MessageOnStorage s;
-            try (PersistentFileManager.PersistentFileWriter w = manager.createWriter("mailbox")) {
+            try (PersistentFileManager.PersistentFileWriter w = manager.createWriterForHead("mailbox")) {
                 s = new MailboxPersistableReplacement.MessageOnStorage(w.createReaderSourceFromCurrentPosition());
                 for (int i = 0; i < blockSize; ++i) {
                     w.write(new Message<>(a, a, "" + i));
@@ -83,7 +83,7 @@ public class ExampleMailboxPersistableReplacementTest {
             }
 
             MailboxPersistableReplacement.MessageOnStorage s2;
-            try (PersistentFileManager.PersistentFileWriter w = manager.createWriter("mailbox")) {
+            try (PersistentFileManager.PersistentFileWriter w = manager.createWriterForHead("mailbox")) {
                 s2 = new MailboxPersistableReplacement.MessageOnStorage(w.createReaderSourceFromCurrentPosition());
                 for (int i = 0; i < blockSize; ++i) {
                     w.write(new Message<>(a, a, "r1-" + i));
@@ -95,7 +95,7 @@ public class ExampleMailboxPersistableReplacementTest {
             }
 
             MailboxPersistableReplacement.MessageOnStorage s3;
-            try (PersistentFileManager.PersistentFileWriter w = manager.createWriter("mailbox")) {
+            try (PersistentFileManager.PersistentFileWriter w = manager.createWriterForHead("mailbox")) {
                 s3 = new MailboxPersistableReplacement.MessageOnStorage(w.createReaderSourceFromCurrentPosition());
                 for (int i = 0; i < blockSize; ++i) {
                     w.write(new Message<>(a, a, "r3-" + i));

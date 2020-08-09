@@ -38,8 +38,8 @@ public class KeyHistogramsPersistableLoadTest {
         }
 
         @Override
-        public Path getPath(String path) {
-            Path base = Paths.get(this.path);
+        public Path getPathForExpandedPath(String path, boolean b) {
+            Path base = Paths.get(this.subPath);
             Path p = Paths.get(path);
             Path f = base.resolve(p.getFileName());
             if (Files.exists(f)) {

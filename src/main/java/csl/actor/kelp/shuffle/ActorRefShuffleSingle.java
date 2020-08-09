@@ -128,7 +128,7 @@ public class ActorRefShuffleSingle<ActorType extends Actor> implements KelpStage
     }
 
     @Override
-    public <StateType> StateType getMergedState(BiFunction<ActorSystem, ConfigKelp, ? extends ActorKelpStateSharing<ActorType, StateType>> factory) {
+    public <StateType> StateType merge(BiFunction<ActorSystem, ConfigKelp, ? extends ActorKelpStateSharing<ActorType, StateType>> factory) {
         try (ActorKelpStateSharing<ActorType, StateType> m = factory.apply(system, new ConfigKelp())) {
             return m.mergeSync(getMemberActors());
         }

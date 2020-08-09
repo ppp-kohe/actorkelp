@@ -70,6 +70,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
     /**
      * starts cluster as remote-driver mode
      * @param args {configFilePath, primaryMainType, primaryMainArgs}
+     * @throws Exception an exception
      */
     @SuppressWarnings("unchecked")
     public static void main(String[] args) throws Exception {
