@@ -7,21 +7,17 @@ import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 import csl.actor.*;
 import csl.actor.kelp.ActorKelp;
-import csl.actor.kelp.ActorKelpFunctions;
-import csl.actor.kelp.ActorKelpFunctions.KeyExtractor;
 import csl.actor.kelp.KelpStage;
-import csl.actor.kelp.behavior.ActorBehaviorKelp;
+import csl.actor.kelp.MessageBundle;
 import csl.actor.kelp.behavior.KelpDispatcher;
-import csl.actor.remote.ActorAddress;
-import csl.actor.remote.ActorRefRemote;
 import csl.actor.util.ResponsiveCalls;
 import csl.actor.util.StagingActor;
 
 import java.io.Serializable;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 
 public class ActorRefShuffle implements ActorRef, Serializable, Cloneable, KryoSerializable,
@@ -29,14 +25,8 @@ public class ActorRefShuffle implements ActorRef, Serializable, Cloneable, KryoS
     public static final long serialVersionUID = 1L;
     protected transient ActorSystem system;
     protected int bufferSize;
-    @Deprecated protected boolean hostIncludePort;
-    @Deprecated protected Map<ActorAddress, List<ShuffleEntry>> entries; //host-address to entries
-    @Deprecated protected List<List<ShuffleEntry>> entriesList;
-    @Deprecated protected List<KeyExtractor<?,?>> keyExtractors;
     protected List<ShuffleEntry> dispatchUnits;
-    protected List<ActorBehaviorKelp.KeyExtractorsAndDispatcher> extractorsAndDispatchers;
-    @Deprecated protected int shuffleSize;
-
+    protected List<KelpDispatcher.SelectiveDispatcher> selectiveDispatchers;
 
     public static List<ShuffleEntry> createDispatchUnits(Iterable<? extends ActorRef> actors, int bufferSize) {
         ArrayList<ShuffleEntry> refs = new ArrayList<>();
@@ -49,52 +39,6 @@ public class ActorRefShuffle implements ActorRef, Serializable, Cloneable, KryoS
         return refs;
     }
 
-    @Deprecated
-    public static Function<ActorRef, ActorAddress> refToHost(boolean hostIncludePort) {
-        return hostIncludePort ? ActorRefShuffle::toHost : ActorRefShuffle::toHostWithoutPort;
-    }
-
-    @Deprecated
-    public static Map<ActorAddress, List<ShuffleEntry>> createEntries(Iterable<? extends ActorRef> actors, int bufferSize,
-                                                                      Function<ActorRef, ActorAddress> refToHost) {
-        Map<ActorAddress, List<ShuffleEntry>> refs = new HashMap<>();
-        int i = 0;
-        for (ActorRef ref : actors) {
-            refs.computeIfAbsent(refToHost.apply(ref), _h -> new ArrayList<>())
-                    .add(new ShuffleEntry(ref, bufferSize, i));
-            ++i;
-        }
-        refs.values().forEach(es ->
-                ((ArrayList<?>) es).trimToSize());
-        return refs;
-    }
-
-    @Deprecated
-    public static ActorAddress.ActorAddressRemote LOCALHOST = ActorAddress.get("localhost", -1);
-
-    @Deprecated
-    public static ActorAddress.ActorAddressRemote toHost(ActorRef ref) {
-        if (ref instanceof ActorRefRemote) {
-            return ((ActorRefRemote) ref).getAddress().getHostAddress();
-        } else {
-            return LOCALHOST;
-        }
-    }
-
-    @Deprecated
-    public static ActorAddress.ActorAddressRemote toHostWithoutPort(ActorRef ref) {
-        return toHostWithoutPort(toHost(ref));
-    }
-    @Deprecated
-    public static ActorAddress.ActorAddressRemote toHostWithoutPort(ActorAddress.ActorAddressRemote a) {
-        if (a.getPort() != -1) {
-            return ActorAddress.get(a.getHost(), -1);
-        } else {
-            return a;
-        }
-    }
-
-
     public static void flush(ActorRef ref, ActorRef sender) {
         if (ref instanceof ActorRefShuffle) {
             ((ActorRefShuffle) ref).flush(sender);
@@ -105,19 +49,11 @@ public class ActorRefShuffle implements ActorRef, Serializable, Cloneable, KryoS
 
     public ActorRefShuffle() {
     }
-    @Deprecated
-    public ActorRefShuffle(ActorSystem system, Map<ActorAddress, List<ShuffleEntry>> entries, List<KeyExtractor<?,?>> keyExtractors, int bufferSize, boolean hostIncludePort) {
-        this.system = system;
-        this.keyExtractors = keyExtractors;
-        this.bufferSize = bufferSize;
-        this.hostIncludePort = hostIncludePort;
-        initEntries(entries);
-    }
 
-    public ActorRefShuffle(ActorSystem system, List<ShuffleEntry> entries, List<ActorBehaviorKelp.KeyExtractorsAndDispatcher> extractorsAndDispatchers, int bufferSize) {
+    public ActorRefShuffle(ActorSystem system, List<ShuffleEntry> entries, List<KelpDispatcher.SelectiveDispatcher> selectiveDispatchers, int bufferSize) {
         this.system = system;
         this.bufferSize = bufferSize;
-        initExtractorsAndDispatchers(extractorsAndDispatchers);
+        initExtractorsAndDispatchers(selectiveDispatchers);
         initDispatchUnits(entries);
     }
 
@@ -125,14 +61,8 @@ public class ActorRefShuffle implements ActorRef, Serializable, Cloneable, KryoS
         this.dispatchUnits = entries;
     }
 
-    protected void initExtractorsAndDispatchers(List<ActorBehaviorKelp.KeyExtractorsAndDispatcher> extractorsAndDispatchers) {
-        this.extractorsAndDispatchers = extractorsAndDispatchers;
-    }
-
-    @Deprecated
-    protected void initEntries(Map<ActorAddress, List<ShuffleEntry>> entries) {
-        this.entries = entries;
-        entriesList = new ArrayList<>(entries.values());
+    protected void initExtractorsAndDispatchers(List<KelpDispatcher.SelectiveDispatcher> extractorsAndDispatchers) {
+        this.selectiveDispatchers = extractorsAndDispatchers;
     }
 
     /**
@@ -172,16 +102,6 @@ public class ActorRefShuffle implements ActorRef, Serializable, Cloneable, KryoS
         return bufferSize;
     }
 
-    @Deprecated
-    public boolean isHostIncludePort() {
-        return hostIncludePort;
-    }
-
-    @Deprecated
-    public List<KeyExtractor<?, ?>> getKeyExtractors() {
-        return keyExtractors;
-    }
-
     public ActorRefShuffle use() {
 //        Map<ActorAddress, List<ShuffleEntry>> es = new HashMap<>(entries.size());
 //        entries.forEach((k,v) ->
@@ -192,19 +112,19 @@ public class ActorRefShuffle implements ActorRef, Serializable, Cloneable, KryoS
                 dispatchUnits.stream()
                     .map(ShuffleEntry::copy)
                     .collect(Collectors.toList()),
-                extractorsAndDispatchers.stream()
-                    .map(ActorBehaviorKelp.KeyExtractorsAndDispatcher::copy)
+                selectiveDispatchers.stream()
+                    .map(KelpDispatcher.SelectiveDispatcher::copy)
                     .collect(Collectors.toList()));
     }
 
     protected ActorRefShuffle copyForUse(
             List<ShuffleEntry> dispatchUnits,
-            List<ActorBehaviorKelp.KeyExtractorsAndDispatcher> extractorsAndDispatchers) {
+            List<KelpDispatcher.SelectiveDispatcher> extractorsAndDispatchers) {
         try {
             ActorRefShuffle ref = (ActorRefShuffle) super.clone();
             //ref.initEntries(es);
             ref.initDispatchUnits(dispatchUnits);
-            ref.initExtractorsAndDispatchers(this.extractorsAndDispatchers);
+            ref.initExtractorsAndDispatchers(this.selectiveDispatchers);
             return ref;
         } catch (CloneNotSupportedException e) {
             throw new RuntimeException(e);
@@ -213,8 +133,8 @@ public class ActorRefShuffle implements ActorRef, Serializable, Cloneable, KryoS
 
     @Override
     public void tellMessage(Message<?> message) {
-        if (message instanceof ActorKelp.MessageBundle) {
-            ((ActorKelp.MessageBundle<?>) message).getData().forEach(d ->
+        if (message instanceof MessageBundle) {
+            ((MessageBundle<?>) message).getData().forEach(d ->
                     tell(d, message.getSender()));
         } else if (KelpStage.isMessageBroadcastedImpl(message)) {
             getMemberActors().forEach(a ->
@@ -225,43 +145,10 @@ public class ActorRefShuffle implements ActorRef, Serializable, Cloneable, KryoS
     }
 
     public void tellMessageShuffle(Message<?> message) {
-        tellMessageShuffle(this, extractorsAndDispatchers, message);
+        KelpDispatcher.tellMessageShuffle(this, selectiveDispatchers, message);
     }
-
-    @SuppressWarnings("unchecked")
-    public static void tellMessageShuffle(KelpDispatcher.DispatchRef self, List<ActorBehaviorKelp.KeyExtractorsAndDispatcher> extractorsAndDispatchers,
-                                          Message<?> message) {
-        Object data = message.getData();
-        for (ActorBehaviorKelp.KeyExtractorsAndDispatcher e : extractorsAndDispatchers) {
-            for (KeyExtractor<?,?> ke : e.getKeyExtractors()) {
-                if (ke.matchValue(data)) {
-                    e.getDispatcher().dispatch(self, (KeyExtractor<?, Object>) ke, message);
-                    return;
-                }
-            }
-        }
-        DEFAULT_DISPATCHER.dispatch(self, DEFAULT_KEY_EXTRACTOR, message);
-    }
-
-    public static ActorKelpFunctions.KeyExtractorClass<?,Object> DEFAULT_KEY_EXTRACTOR = new ActorKelpFunctions.KeyExtractorClass<>(Object.class,
-            ActorKelpFunctions.KeyExtractorFunction.identity());
 
     public static KelpDispatcher.DispatcherShuffle DEFAULT_DISPATCHER = new KelpDispatcher.DispatcherShuffle();
-
-    @Deprecated
-    protected List<ShuffleEntry> entries(Message<?> message, Object key, int keyHash) {
-        ActorAddress target = addressFromMessageData(message, key);
-        List<ShuffleEntry> es = (target == null ? null : entries.get(target));
-        if (es == null) {
-            es = entriesList.get(KelpDispatcher.DispatcherShuffle.hashMod(keyHash, entriesList.size()));
-        }
-        return es;
-    }
-
-    @Deprecated
-    protected ActorAddress addressFromMessageData(Message<?> message, Object key) {
-        return null;
-    }
 
     public void flush() {
         this.flush(null);
@@ -357,10 +244,6 @@ public class ActorRefShuffle implements ActorRef, Serializable, Cloneable, KryoS
                 ')';
     }
 
-    @Deprecated
-    public int getShuffleSize() {
-        return shuffleSize;
-    }
 
     public ActorRef getFirstActor() {
         for (ShuffleEntry e : dispatchUnits) {
@@ -414,14 +297,14 @@ public class ActorRefShuffle implements ActorRef, Serializable, Cloneable, KryoS
         @Override
         public void tell(Object data, ActorRef sender) {
             if (bufferSize <= 0) {
-                actor.tellMessage(new KelpDispatcher.MessageAccepted<>(actor, sender, data));
+                actor.tellMessage(new MessageAccepted<>(actor, sender, data));
             } else {
                 if (buffer == null) {
                     buffer = new ArrayList<>(bufferSize);
                 }
                 buffer.add(data);
                 if (buffer.size() >= bufferSize) { //suppose the ref is not shared
-                    actor.tellMessage(new ActorKelp.MessageBundle<>(actor, sender, buffer));
+                    actor.tellMessage(new MessageBundle<>(actor, sender, buffer));
                     buffer.clear();
                 }
             }
@@ -438,7 +321,7 @@ public class ActorRefShuffle implements ActorRef, Serializable, Cloneable, KryoS
         @Override
         public void flush(ActorRef sender) {
             if (buffer != null && !buffer.isEmpty()) {
-                actor.tellMessage(new ActorKelp.MessageBundle<>(actor, sender, buffer));
+                actor.tellMessage(new MessageBundle<>(actor, sender, buffer));
                 buffer.clear();
             }
         }
@@ -477,26 +360,16 @@ public class ActorRefShuffle implements ActorRef, Serializable, Cloneable, KryoS
 
     @Override
     public void write(Kryo kryo, Output output) {
-        //kryo.writeClassAndObject(output, entries);
-        //kryo.writeClassAndObject(output, entriesList);
-        //kryo.writeClassAndObject(output, keyExtractors);
         kryo.writeClassAndObject(output, dispatchUnits);
-        kryo.writeClassAndObject(output, extractorsAndDispatchers);
+        kryo.writeClassAndObject(output, selectiveDispatchers);
         output.writeInt(bufferSize);
-        //output.writeBoolean(hostIncludePort);
-        //output.writeInt(shuffleSize);
     }
 
     @SuppressWarnings("unchecked")
     @Override
     public void read(Kryo kryo, Input input) {
-        //this.entries = (Map<ActorAddress,List<ShuffleEntry>>) kryo.readClassAndObject(input);
-        //this.entriesList = (List<List<ShuffleEntry>>) kryo.readClassAndObject(input);
-        //this.keyExtractors = (List<KeyExtractor<?,?>>) kryo.readClassAndObject(input);
         this.dispatchUnits = (List<ShuffleEntry>) kryo.readClassAndObject(input);
-        this.extractorsAndDispatchers = (List<ActorBehaviorKelp.KeyExtractorsAndDispatcher>) kryo.readClassAndObject(input);
+        this.selectiveDispatchers = (List<KelpDispatcher.SelectiveDispatcher>) kryo.readClassAndObject(input);
         bufferSize = input.readInt();
-        //hostIncludePort = input.readBoolean();
-        //shuffleSize = input.readInt();
     }
 }

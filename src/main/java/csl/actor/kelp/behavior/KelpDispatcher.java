@@ -5,6 +5,7 @@ import csl.actor.Message;
 import csl.actor.kelp.ActorKelpFunctions;
 
 import java.io.Serializable;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Random;
@@ -24,12 +25,18 @@ public interface KelpDispatcher extends Serializable {
 
     void dispatch(DispatchRef ref, ActorKelpFunctions.KeyExtractor<?, Object> keyExtractor, Message<?> message);
 
-    class MessageAccepted<T> extends Message<T> {
-        public static final long serialVersionUID = -1;
-        public MessageAccepted(ActorRef target, ActorRef sender, T data) {
-            super(target, sender, data);
+
+    static void tellMessageShuffle(KelpDispatcher.DispatchRef self, List<KelpDispatcher.SelectiveDispatcher> selectiveDispatchers,
+                                          Message<?> message) {
+        for (KelpDispatcher.SelectiveDispatcher e : selectiveDispatchers) {
+            if (e.dispatch(self, message)) {
+                return;
+            }
         }
+        DEFAULT_DISPATCHER.dispatch(self, ActorKelpFunctions.DEFAULT_KEY_EXTRACTOR, message);
     }
+
+    KelpDispatcher.DispatcherShuffle DEFAULT_DISPATCHER = new KelpDispatcher.DispatcherShuffle();
 
     interface DispatchRef {
         List<? extends DispatchUnit> getDispatchUnits();
@@ -46,7 +53,50 @@ public interface KelpDispatcher extends Serializable {
         }
     }
 
+    class SelectiveDispatcher implements Serializable, Cloneable {
+        public static final long serialVersionUID = -1;
+        protected List<ActorKelpFunctions.KeyExtractor<?,?>> keyExtractors;
+        protected KelpDispatcher dispatcher;
+
+        public SelectiveDispatcher(List<ActorKelpFunctions.KeyExtractor<?, ?>> keyExtractors, KelpDispatcher dispatcher) {
+            this.keyExtractors = keyExtractors;
+            this.dispatcher = dispatcher;
+        }
+
+        public KelpDispatcher getDispatcher() {
+            return dispatcher;
+        }
+
+        public List<ActorKelpFunctions.KeyExtractor<?, ?>> getKeyExtractors() {
+            return keyExtractors;
+        }
+
+        public SelectiveDispatcher copy() {
+            try {
+                SelectiveDispatcher d = (SelectiveDispatcher) super.clone();
+                d.keyExtractors = new ArrayList<>(keyExtractors);
+                d.dispatcher = dispatcher.copy();
+                return d;
+            } catch (CloneNotSupportedException e) {
+                throw new RuntimeException(e);
+            }
+        }
+
+        @SuppressWarnings({"unchecked"})
+        public boolean dispatch(DispatchRef ref, Message<?> message) {
+            Object data = message.getData();
+            for (ActorKelpFunctions.KeyExtractor<?,?> ke : keyExtractors) {
+                if (ke.matchValue(data)) {
+                    dispatcher.dispatch(ref, (ActorKelpFunctions.KeyExtractor<?, Object>) ke, message);
+                    return true;
+                }
+            }
+            return false;
+        }
+    }
+
     class DispatcherAll implements KelpDispatcher {
+        public static final long serialVersionUID = -1;
         @Override
         public void dispatch(DispatchRef ref, ActorKelpFunctions.KeyExtractor<?, Object> keyExtractor, Message<?> message) {
             ref.getDispatchUnits().forEach(u ->
@@ -55,6 +105,7 @@ public interface KelpDispatcher extends Serializable {
     }
 
     class DispatcherShuffle implements KelpDispatcher {
+        public static final long serialVersionUID = -1;
         @Override
         public void dispatch(DispatchRef ref, ActorKelpFunctions.KeyExtractor<?, Object> keyExtractor, Message<?> message) {
             int size = ref.getDispatchUnitSize();
@@ -105,6 +156,7 @@ public interface KelpDispatcher extends Serializable {
     }
 
     class DispatcherRandomOne implements KelpDispatcher, Cloneable {
+        public static final long serialVersionUID = -1;
         protected Random random;
 
         public DispatcherRandomOne() {
@@ -134,6 +186,7 @@ public interface KelpDispatcher extends Serializable {
     }
 
     class DispatcherRandomPoisson1 extends DispatcherRandomOne {
+        public static final long serialVersionUID = -1;
         public DispatcherRandomPoisson1() { }
 
         public DispatcherRandomPoisson1(Random random) {
@@ -175,4 +228,5 @@ public interface KelpDispatcher extends Serializable {
     }
 
     double POISSON_LIMIT = 100;
+
 }

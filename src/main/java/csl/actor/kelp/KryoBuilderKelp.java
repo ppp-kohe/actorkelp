@@ -35,7 +35,7 @@ public class KryoBuilderKelp extends KryoBuilderCluster {
 
         cs.addAll(Arrays.asList(
                 ActorRefShuffleKelp.class,
-                ActorKelp.MessageBundle.class,
+                MessageBundle.class,
 
                 ActorKelpFunctions.KeyComparator.class,
                 ActorKelpFunctions.KeyComparatorDefault.class,

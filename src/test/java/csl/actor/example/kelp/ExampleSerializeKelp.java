@@ -257,8 +257,7 @@ public class ExampleSerializeKelp extends ExampleSerialize {
 
     private void runShuffle() {
         new TestToolSerialize().writeRead(p, new ActorRefShuffle(system,
-                new HashMap<>(), new ArrayList<>(), 10, true),
-                (ex,ac) -> ac.getMemberActors().isEmpty() && ex.getBufferSize() == ac.getBufferSize() &&
-                                ex.isHostIncludePort() == ac.isHostIncludePort());
+                new ArrayList<>(), new ArrayList<>(), 10),
+                (ex,ac) -> ac.getMemberActors().isEmpty() && ex.getBufferSize() == ac.getBufferSize());
     }
 }

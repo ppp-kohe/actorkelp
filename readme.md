@@ -139,8 +139,93 @@ The above program can be executed as two separated processes:
 ## Key-Value Data Aggregation Processing
 
 ```java
-public class ExampleKelp extends ActorKelp<ExampleKelp> {
-   	public ExampleKelp(
+import csl.actor.ActorBehavior;
+import csl.actor.ActorSystem;
+import csl.actor.kelp.ActorKelp;
+import csl.actor.kelp.ConfigKelp;
+
+import java.util.Arrays;
+
+public class ExampleLearnerKelp extends ActorKelp<ExampleLearnerKelp> {
+    @TransferredState(mergeType = MergerOpType.Add) int[] counts;
+    public ExampleLearnerKelp(ActorSystem system, ConfigKelp config, int size) {
+        super(system, config);
+        this.counts = new int[size];
+    }
+
+    public ExampleLearnerKelp(ActorSystem system, String name, ConfigKelp config) {
+        super(system, name, config);
+    }
+
+    @Override
+    protected ActorBehavior initBehavior() {
+        return behaviorBuilder()
+                .matchKey(Integer.class, identity())
+                .forEach(this::train)
+                .build();
+    }
+
+    public void train(Integer i) {
+        counts[i]++;
+    }
+
+    public double[] dist() {
+        double total = Arrays.stream(counts).sum();
+        double[] d = new double[counts.length];
+        Arrays.setAll(d, i -> d[i] = counts[i] / total);
+        return d;
+    }
 }
 ```
 
+* The class extends `ActorKelp` with supplying the type argument as recursive self-type: `class A extends ActorKelp<A>`.
+* The field `int[] counts`  is the actor's internal state as the learning model, and annotated by `@TransferredState`.
+    * The annotation takes `mergeType=MergerOpType.Add `. The actor supports distributed processing by multiple copies, and the `Add` can aggregate all internal state of the copies by summing each element value after processing (`actor[0].counts[0]+actor[1].counts[0]+actor[2].counts[0]+..., ...`).
+* The first constructor is specific for the class, which can initialize the internal state. But it can take `ConfigKelp` which has a set of configuration parameters of the mechanism.
+* The second constructor `(ActorSystem, String, ConfigKelp)` is the default constructor which is used at creating distributed copies.
+* The behavior uses `.matchKey(...).forEach(...)`
+    * `.matchKey(Integer.class, identity())` specifies the actor receives `Integer` as message and extracts the int value as key for the message (`identity() ` is ` i -> i`)
+    * The mechanism delivers the message to a distributed copy of the actor based on the key
+    * `.forEach(this::train)` specifies that after delivering, the received copy of the actor process each message by `train(i)`. 
+* The above class is executed by the following runner class 
+
+```java
+import csl.actor.ActorSystem;
+import csl.actor.kelp.ClusterKelp;
+import csl.actor.kelp.ConfigKelp;
+import csl.actor.kelp.KelpStage;
+
+import java.util.Arrays;
+import java.util.Random;
+
+public class ExampleKelpRunner {
+    public static void main(String[] args) throws Exception {
+        try (ClusterKelp<ConfigKelp> k = ClusterKelp.create()) {
+            ActorSystem system = k.deploy();
+            int max = 10;
+            KelpStage<ExampleLearnerKelp> learners = 
+                new ExampleLearnerKelp(system, k.getPrimaryConfig(), max).shuffle();
+
+            Random random = new Random();
+            for (int i = 0; i < 1000; ++i) {
+                learners.tell(random.nextInt(max));
+            }
+            learners.sync().get();
+
+            ExampleLearnerKelp merged = learners.merge();
+            System.out.println(Arrays.toString(merged.dist()));
+        }
+    }
+}
+```
+
+* `ClusterKelp` is a cluster manager instance
+    * by default, the class copies class-path jars and saves config files into `target/kelp` directory (under the default build directory of maven), but wors only on the running process.
+    * config file specified by `-Dcsl.actor.cluster.conf=<confFilePath>` can changes the settings as running on multiple processes.
+* `k.deploy()` starts the system
+    * The try-resource block can automatically shutting down the clsuter
+* `new ExampleLearnerKelp(system, k.getPrimaryConfig(), max)` creates the temporary learner actor instance as starting point.
+* `.shuffle()` creates a special kind of `ActorRef` , `KelpStage`, which can holds multiple distributed copies of the actor and deliver messages followed by `matchKey` behaviors.
+* `learners.tell(...)` do the delivering; dispatch each message to one of copy of distributed actors. Also the mechanism has buffers of messages and thus the message will not be immediately sent to the target.
+* `leraners.sync()` causes flusing all messages on the buffers and returns a `CompletableFuture` object which can await finishing all processes of the messages by `.get()`. 
+* After processing finished, `leraners.merge()` aggregates all distributed copies as a local actor. The internal state of the actor will be merged followed by `@TransferredState`

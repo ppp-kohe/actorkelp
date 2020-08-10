@@ -17,6 +17,18 @@ public class ActorBehaviorBuilder {
         public <DataType> ActorBehavior get(Class<DataType> dataType, BiConsumer<DataType, ActorRef> handler) {
             return new ActorBehaviorMatch<>(dataType, handler);
         }
+
+        public ActorBehavior getAny(BiConsumer<Object,ActorRef> handler) {
+            return new ActorBehaviorAny(handler);
+        }
+
+        public ActorBehavior getOr(ActorBehavior l, ActorBehavior r) {
+            return new ActorBehaviorOr(l, r);
+        }
+
+        public <ActorType extends Actor,DataType extends CallableMessage<ActorType,?>> ActorBehavior getCallable(Class<DataType> type) {
+            return new ActorBehaviorCallable<>(type);
+        }
     }
 
     public <DataType> ActorBehaviorBuilder match(Class<DataType> dataType, Consumer<DataType> handler) {
@@ -28,14 +40,14 @@ public class ActorBehaviorBuilder {
     }
 
     public ActorBehaviorBuilder matchAny(BiConsumer<Object,ActorRef> handler) {
-        return with(new ActorBehaviorAny(handler));
+        return with(matchFactory.getAny(handler));
     }
 
     public ActorBehaviorBuilder with(ActorBehavior behavior) {
         if (this.behavior == null || this.behavior.equals(BEHAVIOR_NOTHING)) {
             this.behavior = behavior;
         } else {
-            this.behavior = new ActorBehaviorOr(this.behavior, behavior);
+            this.behavior = matchFactory.getOr(this.behavior, behavior);
         }
         return this;
     }
@@ -45,7 +57,7 @@ public class ActorBehaviorBuilder {
      */
     @SuppressWarnings("unchecked")
     public ActorBehavior build() {
-        return with(new ActorBehaviorCallable<>(CallableMessage.class))
+        return with(matchFactory.getCallable(CallableMessage.class))
                 .buildWithoutDefault();
     }
 

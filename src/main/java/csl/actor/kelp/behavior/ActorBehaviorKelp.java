@@ -7,19 +7,18 @@ import csl.actor.kelp.ActorKelp;
 import csl.actor.kelp.ActorKelpFunctions;
 import csl.actor.kelp.ActorKelpFunctions.*;
 
-import java.io.Serializable;
 import java.util.*;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 
 public class ActorBehaviorKelp {
-    public interface ExtractorsAndDispatcherFactory {
-        KeyExtractorsAndDispatcher createExtractorsAndDispatcher(ActorKelp<?> self);
+    public interface SelectiveDispatcherFactory {
+        KelpDispatcher.SelectiveDispatcher createSelectiveDispatcher(ActorKelp<?> self);
     }
 
     public static abstract class ActorBehaviorMatchKey<KeyType> extends KeyHistograms.HistogramPutContext
-            implements ActorBehavior, HistogramProcessor, ExtractorsAndDispatcherFactory {
+            implements ActorBehavior, HistogramProcessor, SelectiveDispatcherFactory {
         protected int matchKeyEntryId;
         protected KeyComparator<KeyType> keyComparator;
         protected ActorKelpFunctions.DispatcherFactory dispatcher;
@@ -55,39 +54,9 @@ public class ActorBehaviorKelp {
 
         @SuppressWarnings({"unchecked", "rawtypes"})
         @Override
-        public KeyExtractorsAndDispatcher createExtractorsAndDispatcher(ActorKelp<?> self) {
-            return new KeyExtractorsAndDispatcher((List<KeyExtractor<?,?>>) (List) getKeyExtractors(),
+        public KelpDispatcher.SelectiveDispatcher createSelectiveDispatcher(ActorKelp<?> self) {
+            return new KelpDispatcher.SelectiveDispatcher((List<KeyExtractor<?,?>>) (List) getKeyExtractors(),
                     self.createDispatcher(getDispatcher()));
-        }
-    }
-
-    public static class KeyExtractorsAndDispatcher implements Serializable, Cloneable {
-        public static final long serialVersionUID = -1;
-        protected List<KeyExtractor<?,?>> keyExtractors;
-        protected KelpDispatcher dispatcher;
-
-        public KeyExtractorsAndDispatcher(List<KeyExtractor<?, ?>> keyExtractors, KelpDispatcher dispatcher) {
-            this.keyExtractors = keyExtractors;
-            this.dispatcher = dispatcher;
-        }
-
-        public KelpDispatcher getDispatcher() {
-            return dispatcher;
-        }
-
-        public List<KeyExtractor<?, ?>> getKeyExtractors() {
-            return keyExtractors;
-        }
-
-        public KeyExtractorsAndDispatcher copy() {
-            try {
-                KeyExtractorsAndDispatcher d = (KeyExtractorsAndDispatcher) super.clone();
-                d.keyExtractors = new ArrayList<>(keyExtractors);
-                d.dispatcher = dispatcher.copy();
-                return d;
-            } catch (CloneNotSupportedException e) {
-                throw new RuntimeException(e);
-            }
         }
     }
 

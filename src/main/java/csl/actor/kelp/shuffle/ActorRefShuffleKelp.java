@@ -10,7 +10,7 @@ import csl.actor.kelp.ActorKelp;
 import csl.actor.kelp.ActorKelpFunctions;
 import csl.actor.kelp.ConfigKelp;
 import csl.actor.kelp.KelpStage;
-import csl.actor.kelp.behavior.ActorBehaviorKelp;
+import csl.actor.kelp.behavior.KelpDispatcher;
 import csl.actor.remote.ActorAddress;
 
 import java.util.List;
@@ -25,17 +25,8 @@ public class ActorRefShuffleKelp<ActorType extends ActorKelp<ActorType>> extends
     public ActorRefShuffleKelp() {
     }
 
-    @Deprecated
-    public ActorRefShuffleKelp(ActorSystem system, Map<ActorAddress, List<ShuffleEntry>> entries,
-                               List<ActorKelpFunctions.KeyExtractor<?, ?>> keyExtractors, int bufferSize, boolean hostIncludePort,
-                               Class<ActorType> actorType, ConfigKelp config) {
-        super(system, entries, keyExtractors, bufferSize, hostIncludePort);
-        this.actorType = actorType;
-        this.config = config;
-    }
-
     public ActorRefShuffleKelp(ActorSystem system, List<ShuffleEntry> entries,
-                               List<ActorBehaviorKelp.KeyExtractorsAndDispatcher> extractorsAndDispatchers, int bufferSize,
+                               List<KelpDispatcher.SelectiveDispatcher> extractorsAndDispatchers, int bufferSize,
                                Class<?> actorType, ConfigKelp config) {
         super(system, entries, extractorsAndDispatchers, bufferSize);
         this.actorType = actorType;
@@ -57,12 +48,14 @@ public class ActorRefShuffleKelp<ActorType extends ActorKelp<ActorType>> extends
     public void write(Kryo kryo, Output output) {
         super.write(kryo, output);
         kryo.writeClass(output, actorType);
+        kryo.writeClassAndObject(output, config);
     }
 
     @Override
     public void read(Kryo kryo, Input input) {
         super.read(kryo, input);
         actorType = kryo.readClass(input).getType();
+        config = (ConfigKelp) kryo.readClassAndObject(input);
     }
 
     @Override

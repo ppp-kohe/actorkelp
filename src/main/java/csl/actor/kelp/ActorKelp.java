@@ -7,7 +7,6 @@ import csl.actor.kelp.shuffle.*;
 import csl.actor.persist.MailboxManageable;
 import csl.actor.persist.MailboxPersistableIncoming;
 import csl.actor.persist.PersistentFileManager;
-import csl.actor.remote.ActorAddress;
 import csl.actor.util.FileSplitter;
 import csl.actor.util.PathModifier;
 import csl.actor.util.StagingActor;
@@ -21,7 +20,6 @@ import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -35,7 +33,7 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
     protected int mergedCount = 1;
     protected Set<String> mergedActorNames = Collections.emptySet();
     protected Set<ActorRef> shuffleOriginals = new HashSet<>(1);
-    protected List<ActorBehaviorKelp.KeyExtractorsAndDispatcher> extractorsAndDispatchers = null; //initialized by initBehavior
+    protected List<KelpDispatcher.SelectiveDispatcher> selectiveDispatchers = null; //initialized by initBehavior
 
     public ActorKelp(ActorSystem system, String name, Mailbox mailbox, ActorBehavior behavior, ConfigKelp config) {
         super(system, name, mailbox, behavior);
@@ -183,11 +181,6 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
         return config.shufflePartitions;
     }
 
-    @Deprecated
-    public boolean isShuffleHostIncludePort() {
-        return config.shuffleHostIncludePort;
-    }
-
     public int getShuffleBufferSizeFile() {
         return config.shuffleBufferSizeFile;
     }
@@ -235,57 +228,9 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
 
     @Override
     protected ActorBehaviorBuilderKelp behaviorBuilder() {
-        return new ActorBehaviorBuilderKelp(getMailboxAsKelp()::initMessageEntries, this::initExtractorsAndDispatcher);
+        return new ActorBehaviorBuilderKelp(getMailboxAsKelp()::initMessageEntries, this::initSelectiveDispatchers);
     }
 
-    public static <T> ActorKelpFunctions.KeyExtractorFunction<T,T> identity() { //utility for builder
-        return ActorKelpFunctions.KeyExtractorFunction.identity();
-    }
-
-    public static class MessageBundle<DataType> extends Message<List<DataType>> {
-        public static final long serialVersionUID = 1L;
-
-        public MessageBundle(ActorRef target, ActorRef sender, Iterable<? extends DataType> items) {
-            super(target, sender, toList(items));
-        }
-
-        @Override
-        public Message<List<DataType>> renewTarget(ActorRef target) {
-            return new MessageBundle<>(target, sender, data);
-        }
-
-        @Override
-        public String toString() {
-            return getClass().getSimpleName() + "(" +
-                    toStringData(Objects::toString) + " : " + target + " <- " + sender + ")";
-        }
-
-        @Override
-        public String toString(Function<Object, Object> dataToStr) {
-            return getClass().getSimpleName() + "(" +
-                    toStringData(dataToStr) + " : " + target + " <- " + sender + ")";
-        }
-
-        public String toStringData(Function<Object,Object> dataToStr) {
-            if (data == null) {
-                return "null";
-            } else if (data.isEmpty()) {
-                return "[0]{}";
-            } else {
-                return String.format("[%,d]{%s, ...}", data.size(),
-                        dataToStr.apply(data.get(0)));
-            }
-        }
-    }
-
-    public static <DataType> List<DataType> toList(Iterable<? extends DataType> items) {
-        ArrayList<DataType> list = new ArrayList<>();
-        for (DataType t : items) {
-            list.add(t);
-        }
-        list.trimToSize();
-        return list;
-    }
 
     @Override
     public void setNextStage(ActorRef nextStage) {
@@ -333,7 +278,7 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
 
     public static void processMessageBundle(Actor self, MessageBundle<Object> mb) {
         mb.getData().forEach(d ->
-                self.processMessage(new KelpDispatcher.MessageAccepted<>(self, mb.getSender(), d))); //MessageBundle is already accepted by Dispatcher
+                self.processMessage(new MessageAccepted<>(self, mb.getSender(), d))); //MessageBundle is already accepted by Dispatcher
     }
 
     public void processStagingCompleted(StagingActor.StagingCompleted comp) {
@@ -392,7 +337,7 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
                         .forEachRemaining(this::processFileSplitForEachNext);
             } else {
                 fileSplitter.openLineIterator(split).forEachRemaining(line ->
-                        processMessage(new KelpDispatcher.MessageAccepted<>(this, this, line)));
+                        processMessage(new MessageAccepted<>(this, this, line)));
                 config.log("read finish: %s : %s", split, this);
             }
             flush();
@@ -582,7 +527,6 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
 
         int partitions = getShufflePartitions();
         int bufferSize = Math.min(bufferSizeMax, getShuffleBufferSize());
-        boolean hostIncludePort = isShuffleHostIncludePort();
 
         List<ActorRef> entries =
                 IntStream.range(0, partitions)
@@ -596,22 +540,15 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
                 ActorRefShuffle.createDispatchUnits(
                         entries,
                         bufferSize),
-                getKeyExtractorAndDispatchers().stream()
-                    .map(ActorBehaviorKelp.KeyExtractorsAndDispatcher::copy)
+                getSelectiveDispatchers().stream()
+                    .map(KelpDispatcher.SelectiveDispatcher::copy)
                     .collect(Collectors.toList()),
                 bufferSize,
                 (Class<SelfType>) getClass());
     }
 
-    @Deprecated
-    protected ActorRefShuffleKelp<SelfType> createShuffle(ActorSystem system, Map<ActorAddress, List<ActorRefShuffle.ShuffleEntry>> entries,
-                                                          List<ActorKelpFunctions.KeyExtractor<?, ?>> keyExtractors, int bufferSize, boolean hostIncludePort,
-                                                          Class<SelfType> actorType) {
-        return new ActorRefShuffleKelp<>(system, entries, keyExtractors, bufferSize, hostIncludePort, actorType, config);
-    }
-
     protected ActorRefShuffleKelp<SelfType> createShuffle(ActorSystem system, List<ActorRefShuffle.ShuffleEntry> entries,
-                                                          List<ActorBehaviorKelp.KeyExtractorsAndDispatcher> extractorsAndDispatchers, int bufferSize,
+                                                          List<KelpDispatcher.SelectiveDispatcher> extractorsAndDispatchers, int bufferSize,
                                                           Class<SelfType> actorType) {
         return new ActorRefShuffleKelp<>(system, entries, extractorsAndDispatchers, bufferSize, actorType, config);
     }
@@ -629,9 +566,9 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
                 .collect(Collectors.toList());
     }
 
-    protected void initExtractorsAndDispatcher(List<ActorBehaviorKelp.ExtractorsAndDispatcherFactory> extractorsAndDispatchers) {
-        this.extractorsAndDispatchers = extractorsAndDispatchers.stream()
-                .map(e -> e.createExtractorsAndDispatcher(this))
+    protected void initSelectiveDispatchers(List<ActorBehaviorKelp.SelectiveDispatcherFactory> extractorsAndDispatchers) {
+        this.selectiveDispatchers = extractorsAndDispatchers.stream()
+                .map(e -> e.createSelectiveDispatcher(this))
                 .collect(Collectors.toList());
     }
 
@@ -639,12 +576,12 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
         if (factory != null) {
             return factory.create();
         } else {
-            return new KelpDispatcher.DispatcherShuffle();
+            return dispatchShuffle().create();
         }
     }
 
-    public List<ActorBehaviorKelp.KeyExtractorsAndDispatcher> getKeyExtractorAndDispatchers() {
-        return extractorsAndDispatchers;
+    public List<KelpDispatcher.SelectiveDispatcher> getSelectiveDispatchers() {
+        return selectiveDispatchers;
     }
 
     protected ActorRef createAndPlaceShuffle(ActorPlacement place, ActorKelpSerializable<SelfType> serialized, int i) {
@@ -748,5 +685,35 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
     @Override
     public KelpDispatcher.DispatchUnit getDispatchUnit(int index) {
         return index == 0 ? new ActorRefShuffle.ShuffleEntry(this, 0, -1) : null;
+    }
+
+    ///// utilities for builder
+
+    public static <T> ActorKelpFunctions.KeyExtractorFunction<T,T> identity() {
+        return ActorKelpFunctions.KeyExtractorFunction.identity();
+    }
+
+    public static ActorKelpFunctions.DispatcherFactory dispatchAll() {
+        return KelpDispatcher.DispatcherAll::new;
+    }
+
+    public static ActorKelpFunctions.DispatcherFactory dispatchShuffle() {
+        return KelpDispatcher.DispatcherShuffle::new;
+    }
+
+    public static ActorKelpFunctions.DispatcherFactory dispatchRandomOne() {
+        return KelpDispatcher.DispatcherRandomOne::new;
+    }
+
+    public static ActorKelpFunctions.DispatcherFactory dispatchRandomPoison1() {
+        return KelpDispatcher.DispatcherRandomPoisson1::new;
+    }
+
+    public static ActorKelpFunctions.DispatcherFactory dispatchRandomOne(Random random) {
+        return () -> new KelpDispatcher.DispatcherRandomOne(random);
+    }
+
+    public static ActorKelpFunctions.DispatcherFactory dispatchRandomPoison1(Random random) {
+        return () -> new KelpDispatcher.DispatcherRandomPoisson1(random);
     }
 }

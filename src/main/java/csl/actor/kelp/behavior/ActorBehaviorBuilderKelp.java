@@ -2,11 +2,12 @@ package csl.actor.kelp.behavior;
 
 import csl.actor.*;
 import csl.actor.kelp.ActorKelp;
+import csl.actor.kelp.ActorKelpFunctions;
 import csl.actor.kelp.ActorKelpFunctions.*;
+import csl.actor.kelp.MessageBundle;
 import csl.actor.kelp.behavior.ActorBehaviorKelp.ActorBehaviorMatchKeyList;
 import csl.actor.kelp.behavior.ActorBehaviorKelp.ActorBehaviorMatchKeyListFuture;
 import csl.actor.kelp.behavior.ActorBehaviorKelp.ActorBehaviorMatchKeyListFutureStageEnd;
-import csl.actor.kelp.shuffle.ActorRefShuffle;
 import csl.actor.util.FileSplitter;
 import csl.actor.util.StagingActor;
 
@@ -22,14 +23,14 @@ public class ActorBehaviorBuilderKelp extends ActorBehaviorBuilder {
     protected Map<Integer, HistogramProcessor> processors = new HashMap<>();
     protected ActorBehaviorMatchKeyFactory matchKeyFactory = new ActorBehaviorMatchKeyFactory();
 
-    protected List<ActorBehaviorKelp.ExtractorsAndDispatcherFactory> extractorsAndDispatchers = new ArrayList<>();
-    protected Consumer<List<ActorBehaviorKelp.ExtractorsAndDispatcherFactory>> extractorsAndDispatchersTarget;
+    protected List<ActorBehaviorKelp.SelectiveDispatcherFactory> selectiveDispatchers = new ArrayList<>();
+    protected Consumer<List<ActorBehaviorKelp.SelectiveDispatcherFactory>> selectiveDispatchersTarget;
 
     public ActorBehaviorBuilderKelp(
             Consumer<List<HistogramProcessor>> histogramProcessorsTarget,
-            Consumer<List<ActorBehaviorKelp.ExtractorsAndDispatcherFactory>> extractorsAndDispatchersTarget) {
+            Consumer<List<ActorBehaviorKelp.SelectiveDispatcherFactory>> selectiveDispatchersTarget) {
         this.histogramProcessorsTarget = histogramProcessorsTarget;
-        this.extractorsAndDispatchersTarget = extractorsAndDispatchersTarget;
+        this.selectiveDispatchersTarget = selectiveDispatchersTarget;
     }
 
     public ActorBehaviorBuilderKelp matchKeyFactory(ActorBehaviorMatchKeyFactory matchKeyFactory) {
@@ -64,19 +65,19 @@ public class ActorBehaviorBuilderKelp extends ActorBehaviorBuilder {
     }
 
     public <DataType> ActorBehaviorBuilderKelp matchWithSender(Class<DataType> dataType, DispatcherFactory dispatcher, BiConsumer<DataType, ActorRef> handler) {
-        with(new ActorBehaviorMatchWithDispatcher<>(dataType, handler, dispatcher));
+        with(matchKeyFactory.get(dataType, handler, dispatcher));
         return this;
     }
 
     public ActorBehaviorBuilderKelp matchAny(DispatcherFactory dispatcher, BiConsumer<Object, ActorRef> handler) {
-        with(new ActorBehaviorAnyWithDispatcher(handler, dispatcher));
+        with(matchKeyFactory.getAny(handler, dispatcher));
         return this;
     }
 
     @Override
     public ActorBehaviorBuilderKelp with(ActorBehavior behavior) {
-        if (behavior instanceof ActorBehaviorKelp.ExtractorsAndDispatcherFactory) {
-            extractorsAndDispatchers.add((ActorBehaviorKelp.ExtractorsAndDispatcherFactory) behavior);
+        if (behavior instanceof ActorBehaviorKelp.SelectiveDispatcherFactory) {
+            selectiveDispatchers.add((ActorBehaviorKelp.SelectiveDispatcherFactory) behavior);
         }
         super.with(behavior);
         return this;
@@ -94,20 +95,19 @@ public class ActorBehaviorBuilderKelp extends ActorBehaviorBuilder {
                     .sorted(Map.Entry.comparingByKey())
                     .map(Map.Entry::getValue)
                     .collect(Collectors.toList()));
-        extractorsAndDispatchersTarget.accept(extractorsAndDispatchers);
+        selectiveDispatchersTarget.accept(selectiveDispatchers);
         return b;
     }
 
-    private void withTop(ActorBehavior behavior) {
+    protected void withTop(ActorBehavior behavior) {
         if (this.behavior == null || this.behavior.equals(BEHAVIOR_NOTHING)) {
             this.behavior = behavior;
         } else {
-            this.behavior = new ActorBehaviorOr(behavior, this.behavior);
+            this.behavior = matchFactory.getOr(behavior, this.behavior);
         }
     }
 
-
-    public static class ActorBehaviorMatchWithDispatcher<DataType> extends ActorBehaviorMatch<DataType> implements ActorBehaviorKelp.ExtractorsAndDispatcherFactory {
+    public static class ActorBehaviorMatchWithDispatcher<DataType> extends ActorBehaviorMatch<DataType> implements ActorBehaviorKelp.SelectiveDispatcherFactory {
         protected DispatcherFactory dispatcher;
 
         public ActorBehaviorMatchWithDispatcher(Class<DataType> dataType, BiConsumer<DataType, ActorRef> handler, DispatcherFactory dispatcher) {
@@ -116,13 +116,13 @@ public class ActorBehaviorBuilderKelp extends ActorBehaviorBuilder {
         }
 
         @Override
-        public ActorBehaviorKelp.KeyExtractorsAndDispatcher createExtractorsAndDispatcher(ActorKelp<?> self) {
-            return new ActorBehaviorKelp.KeyExtractorsAndDispatcher(Collections.singletonList(ActorRefShuffle.DEFAULT_KEY_EXTRACTOR),
+        public KelpDispatcher.SelectiveDispatcher createSelectiveDispatcher(ActorKelp<?> self) {
+            return new KelpDispatcher.SelectiveDispatcher(Collections.singletonList(ActorKelpFunctions.DEFAULT_KEY_EXTRACTOR),
                     self.createDispatcher(dispatcher));
         }
     }
 
-    public static class ActorBehaviorAnyWithDispatcher extends ActorBehaviorAny implements ActorBehaviorKelp.ExtractorsAndDispatcherFactory {
+    public static class ActorBehaviorAnyWithDispatcher extends ActorBehaviorAny implements ActorBehaviorKelp.SelectiveDispatcherFactory {
         protected DispatcherFactory dispatcher;
 
         public ActorBehaviorAnyWithDispatcher(BiConsumer<Object, ActorRef> handler, DispatcherFactory dispatcher) {
@@ -131,18 +131,25 @@ public class ActorBehaviorBuilderKelp extends ActorBehaviorBuilder {
         }
 
         @Override
-        public ActorBehaviorKelp.KeyExtractorsAndDispatcher createExtractorsAndDispatcher(ActorKelp<?> self) {
-            return new ActorBehaviorKelp.KeyExtractorsAndDispatcher(Collections.singletonList(ActorRefShuffle.DEFAULT_KEY_EXTRACTOR),
+        public KelpDispatcher.SelectiveDispatcher createSelectiveDispatcher(ActorKelp<?> self) {
+            return new KelpDispatcher.SelectiveDispatcher(Collections.singletonList(ActorKelpFunctions.DEFAULT_KEY_EXTRACTOR),
                     self.createDispatcher(dispatcher));
         }
     }
 
+    /**
+     * all messages arrived as regular {@link Message} will be selected by {@link KelpDispatcher}.
+     * After the selection, a message will be {@link MessageBundle} or {@link csl.actor.kelp.shuffle.MessageAccepted}.
+     * The dispatcher mechanism can be separated to the call-site part, and thus the selection is usually done by the call-site,
+     *    and the arrived message will be those selected one.
+     *   Otherwise, the behavior process the selection on the receiver-site.
+     */
     public static class ActorBehaviorDispatcher implements ActorBehavior {
         @Override
         public boolean process(Actor self, Message<?> message) {
-            if (message != null && message.getClass().equals(Message.class) && self instanceof ActorKelp<?>) { //not yet accepted by disptacher
-                ActorRefShuffle.tellMessageShuffle((ActorKelp<?>) self,
-                        ((ActorKelp<?>) self).getKeyExtractorAndDispatchers(), message);
+            if (message != null && message.getClass().equals(Message.class) && self instanceof ActorKelp<?>) { //not yet accepted by dispatcher
+                KelpDispatcher.tellMessageShuffle((ActorKelp<?>) self,
+                        ((ActorKelp<?>) self).getSelectiveDispatchers(), message);
                 return true;
             } else {
                 return false;
@@ -154,13 +161,13 @@ public class ActorBehaviorBuilderKelp extends ActorBehaviorBuilder {
         @SuppressWarnings("unchecked")
         @Override
         public boolean process(Actor self, Message<?> message) {
-            if (message instanceof ActorKelp.MessageBundle) {
+            if (message instanceof MessageBundle) {
                 if (self instanceof ActorKelp<?>) {
                     ((ActorKelp<?>) self).processMessageBundle(
-                            (ActorKelp.MessageBundle<Object>) message);
+                            (MessageBundle<Object>) message);
                 } else {
                     ActorKelp.processMessageBundle(self,
-                            (ActorKelp.MessageBundle<Object>) message);
+                            (MessageBundle<Object>) message);
                 }
                 return true;
             }
@@ -828,6 +835,14 @@ public class ActorBehaviorBuilderKelp extends ActorBehaviorBuilder {
 
 
     public static class ActorBehaviorMatchKeyFactory {
+        public <DataType> ActorBehavior get(Class<DataType> dataType, BiConsumer<DataType, ActorRef> handler, DispatcherFactory dispatcher) {
+            return new ActorBehaviorMatchWithDispatcher<>(dataType, handler, dispatcher);
+        }
+
+        public ActorBehavior getAny(BiConsumer<Object, ActorRef> handler, DispatcherFactory dispatcher) {
+            return new ActorBehaviorAnyWithDispatcher(handler, dispatcher);
+        }
+
         public <KeyType, ParamType1, ValueType1> ActorBehavior get1(int matchKeyEntryId, KeyComparator<KeyType> keyComparator,
                                                   KeyExtractor<KeyType, ParamType1> keyExtractorFromValue1,
                                                   Function<ParamType1, ValueType1> valueExtractorFromValue1,

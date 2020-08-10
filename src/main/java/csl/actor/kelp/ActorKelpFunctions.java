@@ -26,6 +26,8 @@ public class ActorKelpFunctions {
         }
     }
 
+    public static KeyExtractorClass<?,Object> DEFAULT_KEY_EXTRACTOR = new KeyExtractorClass<>(Object.class, KeyExtractorFunction.identity());
+
     public static class KeyExtractorClass<KeyType, ValueType> implements KeyExtractor<KeyType, ValueType> {
         public static final long serialVersionUID = 1L;
 

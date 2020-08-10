@@ -103,6 +103,7 @@ public interface KelpStage<ActorType extends Actor> extends ActorRef, KelpDispat
     }
 
     default CompletableFuture<StagingActor.StagingCompleted> sync(Instant startTime) {
+        flush();
         return StagingActor.staging(getSystem())
                 .withStartTime(startTime)
                 .startActors(getMemberActors());
