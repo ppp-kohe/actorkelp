@@ -15,6 +15,7 @@ import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
+import java.lang.reflect.Type;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
@@ -44,6 +45,14 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
         }
     }
 
+    /**
+     * the primary constructor of the class.
+     *  {@link ActorKelpSerializable} restores an actor instance
+     *    by calling the constructor which takes same arg-types of the constructor.
+     * @param system the system
+     * @param name the name
+     * @param config the config
+     */
     public ActorKelp(ActorSystem system, String name, ConfigKelp config) {
         this(system, name, null, null, config);
         this.mailbox = initMailbox();
@@ -371,6 +380,12 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
 
     /**
      * default reader class
+     * <pre>
+     *     var r = new FileReader();
+     *     r.connects(new MapperActor()); //mappers will receive FileSplit and String lines
+     *
+     *     r.startReading("file.txt").get();
+     * </pre>
      */
     public static class FileReader extends ActorKelp<FileReader> {
         public FileReader(ActorSystem system, String name, ConfigKelp config) {
@@ -464,18 +479,72 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
     @Retention(RetentionPolicy.RUNTIME)
     public @interface TransferredState {
         MergerOpType mergeType() default MergerOpType.Default;
+        /**
+         * @return specified class for constructing merger operation for the target field.
+         *   It uses <code>public static get({@link MergerOpType},{@link java.lang.reflect.Type})</code>
+         *    and obtains {@link ActorKelpMergerFunctions.MergerFunction}.
+         *   The default is {@link ActorKelpMergerFunctions.MergerFunctionDefault} and
+         *     {@link ActorKelpMergerFunctions.MergerFunctionDefault#get(MergerOpType, Type)} just calls
+         *       {@link ActorKelpMergerFunctions#getMergerFunction(MergerOpType, Type)}
+         *         which employs a default operation specified by {@link #mergeType()}.
+         */
         Class<? extends ActorKelpMergerFunctions.MergerFunction<?>> mergeFunc()
                 default ActorKelpMergerFunctions.MergerFunctionDefault.class;
+        /**
+         * @return indicates the target field is not restored and the field is used only merging.
+         */
         boolean mergeOnly() default false;
     }
 
     public enum MergerOpType {
+        /** <ul>
+         * <li>{@link ActorKelpMergerFunctions.Mergeable}: calling l.merge(r) </li>
+         * <li>Map: {k=merge(lv,rv)}</li>
+         * <li>otherwise: {@link #None} </li>
+         * </ul>
+         */
         Default,
+        /** <ul>
+         * <li>numbers: l+r </li>
+         * <li>number arrays: {l[i]+r[i]} </li>
+         * <li>{@link Set} or {@link List}: v.addAll(l); v.addAll(r);</li>
+         * <li>Map: {k=merge(lv,rv)}</li>
+         * </ul>
+         */
         Add,
+        /** <ul>
+         *  <li>numbers: l*r </li>
+         *  <li>number arrays: {l[i]*r[i]}</li>
+         *  <li>Map: {k=merge(lv,rv)}</li>
+         *  </ul>
+         */
         Multiply,
+        /** <ul>
+         *  <li>numbers: mean(l,r) e.g. for int, {@link ActorKelpSerializable.MergingContext#mean(int, int)}</li>
+         *  <li>number arrays: {mean(l[i],r[i])}</li>
+         *  <li>Map: {k=merge(lv,rv)}</li>
+         *  </ul>
+         */
         Mean,
+        /** <ul>
+         *  <li>numbers: max(l,r) e.g. {@link Math#max(int, int)}</li>
+         *  <li>number arrays: {max(l[i],r[i])}</li>
+         *  <li>{@link Comparable}: compareTo(l,r) and select &gt;0 </li>
+         *  <li>Map: {k=merge(lv,rv)}</li>
+         *  </ul>
+         */
         Max,
+        /** <ul>
+         *  <li>numbers: min(l,r) e.g. {@link Math#min(int, int)}</li>
+         *  <li>number arrays: {min(l[i],r[i])}</li>
+         *  <li>{@link Comparable}: compareTo(l,r) and select &lt;0 </li>
+         *  <li>Map: {k=merge(lv,rv)}</li>
+         *  </ul>
+         */
         Min,
+        /**
+         * l or r if l==null
+         */
         None;
     }
 

@@ -4,10 +4,7 @@ import com.esotericsoftware.kryo.Kryo;
 import csl.actor.ActorRef;
 import csl.actor.ActorSystem;
 import csl.actor.cluster.KryoBuilderCluster;
-import csl.actor.kelp.behavior.ActorBehaviorKelp;
-import csl.actor.kelp.behavior.HistogramEntry;
-import csl.actor.kelp.behavior.KeyHistograms;
-import csl.actor.kelp.behavior.KeyHistogramsPersistable;
+import csl.actor.kelp.behavior.*;
 import csl.actor.kelp.shuffle.*;
 
 import java.util.ArrayList;
@@ -45,6 +42,8 @@ public class KryoBuilderKelp extends KryoBuilderCluster {
                 ActorKelpFunctions.KeyExtractorClass.class,
                 ActorKelpFunctions.KeyExtractorFunction.class,
                 ActorKelpFunctions.KeyExtractorList.class,
+
+                ActorKelpFunctions.DispatcherFactory.class,
 
                 ActorKelpMerger.MergeTask.class,
                 ActorKelpMerger.ToStateTask.class,
@@ -86,8 +85,29 @@ public class KryoBuilderKelp extends KryoBuilderCluster {
                 KeyHistogramsPersistable.HistogramTreePersistable.class,
                 KeyHistogramsPersistable.NodeTreeData.class,
                 KeyHistogramsPersistable.PersistentFileReaderSourceWithSize.class,
-                KeyHistogramsPersistable.PutIndexHistory.class
+                KeyHistogramsPersistable.PutIndexHistory.class,
 
+                KelpDispatcher.class,
+                KelpDispatcher.DispatcherAll.class,
+                KelpDispatcher.DispatcherRandomOne.class,
+                KelpDispatcher.DispatcherRandomPoisson1.class,
+                KelpDispatcher.DispatcherShuffle.class,
+                KelpDispatcher.SelectiveDispatcher.class,
+
+                ActorKelpMergerFunctions.Mergeable.class,
+                ActorKelpMerger.MergeTask.class,
+                ActorKelpMerger.ToStateTask.class,
+                ActorKelpStateSharing.MergerOperator.class,
+                ActorKelpStateSharing.SetStateFunction.class,
+                ActorKelpStateSharing.StateSharingRequest.class,
+                ActorKelpStateSharing.StateSharingRequestLambda.class,
+                ActorKelpStateSharing.ToStateFunction.class,
+                ActorKelpStateSharing.ToStateTask.class,
+
+                ActorRefShuffle.ShuffleEntry.class,
+
+                ClusterKelp.ActorStat.class,
+                ClusterKelp.HistogramStat.class
         ));
 
         return cs;

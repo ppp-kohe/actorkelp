@@ -47,7 +47,7 @@ public interface KelpStage<ActorType extends Actor> extends ActorRef, KelpDispat
      * it collects state of member {@link ActorKelp}s
      *  and returns as a local actor by merging.
      *    It is a synchronous task.
-     * Each member actor become disabled.
+     * Each member actor becomes disabled.
      * The actor's {@link AutoCloseable#close()} will be executed.
      * @return the merged actor
      */
@@ -59,7 +59,12 @@ public interface KelpStage<ActorType extends Actor> extends ActorRef, KelpDispat
      */
     ActorType getMergedState();
 
-
+    /**
+     * collecting member states obtained by the function
+     * @param toState the function (actor) -&gt; state
+     * @param <StateType> the state type
+     * @return list of collected states
+     */
     default <StateType> List<StateType> collectStates(ActorKelpStateSharing.ToStateFunction<ActorType, StateType> toState) {
         return merge(ActorKelpStateSharing.factory((a) -> {
             List<StateType> sl = new ArrayList<>();
@@ -71,6 +76,13 @@ public interface KelpStage<ActorType extends Actor> extends ActorRef, KelpDispat
         }));
     }
 
+    /**
+     * collecting and merging states obtained by the functions
+     * @param toState the state getter function (actor) -&gt; state
+     * @param merger  (state1,state2)-&gt;mergedState
+     * @param <StateType> the state type
+     * @return the merged state for all members
+     */
     default <StateType> StateType getMergedState(ActorKelpStateSharing.ToStateFunction<ActorType, StateType> toState,
                                                  ActorKelpStateSharing.MergerOperator<StateType> merger) {
         return merge(ActorKelpStateSharing.factory(toState, merger));
@@ -80,12 +92,22 @@ public interface KelpStage<ActorType extends Actor> extends ActorRef, KelpDispat
 
     default void setSystemBySerializer(ActorSystem system) { }
 
+    /**
+     * flush buffered messages
+     */
     default void flush() {}
 
+    /**
+     * flush buffered messages
+     * @param sender the sender
+     */
     default void flush(ActorRef sender) {}
 
     ActorSystem getSystem();
 
+    /**
+     * @return the member size
+     */
     default int getDispatchUnitSize() {
         return 1;
     }
@@ -98,10 +120,19 @@ public interface KelpStage<ActorType extends Actor> extends ActorRef, KelpDispat
         forEach(s -> s.tell(msg));
     }
 
+    /**
+     * {@link #flush()} and returns a {@link CompletableFuture} from {@link StagingActor}
+     * @return a completable future
+     */
     default CompletableFuture<StagingActor.StagingCompleted> sync() {
         return sync(Instant.now());
     }
 
+    /**
+     * {@link #flush()} and returns a {@link CompletableFuture} from {@link StagingActor}
+     * @param startTime the staring time passed to the {@link StagingActor}
+     * @return a completable future
+     */
     default CompletableFuture<StagingActor.StagingCompleted> sync(Instant startTime) {
         flush();
         return StagingActor.staging(getSystem())

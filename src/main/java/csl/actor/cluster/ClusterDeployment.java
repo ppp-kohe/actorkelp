@@ -293,6 +293,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
     }
 
     /**
+     * load specified config file by {@link ClusterCommands}.
      * if the confFile is "-" {@link #NON_DRIVER_SYMBOL_CONF}, it loads the path obttained from from the property {@link #NON_DRIVER_PROPERTY_CONF}.
      *  Also, it changes the {@link #isDriverMode()} flag from {@link #NON_DRIVER_PROPERTY_FLAG}.
      *  <p>

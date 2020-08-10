@@ -14,6 +14,53 @@ import java.util.function.Predicate;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+/**
+ * The class can parse a text file as the following syntax:
+ * <pre>
+ * CommandToken ::=  LineEnd | token
+ * token        ::=  String | Colon | Number | Identifier
+ *
+ * LineEnd      ::= ('#'.*|) \n
+ * String       ::= '"' ('\'('r'|'n'|'t'|'f'|'b'|'\'|'''|'"'|'u'....)  | [^\\])* '"'
+ * Colon        ::= ':'
+ * Number       ::= [0-9]\S+
+ * Identifier   ::= \S+
+ *
+ * syntax       ::=  (block | extends | property | LineEnd)*
+ *
+ * block        ::= ('class'|'node') (Identifier|String) Colon LineEnd
+ * extends      ::= 'extends' values LineEnd
+ * property     ::= Identifier values LineEnd
+ *
+ * values       ::= value ('\\' LineEnd values |)
+ * value        ::= token*
+ * </pre>
+ * The purpose of the syntax is constructing {@link ClusterUnit}s.
+ *
+ * <p>
+ * An example file:
+ * <pre>
+ * class base:
+ *    javaVmOption "-Xmx10g"
+ *      # a class defines a set of properties can be shared for multiple nodes (machines).
+ *      # a property can overwrites a field defined
+ *      #  in {@link ConfigDeployment} or AppConfType (and its subclasses).
+ *
+ * node myhost1:
+ *    extends base
+ *    logColor 20
+ *      # a node block defines a worker computer node with the name.
+ *      # the name will be used as host name until the property 'host' is specified.
+ *      # 'extends' refers a class definition by the name and imports all property settings.
+ *      # a property defined in the block is specific for the node.
+ *
+ * node myhost2:
+ *    extends base
+ *    baseDir "/opt/data"
+ *    logColor 21
+ * </pre>
+ * @param <AppConfType> the app-config type
+ */
 public class ClusterCommands<AppConfType extends ConfigBase> {
     protected Class<AppConfType> defaultConfType;
 
