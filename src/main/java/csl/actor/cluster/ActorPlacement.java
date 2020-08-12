@@ -93,13 +93,12 @@ public interface ActorPlacement {
             this(system, PLACEMENT_NAME, strategy);
         }
 
+
         @Override
-        protected ActorBehavior initBehavior() {
-            return behaviorBuilder()
-                    .matchWithSender(AddressList.class, this::receive)
+        protected ActorBehaviorBuilder initBehavior(ActorBehaviorBuilder builder) {
+            return builder.matchWithSender(AddressList.class, this::receive)
                     .matchWithSender(ActorCreationRequest.class, this::create)
-                    .match(LeaveEntry.class, this::receiveLeave)
-                    .build();
+                    .match(LeaveEntry.class, this::receiveLeave);
         }
 
         public void join(ActorAddress.ActorAddressRemote primary) {

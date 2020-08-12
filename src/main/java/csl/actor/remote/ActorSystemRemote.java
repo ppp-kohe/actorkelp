@@ -583,10 +583,8 @@ public class ActorSystemRemote implements ActorSystem, KryoBuilder.SerializerFac
         }
 
         @Override
-        protected ActorBehavior initBehavior() {
-            return behaviorBuilder()
-                    .match(ConnectionCloseNotice.class, this::receive)
-                    .build();
+        protected ActorBehaviorBuilder initBehavior(ActorBehaviorBuilder builder) {
+            return builder.match(ConnectionCloseNotice.class, this::receive);
         }
 
         public void receive(ConnectionCloseNotice notice) {

@@ -27,7 +27,7 @@ public class ClusterFiles {
     public void deployFiles() throws Exception {
         Path appDir = Paths.get(appName);
         String header = unit.getDeploymentConfig().getAddress();
-        unit.log("%s deployFiles %s: appDir=%s", appName, header, appDir.toAbsolutePath());
+        unit.log("%s deployFiles %s: appDir=%s", appName, header, getTargetPath(appDir).toAbsolutePath());
         if (Files.exists(appDir)) {
             throw new RuntimeException("failed creation: " + appDir);
         }

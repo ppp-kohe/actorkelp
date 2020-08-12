@@ -149,6 +149,11 @@ public class StagingActor extends ActorDefault {
         return this;
     }
 
+    public StagingActor withLogging(boolean logging) {
+        entry.getTask().setLogging(logging);
+        return this;
+    }
+
     public StagingActor withWatcherSleepTimeMs(long watcherSleepTimeMs) {
         entry.getTask().setWatcherSleepTimeMs(watcherSleepTimeMs);
         return this;
@@ -211,6 +216,7 @@ public class StagingActor extends ActorDefault {
         protected Object key;
         protected ActorRef terminalActor; //stagingActor
         protected long watcherSleepTimeMs;
+        protected boolean logging = true;
 
         public StagingTask() {}
 
@@ -259,6 +265,14 @@ public class StagingActor extends ActorDefault {
 
         public Duration getElapsedTime(Instant time) {
             return Duration.between(startTime, time);
+        }
+
+        public void setLogging(boolean logging) {
+            this.logging = logging;
+        }
+
+        public boolean isLogging() {
+            return logging;
         }
     }
 
@@ -723,8 +737,10 @@ public class StagingActor extends ActorDefault {
     }
 
     public void log(StagingTask task, long started, long finished, String msg) {
-        double d = 100 * (started == 0 ? 0 : (finished / (double) started));
-        log(String.format("%s [%,3d/%,3d (%3.0f%%)] : %s", task, finished, started, d, msg));
+        if (task.isLogging()) {
+            double d = 100 * (started == 0 ? 0 : (finished / (double) started));
+            log(String.format("%s [%,3d/%,3d (%3.0f%%)] : %s", task, finished, started, d, msg));
+        }
     }
 
     protected void log(String str) {

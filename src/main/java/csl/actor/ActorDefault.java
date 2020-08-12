@@ -32,7 +32,13 @@ public abstract class ActorDefault extends Actor {
         this.behavior = behavior;
     }
 
-    protected abstract ActorBehavior initBehavior();
+    protected ActorBehavior initBehavior() {
+        return initBehavior(behaviorBuilder()).build();
+    }
+
+    protected ActorBehaviorBuilder initBehavior(ActorBehaviorBuilder builder) {
+        return builder;
+    }
 
     protected ActorBehaviorBuilder behaviorBuilder() {
         return new ActorBehaviorBuilder();

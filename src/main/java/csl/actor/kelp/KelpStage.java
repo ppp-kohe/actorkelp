@@ -134,10 +134,14 @@ public interface KelpStage<ActorType extends Actor> extends ActorRef, KelpDispat
      * @return a completable future
      */
     default CompletableFuture<StagingActor.StagingCompleted> sync(Instant startTime) {
+        return sync(s -> s.withStartTime(startTime));
+    }
+
+    default CompletableFuture<StagingActor.StagingCompleted> sync(Consumer<StagingActor> editor) {
         flush();
-        return StagingActor.staging(getSystem())
-                .withStartTime(startTime)
-                .startActors(getMemberActors());
+        StagingActor s = StagingActor.staging(getSystem());
+        editor.accept(s);
+        return s.startActors(getMemberActors());
     }
 
     default CompletableFuture<StagingActor.StagingCompleted> forEachTellSync(Instant startTime, Consumer<KelpDispatcher.DispatchUnit> task) {

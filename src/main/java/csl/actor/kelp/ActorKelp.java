@@ -240,6 +240,9 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
         return new ActorBehaviorBuilderKelp(getMailboxAsKelp()::initMessageEntries, this::initSelectiveDispatchers);
     }
 
+    protected ActorBehaviorBuilder initBehavior(ActorBehaviorBuilderKelp builder) {
+        return super.initBehavior(builder);
+    }
 
     @Override
     public void setNextStage(ActorRef nextStage) {
@@ -398,12 +401,6 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
 
         public FileReader(ActorSystem system) {
             super(system);
-        }
-
-        @Override
-        protected ActorBehavior initBehavior() {
-            return behaviorBuilder()
-                    .build();
         }
 
         @Override
