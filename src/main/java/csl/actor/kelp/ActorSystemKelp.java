@@ -14,6 +14,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
@@ -57,12 +58,27 @@ public class ActorSystemKelp extends ActorSystemRemote {
         this(new ActorSystemDefaultForKelp(configDeployment), configDeployment.kryoBuilder(defaultBuilderType()));
     }
 
-    public ActorSystemKelp(ActorSystemDefault localSystem, Function<ActorSystem, Kryo> kryoFactory) {
+    public ActorSystemKelp(ActorSystemDefaultForKelp localSystem, Function<ActorSystem, Kryo> kryoFactory) {
         super(localSystem, kryoFactory);
+    }
+
+    public ExecutorService getMergerExecutors() {
+        return ((ActorSystemDefaultForKelp) localSystem).getMergerExecutors();
+    }
+
+    public static ExecutorService getMergerExecutors(ActorSystem system) {
+        if (system instanceof ActorSystemDefaultForKelp) {
+            return ((ActorSystemDefaultForKelp) system).getMergerExecutors();
+        } else if (system instanceof ActorSystemKelp) {
+            return ((ActorSystemKelp) system).getMergerExecutors();
+        } else {
+            return null;
+        }
     }
 
     public static class ActorSystemDefaultForKelp extends ActorSystemCluster.ActorSystemDefaultForCluster {
         protected ConfigDeployment configDeployment;
+        protected ExecutorService mergerExecutors;
 
         public ActorSystemDefaultForKelp() {
             this(new ConfigDeployment(), KryoBuilderKelp.builder());
@@ -87,6 +103,11 @@ public class ActorSystemKelp extends ActorSystemRemote {
         protected void initSystemExecutorService() {
             executorService = Executors.newFixedThreadPool(
                     Math.max(1, (int) (threads * configDeployment.systemThreadFactor)));
+            mergerExecutors = Executors.newCachedThreadPool();
+        }
+
+        public ExecutorService getMergerExecutors() {
+            return mergerExecutors;
         }
 
         @Override
@@ -104,6 +125,12 @@ public class ActorSystemKelp extends ActorSystemRemote {
 
         public int getClientThreads() {
             return Math.max(1, (int) (getThreads() * configDeployment.systemClientThreadsFactor));
+        }
+
+        @Override
+        public void close() {
+            super.close();
+            mergerExecutors.shutdownNow();
         }
     }
 

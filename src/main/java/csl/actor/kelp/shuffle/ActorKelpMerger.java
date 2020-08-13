@@ -3,6 +3,7 @@ package csl.actor.kelp.shuffle;
 import csl.actor.*;
 import csl.actor.kelp.ActorKelp;
 import csl.actor.kelp.ActorKelpSerializable;
+import csl.actor.kelp.ActorSystemKelp;
 import csl.actor.kelp.ConfigKelp;
 import csl.actor.kelp.behavior.MailboxKelp;
 import csl.actor.util.ResponsiveCalls;
@@ -18,17 +19,24 @@ import java.util.concurrent.Future;
 public class ActorKelpMerger<ActorType extends ActorKelp<ActorType>> implements AutoCloseable {
     protected ActorSystem system;
     protected ExecutorService executor;
+    protected boolean executorOwner;
     protected ConfigKelp config;
 
     public ActorKelpMerger(ActorSystem system, ConfigKelp config) {
         this.system = system;
         this.config = config;
-        executor = Executors.newCachedThreadPool();
+        executor = ActorSystemKelp.getMergerExecutors(system);
+        if (executor == null) {
+            executor = Executors.newCachedThreadPool();
+            executorOwner = true;
+        }
     }
 
     @Override
     public void close() {
-        executor.shutdown();
+        if (executorOwner) {
+            executor.shutdown();
+        }
     }
 
     @SuppressWarnings("unchecked")

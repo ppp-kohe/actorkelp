@@ -1,6 +1,7 @@
 package csl.actor.kelp.shuffle;
 
 import csl.actor.*;
+import csl.actor.kelp.ActorSystemKelp;
 import csl.actor.kelp.ConfigKelp;
 import csl.actor.kelp.behavior.MailboxKelp;
 import csl.actor.util.ResponsiveCalls;
@@ -20,6 +21,7 @@ import java.util.function.BinaryOperator;
 public abstract class ActorKelpStateSharing<ActorType extends Actor, StateType> implements AutoCloseable {
     protected ActorSystem system;
     protected ExecutorService executor;
+    protected boolean executorOwner;
     protected ConfigKelp config;
     protected UUID id;
     protected boolean share;
@@ -31,13 +33,19 @@ public abstract class ActorKelpStateSharing<ActorType extends Actor, StateType> 
     public ActorKelpStateSharing(ActorSystem system, ConfigKelp config, UUID id) {
         this.system = system;
         this.config = config;
-        executor = Executors.newCachedThreadPool();
+        executor = ActorSystemKelp.getMergerExecutors(system);
+        if (executor == null) {
+            executor = Executors.newCachedThreadPool();
+            executorOwner = true;
+        }
         this.id = id;
     }
 
     @Override
     public void close() {
-        executor.shutdown();
+        if (executorOwner) {
+            executor.shutdown();
+        }
     }
 
     public StateType shareSync(List<? extends ActorRef> members) {
