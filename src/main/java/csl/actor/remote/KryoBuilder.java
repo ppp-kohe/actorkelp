@@ -132,9 +132,12 @@ public class KryoBuilder {
         kryo.setRegistrationRequired(false);
         kryo.setReferences(true);
         kryo.setInstantiatorStrategy(new DefaultInstantiatorStrategy(new StdInstantiatorStrategy()));
+        /*
         var conf = new FieldSerializer.FieldSerializerConfig();
         conf.setFieldsAsAccessible(false);
         kryo.setDefaultSerializer(new com.esotericsoftware.kryo.SerializerFactory.FieldSerializerFactory(conf));
+         */
+        kryo.setDefaultSerializer(new PublicFieldSerializer.SerializerFactoryPublicField<Object>());
     }
 
     protected void buildRegisterBasic(Kryo kryo) {

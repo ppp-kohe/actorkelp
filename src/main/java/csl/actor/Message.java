@@ -6,9 +6,9 @@ import java.util.function.Function;
 public class Message<DataType> implements Serializable {
     public static final long serialVersionUID = 1L;
 
-    protected ActorRef target;
-    protected ActorRef sender;
-    protected DataType data;
+    public final ActorRef target;
+    public final ActorRef sender;
+    public final DataType data;
 
     public Message(ActorRef target, ActorRef sender, DataType data) {
         this.target = target;
