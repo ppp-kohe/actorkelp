@@ -1,9 +1,6 @@
 package csl.actor.remote;
 
-import com.esotericsoftware.kryo.Kryo;
-import com.esotericsoftware.kryo.KryoSerializable;
-import com.esotericsoftware.kryo.Registration;
-import com.esotericsoftware.kryo.Serializer;
+import com.esotericsoftware.kryo.*;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 import com.esotericsoftware.kryo.serializers.ClosureSerializer;
@@ -122,7 +119,7 @@ public class KryoBuilder {
         buildKryoInit(kryo);
         buildRegisterBasic(kryo);
         buildRegisterLambda(kryo);
-        buildRegisterBasicAdditional(kryo);
+        //java17: buildRegisterBasicAdditional(kryo);
         buildRegisterActor(kryo);
         return kryo;
     }
@@ -135,19 +132,24 @@ public class KryoBuilder {
         kryo.setRegistrationRequired(false);
         kryo.setReferences(true);
         kryo.setInstantiatorStrategy(new DefaultInstantiatorStrategy(new StdInstantiatorStrategy()));
+        var conf = new FieldSerializer.FieldSerializerConfig();
+        conf.setFieldsAsAccessible(false);
+        kryo.setDefaultSerializer(new com.esotericsoftware.kryo.SerializerFactory.FieldSerializerFactory(conf));
     }
 
     protected void buildRegisterBasic(Kryo kryo) {
+        KyroBaseSerializer.register(kryo);
         register(kryo, getDefaultSerializerClasses());
         register(kryo, getBaseClasses());
     }
 
     protected void buildRegisterLambda(Kryo kryo) {
         kryo.register(SerializedLambda.class);
-        kryo.register(ClosureSerializer.Closure.class, new ClosureSerializer());
+        //kryo.register(ClosureSerializer.Closure.class, new ClosureSerializer()); //java17
     }
 
     @SuppressWarnings("unchecked")
+    @Deprecated
     protected void buildRegisterBasicAdditional(Kryo kryo) {
         registerObjectStream(kryo, EnumMap.class);
         registerObjectStream(kryo, SimpleTimeZone.class);
@@ -167,6 +169,7 @@ public class KryoBuilder {
     protected void buildRegisterActorRef(Kryo kryo) {
         kryo.addDefaultSerializer(ActorRef.class, new ActorRefRemoteSerializer<>(system)); //for sub-types
          // subsequent kryo.register(t) obtains the default serializer. So the sub-types of ActorRef will use the serializer
+        kryo.addDefaultSerializer(ActorAddress.class, new ActorAddressSerializer());
     }
 
     public void register(Kryo kryo, List<Class<?>> types) {
@@ -185,8 +188,10 @@ public class KryoBuilder {
         try {
             cls.getConstructor();
         } catch (Exception ex) {
-            r.setInstantiator(new ObjectStreamClassInstantiator<>(cls));
-            r.setSerializer(new JavaSerializer());
+            throw new RuntimeException(ex);
+            //java17
+            //r.setInstantiator(new ObjectStreamClassInstantiator<>(cls));
+            //r.setSerializer(new JavaSerializer());
         }
     }
 
@@ -204,7 +209,6 @@ public class KryoBuilder {
             }
         }
     }
-
 
     public List<Class<?>> getDefaultSerializerClasses() {
         return Arrays.asList(
@@ -246,15 +250,17 @@ public class KryoBuilder {
                 Arrays.asList().getClass(),
                 void.class,
                 PriorityQueue.class,
-                BitSet.class);
-    }
+                BitSet.class,
 
-    public List<Class<?>> getBaseClasses() { //java.base
-        return Arrays.asList(
-                //java.lang
                 Boolean.class, Byte.class, Character.class, Double.class, Object.class,
                 Float.class, Integer.class, Long.class, Number.class, Object.class, Short.class, Throwable.class, Void.class,
-
+                //java.time
+                Duration.class, Instant.class, LocalDate.class, LocalDateTime.class, LocalTime.class,
+                MonthDay.class, OffsetDateTime.class, OffsetTime.class, Period.class, Year.class, YearMonth.class,
+                ZonedDateTime.class, ZoneId.class, ZoneOffset.class, DayOfWeek.class, Month.class);
+    }
+    public List<Class<?>> getBaseClasses() { //java.base
+        return Arrays.asList(
                 //java.io
                 File.class,
 
@@ -271,25 +277,26 @@ public class KryoBuilder {
                 Format.class, Format.Field.class, MessageFormat.class, MessageFormat.Field.class,
                 NumberFormat.class, NumberFormat.Field.class, SimpleDateFormat.class,
 
-                //java.time
-                Duration.class, Instant.class, LocalDate.class, LocalDateTime.class, LocalTime.class,
-                MonthDay.class, OffsetDateTime.class, OffsetTime.class, Period.class, Year.class, YearMonth.class,
-                ZonedDateTime.class, ZoneId.class, ZoneOffset.class, DayOfWeek.class, Month.class,
+
+
+                //java.util
+                ArrayList.class, ArrayDeque.class, BitSet.class,
+                EnumMap.class, GregorianCalendar.class, HashMap.class, HashSet.class,  Hashtable.class, IdentityHashMap.class,
+                LinkedHashMap.class, LinkedHashSet.class, LinkedList.class,
+
+                PriorityQueue.class, Properties.class, Random.class, SimpleTimeZone.class, Stack.class,
+                TreeMap.class, TreeSet.class , Vector.class, WeakHashMap.class,
+
+                Optional.class, OptionalInt.class, OptionalDouble.class, OptionalLong.class,
+
+                UUID.class, Locale.class, Calendar.class, Date.class, Currency.class,
+
+                //java.util.concurrent
+                TimeUnit.class,
 
                 //java.time.chrono
                 HijrahDate.class, HijrahEra.class, JapaneseEra.class, JapaneseDate.class, MinguoEra.class, MinguoDate.class,
                 ThaiBuddhistDate.class, ThaiBuddhistEra.class, IsoEra.class,
-
-                //java.util
-                ArrayList.class, ArrayDeque.class, BitSet.class, Calendar.class, Currency.class, Date.class,
-                EnumMap.class, GregorianCalendar.class, HashMap.class, HashSet.class,  Hashtable.class, IdentityHashMap.class,
-                LinkedHashMap.class, LinkedHashSet.class, LinkedList.class, Locale.class,
-                Locale.class, Optional.class, OptionalInt.class, OptionalDouble.class, OptionalLong.class,
-                PriorityQueue.class, Properties.class, Random.class, SimpleTimeZone.class, Stack.class,
-                TreeMap.class, TreeSet.class, UUID.class, Vector.class, WeakHashMap.class,
-
-                //java.util.concurrent
-                TimeUnit.class,
 
                 //java.util.concurrent.atomic
                 AtomicBoolean.class, AtomicInteger.class, AtomicIntegerArray.class, AtomicLong.class, AtomicLongArray.class,

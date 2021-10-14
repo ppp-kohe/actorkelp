@@ -197,6 +197,14 @@ public abstract class ActorAddress {
         public ActorRefLocalNamed toLocal(ActorSystem system) {
             return new ActorRefLocalNamed.ActorRefLocalNamedNoName(system, this);
         }
+
+        public int getIdentityHashCode() {
+            return identityHashCode;
+        }
+
+        public String getTypeName() {
+            return typeName;
+        }
     }
 
     public static class ActorAddressError extends ActorAddressRemoteActor {
@@ -211,6 +219,10 @@ public abstract class ActorAddress {
         @Override
         public String toString() {
             return super.toString() + "#" + info;
+        }
+
+        public String getInfo() {
+            return info;
         }
     }
 }
