@@ -22,18 +22,29 @@ public class ActorKelpMergerSharing<ActorType extends ActorKelp<ActorType>> exte
 
     @Override
     public ToStateFunction<ActorType, ActorKelpSerializable<ActorType>> getToState() {
-        return (k) -> {
-            ActorKelpSerializable<ActorType> s = k.toSerializable(false);
+        return new GetToState<>();
+    }
+
+    public static class GetToState<ActorType extends ActorKelp<ActorType>> implements ToStateFunction<ActorType, ActorKelpSerializable<ActorType>> {
+        @Override
+        public ActorKelpSerializable<ActorType> apply(ActorType self) {
+            ActorKelpSerializable<ActorType> s = self.toSerializable(false);
             s.internalStateUsed = true;
             return s;
-        };
+        }
     }
 
     @SuppressWarnings({"rawtypes", "unchecked"})
     @Override
     public SetStateFunction<ActorType, ActorKelpSerializable<ActorType>> getSetState() {
-        return (k,state) ->
-            k.setSerializable((ActorKelpSerializable) state);
+        return new SetStateFunctionSetSerializable<>();
+    }
+
+    public static class SetStateFunctionSetSerializable<ActorType extends ActorKelp<ActorType>> implements SetStateFunction<ActorType, ActorKelpSerializable<ActorType>> {
+        @Override
+        public void accept(ActorType self, ActorKelpSerializable<ActorType> state) {
+            self.setSerializable((ActorKelpSerializable) state);
+        }
     }
 
     public ActorType mergeToLocalSync(List<? extends ActorRef> members) {

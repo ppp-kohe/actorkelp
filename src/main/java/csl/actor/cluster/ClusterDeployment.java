@@ -228,7 +228,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
                     attachInitPlaceRef(addr);
 
                     String s = ResponsiveCalls.sendTask(getSystem(), getPlace(),
-                            Object::toString).get(30, TimeUnit.SECONDS);
+                            new ToStringMessage()).get(30, TimeUnit.SECONDS);
                     primary.log("launched: %s", s);
                     return;
                 } catch (Exception ex) {
@@ -241,6 +241,13 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
             throw last;
         } catch (Exception ex) {
             throw new RuntimeException(ex);
+        }
+    }
+
+    public static class ToStringMessage implements CallableMessage<Actor, String> {
+        @Override
+        public String call(Actor self) {
+            return self.toString();
         }
     }
 
@@ -1053,7 +1060,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
     public ActorRef getPlace(ActorRef actor) {
         if (actor instanceof ActorRefRemote) {
             ActorAddress address = ((ActorRefRemote) actor).getAddress();
-            ActorPlacement.AddressListEntry entry = placeGet(p -> p.getEntry(address));
+            ActorPlacement.AddressListEntry entry = placeGet(new PlaceGetEntry<>(address));
             return entry.getPlacementActor().ref(getSystem());
         } else if (actor instanceof Actor) {
             try {
@@ -1067,16 +1074,65 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         }
     }
 
+    public static class PlaceGetEntry<AppConfType extends ConfigBase,
+            PlaceType extends ClusterDeployment.ActorPlacementForCluster<AppConfType>>
+            implements CallableMessage<PlaceType, ActorPlacement.AddressListEntry> {
+        public ActorAddress address;
+
+        public PlaceGetEntry() {}
+
+        public PlaceGetEntry(ActorAddress address) {
+            this.address = address;
+        }
+
+        @Override
+        public ActorPlacement.AddressListEntry call(PlaceType self) {
+            return self.getEntry(address);
+        }
+    }
+
     @PropertyInterface("placement-move")
     public CompletableFuture<ActorRef> move(ActorRef actor, ActorAddress targetHost) {
         return ResponsiveCalls.<ActorPlacementForCluster<AppConfType>, ActorRef>sendTask(getSystem(),
                 getPlace(actor),
-                (a) -> a.move(actor.asLocal(), targetHost));
+                new CallableMessageMove<>(actor, targetHost));
+    }
+
+    public static class CallableMessageMove<AppConfType extends ConfigBase>
+            implements CallableMessage<ActorPlacementForCluster<AppConfType>, ActorRef> {
+        public ActorRef actor;
+        public ActorAddress targetHost;
+
+        public CallableMessageMove() {}
+
+        public CallableMessageMove(ActorRef actor, ActorAddress targetHost) {
+            this.actor = actor;
+            this.targetHost = targetHost;
+        }
+
+        @Override
+        public ActorRef call(ActorPlacementForCluster<AppConfType> self) {
+            return self.move(actor.asLocal(), targetHost);
+        }
     }
 
     @PropertyInterface("actor-load-and-send")
     public CompletableFuture<?> loadAndSendToActor(ActorRef target, String serializedMailboxPath) {
-        return ResponsiveCalls.sendTaskConsumer(getSystem(), target, (a) -> {
+        return ResponsiveCalls.sendTaskConsumer(getSystem(), target,
+                new CallMessageLoadAndSendToActor(serializedMailboxPath));
+    }
+
+    public static class CallMessageLoadAndSendToActor implements CallableMessage.CallableMessageConsumer<Actor> {
+        public String serializedMailboxPath;
+
+        public CallMessageLoadAndSendToActor() {}
+
+        public CallMessageLoadAndSendToActor(String serializedMailboxPath) {
+            this.serializedMailboxPath = serializedMailboxPath;
+        }
+
+        @Override
+        public void accept(Actor a) {
             //temporary manager
             //TODO the serializedMailbxPath is expanded ?
             PersistentFileManager m = PersistentFileManager.createPersistentFile(serializedMailboxPath, a.getSystem());
@@ -1089,13 +1145,13 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
                     next = msg.readNext();
                 }
             }
-        });
+        }
     }
 
     @PropertyInterface("placement-shutdown")
     public CompletableFuture<?> shutdown(ActorAddress targetHost) {
         return ResponsiveCalls.<ActorPlacement.ActorPlacementDefault, String>sendTask(getSystem(),
-                placeGet(p -> p.getEntry(targetHost)).getPlacementActor().ref(getSystem()),
+                placeGet(new PlaceGetEntry<>(targetHost)).getPlacementActor().ref(getSystem()),
                 new ShutdownTask());
     }
 
@@ -1182,7 +1238,16 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         if (primary != null) {
             return primary.getAppConfig();
         } else {
-            return placeGet(p -> p.getRemoteConfig().get(p.getSelfAddress().getHostAddress()));
+            return placeGet(new PlaceGetRemoteConfig<>());
+        }
+    }
+
+    public static class PlaceGetRemoteConfig<AppConfType extends ConfigBase,
+            PlaceType extends ClusterDeployment.ActorPlacementForCluster<AppConfType>>
+            implements CallableMessage<PlaceType, AppConfType> {
+        @Override
+        public AppConfType call(PlaceType self) {
+            return self.getRemoteConfig().get(self.getSelfAddress().getHostAddress());
         }
     }
 
@@ -1214,15 +1279,41 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
             attachInitPlaceRef(addr);
 
             CompletableFuture.allOf(
-                    attachInitRun(a -> a.getDeployment().getAppName(), r -> this.appName = r),
-                    attachInitRun(a -> a.getDeployment().getPrimary(), r -> primary = r),
-                    attachInitRun(a -> a.getDeployment().getNodes(), r -> nodes = r)
+                    attachInitRun(new AttachInitRunGetAppName<>(), r -> this.appName = r),
+                    attachInitRun(new AttachInitRunGetPrimary<>(), r -> primary = r),
+                    attachInitRun(new AttachInitRunGetNodes<>(), r -> nodes = r)
                 ).get(30, TimeUnit.SECONDS);
 
         } catch (Exception ex) {
             throw new RuntimeException(ex);
         }
     }
+
+    public static class AttachInitRunGetAppName<AppConfType extends ConfigBase,
+            PlaceType extends ClusterDeployment.ActorPlacementForCluster<AppConfType>>
+        implements CallableMessage<PlaceType, String> {
+        @Override
+        public String call(PlaceType self) {
+            return self.getDeployment().getAppName();
+        }
+    }
+    public static class AttachInitRunGetPrimary<AppConfType extends ConfigBase,
+            PlaceType extends ClusterDeployment.ActorPlacementForCluster<AppConfType>>
+            implements CallableMessage<PlaceType, ClusterUnit<AppConfType>> {
+        @Override
+        public ClusterUnit<AppConfType> call(PlaceType self) {
+            return self.getDeployment().getPrimary();
+        }
+    }
+    public static class AttachInitRunGetNodes<AppConfType extends ConfigBase,
+            PlaceType extends ClusterDeployment.ActorPlacementForCluster<AppConfType>>
+            implements CallableMessage<PlaceType, List<ClusterUnit<AppConfType>>> {
+        @Override
+        public List<ClusterUnit<AppConfType>> call(PlaceType self) {
+            return self.getDeployment().getNodes();
+        }
+    }
+
 
     protected void attachInitSystem() {
         system = createAttachInitSystem();
@@ -1262,7 +1353,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
     public <T> T placeGet(ActorAddress.ActorAddressRemote host, CallableMessage<PlaceType, T> getter) {
         ActorAddress.ActorAddressRemoteActor addr;
         try {
-            addr = this.<ActorAddress.ActorAddressRemoteActor>placeGet(mp -> mp.getEntry(host).getPlacementActor());
+            addr = this.<ActorAddress.ActorAddressRemoteActor>placeGet(new PlaceGetEntryPlacementActor<>(host));
         } catch (Exception ex) {
             throw new RuntimeException("placeGet.1: getPlacementActor", ex);
         }
@@ -1276,57 +1367,154 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         }
     }
 
+    public static class PlaceGetEntryPlacementActor<AppConfType extends ConfigBase,
+            PlaceType extends ClusterDeployment.ActorPlacementForCluster<AppConfType>>
+            implements CallableMessage<PlaceType, ActorAddress.ActorAddressRemoteActor> {
+        public ActorAddress.ActorAddressRemote host;
+
+        public PlaceGetEntryPlacementActor() {}
+
+        public PlaceGetEntryPlacementActor(ActorAddress.ActorAddressRemote host) {
+            this.host = host;
+        }
+
+        @Override
+        public ActorAddress.ActorAddressRemoteActor call(PlaceType self) {
+            return self.getEntry(host).getPlacementActor();
+        }
+    }
+
     //////
 
     @PropertyInterface("system")
     public SystemStats getAttachedSystemStats() {
-        return placeGet(p -> new SystemStats().set(p));
+        return placeGet(new PlaceGetAttachedSystemStats<>());
     }
 
     @PropertyInterface("system-actors")
     public Map<String, ActorRef> getAttachedSystemNamedActorMap() {
-        return placeGet(p -> toRefMap(((ActorSystemRemote) p.getSystem()).getLocalSystem().getNamedActorMap()));
+        return placeGet(new PlaceGetAttachedSystemNamedActorMap<>());
     }
 
     @PropertyInterface("system-process-count")
     public int getAttachedSystemProcessingCount() {
-        return placeGet(p -> ((ActorSystemRemote) p.getSystem()).getLocalSystem().getProcessingCount().get());
+        return placeGet(new PlaceGetAttachedSystemProcessingCount<>());
     }
 
     @PropertyInterface("system-connections")
     public Map<ActorAddress, NetworkStats> getAttachedSystemRemoteConnectionMap() {
-        return placeGet(p -> ((ActorSystemRemote) p.getSystem()).getConnectionMap().entrySet().stream()
-                .collect(Collectors.toMap(Map.Entry::getKey, e -> new NetworkStats().send(e.getValue()))));
+        return placeGet(new PlaceGetAttachedSystemRemoteConnectionMap<>());
     }
 
     @PropertyInterface("system-server-receive")
     public NetworkStats getAttachedSystemRemoteServerReceive() {
-        return placeGet(p -> new NetworkStats().receive((ActorSystemRemote) p.getSystem()));
+        return placeGet(new PlaceGetAttachedSystemRemoteServerReceive<>());
     }
 
     @PropertyInterface("placement-total-threads")
     public int getAttachedPlacementTotalThreads() {
-        return placeGet(ActorPlacement.ActorPlacementDefault::getTotalThreads);
+        return placeGet(new PlaceGetAttachedPlacementTotalThreads<>());
     }
 
     @PropertyInterface("placement-clusters")
     public List<ActorPlacement.AddressListEntry> getAttachedPlacementCluster() {
-        return placeGet(ActorPlacement.ActorPlacementDefault::getCluster);
+        return placeGet(new PlaceGetAttachedPlacementCluster<>());
     }
 
     @PropertyInterface("placement-clusters-with-self")
     public List<ActorPlacement.AddressListEntry> getAttachedPlacementClusterWithSelf() {
-        return placeGet(ActorPlacement.ActorPlacementDefault::getClusterWithSelf);
+        return placeGet(new PlaceGetAttachedPlacementClusterWithSelf<>());
     }
 
     @PropertyInterface("placement-created-actors")
     public long getAttachedPlacementCreatedActors() {
-        return placeGet(ActorPlacement.ActorPlacementDefault::getCreatedActors);
+        return placeGet(new PlaceGetAttachedPlacementCreatedActors<>());
     }
 
     @PropertyInterface("placement-remote-config")
     public Map<ActorAddress, ? extends ConfigBase> getAttachedPlacementForClusterRemoteConfig() {
-        return placeGet(ActorPlacementForCluster::getRemoteConfig);
+        return placeGet(new PlaceGetAttachedPlacementForClusterRemoteConfig<>());
+    }
+    public static class PlaceGetAttachedSystemStats<AppConfType extends ConfigBase,
+            PlaceType extends ClusterDeployment.ActorPlacementForCluster<AppConfType>>
+            implements CallableMessage<PlaceType, SystemStats> {
+        @Override
+        public SystemStats call(PlaceType self) {
+            return new SystemStats().set(self);
+        }
+    }
+    public static class PlaceGetAttachedSystemNamedActorMap<AppConfType extends ConfigBase,
+            PlaceType extends ClusterDeployment.ActorPlacementForCluster<AppConfType>>
+            implements CallableMessage<PlaceType, Map<String,ActorRef>> {
+        @Override
+        public Map<String,ActorRef> call(PlaceType self) {
+            return toRefMap(((ActorSystemRemote) self.getSystem()).getLocalSystem().getNamedActorMap());
+        }
+    }
+    public static class PlaceGetAttachedSystemProcessingCount<AppConfType extends ConfigBase,
+            PlaceType extends ClusterDeployment.ActorPlacementForCluster<AppConfType>>
+            implements CallableMessage<PlaceType, Integer> {
+        @Override
+        public Integer call(PlaceType self) {
+            return ((ActorSystemRemote) self.getSystem()).getLocalSystem().getProcessingCount().get();
+        }
+    }
+    public static class PlaceGetAttachedSystemRemoteConnectionMap<AppConfType extends ConfigBase,
+            PlaceType extends ClusterDeployment.ActorPlacementForCluster<AppConfType>>
+            implements CallableMessage<PlaceType, Map<ActorAddress, NetworkStats>> {
+        @Override
+        public Map<ActorAddress, NetworkStats> call(PlaceType self) {
+            return ((ActorSystemRemote) self.getSystem()).getConnectionMap().entrySet().stream()
+                    .collect(Collectors.toMap(Map.Entry::getKey, e -> new NetworkStats().send(e.getValue())));
+        }
+    }
+    public static class PlaceGetAttachedSystemRemoteServerReceive<AppConfType extends ConfigBase,
+            PlaceType extends ClusterDeployment.ActorPlacementForCluster<AppConfType>>
+            implements CallableMessage<PlaceType, NetworkStats> {
+        @Override
+        public NetworkStats call(PlaceType self) {
+            return new NetworkStats().receive((ActorSystemRemote) self.getSystem());
+        }
+    }
+    public static class PlaceGetAttachedPlacementTotalThreads<AppConfType extends ConfigBase,
+            PlaceType extends ClusterDeployment.ActorPlacementForCluster<AppConfType>>
+            implements CallableMessage<PlaceType, Integer> {
+        @Override
+        public Integer call(PlaceType self) {
+            return self.getTotalThreads();
+        }
+    }
+    public static class PlaceGetAttachedPlacementCluster<AppConfType extends ConfigBase,
+            PlaceType extends ClusterDeployment.ActorPlacementForCluster<AppConfType>>
+            implements CallableMessage<PlaceType, List<ActorPlacement.AddressListEntry>> {
+        @Override
+        public List<ActorPlacement.AddressListEntry> call(PlaceType self) {
+            return self.getCluster();
+        }
+    }
+    public static class PlaceGetAttachedPlacementClusterWithSelf<AppConfType extends ConfigBase,
+            PlaceType extends ClusterDeployment.ActorPlacementForCluster<AppConfType>>
+            implements CallableMessage<PlaceType, List<ActorPlacement.AddressListEntry>> {
+        @Override
+        public List<ActorPlacement.AddressListEntry> call(PlaceType self) {
+            return self.getClusterWithSelf();
+        }
+    }
+    public static class PlaceGetAttachedPlacementCreatedActors<AppConfType extends ConfigBase,
+            PlaceType extends ClusterDeployment.ActorPlacementForCluster<AppConfType>>
+            implements CallableMessage<PlaceType, Long> {
+        @Override
+        public Long call(PlaceType self) {
+            return self.getCreatedActors();
+        }
+    }
+    public static class PlaceGetAttachedPlacementForClusterRemoteConfig<AppConfType extends ConfigBase,
+            PlaceType extends ClusterDeployment.ActorPlacementForCluster<AppConfType>>
+            implements CallableMessage<PlaceType, Map<ActorAddress, ? extends ConfigBase>> {
+        @Override
+        public Map<ActorAddress, ? extends ConfigBase> call(PlaceType self) {
+            return self.getRemoteConfig();
+        }
     }
 
     public static Map<String, ActorRef> toRefMap(Map<String, Actor> map) {
@@ -1422,54 +1610,51 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
 
     @PropertyInterface("system")
     public SystemStats getAttachedSystemStats(ActorAddress.ActorAddressRemote host) {
-        return placeGet(host, p -> new SystemStats().set(p));
+        return placeGet(host, new PlaceGetAttachedSystemStats<>());
     }
 
     @PropertyInterface("system-actors")
     public Map<String, ActorRef> getAttachedSystemNamedActorMap(ActorAddress.ActorAddressRemote host) {
-        return placeGet(host, p -> toRefMap(((ActorSystemRemote) p.getSystem()).getLocalSystem().getNamedActorMap()));
+        return placeGet(host, new PlaceGetAttachedSystemNamedActorMap<>());
     }
 
     @PropertyInterface("system-process-count")
     public int getAttachedSystemProcessingCount(ActorAddress.ActorAddressRemote host) {
-        return placeGet(host, p -> ((ActorSystemRemote) p.getSystem()).getLocalSystem().getProcessingCount().get());
+        return placeGet(host, new PlaceGetAttachedSystemProcessingCount<>());
     }
 
     @PropertyInterface("system-connections")
     public Map<ActorAddress, NetworkStats> getAttachedSystemRemoteConnectionMap(ActorAddress.ActorAddressRemote host) {
-        return placeGet(host, p -> ((ActorSystemRemote) p.getSystem()).getConnectionMap().entrySet().stream()
-                .collect(Collectors.toMap(Map.Entry::getKey, e -> new NetworkStats().send(e.getValue()))));
+        return placeGet(host, new PlaceGetAttachedSystemRemoteConnectionMap<>());
     }
 
     @PropertyInterface("system-server-receive")
     public NetworkStats getAttachedSystemRemoteServerReceive(ActorAddress.ActorAddressRemote host) {
-        return placeGet(host, p -> new NetworkStats().receive((ActorSystemRemote) p.getSystem()));
+        return placeGet(host, new PlaceGetAttachedSystemRemoteServerReceive<>());
     }
 
     @PropertyInterface("placement-total-threads")
     public int getAttachedPlacementTotalThreads(ActorAddress.ActorAddressRemote host) {
-        return placeGet(host, ActorPlacement.ActorPlacementDefault::getTotalThreads);
+        return placeGet(host, new PlaceGetAttachedPlacementTotalThreads<>());
     }
 
     @PropertyInterface("placement-clusters")
     public List<ActorPlacement.AddressListEntry> getAttachedPlacementCluster(ActorAddress.ActorAddressRemote host) {
-        return placeGet(host, ActorPlacement.ActorPlacementDefault::getCluster);
+        return placeGet(host, new PlaceGetAttachedPlacementCluster<>());
     }
 
     @PropertyInterface("placement-clusters-with-self")
     public List<ActorPlacement.AddressListEntry> getAttachedPlacementClusterWithSelf(ActorAddress.ActorAddressRemote host) {
-        return placeGet(host, ActorPlacement.ActorPlacementDefault::getClusterWithSelf);
+        return placeGet(host, new PlaceGetAttachedPlacementClusterWithSelf<>());
     }
 
     @PropertyInterface("placement-created-actors")
     public long getAttachedPlacementCreatedActors(ActorAddress.ActorAddressRemote host) {
-        return placeGet(host, ActorPlacement.ActorPlacementDefault::getCreatedActors);
+        return placeGet(host, new PlaceGetAttachedPlacementCreatedActors<>());
     }
 
     @PropertyInterface("placement-remote-config")
     public Map<ActorAddress, ? extends ConfigBase> getAttachedPlacementForClusterRemoteConfig(ActorAddress.ActorAddressRemote host) {
-        return placeGet(host, ActorPlacementForCluster::getRemoteConfig);
+        return placeGet(host, new PlaceGetAttachedPlacementForClusterRemoteConfig<>());
     }
-
-
 }

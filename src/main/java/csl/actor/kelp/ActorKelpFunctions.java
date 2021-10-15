@@ -22,7 +22,14 @@ public class ActorKelpFunctions {
         long serialVersionUID = 1L;
 
         static <T> KeyExtractorFunction<T,T> identity() {
-            return k -> k;
+            return new KeyExtractorFunctionIdentity<>();
+        }
+    }
+
+    public static class KeyExtractorFunctionIdentity<T> implements KeyExtractorFunction<T,T> {
+        @Override
+        public T apply(T o) {
+            return o;
         }
     }
 
@@ -31,8 +38,8 @@ public class ActorKelpFunctions {
     public static class KeyExtractorClass<KeyType, ValueType> implements KeyExtractor<KeyType, ValueType> {
         public static final long serialVersionUID = 1L;
 
-        protected Class<ValueType> valueType;
-        protected KeyExtractorFunction<ValueType, KeyType> keyExtractorFromValue;
+        public Class<ValueType> valueType;
+        public KeyExtractorFunction<ValueType, KeyType> keyExtractorFromValue;
 
         public KeyExtractorClass(Class<ValueType> valueType, KeyExtractorFunction<ValueType, KeyType> keyExtractorFromValue) {
             this.valueType = valueType;
@@ -60,7 +67,7 @@ public class ActorKelpFunctions {
 
     public static class KeyExtractorList<KeyType, ValueType> implements KeyExtractor<KeyType, ValueType> {
         public static final long serialVersionUID = 1L;
-        protected List<KeyExtractor<KeyType, ?>> keyExtractors;
+        public List<KeyExtractor<KeyType, ?>> keyExtractors;
 
         public KeyExtractorList(List<KeyExtractor<KeyType, ?>> keyExtractors) {
             this.keyExtractors = keyExtractors;

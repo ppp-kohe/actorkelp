@@ -191,7 +191,7 @@ public class ActorRefShuffle implements ActorRef, Serializable, Cloneable, KryoS
 
     public static class ToShuffleTask implements CallableMessage<Actor, ActorRef> {
         public static final long serialVersionUID = 1L;
-        protected int bufferSizeMax;
+        public int bufferSizeMax;
 
         public ToShuffleTask() {}
 
@@ -215,7 +215,7 @@ public class ActorRefShuffle implements ActorRef, Serializable, Cloneable, KryoS
 
     public static class ConnectTask implements CallableMessage.CallableMessageConsumer<Actor> {
         public static final long serialVersionUID = 1L;
-        protected ActorRef next;
+        public ActorRef next;
 
         public ConnectTask() {}
 

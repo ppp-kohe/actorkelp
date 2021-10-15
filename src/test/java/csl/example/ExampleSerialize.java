@@ -7,6 +7,7 @@ import csl.actor.remote.ActorSystemRemote;
 import csl.actor.remote.KryoBuilder;
 
 import java.io.File;
+import java.io.Serializable;
 import java.math.BigInteger;
 import java.net.URL;
 import java.nio.ByteBuffer;
@@ -15,6 +16,7 @@ import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZonedDateTime;
 import java.util.*;
+import java.util.function.Function;
 import java.util.regex.Pattern;
 
 public class ExampleSerialize {
@@ -99,6 +101,20 @@ public class ExampleSerialize {
                     l.items.get(0).value.equals(r.items.get(0).value) &&
                     l.items.get(1).value.equals(r.items.get(1).value) &&
                     ((ContElemEx) l.items.get(1)).exValue.value.equals(((ContElemEx) r.items.get(1)).exValue.value));
+
+        ////
+        Random rnd = new Random(1234);
+        SerializableFunc f1 = (arg) -> "<<<" + arg + rnd.nextInt(100) + ">>>";
+        ts.writeRead(k, f1, (l, r) -> {
+            var lv = l.apply("hello");
+            var rv = r.apply("hello");
+            System.err.println(lv + " : " + rv);
+            return lv.equals(rv);
+        });
+    }
+
+    public interface SerializableFunc extends Function<String,String>, Serializable {
+
     }
 
     public static class ExampleActor extends ActorDefault {

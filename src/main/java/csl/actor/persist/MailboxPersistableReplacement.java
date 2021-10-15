@@ -228,7 +228,7 @@ public class MailboxPersistableReplacement extends MailboxDefault implements Mai
 
     public static class MessageOnStorage extends Message<Object> {
         public static final long serialVersionUID = 1L;
-        protected PersistentFileManager.PersistentFileReaderSource source;
+        public PersistentFileManager.PersistentFileReaderSource source;
         protected transient PersistentFileManager.PersistentFileReader reader;
         protected transient MessageOnStorage currentMessage;
 

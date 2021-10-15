@@ -311,8 +311,8 @@ public class ClusterCommands<AppConfType extends ConfigBase> {
 
     public static class CommandToken implements Serializable {
         public static final long serialVersionUID = 1L;
-        protected CommandTokenType type;
-        protected String data;
+        public CommandTokenType type;
+        public String data;
 
         public CommandToken() {}
 
@@ -368,8 +368,8 @@ public class ClusterCommands<AppConfType extends ConfigBase> {
 
     public static class CommandBlockRoot extends CommandBlock {
         public static final long serialVersionUID = 1L;
-        protected Map<String, CommandBlockNamed> nameToBlock = new LinkedHashMap<>();
-        protected List<CommandBlock> blocksAll = new ArrayList<>();
+        public Map<String, CommandBlockNamed> nameToBlock = new LinkedHashMap<>();
+        public List<CommandBlock> blocksAll = new ArrayList<>();
 
         public Map<String, CommandBlockNamed> getNameToBlock() {
             return nameToBlock;
@@ -455,10 +455,10 @@ public class ClusterCommands<AppConfType extends ConfigBase> {
 
     public static class CommandBlock  implements Serializable {
         public static final long serialVersionUID = 1L;
-        protected List<List<CommandToken>> clusterLines = new ArrayList<>();
-        protected List<List<CommandToken>> configLines = new ArrayList<>();
-        protected List<CommandBlock> blocks = new ArrayList<>();
-        protected CommandBlock superBlock;
+        public List<List<CommandToken>> clusterLines = new ArrayList<>();
+        public List<List<CommandToken>> configLines = new ArrayList<>();
+        public List<CommandBlock> blocks = new ArrayList<>();
+        public CommandBlock superBlock;
 
         public List<List<CommandToken>> getClusterLines() {
             return clusterLines;
@@ -599,8 +599,8 @@ public class ClusterCommands<AppConfType extends ConfigBase> {
 
     public static class CommandBlockLineContinue extends CommandBlock {
         public static final long serialVersionUID = 1L;
-        protected CommandBlock base;
-        protected List<CommandToken> commands;
+        public CommandBlock base;
+        public List<CommandToken> commands;
 
         public CommandBlockLineContinue() {}
 
@@ -632,10 +632,10 @@ public class ClusterCommands<AppConfType extends ConfigBase> {
 
     public static class CommandBlockNamed extends CommandBlock {
         public static final long serialVersionUID = 1L;
-        protected int indentLevel;
-        protected boolean isClass;
-        protected CommandToken name;
-        protected CommandBlock parent;
+        public int indentLevel;
+        public boolean isClass;
+        public CommandToken name;
+        public CommandBlock parent;
 
         public CommandBlockNamed() {}
 
@@ -702,10 +702,10 @@ public class ClusterCommands<AppConfType extends ConfigBase> {
 
     public static class ClusterUnit<AppConfType extends ConfigBase> implements Serializable, ToJson {
         public static final long serialVersionUID = 1L;
-        protected String name;
-        protected ConfigDeployment deploymentConfig;
-        protected AppConfType appConfig;
-        protected CommandBlock block;
+        public String name;
+        public ConfigDeployment deploymentConfig;
+        public AppConfType appConfig;
+        public CommandBlock block;
 
         protected List<String> classPathList;
 

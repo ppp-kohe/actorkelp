@@ -55,8 +55,8 @@ public interface KelpDispatcher extends Serializable {
 
     class SelectiveDispatcher implements Serializable, Cloneable {
         public static final long serialVersionUID = -1;
-        protected List<ActorKelpFunctions.KeyExtractor<?,?>> keyExtractors;
-        protected KelpDispatcher dispatcher;
+        public List<ActorKelpFunctions.KeyExtractor<?,?>> keyExtractors;
+        public KelpDispatcher dispatcher;
 
         public SelectiveDispatcher(List<ActorKelpFunctions.KeyExtractor<?, ?>> keyExtractors, KelpDispatcher dispatcher) {
             this.keyExtractors = keyExtractors;
@@ -157,7 +157,7 @@ public interface KelpDispatcher extends Serializable {
 
     class DispatcherRandomOne implements KelpDispatcher, Cloneable {
         public static final long serialVersionUID = -1;
-        protected Random random;
+        public Random random;
 
         public DispatcherRandomOne() {
             this.random = new Random();

@@ -352,7 +352,7 @@ public interface ActorPlacement {
 
     class AddressList implements Serializable {
         public static final long serialVersionUID = 1L;
-        protected List<AddressListEntry> cluster;
+        public List<AddressListEntry> cluster;
 
         public AddressList() {}
 
@@ -379,10 +379,12 @@ public interface ActorPlacement {
 
     class AddressListEntry implements Serializable, ToJson {
         public static final long serialVersionUID = 1L;
-        protected ActorAddress.ActorAddressRemoteActor placementActor;
-        protected int threads;
+        public ActorAddress.ActorAddressRemoteActor placementActor;
+        public int threads;
 
-        public AddressListEntry() {}
+        public AddressListEntry() {
+            this(null, 0);
+        }
 
         public AddressListEntry(ActorAddress.ActorAddressRemoteActor placementActor, int threads) {
             this.placementActor = placementActor;
@@ -433,7 +435,7 @@ public interface ActorPlacement {
 
     class ActorCreationRequest implements Serializable {
         public static final long serialVersionUID = 1L;
-        protected Serializable data;
+        public Serializable data;
 
         public ActorCreationRequest() {}
 
@@ -455,7 +457,7 @@ public interface ActorPlacement {
 
     class LeaveEntry implements Serializable {
         public static final long serialVersionUID = 1L;
-        protected ActorAddress.ActorAddressRemoteActor placementActor;
+        public ActorAddress.ActorAddressRemoteActor placementActor;
 
         public LeaveEntry() {}
 

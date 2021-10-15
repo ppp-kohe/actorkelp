@@ -123,9 +123,9 @@ public abstract class ActorKelpStateSharing<ActorType extends Actor, StateType> 
     public static class ToStateTask<ActorType extends Actor, StateType>
             implements Serializable, CallableMessage<ActorType, StateType>, MailboxKelp.MessageControl {
         public static final long serialVersionUID = -1;
-        protected UUID id;
-        protected boolean suspend;
-        protected ToStateFunction<ActorType, StateType> function;
+        public UUID id;
+        public boolean suspend;
+        public ToStateFunction<ActorType, StateType> function;
 
         public ToStateTask() {}
 
@@ -151,9 +151,9 @@ public abstract class ActorKelpStateSharing<ActorType extends Actor, StateType> 
     public static class SetStateTask<ActorType extends Actor, StateType>
             implements CallableMessage.CallableMessageConsumer<ActorType>, MailboxKelp.MessageControl {
         public static final long serialVersionUID = -1;
-        protected UUID id;
-        protected StateType state;
-        protected SetStateFunction<ActorType, StateType> function;
+        public UUID id;
+        public StateType state;
+        public SetStateFunction<ActorType, StateType> function;
 
         public SetStateTask() {}
 
@@ -221,9 +221,9 @@ public abstract class ActorKelpStateSharing<ActorType extends Actor, StateType> 
     @SuppressWarnings("rawtypes")
     public static class StateSharingRequest implements Serializable {
         public static final long serialVersionUID = -1;
-        protected ActorRef sender;
-        protected Instant time;
-        protected Class<? extends ActorKelpStateSharing> type;
+        public ActorRef sender;
+        public Instant time;
+        public Class<? extends ActorKelpStateSharing> type;
 
         public StateSharingRequest() {}
 
@@ -273,8 +273,15 @@ public abstract class ActorKelpStateSharing<ActorType extends Actor, StateType> 
             ToStateFunction<ActorType, StateType> toState,
             MergerOperator<StateType> merger) {
         return (system, config) -> get(system, config, toState,
-                (a,s) -> {throw new RuntimeException("unsupported : " + a + " : " + s);},
+                new SetStateFunctionThrowException<>(),
                 merger);
+    }
+
+    public static class SetStateFunctionThrowException<ActorType extends Actor, StateType> implements SetStateFunction<ActorType, StateType> {
+        @Override
+        public void accept(ActorType self, StateType state) {
+            throw new RuntimeException("unsupported : " + self + " : " + state);
+        }
     }
 
     public static <ActorType extends Actor, StateType> StateSharingRequestLambda<ActorType,StateType> request(ActorRef sender,
@@ -327,9 +334,9 @@ public abstract class ActorKelpStateSharing<ActorType extends Actor, StateType> 
 
     public static class StateSharingRequestLambda<ActorType extends Actor, StateType> extends StateSharingRequest {
         public static final long serialVersionUID = -1;
-        protected ToStateFunction<ActorType, StateType> toState;
-        protected SetStateFunction<ActorType, StateType> setState;
-        protected MergerOperator<StateType> merger;
+        public ToStateFunction<ActorType, StateType> toState;
+        public SetStateFunction<ActorType, StateType> setState;
+        public MergerOperator<StateType> merger;
 
         public StateSharingRequestLambda() { }
 

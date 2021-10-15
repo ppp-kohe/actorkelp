@@ -760,26 +760,72 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
     }
 
     public static ActorKelpFunctions.DispatcherFactory dispatchAll() {
-        return KelpDispatcher.DispatcherAll::new;
+        return new DispatcherFactoryDispatcherAll();
     }
 
     public static ActorKelpFunctions.DispatcherFactory dispatchShuffle() {
-        return KelpDispatcher.DispatcherShuffle::new;
+        return new DispatcherFactoryDispatcherShuffle();
     }
 
     public static ActorKelpFunctions.DispatcherFactory dispatchRandomOne() {
-        return KelpDispatcher.DispatcherRandomOne::new;
+        return new DispatcherFactoryDispatcherRandomOne();
     }
 
     public static ActorKelpFunctions.DispatcherFactory dispatchRandomPoison1() {
-        return KelpDispatcher.DispatcherRandomPoisson1::new;
+        return new DispatcherFactoryDispatcherRandomPoisson1();
     }
 
     public static ActorKelpFunctions.DispatcherFactory dispatchRandomOne(Random random) {
-        return () -> new KelpDispatcher.DispatcherRandomOne(random);
+        return new DispatcherFactoryDispatcherRandomOne(random);
     }
 
     public static ActorKelpFunctions.DispatcherFactory dispatchRandomPoison1(Random random) {
-        return () -> new KelpDispatcher.DispatcherRandomPoisson1(random);
+        return new DispatcherFactoryDispatcherRandomPoisson1(random);
+    }
+
+    public static class DispatcherFactoryDispatcherAll implements ActorKelpFunctions.DispatcherFactory {
+        @Override
+        public KelpDispatcher create() {
+            return new KelpDispatcher.DispatcherAll();
+        }
+    }
+    public static class DispatcherFactoryDispatcherShuffle implements ActorKelpFunctions.DispatcherFactory {
+        @Override
+        public KelpDispatcher create() {
+            return new KelpDispatcher.DispatcherShuffle();
+        }
+    }
+    public static class DispatcherFactoryDispatcherRandomOne implements ActorKelpFunctions.DispatcherFactory {
+        public Random random;
+
+        public DispatcherFactoryDispatcherRandomOne() {}
+
+        public DispatcherFactoryDispatcherRandomOne(Random random) {
+            this.random = random;
+        }
+
+        @Override
+        public KelpDispatcher create() {
+            return random == null ?
+                    new KelpDispatcher.DispatcherRandomOne() :
+                    new KelpDispatcher.DispatcherRandomOne(random);
+        }
+    }
+
+    public static class DispatcherFactoryDispatcherRandomPoisson1 implements ActorKelpFunctions.DispatcherFactory {
+        public Random random;
+
+        public DispatcherFactoryDispatcherRandomPoisson1() {}
+
+        public DispatcherFactoryDispatcherRandomPoisson1(Random random) {
+            this.random = random;
+        }
+
+        @Override
+        public KelpDispatcher create() {
+            return random == null ?
+                    new KelpDispatcher.DispatcherRandomPoisson1() :
+                    new KelpDispatcher.DispatcherRandomPoisson1(random);
+        }
     }
 }

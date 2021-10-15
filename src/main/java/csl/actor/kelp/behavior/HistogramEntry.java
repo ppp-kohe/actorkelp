@@ -117,7 +117,7 @@ public class HistogramEntry {
 
     public static class TraversalProcess implements CallableMessage.CallableMessageConsumer<ActorKelp<?>> {
         public static final long serialVersionUID = 1L;
-        protected int entryId;
+        public int entryId;
 
         public TraversalProcess() {}
 

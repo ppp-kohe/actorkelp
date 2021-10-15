@@ -118,10 +118,10 @@ public class ActorKelpMerger<ActorType extends ActorKelp<ActorType>> implements 
     public static class MergeTask implements Serializable, CallableMessage<Actor, ActorRef> {
         public static final long serialVersionUID = -1;
 
-        protected ActorRef l;
-        protected ActorRef r;
-        protected boolean disable;
-        protected boolean stateIncludeMailbox;
+        public ActorRef l;
+        public ActorRef r;
+        public boolean disable;
+        public boolean stateIncludeMailbox;
 
         public MergeTask() {}
 
@@ -158,9 +158,9 @@ public class ActorKelpMerger<ActorType extends ActorKelp<ActorType>> implements 
 
     public static class ToStateTask implements Serializable, CallableMessage<Actor, ActorKelpSerializable<?>> {
         public static final long serialVersionUID = -1;
-        protected ActorRef replacement;
-        protected boolean disable;
-        protected boolean stateIncludeMailbox;
+        public ActorRef replacement;
+        public boolean disable;
+        public boolean stateIncludeMailbox;
 
         public ToStateTask() {}
 

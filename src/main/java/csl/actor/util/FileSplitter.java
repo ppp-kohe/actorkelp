@@ -65,11 +65,11 @@ public class FileSplitter {
     }
 
     public FileSplit getTopSplit(String path) throws IOException {
-        FileSplit s = new FileSplit(path);
-        s.fileLength = Files.size(pathModifier.getExpanded(s.path));
-        s.splitLength = getSplitLength(path, s.fileLength);
-        s.splitIndex = 0;
-        return s;
+        long len = Files.size(pathModifier.getExpanded(path));
+        return new FileSplit(path,
+                len,
+                getSplitLength(path, len),
+                0,0);
     }
 
     public Iterator<FileSplit> splitIterator(String path) throws IOException {
@@ -109,16 +109,18 @@ public class FileSplitter {
 
     public static class FileSplit implements Serializable {
         public static final long serialVersionUID = 1L;
-        String path;
-        long fileLength;
-        long splitIndex;
-        long splitStart;
-        long splitLength;
+        public String path;
+        public long fileLength;
+        public long splitIndex;
+        public long splitStart;
+        public long splitLength;
 
-        public FileSplit() {}
+        public FileSplit() {
+            this(null);
+        }
 
         public FileSplit(String path) {
-            this.path = path;
+            this(path, 0, 0, 0, 0);
         }
 
         public FileSplit(String path, long fileLength, long splitIndex, long splitStart, long splitLength) {

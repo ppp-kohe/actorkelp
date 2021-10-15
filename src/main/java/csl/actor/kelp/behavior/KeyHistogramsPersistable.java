@@ -257,6 +257,8 @@ public class KeyHistogramsPersistable extends KeyHistograms {
 
         protected transient PersistentConditionHistogram condition;
 
+        public HistogramTreePersistable() {}
+
         public HistogramTreePersistable(KeyComparator<?> comparator, int treeLimit,
                                         HistogramTreePersistableConfig config,
                                         PersistentFileManager persistent,
@@ -1048,6 +1050,8 @@ public class KeyHistogramsPersistable extends KeyHistograms {
         protected long skipCount = 0;
         protected long remainingCount;
 
+        public HistogramLeafCellOnStorageFile() {}
+
         public HistogramLeafCellOnStorageFile(PersistentFileReaderSourceWithSize source) {
             this.value = source;
             this.source = source;
@@ -1210,8 +1214,8 @@ public class KeyHistogramsPersistable extends KeyHistograms {
 
     public static class HistogramNodeTreeOnStorage extends HistogramNodeTree implements HistogramNodeOnStorage {
         public static final long serialVersionUID = 1L;
-        protected PersistentFileReaderSource source;
-        protected boolean loaded;
+        public PersistentFileReaderSource source;
+        public boolean loaded;
 
         public HistogramNodeTreeOnStorage(NodeTreeData data, PersistentFileReaderSource source) {
             super(data.height, Collections.emptyList());
@@ -1374,7 +1378,7 @@ public class KeyHistogramsPersistable extends KeyHistograms {
 
     public static class HistogramNodeLeafOnStorage extends HistogramNodeLeaf implements HistogramNodeOnStorage {
         public static final long serialVersionUID = 1L;
-        protected PersistentFileReaderSource source;
+        public PersistentFileReaderSource source;
         public HistogramNodeLeafOnStorage(NodeTreeData data, PersistentFileReaderSource source) {
             super(data.keyStart, null, data.height);
             this.source = source;

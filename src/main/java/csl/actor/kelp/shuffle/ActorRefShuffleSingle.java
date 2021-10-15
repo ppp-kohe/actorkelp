@@ -4,10 +4,7 @@ import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.KryoSerializable;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
-import csl.actor.Actor;
-import csl.actor.ActorRef;
-import csl.actor.ActorSystem;
-import csl.actor.Message;
+import csl.actor.*;
 import csl.actor.kelp.ActorKelp;
 import csl.actor.kelp.ConfigKelp;
 import csl.actor.kelp.KelpStage;
@@ -54,23 +51,56 @@ public class ActorRefShuffleSingle<ActorType extends Actor> implements KelpStage
     @SuppressWarnings("unchecked")
     public <NextActorType extends Actor> KelpStage<NextActorType> connectsKelpStageSend(Class<NextActorType> nextActorType, ActorRef next) {
         try {
-            return ResponsiveCalls.sendTask(system, entry.getActor(), (self) ->
-                    ((KelpStage<NextActorType>) self).connects(nextActorType, next)).get();
+            return ResponsiveCalls.sendTask(system, entry.getActor(),
+                    new MessageConnectKelpStageSend<>(nextActorType, next)).get();
         } catch (Exception ex) {
             throw new RuntimeException(ex);
+        }
+    }
+
+    public static class MessageConnectKelpStageSend<NextActorType extends Actor>
+            implements CallableMessage<Actor,KelpStage<NextActorType>> {
+        public Class<NextActorType> nextActorType;
+        public ActorRef next;
+
+        public MessageConnectKelpStageSend() {}
+
+        public MessageConnectKelpStageSend(Class<NextActorType> nextActorType, ActorRef next) {
+            this.nextActorType = nextActorType;
+            this.next = next;
+        }
+
+        @Override
+        @SuppressWarnings("unchecked")
+        public KelpStage<NextActorType> call(Actor self) {
+            return ((KelpStage<NextActorType>) self).connects(nextActorType, next);
         }
     }
 
     public <NextActorType extends Actor> KelpStage<NextActorType> connectsStagingSend(Class<NextActorType> nextActorType, ActorRef next) {
         ActorRef nextRef = ActorRefShuffle.connectStageInitialActor(system, next, getShuffleBufferSizeMax());
         try {
-            ResponsiveCalls.sendTaskConsumer(system, entry.getActor(), (self) ->
-                    ((StagingActor.StagingSupported) self).setNextStage(
-                            nextRef));
+            ResponsiveCalls.sendTaskConsumer(system, entry.getActor(), new MessageConnectStagingSend(nextRef));
         } catch (Exception ex) {
             throw new RuntimeException(ex);
         }
         return ActorKelp.toKelpStage(system, nextActorType, nextRef, entry.getBufferSize());
+    }
+
+    public static class MessageConnectStagingSend
+            implements CallableMessage.CallableMessageConsumer<Actor> {
+        public ActorRef nextRef;
+
+        public MessageConnectStagingSend() {}
+
+        public MessageConnectStagingSend(ActorRef nextRef) {
+            this.nextRef = nextRef;
+        }
+
+        @Override
+        public void accept(Actor self) {
+            ((StagingActor.StagingSupported) self).setNextStage(nextRef);
+        }
     }
 
     public int getShuffleBufferSizeMax() {

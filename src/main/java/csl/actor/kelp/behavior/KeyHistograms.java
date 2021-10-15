@@ -444,12 +444,12 @@ public class KeyHistograms {
 
     public static class HistogramNodeTree implements HistogramNode, Cloneable {
         public static final long serialVersionUID = 1L;
-        protected HistogramNodeTree parent;
-        protected List<HistogramNode> children;
-        protected long size;
-        protected Object keyStart;
-        protected Object keyEnd;
-        protected int height;
+        public HistogramNodeTree parent;
+        public List<HistogramNode> children;
+        public long size;
+        public Object keyStart;
+        public Object keyEnd;
+        public int height;
 
         public HistogramNodeTree(int height, List<HistogramNode> children) {
             this.height = height;
@@ -815,10 +815,10 @@ public class KeyHistograms {
 
     public static abstract class HistogramNodeLeaf implements HistogramNode, Cloneable {
         public static final long serialVersionUID = 1L;
-        protected HistogramNodeTree parent;
-        protected Object key;
-        protected long size;
-        protected int height;
+        public HistogramNodeTree parent;
+        public Object key;
+        public long size;
+        public int height;
 
         public HistogramNodeLeaf(Object key, HistogramPutContext context, int height) {
             this.key = key;
@@ -968,8 +968,8 @@ public class KeyHistograms {
 
     public static class HistogramNodeLeafMap extends HistogramNodeLeaf {
         public static final long serialVersionUID = 1L;
-        protected TreeMap<Comparable<?>, HistogramLeafList> values;
-        protected int nextPosition;
+        public TreeMap<Comparable<?>, HistogramLeafList> values;
+        public int nextPosition;
 
         public HistogramNodeLeafMap(Object key, HistogramPutContext context, int height) {
             super(key, context, height);
@@ -1207,6 +1207,8 @@ public class KeyHistograms {
         public static final long serialVersionUID = 1L;
         public Object value;
         public HistogramLeafCell next;
+
+        public HistogramLeafCell() {}
 
         public HistogramLeafCell(Object value) {
             this.value = value;

@@ -147,8 +147,10 @@ public class KryoBuilder {
     }
 
     protected void buildRegisterLambda(Kryo kryo) {
-        kryo.register(SerializedLambda.class);
+        //kryo.register(SerializedLambda.class);
         //kryo.register(ClosureSerializer.Closure.class, new ClosureSerializer()); //java17
+        kryo.register(SerializedLambda.class, new JavaSerializer());
+        kryo.register(ClosureSerializer.Closure.class, new JavaSerializer());
     }
 
     @SuppressWarnings("unchecked")

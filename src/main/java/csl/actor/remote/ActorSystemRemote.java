@@ -561,7 +561,7 @@ public class ActorSystemRemote implements ActorSystem, KryoBuilder.SerializerFac
 
     public static class ConnectionCloseNotice implements Serializable {
         public static final long serialVersionUID = 1L;
-        protected ActorAddress address;
+        public ActorAddress address;
 
         public ConnectionCloseNotice(ActorAddress address) {
             this.address = address;

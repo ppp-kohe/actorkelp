@@ -146,7 +146,23 @@ public class ClusterKelp<ConfigType extends ConfigKelp> extends ClusterDeploymen
 
     @PropertyInterface("actor-stats")
     public ActorStat getActorStat(ActorRef actor) {
-        return placeGetForActor(actor, a -> new ClusterKelp.ActorStat().set(actor.asLocal()));
+        return placeGetForActor(actor, new CallableMessageNewActorStat<>(actor));
+    }
+
+    public static class CallableMessageNewActorStat<ConfigType extends ConfigKelp>
+            implements CallableMessage<ActorPlacementKelp<ConfigType>, ClusterKelp.ActorStat> {
+        public ActorRef actor;
+
+        public CallableMessageNewActorStat() {}
+
+        public CallableMessageNewActorStat(ActorRef actor) {
+            this.actor = actor;
+        }
+
+        @Override
+        public ActorStat call(ActorPlacementKelp<ConfigType> self) {
+            return new ClusterKelp.ActorStat().set(actor.asLocal());
+        }
     }
 
     public static class ActorStat implements Serializable, ToJson {

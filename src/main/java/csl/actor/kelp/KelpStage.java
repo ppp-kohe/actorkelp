@@ -66,14 +66,30 @@ public interface KelpStage<ActorType extends Actor> extends ActorRef, KelpDispat
      * @return list of collected states
      */
     default <StateType> List<StateType> collectStates(ActorKelpStateSharing.ToStateFunction<ActorType, StateType> toState) {
-        return merge(ActorKelpStateSharing.factory((a) -> {
+        return merge(ActorKelpStateSharing.factory(new CollectStates<>(toState), new MergerOperatorConcat<>()));
+    }
+
+    class CollectStates<ActorType extends Actor, StateType> implements ActorKelpStateSharing.ToStateFunction<ActorType, List<StateType>> {
+        public ActorKelpStateSharing.ToStateFunction<ActorType, StateType> toState;
+
+        public CollectStates(ActorKelpStateSharing.ToStateFunction<ActorType, StateType> toState) {
+            this.toState = toState;
+        }
+
+        @Override
+        public List<StateType> apply(ActorType self) {
             List<StateType> sl = new ArrayList<>();
-            sl.add(toState.apply(a));
+            sl.add(toState.apply(self));
             return sl;
-        }, (l,r) -> {
-            l.addAll(r);
-            return l;
-        }));
+        }
+    }
+
+    class MergerOperatorConcat<StateType> implements ActorKelpStateSharing.MergerOperator<List<StateType>> {
+        @Override
+        public List<StateType> apply(List<StateType> stateTypes, List<StateType> stateTypes2) {
+            stateTypes.addAll(stateTypes2);
+            return stateTypes;
+        }
     }
 
     /**

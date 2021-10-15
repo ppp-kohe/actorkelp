@@ -282,7 +282,7 @@ public class ActorSystemCluster extends ActorSystemRemote implements PersistentF
             updateStatus(addr, start, future, p);
             p.getCluster()
                     .forEach(a -> ResponsiveCalls.sendTaskConsumer(system, a.getPlacementActor(),
-                            (ap) -> updateStatus(addr, start, future, ap)));
+                            new PersistentFileManagerThrottleUpdateStatus(start, future, addr)));
 
         }
 
@@ -310,6 +310,25 @@ public class ActorSystemCluster extends ActorSystemRemote implements PersistentF
             } else {
                 return null;
             }
+        }
+    }
+
+    public static class PersistentFileManagerThrottleUpdateStatus implements CallableMessage.CallableMessageConsumer<Actor> {
+        public boolean start;
+        public Instant future;
+        public ActorAddress.ActorAddressRemote addr;
+
+        public PersistentFileManagerThrottleUpdateStatus() {}
+
+        public PersistentFileManagerThrottleUpdateStatus(boolean start, Instant future, ActorAddress.ActorAddressRemote addr) {
+            this.start = start;
+            this.future = future;
+            this.addr = addr;
+        }
+
+        @Override
+        public void accept(Actor self) {
+            PersistentFileManagerThrottle.updateStatus(addr, start, future, self);
         }
     }
 

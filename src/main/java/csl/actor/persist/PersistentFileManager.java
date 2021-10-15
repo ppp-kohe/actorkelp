@@ -263,9 +263,9 @@ public class PersistentFileManager {
 
     public static class PersistentFileReaderSource implements Serializable {
         public static final long serialVersionUID = 1L;
-        protected String pathExpanded;
-        protected long offset;
-        protected PersistentFileManager manager;
+        public String pathExpanded;
+        public long offset;
+        public PersistentFileManager manager;
 
         public PersistentFileReaderSource() {}
 

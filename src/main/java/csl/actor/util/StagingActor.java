@@ -169,8 +169,25 @@ public class StagingActor extends ActorDefault {
     public <ActorType> StagingActor withHandlerNonActor(Class<ActorType> actorType,
                                                               CallConsumerI<ActorType> handler) {
         participantsHandler.add(new CompletionHandlerForActor(actorType,
-                (self) -> handler.accept(actorType.cast(self))));
+                new CompletionHandlerActorCast<>(actorType, handler)));
         return this;
+    }
+
+    public static class CompletionHandlerActorCast<ActorType> implements CallableMessage.CallableMessageConsumer<Actor> {
+        public Class<ActorType> actorType;
+        public CallConsumerI<ActorType> handler;
+
+        public CompletionHandlerActorCast() {}
+
+        public CompletionHandlerActorCast(Class<ActorType> actorType, CallConsumerI<ActorType> handler) {
+            this.actorType = actorType;
+            this.handler = handler;
+        }
+
+        @Override
+        public void accept(Actor self) {
+            handler.accept(actorType.cast(self));
+        }
     }
 
     @FunctionalInterface
@@ -212,11 +229,11 @@ public class StagingActor extends ActorDefault {
      */
     public static class StagingTask implements Serializable {
         public static final long serialVersionUID = 1L;
-        protected Instant startTime;
-        protected Object key;
-        protected ActorRef terminalActor; //stagingActor
-        protected long watcherSleepTimeMs;
-        protected boolean logging = true;
+        public Instant startTime;
+        public Object key;
+        public ActorRef terminalActor; //stagingActor
+        public long watcherSleepTimeMs;
+        public boolean logging = true;
 
         public StagingTask() {}
 
@@ -282,9 +299,9 @@ public class StagingActor extends ActorDefault {
      */
     public static class StagingWatcher implements CallableMessage.CallableMessageConsumer<Actor>, Cloneable, ActorSystemRemote.SpecialMessage {
         public static final long serialVersionUID = 1L;
-        protected StagingTask task;
-        protected Object sender;
-        protected int count;
+        public StagingTask task;
+        public Object sender;
+        public int count;
 
         public StagingWatcher() {}
 
@@ -388,10 +405,10 @@ public class StagingActor extends ActorDefault {
      */
     public static class StagingCompleted implements CallableMessage.CallableMessageConsumer<Actor>, Serializable, ActorSystemRemote.SpecialMessage {
         public static final long serialVersionUID = 1L;
-        protected StagingTask task;
-        protected Object sender;
-        protected ActorRef completedActor;
-        protected volatile Instant completedTime;
+        public StagingTask task;
+        public Object sender;
+        public ActorRef completedActor;
+        public volatile Instant completedTime;
 
         public StagingCompleted() {}
 
@@ -535,11 +552,11 @@ public class StagingActor extends ActorDefault {
      */
     public static class StagingNotification implements Serializable, ActorSystemRemote.SpecialMessage {
         public static final long serialVersionUID = 1L;
-        protected StagingTask task;
-        protected Object sender;
-        protected boolean start; //or complete
-        protected int taskCount;
-        protected ActorRef actor;
+        public StagingTask task;
+        public Object sender;
+        public boolean start; //or complete
+        public int taskCount;
+        public ActorRef actor;
 
         public StagingNotification() { }
 
@@ -808,9 +825,9 @@ public class StagingActor extends ActorDefault {
 
     public static class StagingHandlerCompleted implements Serializable, ActorSystemRemote.SpecialMessage {
         public static final long serialVersionUID = 1L;
-        protected ActorRef target;
-        protected int handlerIndex;
-        protected StagingCompleted completed;
+        public ActorRef target;
+        public int handlerIndex;
+        public StagingCompleted completed;
 
         public StagingHandlerCompleted() {}
 
@@ -856,10 +873,10 @@ public class StagingActor extends ActorDefault {
 
     public static class CompletionHandlerTask implements CallableMessage.CallableMessageConsumer<Actor>, ActorSystemRemote.SpecialMessage {
         public static final long serialVersionUID = 1L;
-        protected ActorRef stagingActor;
-        protected int index;
-        protected StagingCompleted completed;
-        protected List<CompletionHandlerForActor> handlers;
+        public ActorRef stagingActor;
+        public int index;
+        public StagingCompleted completed;
+        public List<CompletionHandlerForActor> handlers;
 
         public CompletionHandlerTask() {}
 
@@ -892,8 +909,8 @@ public class StagingActor extends ActorDefault {
 
     public static class CompletionHandlerForActor implements Serializable {
         public static final long serialVersionUID = 1L;
-        protected Class<?> actorType;
-        protected CallableMessage.CallableMessageConsumer<Actor> handler;
+        public Class<?> actorType;
+        public CallableMessage.CallableMessageConsumer<Actor> handler;
 
         public CompletionHandlerForActor() {}
 

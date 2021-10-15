@@ -16,8 +16,8 @@ public interface CallableMessage<ActorType extends Actor,RetType> extends Serial
 
     class CallableFailure implements Serializable {
         public static final long serialVersionUID = 1L;
-        protected Throwable error;
-        protected String trace;
+        public Throwable error;
+        public String trace;
 
         public CallableFailure(Throwable error) {
             this.error = error;
@@ -81,7 +81,7 @@ public interface CallableMessage<ActorType extends Actor,RetType> extends Serial
 
     class CallableResponse<V> implements Serializable {
         public static final long serialVersionUID = 1L;
-        protected V value;
+        public V value;
 
         public CallableResponse(V value) {
             this.value = value;
