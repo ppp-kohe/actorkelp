@@ -73,18 +73,18 @@ public class PublicFieldSerializer<T> extends Serializer<T> {
     @Override
     public T read(Kryo kryo, Input input, Class<? extends T> type) {
         int pop = pushGenerics(kryo);
-        var o = kryo.newInstance(type);
-        kryo.reference(o);
-
-        for (FieldEntry f : fields) {
-            try {
+        try {
+            var o = kryo.newInstance(type);
+            kryo.reference(o);
+            for (FieldEntry f : fields) {
                 f.read(kryo, input, o, type);
-            } catch (Exception e) {
-                throw new KryoException(e);
             }
+            return o;
+        } catch (Throwable ex) {
+            throw new KryoException("" + type.getName(), ex);
+        } finally {
+            popGenerics(kryo, pop);
         }
-        popGenerics(kryo, pop);
-        return o;
     }
 
     protected int pushGenerics(Kryo kryo) {

@@ -2,6 +2,7 @@ package csl.actor.kelp;
 
 import csl.actor.Actor;
 import csl.actor.ActorRef;
+import csl.actor.ActorSystem;
 import csl.actor.CallableMessage;
 import csl.actor.cluster.ClusterCommands;
 import csl.actor.cluster.ClusterDeployment;
@@ -45,7 +46,19 @@ import java.util.function.Function;
  *
  * @param <ConfigType> customized config type
  */
-public class ClusterKelp<ConfigType extends ConfigKelp> extends ClusterDeployment<ConfigType, ActorPlacementKelp<ConfigType>> {
+public class ClusterKelp<ConfigType extends ConfigKelp> extends ClusterDeployment<ConfigType, ActorPlacementKelp<ConfigType>>
+        implements ActorKelpBuilder {
+
+    @Override
+    public ActorSystem system() {
+        return getSystem();
+    }
+
+    @Override
+    public ConfigKelp config() {
+        return getPrimaryConfig();
+    }
+
     public static void main(String[] args) throws Exception {
         ClusterKelp.create()
                 .runAsRemoteDriver(args);
@@ -94,6 +107,11 @@ public class ClusterKelp<ConfigType extends ConfigKelp> extends ClusterDeploymen
 
     public ActorSystemKelp createSystemKelpPrimary(ConfigDeployment configDeployment) {
         return ActorSystemKelp.create(configDeployment, configDeployment.kryoBuilder(defaultBuilderType()));
+    }
+
+    @Override
+    public ActorSystemKelp getSystem() {
+        return (ActorSystemKelp) system;
     }
 
     protected Class<? extends KryoBuilder> defaultBuilderType() {

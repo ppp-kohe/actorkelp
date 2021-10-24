@@ -451,6 +451,8 @@ public class KeyHistograms {
         public Object keyEnd;
         public int height;
 
+        public HistogramNodeTree() {}
+
         public HistogramNodeTree(int height, List<HistogramNode> children) {
             this.height = height;
             this.children = children;
@@ -820,6 +822,8 @@ public class KeyHistograms {
         public long size;
         public int height;
 
+        public HistogramNodeLeaf() {}
+
         public HistogramNodeLeaf(Object key, HistogramPutContext context, int height) {
             this.key = key;
             this.height = height;
@@ -970,6 +974,8 @@ public class KeyHistograms {
         public static final long serialVersionUID = 1L;
         public TreeMap<Comparable<?>, HistogramLeafList> values;
         public int nextPosition;
+
+        public HistogramNodeLeafMap() {}
 
         public HistogramNodeLeafMap(Object key, HistogramPutContext context, int height) {
             super(key, context, height);

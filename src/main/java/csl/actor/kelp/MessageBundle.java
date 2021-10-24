@@ -11,6 +11,8 @@ import java.util.function.Function;
 public class MessageBundle<DataType> extends Message<List<DataType>> {
     public static final long serialVersionUID = 1L;
 
+    public MessageBundle() {}
+
     public MessageBundle(ActorRef target, ActorRef sender, Iterable<? extends DataType> items) {
         super(target, sender, toList(items));
     }

@@ -47,6 +47,8 @@ public class ExampleSerialize {
         ts.writeRead(k, new HashSet<>(Arrays.asList("hello", "world")));
         ts.writeRead(k, Integer.valueOf(12345678));
 
+        ts.writeRead(k, UUID.randomUUID());
+
         ts.writeRead(k, null);
 
         Map<String,Object> map = new HashMap<>();

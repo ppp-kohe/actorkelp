@@ -140,7 +140,11 @@ public interface PathModifier {
 
 
     static PathModifier.PathModifierHost createDefaultPathModifier(ActorSystem system) {
-        PathModifier.PathModifierHost pm = new PathModifier.PathModifierHost(".");
+        return PathModifier.createDefaultPathModifier(system, ".");
+    }
+
+    static PathModifier.PathModifierHost createDefaultPathModifier(ActorSystem system, String baseDir) {
+        PathModifier.PathModifierHost pm = new PathModifier.PathModifierHost(baseDir);
         ActorAddress.ActorAddressRemote addr;
         if (system instanceof ActorSystemRemote &&
                 (addr = ((ActorSystemRemote) system).getServerAddress()) != null) {
@@ -185,7 +189,7 @@ public interface PathModifier {
     }
 
     static PathModifier.PathModifierHost setPathModifierWithBaseDir(ActorSystem system, String baseDir) {
-        PathModifier.PathModifierHost h = new PathModifier.PathModifierHost(baseDir);
+        PathModifier.PathModifierHost h = PathModifier.createDefaultPathModifier(system, baseDir);
         setPathModifier(system, h);
         return h;
     }

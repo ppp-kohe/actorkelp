@@ -182,6 +182,8 @@ public abstract class ActorAddress {
         protected String typeName;
         protected int identityHashCode;
 
+        public ActorAddressAnonymousActor() {}
+
         public ActorAddressAnonymousActor(String host, int port, String typeName, int identityHashCode) {
             super(host, port, null);
             this.typeName = typeName;
@@ -210,6 +212,8 @@ public abstract class ActorAddress {
     public static class ActorAddressError extends ActorAddressRemoteActor {
         public static final long serialVersionUID = 1L;
         protected String info;
+
+        public ActorAddressError() {}
 
         public ActorAddressError(String host, int port, String info) {
             super(host, port, null);

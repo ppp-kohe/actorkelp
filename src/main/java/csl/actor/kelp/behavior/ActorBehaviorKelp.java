@@ -147,6 +147,9 @@ public class ActorBehaviorKelp {
 
     public static abstract class HistogramNodeLeafN extends KeyHistograms.HistogramNodeLeaf {
         public static final long serialVersionUID = 1L;
+
+        public HistogramNodeLeafN() {}
+
         public HistogramNodeLeafN(Object key, KeyHistograms.HistogramPutContext context, int height) {
             super(key, context, height);
         }
@@ -161,6 +164,8 @@ public class ActorBehaviorKelp {
     public static class HistogramNodeLeaf1 extends HistogramNodeLeafN {
         public static final long serialVersionUID = 1L;
         public KeyHistograms.HistogramLeafList values1;
+
+        public HistogramNodeLeaf1() {}
 
         public HistogramNodeLeaf1(Object key, KeyHistograms.HistogramPutContext context, int height) {
             super(key, context, height);
@@ -308,6 +313,8 @@ public class ActorBehaviorKelp {
         public static final long serialVersionUID = 1L;
         public KeyHistograms.HistogramLeafList values1;
         public KeyHistograms.HistogramLeafList values2;
+
+        public HistogramNodeLeaf2() {}
 
         public HistogramNodeLeaf2(Object key, KeyHistograms.HistogramPutContext context, int height) {
             super(key, context, height);
@@ -476,6 +483,8 @@ public class ActorBehaviorKelp {
         public KeyHistograms.HistogramLeafList values1;
         public KeyHistograms.HistogramLeafList values2;
         public KeyHistograms.HistogramLeafList values3;
+
+        public HistogramNodeLeaf3() {}
 
         public HistogramNodeLeaf3(Object key, KeyHistograms.HistogramPutContext context, int height) {
             super(key, context, height);
@@ -665,6 +674,8 @@ public class ActorBehaviorKelp {
         public KeyHistograms.HistogramLeafList values3;
         public KeyHistograms.HistogramLeafList values4;
 
+        public HistogramNodeLeaf4() {}
+
         public HistogramNodeLeaf4(Object key, KeyHistograms.HistogramPutContext context, int height) {
             super(key, context, height);
         }
@@ -813,6 +824,9 @@ public class ActorBehaviorKelp {
     public static class HistogramNodeLeafList extends HistogramNodeLeafN {
         public static final long serialVersionUID = 1L;
         public KeyHistograms.HistogramLeafList values;
+
+        public HistogramNodeLeafList() {}
+
         public HistogramNodeLeafList(Object key, KeyHistograms.HistogramPutContext context, int height) {
             super(key, context, height);
         }
@@ -973,6 +987,9 @@ public class ActorBehaviorKelp {
 
     public static class HistogramNodeLeafListReducible extends HistogramNodeLeafList {
         public static final long serialVersionUID = 1L;
+
+        public HistogramNodeLeafListReducible() {}
+
         public HistogramNodeLeafListReducible(Object key, KeyHistograms.HistogramPutContext context, int height) {
             super(key, context, height);
         }
@@ -1096,6 +1113,9 @@ public class ActorBehaviorKelp {
 
     public static class HistogramNodeLeafListReducibleForStageEnd extends HistogramNodeLeafListReducible {
         public static final long serialVersionUID = 1L;
+
+        public HistogramNodeLeafListReducibleForStageEnd() {}
+
         public HistogramNodeLeafListReducibleForStageEnd(Object key, KeyHistograms.HistogramPutContext context, int height) {
             super(key, context, height);
         }

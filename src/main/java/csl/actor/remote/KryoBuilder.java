@@ -138,6 +138,7 @@ public class KryoBuilder {
         kryo.setDefaultSerializer(new com.esotericsoftware.kryo.SerializerFactory.FieldSerializerFactory(conf));
          */
         kryo.setDefaultSerializer(new PublicFieldSerializer.SerializerFactoryPublicField<Object>());
+        kryo.addDefaultSerializer(Throwable.class, new JavaSerializer());
     }
 
     protected void buildRegisterBasic(Kryo kryo) {

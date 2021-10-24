@@ -20,9 +20,19 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-public class ActorSystemKelp extends ActorSystemRemote {
+public class ActorSystemKelp extends ActorSystemRemote implements ActorKelpBuilder {
     protected Map<ActorAddress, ConnectionHost> connectionHostMap;
     protected volatile ConfigKelp config = ConfigKelp.CONFIG_DEFAULT;
+
+    @Override
+    public ActorSystem system() {
+        return this;
+    }
+
+    @Override
+    public ConfigKelp config() {
+        return config;
+    }
 
     public static ActorSystemKelp create(ConfigDeployment configDeployment) {
         Function<ActorSystem, Kryo> kryoFactory = configDeployment.kryoBuilder(defaultBuilderType());
@@ -76,9 +86,20 @@ public class ActorSystemKelp extends ActorSystemRemote {
         }
     }
 
-    public static class ActorSystemDefaultForKelp extends ActorSystemCluster.ActorSystemDefaultForCluster {
+    public static class ActorSystemDefaultForKelp extends ActorSystemCluster.ActorSystemDefaultForCluster
+        implements ActorKelpBuilder {
         protected ConfigDeployment configDeployment;
         protected ExecutorService mergerExecutors;
+
+        @Override
+        public ActorSystem system() {
+            return this;
+        }
+
+        @Override
+        public ConfigKelp config() {
+            return (ConfigKelp) configDeployment.createAppConfig(ConfigKelp.class);
+        }
 
         public ActorSystemDefaultForKelp() {
             this(new ConfigDeployment(), KryoBuilderKelp.builder());

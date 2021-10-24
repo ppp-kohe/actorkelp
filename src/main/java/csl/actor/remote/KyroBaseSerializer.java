@@ -16,6 +16,7 @@ public class KyroBaseSerializer {
     public static void register(Kryo kryo) {
         kryo.addDefaultSerializer(File.class, new FileSerializer());
         kryo.addDefaultSerializer(Pattern.class, new PatternSerializer());
+        kryo.addDefaultSerializer(UUID.class, new UuidSerializer());
         kryo.addDefaultSerializer(EnumMap.class, new EnumMapSerializer());
         kryo.addDefaultSerializer(EnumSet.class, new EnumSetSerializer());
         kryo.addDefaultSerializer(ByteBuffer.class, new BufferSerializerByte());
@@ -70,6 +71,23 @@ public class KyroBaseSerializer {
         public Pattern read(Kryo kryo, Input input, Class<? extends Pattern> type) {
             String s = input.readString();
             return s == null ? null : Pattern.compile(s, input.readInt());
+        }
+    }
+
+    public static class UuidSerializer extends Serializer<UUID> {
+        public UuidSerializer() {
+            super(true, true);
+        }
+
+        @Override
+        public void write(Kryo kryo, Output output, UUID object) {
+            output.writeString(object == null ? null : object.toString());
+        }
+
+        @Override
+        public UUID read(Kryo kryo, Input input, Class<? extends UUID> type) {
+            String s = input.readString();
+            return s == null ? null : UUID.fromString(s);
         }
     }
 
@@ -442,4 +460,5 @@ public class KyroBaseSerializer {
             }
         }
     }
+
 }

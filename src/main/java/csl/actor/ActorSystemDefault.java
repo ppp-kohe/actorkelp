@@ -258,6 +258,8 @@ public class ActorSystemDefault implements ActorSystem {
         public static final long serialVersionUID = 1L;
         public Message<?> message;
 
+        public DeadLetter() {}
+
         public DeadLetter(Message<?> message) {
             this.message = message;
         }

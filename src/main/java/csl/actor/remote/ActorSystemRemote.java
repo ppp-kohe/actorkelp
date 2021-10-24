@@ -563,6 +563,8 @@ public class ActorSystemRemote implements ActorSystem, KryoBuilder.SerializerFac
         public static final long serialVersionUID = 1L;
         public ActorAddress address;
 
+        public ConnectionCloseNotice() {}
+
         public ConnectionCloseNotice(ActorAddress address) {
             this.address = address;
         }
@@ -675,6 +677,8 @@ public class ActorSystemRemote implements ActorSystem, KryoBuilder.SerializerFac
         public static final long serialVersionUID = 1L;
         public int id;
         public Object body;
+
+        public TransferredMessage() {}
 
         public TransferredMessage(int id, Object body) {
             this.id = id;

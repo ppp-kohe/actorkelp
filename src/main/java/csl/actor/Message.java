@@ -48,6 +48,9 @@ public class Message<DataType> implements Serializable {
      */
     public static class MessageNone extends Message<Void> {
         public static final long serialVersionUID = 1L;
+
+        public MessageNone() {}
+
         public MessageNone(ActorRef target) {
             super(target, null, null);
         }

@@ -58,6 +58,8 @@ public interface KelpDispatcher extends Serializable {
         public List<ActorKelpFunctions.KeyExtractor<?,?>> keyExtractors;
         public KelpDispatcher dispatcher;
 
+        public SelectiveDispatcher() {}
+
         public SelectiveDispatcher(List<ActorKelpFunctions.KeyExtractor<?, ?>> keyExtractors, KelpDispatcher dispatcher) {
             this.keyExtractors = keyExtractors;
             this.dispatcher = dispatcher;

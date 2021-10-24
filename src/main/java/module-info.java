@@ -6,6 +6,7 @@ open module actorkelp {
     exports csl.actor.kelp.shuffle;
     exports csl.actor.persist;
     exports csl.actor.remote;
+    exports csl.actor.util;
 
     requires java.base;
     requires java.sql;

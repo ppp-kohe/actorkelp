@@ -72,6 +72,8 @@ public interface KelpStage<ActorType extends Actor> extends ActorRef, KelpDispat
     class CollectStates<ActorType extends Actor, StateType> implements ActorKelpStateSharing.ToStateFunction<ActorType, List<StateType>> {
         public ActorKelpStateSharing.ToStateFunction<ActorType, StateType> toState;
 
+        public CollectStates() {}
+
         public CollectStates(ActorKelpStateSharing.ToStateFunction<ActorType, StateType> toState) {
             this.toState = toState;
         }

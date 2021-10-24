@@ -68,8 +68,8 @@ public class FileSplitter {
         long len = Files.size(pathModifier.getExpanded(path));
         return new FileSplit(path,
                 len,
-                getSplitLength(path, len),
-                0,0);
+                0,
+                0,getSplitLength(path, len));
     }
 
     public Iterator<FileSplit> splitIterator(String path) throws IOException {

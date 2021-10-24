@@ -41,6 +41,8 @@ public class ActorKelpFunctions {
         public Class<ValueType> valueType;
         public KeyExtractorFunction<ValueType, KeyType> keyExtractorFromValue;
 
+        public KeyExtractorClass() {}
+
         public KeyExtractorClass(Class<ValueType> valueType, KeyExtractorFunction<ValueType, KeyType> keyExtractorFromValue) {
             this.valueType = valueType;
             this.keyExtractorFromValue = keyExtractorFromValue;
@@ -68,6 +70,8 @@ public class ActorKelpFunctions {
     public static class KeyExtractorList<KeyType, ValueType> implements KeyExtractor<KeyType, ValueType> {
         public static final long serialVersionUID = 1L;
         public List<KeyExtractor<KeyType, ?>> keyExtractors;
+
+        public KeyExtractorList() {}
 
         public KeyExtractorList(List<KeyExtractor<KeyType, ?>> keyExtractors) {
             this.keyExtractors = keyExtractors;

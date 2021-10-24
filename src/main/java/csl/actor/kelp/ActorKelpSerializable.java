@@ -20,6 +20,7 @@ public class ActorKelpSerializable<SelfType extends ActorKelp<SelfType>> impleme
     public ConfigKelp config;
     public Message<?>[] messages;
     public List<KeyHistograms.HistogramTree> histograms;
+    public Object constructionState;
     /** it is not Serializable, but it needs to have support of reading/writing/copying by a serializer */
     public Object internalState;
     public int mergedCount;
@@ -48,6 +49,7 @@ public class ActorKelpSerializable<SelfType extends ActorKelp<SelfType>> impleme
         initShuffleOriginals(actor);
         initMailbox(actor);
         initInternalState(actor);
+        initConstructionState(actor);
     }
 
     @SuppressWarnings("unchecked")
@@ -87,6 +89,10 @@ public class ActorKelpSerializable<SelfType extends ActorKelp<SelfType>> impleme
 
     protected void initInternalState(SelfType actor) {
         internalState = actor.toInternalState();
+    }
+
+    protected void initConstructionState(SelfType actor) {
+        constructionState = actor.getConstructionState();
     }
 
     public void setMessages(Message<?>[] messages) {
@@ -139,7 +145,7 @@ public class ActorKelpSerializable<SelfType extends ActorKelp<SelfType>> impleme
 
     @SuppressWarnings("unchecked")
     public SelfType create(ActorSystem system, String name, ConfigKelp config) throws Exception {
-        return (SelfType) getConstructor(actorType).create(system, name, config);
+        return (SelfType) getConstructor(actorType).create(system, name, config, constructionState);
     }
 
     protected void restoreSetNonOriginal(SelfType actor) {
@@ -232,12 +238,19 @@ public class ActorKelpSerializable<SelfType extends ActorKelp<SelfType>> impleme
 
         protected void init() {
             //select from 3 constructors
+            Constructor<?> cons4 = null; //(ActorSystem, String, ConfigKelp, Object)
             Constructor<?> cons3 = null; //(ActorSystem, String, ConfigKelp)
             Constructor<?> cons2 = null; //(ActorSystem, ConfigKelp)
             Constructor<?> cons1 = null; //(ActorSystem)
             for (Constructor<?> constructor : type.getConstructors()) {
                 Class<?>[] argTypes = constructor.getParameterTypes();
-                if (argTypes.length == 3 &&
+                if (argTypes.length == 4 &&
+                        argTypes[0].equals(ActorSystem.class) &&
+                        argTypes[1].equals(String.class) &&
+                        ConfigKelp.class.isAssignableFrom(argTypes[2]) &&
+                        argTypes[3].equals(Object.class)) {
+                    cons4 = constructor;
+                } else if (argTypes.length == 3 &&
                         argTypes[0].equals(ActorSystem.class) &&
                         argTypes[1].equals(String.class) &&
                         ConfigKelp.class.isAssignableFrom(argTypes[2])) {
@@ -251,8 +264,9 @@ public class ActorKelpSerializable<SelfType extends ActorKelp<SelfType>> impleme
                     cons1 = constructor;
                 }
             }
-
-            if (cons3 != null) {
+            if (cons4 != null) {
+                this.constructor = cons4;
+            } else if (cons3 != null) {
                 this.constructor = cons3;
             } else if (cons2 != null) {
                 this.constructor = cons2;
@@ -263,9 +277,11 @@ public class ActorKelpSerializable<SelfType extends ActorKelp<SelfType>> impleme
             }
         }
 
-        public Object create(ActorSystem system, String name, ConfigKelp config) throws Exception {
+        public Object create(ActorSystem system, String name, ConfigKelp config, Object consState) throws Exception {
             int pc = constructor.getParameterCount();
-            if (pc == 3) {
+            if (pc == 4) {
+                return constructor.newInstance(system, name, config, consState);
+            } else if (pc == 3) {
                 return constructor.newInstance(system, name, config);
             } else if (pc == 2) {
                 ActorKelp<?> obj = (ActorKelp<?>) constructor.newInstance(system, config);
@@ -384,12 +400,20 @@ public class ActorKelpSerializable<SelfType extends ActorKelp<SelfType>> impleme
         }
 
         public Object toState(KryoBuilder.SerializerFunction serializer, Object obj) throws Exception {
-            return serializer.copy(field.get(obj));
+            return stateCopy(serializer, field.get(obj));
         }
 
         public void setState(KryoBuilder.SerializerFunction serializer, Object obj, Object data) throws Exception {
-            Object setData = (serializer == null ? data : (serializer.copy(data)));
+            Object setData = (serializer == null ? data : (stateCopy(serializer, data)));
             setState(obj, setData);
+        }
+
+        public Object stateCopy(KryoBuilder.SerializerFunction serializer, Object obj) {
+            try {
+                return serializer.copy(obj);
+            } catch (Exception ex) {
+                return obj; //TODO JavaSerializer does not support copying
+            }
         }
 
         public void setState(Object obj, Object data) throws Exception {

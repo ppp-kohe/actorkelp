@@ -1180,6 +1180,8 @@ public class KeyHistogramsPersistable extends KeyHistograms {
         public PersistentFileReaderSource source;
         public long remainingSize;
 
+        public PersistentFileReaderSourceWithSize() {}
+
         public PersistentFileReaderSourceWithSize(PersistentFileReaderSource source, long remainingSize) {
             this.source = source;
             this.remainingSize = remainingSize;
@@ -1216,6 +1218,8 @@ public class KeyHistogramsPersistable extends KeyHistograms {
         public static final long serialVersionUID = 1L;
         public PersistentFileReaderSource source;
         public boolean loaded;
+
+        public HistogramNodeTreeOnStorage() {}
 
         public HistogramNodeTreeOnStorage(NodeTreeData data, PersistentFileReaderSource source) {
             super(data.height, Collections.emptyList());
@@ -1379,6 +1383,9 @@ public class KeyHistogramsPersistable extends KeyHistograms {
     public static class HistogramNodeLeafOnStorage extends HistogramNodeLeaf implements HistogramNodeOnStorage {
         public static final long serialVersionUID = 1L;
         public PersistentFileReaderSource source;
+
+        public HistogramNodeLeafOnStorage() {}
+
         public HistogramNodeLeafOnStorage(NodeTreeData data, PersistentFileReaderSource source) {
             super(data.keyStart, null, data.height);
             this.source = source;

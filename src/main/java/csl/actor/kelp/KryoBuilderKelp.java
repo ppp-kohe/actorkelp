@@ -6,6 +6,8 @@ import csl.actor.ActorSystem;
 import csl.actor.cluster.KryoBuilderCluster;
 import csl.actor.kelp.behavior.*;
 import csl.actor.kelp.shuffle.*;
+import csl.actor.remote.ActorAddress;
+import csl.actor.remote.ActorAddressSerializer;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -19,6 +21,7 @@ public class KryoBuilderKelp extends KryoBuilderCluster {
     }
 
     protected void buildRegisterActorRef(Kryo kryo) {
+        kryo.addDefaultSerializer(ActorAddress.class, new ActorAddressSerializer());
         KelpStageSerializer ss = new KelpStageSerializer(system);
         kryo.addDefaultSerializer(ActorRef.class, ss); //for sub-types
 

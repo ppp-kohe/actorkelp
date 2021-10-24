@@ -45,6 +45,19 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
         }
     }
 
+    public ActorKelp(ActorSystem system, String name, ConfigKelp config, Object constructionState) {
+        this(system, name, null, null, config);
+        initConstructionState(constructionState);
+        this.mailbox = initMailbox();
+        this.behavior = initBehavior();
+    }
+
+    protected void initConstructionState(Object constructionState) {}
+
+    public Object getConstructionState() {
+        return null;
+    }
+
     /**
      * the primary constructor of the class.
      *  {@link ActorKelpSerializable} restores an actor instance
@@ -240,6 +253,11 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
         return new ActorBehaviorBuilderKelp(getMailboxAsKelp()::initMessageEntries, this::initSelectiveDispatchers);
     }
 
+    @Override
+    protected ActorBehaviorBuilder initBehavior(ActorBehaviorBuilder builder) {
+        return initBehavior((ActorBehaviorBuilderKelp) builder);
+    }
+
     protected ActorBehaviorBuilder initBehavior(ActorBehaviorBuilderKelp builder) {
         return super.initBehavior(builder);
     }
@@ -252,6 +270,10 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
     @Override
     public ActorRef nextStageActor() {
         return nextStage;
+    }
+
+    public void nextStageTell(Object data) {
+        nextStageActor().tell(data, this);
     }
 
     @Override
