@@ -1,5 +1,7 @@
 package csl.actor.util;
 
+import csl.actor.Message;
+
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.io.Serializable;
@@ -107,7 +109,7 @@ public class FileSplitter {
         return new FileSplitLineIterator(new FileSplitReader(split, pathModifier));
     }
 
-    public static class FileSplit implements Serializable {
+    public static class FileSplit implements Serializable, Message.MessageData {
         public static final long serialVersionUID = 1L;
         public String path;
         public long fileLength;
@@ -174,13 +176,23 @@ public class FileSplitter {
         public String toString() {
             return String.format("(%s,%,d: [%,d] %,d,+%,d)", path, fileLength, splitIndex, splitStart, splitLength);
         }
+        public String toStringShort() {
+            String p = path;
+            int n = (p == null ? -1 : p.lastIndexOf('/'));
+            if (n != -1) {
+                p = p.substring(n + 1);
+            }
+            return String.format("%s[%,d]", p, splitIndex);
+        }
     }
 
     public static class FileSplitLineIterator implements Iterator<String> {
+        protected FileSplit split;
         protected FileSplitReader reader;
         protected ByteBuffer next;
 
         public FileSplitLineIterator(FileSplitReader reader) {
+            split = (reader == null ? null : reader.getSplit());
             this.reader = reader;
         }
 
@@ -227,6 +239,37 @@ public class FileSplitter {
                 throw new RuntimeException("reader=" + reader, ex);
             }
         }
+
+        @Override
+        public String toString() {
+            return "{reader=" + reader + "}";
+        }
+
+        public String toStringProgress() {
+            FileSplitReader r = reader;
+            if (r != null) {
+                return r.toStringProgress();
+            } else {
+                return "reader=null";
+            }
+        }
+
+        public double getPositionRate() {
+            return reader == null ? 1.0 : reader.getPositionRate();
+        }
+
+        public String toStringShort() {
+            String splitStr = "?";
+            if (split != null) {
+                splitStr = split.toStringShort();
+            }
+            FileSplitReader r = reader;
+            if (r != null) {
+                return String.format("splitReader(%s, %2.2f%%)", splitStr, r.getPositionRate() * 100.0);
+            } else {
+                return String.format("splitReader(%s, 100%%)", splitStr);
+            }
+        }
     }
 
     public static class FileSplitReader {
@@ -246,9 +289,21 @@ public class FileSplitter {
             open();
         }
 
+        public FileSplit getSplit() {
+            return split;
+        }
+
+        public double getPositionRate() {
+            return (filePosition - split.splitStart) / (double) split.splitLength;
+        }
+
+        public String toStringProgress() {
+            return String.format("pos=%,d (%2.2f%%)", filePosition, getPositionRate() * 100.0);
+        }
+
         @Override
         public String toString() {
-            return String.format("%s(over=%s, bLs=%,d, nlLs=%,d, filePos=%,d, path=%s, buf=%s",
+            return String.format("%s(over=%s, bLs=%,d, nlLs=%,d, filePos=%,d, path=%s, buf=%s)",
                     getClass().getSimpleName(), over, bufferLineStart, newLinesBeforeLineStart,
                     filePosition, actualPath, buffer);
         }

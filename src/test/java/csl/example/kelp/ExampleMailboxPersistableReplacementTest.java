@@ -1,6 +1,7 @@
 package csl.example.kelp;
 
 import csl.actor.*;
+import csl.actor.kelp.KelpStageGraphActor;
 import csl.example.TestTool;
 import csl.actor.kelp.ActorSystemKelp;
 import csl.actor.kelp.ConfigKelp;
@@ -8,7 +9,6 @@ import csl.actor.persist.PersistentFileManager;
 import csl.actor.persist.MailboxPersistableReplacement;
 import csl.actor.util.ResponsiveCalls;
 import csl.actor.remote.KryoBuilder;
-import csl.actor.util.StagingActor;
 
 import java.nio.file.Paths;
 import java.time.Duration;
@@ -38,25 +38,22 @@ public class ExampleMailboxPersistableReplacementTest {
 
             MailboxPersistableReplacement.MessageOnStorage s;
             try (PersistentFileManager.PersistentFileWriter w = manager.createWriterForHead("mailbox")) {
-                s = new MailboxPersistableReplacement.MessageOnStorage(w.createReaderSourceFromCurrentPosition());
-                w.write(new Message<>(a, a, "hello"));
-                w.write(new Message<>(a, a, 1234));
-                w.write(new Message<>(a, a, CallableMessage.callableMessage((self) -> "hello")));
+                s = new MailboxPersistableReplacement.MessageOnStorage(w.createReaderSourceFromCurrentPosition(), 3);
+                w.write(new Message<>(a, "hello"));
+                w.write(new Message<>(a, 1234));
+                w.write(new Message<>(a, CallableMessage.callableMessage((self) -> "hello")));
             }
 
             Message<?> m = s.readNext();
             check(m.getTarget(), a, (act, exp) -> act.asLocal().equals(exp));
-            check(m.getSender(), a, (act, exp) -> act.asLocal().equals(exp));
             check(m.getData(), "hello");
             m = s.readNext();
             check(m.getTarget(), a, (act, exp) -> act.asLocal().equals(exp));
-            check(m.getSender(), a, (act, exp) -> act.asLocal().equals(exp));
             check(m.getData(), 1234);
             m = s.readNext();
             check(m.getTarget(), a, (act, exp) -> act.asLocal().equals(exp));
-            check(m.getSender(), a, (act, exp) -> act.asLocal().equals(exp));
             check(m.getData(), (Object) "hello",
-                    (act,exp) -> ((CallableMessage<?,?>) act).call(null, null).equals("hello"));
+                    (act,exp) -> ((CallableMessage<?,?>) act).call(null).equals("hello"));
 
             m = s.readNext();
             check(m, null, (act,exp) -> act == exp);
@@ -76,64 +73,65 @@ public class ExampleMailboxPersistableReplacementTest {
 
             MailboxPersistableReplacement.MessageOnStorage s;
             try (PersistentFileManager.PersistentFileWriter w = manager.createWriterForHead("mailbox")) {
-                s = new MailboxPersistableReplacement.MessageOnStorage(w.createReaderSourceFromCurrentPosition());
+                s = new MailboxPersistableReplacement.MessageOnStorage(w.createReaderSourceFromCurrentPosition(),blockSize);
                 for (int i = 0; i < blockSize; ++i) {
-                    w.write(new Message<>(a, a, "" + i));
+                    w.write(new Message<>(a, "" + i));
                 }
             }
 
             MailboxPersistableReplacement.MessageOnStorage s2;
             try (PersistentFileManager.PersistentFileWriter w = manager.createWriterForHead("mailbox")) {
-                s2 = new MailboxPersistableReplacement.MessageOnStorage(w.createReaderSourceFromCurrentPosition());
+                s2 = new MailboxPersistableReplacement.MessageOnStorage(w.createReaderSourceFromCurrentPosition(),
+                        blockSize + s.dataSizeOnStorage() + blockSize);
                 for (int i = 0; i < blockSize; ++i) {
-                    w.write(new Message<>(a, a, "r1-" + i));
+                    w.write(new Message<>(a, "r1-" + i));
                 }
                 w.write(s);
                 for (int i = 0; i < blockSize; ++i) {
-                    w.write(new Message<>(a, a, "r2-" + i));
+                    w.write(new Message<>(a, "r2-" + i));
                 }
             }
 
             MailboxPersistableReplacement.MessageOnStorage s3;
             try (PersistentFileManager.PersistentFileWriter w = manager.createWriterForHead("mailbox")) {
-                s3 = new MailboxPersistableReplacement.MessageOnStorage(w.createReaderSourceFromCurrentPosition());
+                s3 = new MailboxPersistableReplacement.MessageOnStorage(w.createReaderSourceFromCurrentPosition(),
+                        blockSize + s2.dataSizeOnStorage() + blockSize);
                 for (int i = 0; i < blockSize; ++i) {
-                    w.write(new Message<>(a, a, "r3-" + i));
+                    w.write(new Message<>(a, "r3-" + i));
                 }
                 w.write(s2);
                 for (int i = 0; i < blockSize; ++i) {
-                    w.write(new Message<>(a, a, "r4-" + i));
+                    w.write(new Message<>(a, "r4-" + i));
                 }
             }
 
             for (int i = 0; i < blockSize; ++i) {
                 Message<?> m = s3.readNext();
-                check(m, a, a, "r3-" + i);
+                check(m, a, "r3-" + i);
             }
             for (int i = 0; i < blockSize; ++i) {
                 Message<?> m = s3.readNext();
-                check(m, a, a, "r1-" + i);
+                check(m, a, "r1-" + i);
             }
             for (int i = 0; i < blockSize; ++i) {
                 Message<?> m = s3.readNext();
-                check(m, a, a, "" + i);
+                check(m, a, "" + i);
             }
             for (int i = 0; i < blockSize; ++i) {
                 Message<?> m = s3.readNext();
-                check(m, a, a, "r2-" + i);
+                check(m, a, "r2-" + i);
             }
             for (int i = 0; i < blockSize; ++i) {
                 Message<?> m = s3.readNext();
-                check(m, a, a, "r4-" + i);
+                check(m, a, "r4-" + i);
             }
             Message<?> m = s3.readNext();
             check(m, null, (act,exp) -> act == exp);
         }
     }
 
-    private void check(Message<?> m, ActorRef a, ActorRef s, Object obj) {
+    private void check(Message<?> m, ActorRef a, Object obj) {
         check(m.getTarget(), a, (act, exp) -> act.asLocal().equals(exp));
-        check(m.getSender(), a, (act, exp) -> act.asLocal().equals(exp));
         check(m.getData(), obj);
     }
 
@@ -164,8 +162,8 @@ public class ExampleMailboxPersistableReplacementTest {
         }
         System.err.println(String.format("%s: finish input", Duration.between(start, Instant.now())));
 
-        StagingActor.staging(system)
-                .start(a).get();
+        KelpStageGraphActor.get(system, a)
+                        .startAwait().get();
 
 
         ResponsiveCalls.<TestActor>sendTaskConsumer(system, a, (self) -> {
@@ -273,8 +271,8 @@ public class ExampleMailboxPersistableReplacementTest {
         }
         System.err.println(String.format("%s: finish input", Duration.between(start, Instant.now())));
 
-        StagingActor.staging(system)
-                .start(a);
+        KelpStageGraphActor.get(system, a)
+                        .startAwait().get();
 
         ResponsiveCalls.<TestActorForSpeed>sendTaskConsumer(system, a, (self) -> {
             if (self.getMailbox() instanceof TestMailboxPersistableReplacement) {

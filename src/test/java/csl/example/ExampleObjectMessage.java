@@ -59,10 +59,12 @@ public class ExampleObjectMessage {
         return 200;
     }
 
-    static class ExampleData implements Serializable {
+    public static class ExampleData implements Serializable {
         public static final long serialVersionUID = 1L;
         public long n;
         public double[] data;
+
+        public ExampleData() {}
 
         public ExampleData(long n, double[] data) {
             this.n = n;

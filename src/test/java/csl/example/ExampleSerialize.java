@@ -46,6 +46,15 @@ public class ExampleSerialize {
         ts.writeRead(k, Arrays.asList("hello", "world"));
         ts.writeRead(k, new HashSet<>(Arrays.asList("hello", "world")));
         ts.writeRead(k, Integer.valueOf(12345678));
+        ts.writeRead(k, Collections.singleton("singleton"));
+        ts.writeRead(k, Collections.singletonList("singleton"));
+        ts.writeRead(k, Collections.emptySet());
+        ts.writeRead(k, Collections.emptyMap());
+        ts.writeRead(k, Collections.emptyList());
+        ts.writeRead(k, List.of(1,2,3));
+        ts.writeRead(k, Collections.nCopies(3, "hello"));
+        ts.writeRead(k, Map.entry("hello", 123));
+        //ts.writeRead(k, Collections.unmodifiableList(Arrays.asList("1", "2")));
 
         ts.writeRead(k, UUID.randomUUID());
 
@@ -83,13 +92,13 @@ public class ExampleSerialize {
             }
         });
 
-        ActorSystemRemote.TransferredMessage msg = new ActorSystemRemote.TransferredMessage(123,
+        ActorSystemRemote.MessageDataTransferred msg = new ActorSystemRemote.MessageDataTransferred(123, null,
                 ActorRefRemote.get(sys, "hello-world", 33333, "hello"));
         ts.writeRead(k, msg, (l,r) ->
             l.id == r.id && l.body.equals(r.body));
 
-        ActorSystemRemote.TransferredMessage msg2 = new ActorSystemRemote.TransferredMessage(123,
-                new Message<>(ActorRefRemote.get(sys, "hello-world", 33333, "hello"), null, "hello"));
+        ActorSystemRemote.MessageDataTransferred msg2 = new ActorSystemRemote.MessageDataTransferred(123, null,
+                new Message<>(ActorRefRemote.get(sys, "hello-world", 33333, "hello"), "hello"));
         ts.writeRead(k, msg2, (l,r) ->
                 l.id == r.id && ((Message<?>)l.body).getTarget().equals(((Message<?>)r.body).getTarget())
                         && ((Message<?>)l.body).getData().equals(((Message<?>)r.body).getData()));

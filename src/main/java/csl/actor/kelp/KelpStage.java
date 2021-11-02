@@ -8,7 +8,7 @@ import csl.actor.kelp.behavior.KelpDispatcher;
 import csl.actor.kelp.shuffle.ActorKelpStateSharing;
 import csl.actor.kelp.shuffle.ActorRefShuffle;
 import csl.actor.kelp.shuffle.ActorRefShuffleKelp;
-import csl.actor.util.StagingActor;
+import csl.actor.util.Staging;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -17,7 +17,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 
-public interface KelpStage<ActorType extends Actor> extends ActorRef, KelpDispatcher.DispatchRef {
+public interface KelpStage<ActorType extends Actor> extends ActorRef, KelpDispatcher.DispatchRef, Staging.StagingPoint {
 
     /**
      * set the nextStage property of each shuffle-members to the next actor.
@@ -40,7 +40,39 @@ public interface KelpStage<ActorType extends Actor> extends ActorRef, KelpDispat
 
     <NextActorType extends Actor> KelpStage<NextActorType> connects(Class<NextActorType> actorType, ActorRef ref);
 
+    Class<ActorType> getActorType();
+
+    /**
+     * set the nextStage property of each shuffle-members to the next junction.
+     * The method is intended to combine with {@link ActorKelp#shuffle()}:
+     *  <pre>
+     *     KelpStage prevStage1 = ...
+     *     KelpStage prevStage2 = ...
+     *
+     *     MyActorKelp next = new MyActorKelp(...);
+     *     prevStage1.connects(next); // first next.shuffle()
+     *     prevStage2.connects(next); //ERROR! second next.shuffle(): unintended copying of next will happen.
+     *
+     *     //instead...
+     *     KelpStage&lt;MyActorKelp&gt; next = new MyActorKelp(...).shuffle();
+     *     prevStage1.connectsStage(next); //copying stage: without copying the unit actors
+     *     prevStage2.connectsStage(next); //OK
+     *  </pre>
+     *
+     * @param stage the junction
+     * @param <NextActorType> the actual actor type
+     * @return the next stage
+     */
+    default <NextActorType extends Actor> KelpStage<NextActorType> connectsStage(KelpStage<NextActorType> stage) {
+        return connects(stage.getActorType(), stage);
+    }
+
     List<ActorRef> getMemberActors();
+
+    /**
+     * @return a unique name between stages, might be the actor name
+     */
+    String getName();
 
     /**
      * If the target is an {@link ActorRefShuffleKelp},
@@ -70,6 +102,7 @@ public interface KelpStage<ActorType extends Actor> extends ActorRef, KelpDispat
     }
 
     class CollectStates<ActorType extends Actor, StateType> implements ActorKelpStateSharing.ToStateFunction<ActorType, List<StateType>> {
+        public static final long serialVersionUID = -1;
         public ActorKelpStateSharing.ToStateFunction<ActorType, StateType> toState;
 
         public CollectStates() {}
@@ -87,6 +120,7 @@ public interface KelpStage<ActorType extends Actor> extends ActorRef, KelpDispat
     }
 
     class MergerOperatorConcat<StateType> implements ActorKelpStateSharing.MergerOperator<List<StateType>> {
+        public static final long serialVersionUID = -1;
         @Override
         public List<StateType> apply(List<StateType> stateTypes, List<StateType> stateTypes2) {
             stateTypes.addAll(stateTypes2);
@@ -110,16 +144,15 @@ public interface KelpStage<ActorType extends Actor> extends ActorRef, KelpDispat
 
     default void setSystemBySerializer(ActorSystem system) { }
 
+    default void tellAndFlush(Object data) {
+        tell(data);
+        flush();
+    }
+
     /**
      * flush buffered messages
      */
     default void flush() {}
-
-    /**
-     * flush buffered messages
-     * @param sender the sender
-     */
-    default void flush(ActorRef sender) {}
 
     ActorSystem getSystem();
 
@@ -139,45 +172,62 @@ public interface KelpStage<ActorType extends Actor> extends ActorRef, KelpDispat
     }
 
     /**
-     * {@link #flush()} and returns a {@link CompletableFuture} from {@link StagingActor}
+     * do {@link KelpStageGraphActor#get(ActorSystem, ActorRef...)} with <code>(getSystem(), this)</code>.
+     * constructs a stage graph and returns it. The target stage will be the entry point of the graph.
+     * @return a graph actor constructed from this
+     */
+    default KelpStageGraphActor stageGraph() {
+        try {
+            return KelpStageGraphActor.get(getSystem(), this);
+        } catch (Exception ex) {
+            throw new RuntimeException(ex);
+        }
+    }
+
+    /**
+     * {@link #flush()} and returns a {@link CompletableFuture} from {@link KelpStageGraphActor}
      * @return a completable future
      */
-    default CompletableFuture<StagingActor.StagingCompleted> sync() {
+    default CompletableFuture<KelpStageGraphActor> sync() {
         return sync(Instant.now());
     }
 
     /**
-     * {@link #flush()} and returns a {@link CompletableFuture} from {@link StagingActor}
-     * @param startTime the staring time passed to the {@link StagingActor}
+     * {@link #flush()} and returns a {@link CompletableFuture} from {@link KelpStageGraphActor}
+     * @param startTime the staring time passed to the {@link KelpStageGraphActor}
      * @return a completable future
      */
-    default CompletableFuture<StagingActor.StagingCompleted> sync(Instant startTime) {
-        return sync(s -> s.withStartTime(startTime));
+    default CompletableFuture<KelpStageGraphActor> sync(Instant startTime) {
+        return sync(startTime, e -> {});
     }
 
-    default CompletableFuture<StagingActor.StagingCompleted> sync(Consumer<StagingActor> editor) {
+    default CompletableFuture<KelpStageGraphActor> sync(Instant startTime, Consumer<KelpStageGraphActor> editor) {
         flush();
-        StagingActor s = StagingActor.staging(getSystem());
-        editor.accept(s);
-        return s.startActors(getMemberActors());
+        try {
+            KelpStageGraphActor s = stageGraph();
+            editor.accept(s);
+            return s.startAwait(startTime);
+        } catch (Exception ex) {
+            throw new RuntimeException(ex);
+        }
     }
 
-    default CompletableFuture<StagingActor.StagingCompleted> forEachTellSync(Instant startTime, Consumer<KelpDispatcher.DispatchUnit> task) {
+    default CompletableFuture<KelpStageGraphActor> forEachTellSync(Instant startTime, Consumer<KelpDispatcher.DispatchUnit> task) {
         forEach(task);
         return sync(startTime);
     }
 
-    default CompletableFuture<StagingActor.StagingCompleted> forEachTellSync(Consumer<KelpDispatcher.DispatchUnit> task) {
+    default CompletableFuture<KelpStageGraphActor> forEachTellSync(Consumer<KelpDispatcher.DispatchUnit> task) {
         forEach(task);
         return sync();
     }
 
-    default CompletableFuture<StagingActor.StagingCompleted> forEachTellSync(Instant startTime, Object msg) {
+    default CompletableFuture<KelpStageGraphActor> forEachTellSync(Instant startTime, Object msg) {
         forEachTell(msg);
         return sync(startTime);
     }
 
-    default CompletableFuture<StagingActor.StagingCompleted> forEachTellSync(Object msg) {
+    default CompletableFuture<KelpStageGraphActor> forEachTellSync(Object msg) {
         forEachTell(msg);
         return sync();
     }
@@ -188,14 +238,6 @@ public interface KelpStage<ActorType extends Actor> extends ActorRef, KelpDispat
     }
 
     static boolean isMessageBroadcastedImpl(Message<?> message) {
-        if (message instanceof Message.MessageNone) {
-            return true;
-        } else {
-            Object data = message.getData();
-            return data instanceof StagingActor.StagingWatcher ||
-                    data instanceof StagingActor.StagingCompleted ||
-                    data instanceof StagingActor.StagingHandlerCompleted ||
-                    data instanceof StagingActor.StagingNotification;
-        }
+        return (message instanceof Message.MessageNone);
     }
 }

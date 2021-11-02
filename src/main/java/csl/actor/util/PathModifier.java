@@ -4,6 +4,7 @@ import csl.actor.ActorSystem;
 import csl.actor.remote.ActorAddress;
 import csl.actor.remote.ActorSystemRemote;
 
+import java.io.File;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Instant;
@@ -22,6 +23,13 @@ import java.util.regex.Pattern;
  *         the string "app" and the UTC date uu-MM-dd and the UTC time (milliseconds) of the day as hex</li>
  *      <li><code>%h</code> : <code>host-port</code>.
  *        the host name up to 18 chars and the port is up to 8 chars. Non word chars are replaced to "-"</li>
+ *
+ *     <li>absolute paths ({@link Path#isAbsolute()}): the default path-modifier created by {@link #setPathModifierWithBaseDir(ActorSystem, String)}
+ *          can ignore the baseDir if the expanded path is an absolute path.
+ *          Som custom path-modifiers for clusters might disallow it.</li>
+ *      <li>top <code>%l</code> : <code>local-only-base-path</code>. another baseDir intended use for local only files.
+ *         if no path is set, it will be ignored.
+ *      </li>
  *  </ul>
  *
  *  example:
@@ -57,8 +65,14 @@ public interface PathModifier {
 
         protected String host;
         protected String app;
+        protected String localOnlyBaseDir;
+
+        protected boolean allowAbsolutePath = false;
 
         public PathModifierHost(String baseDir) {
+            if (baseDir == null) {
+                baseDir = "";
+            }
             this.baseDir = baseDir;
         }
 
@@ -78,6 +92,15 @@ public interface PathModifier {
             return this;
         }
 
+        public PathModifierHost setLocalOnlyBaseDir(String localOnlyBaseDir) {
+            if (localOnlyBaseDir != null && localOnlyBaseDir.endsWith("/")) {
+                return setLocalOnlyBaseDir(localOnlyBaseDir.substring(0, localOnlyBaseDir.length() - 1));
+            } else {
+                this.localOnlyBaseDir = localOnlyBaseDir;
+                return this;
+            }
+        }
+
         public String getBaseDir() {
             return baseDir;
         }
@@ -90,13 +113,53 @@ public interface PathModifier {
             return app;
         }
 
+        public String getLocalOnlyBaseDir() {
+            return localOnlyBaseDir;
+        }
+
+        public boolean isAllowAbsolutePath() {
+            return allowAbsolutePath;
+        }
+
+        public PathModifierHost setAllowAbsolutePath(boolean allowAbsolutePath) {
+            this.allowAbsolutePath = allowAbsolutePath;
+            return this;
+        }
+
         @Override
         public Path get(String expandedPath) {
-            return Paths.get(baseDir, expandPath(expandedPath)).normalize();
+            String ep = expandPath(expandedPath);
+            boolean localOnlyAbs = false;
+            if (ep.startsWith(localOnlyBaseDir + "/")) {
+                localOnlyAbs = true;
+            }
+            String baseDir = this.baseDir.replaceAll("/", File.separator);
+            ep = ep.replaceAll("/", File.separator);
+            if (allowAbsolutePath || localOnlyAbs) {
+                Path p = Paths.get(ep);
+                if (p.isAbsolute() || localOnlyAbs) {
+                    return p.normalize();
+                } else {
+                    return Paths.get(baseDir, ep).normalize();
+                }
+            } else {
+                return Paths.get(baseDir, ep).normalize();
+            }
         }
 
         @Override
         public String expandPath(String path) {
+            if (path.startsWith("%l")) {
+                if (localOnlyBaseDir == null || localOnlyBaseDir.isEmpty()) {
+                    path = path.substring(2);
+                    if (path.startsWith("/")) {
+                        path = path.substring(1);
+                    }
+                } else {
+                    path = path.substring(2);
+                    path = localOnlyBaseDir + (path.startsWith("/") ? "" : "/") + path;
+                }
+            }
             return path.replaceAll(Pattern.quote("%h"), host)
                        .replaceAll(Pattern.quote("%a"), app);
         }
@@ -104,7 +167,9 @@ public interface PathModifier {
         @Override
         public String toString() {
             return getClass().getSimpleName() +
-                    "(baseDir=" + baseDir + ", host=" + host + ", app=" + app + ")";
+                    "(baseDir=" + baseDir + ", host=" + host + ", app=" + app +
+                        ", localBase=" + localOnlyBaseDir +
+                        ", allowAbs=" + allowAbsolutePath + ")";
         }
     }
 
@@ -144,7 +209,8 @@ public interface PathModifier {
     }
 
     static PathModifier.PathModifierHost createDefaultPathModifier(ActorSystem system, String baseDir) {
-        PathModifier.PathModifierHost pm = new PathModifier.PathModifierHost(baseDir);
+        PathModifier.PathModifierHost pm = new PathModifier.PathModifierHost(baseDir)
+                .setAllowAbsolutePath(true);
         ActorAddress.ActorAddressRemote addr;
         if (system instanceof ActorSystemRemote &&
                 (addr = ((ActorSystemRemote) system).getServerAddress()) != null) {

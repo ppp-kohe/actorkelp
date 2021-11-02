@@ -27,6 +27,51 @@ public class KyroBaseSerializer {
         kryo.addDefaultSerializer(DoubleBuffer.class, new BufferSerializerDouble());
         kryo.addDefaultSerializer(FloatBuffer.class, new BufferSerializerFloat());
 
+        kryo.addDefaultSerializer(Collections.nCopies(2, "").getClass(), new NCopiesSerializer());
+        kryo.addDefaultSerializer(Map.Entry.class, new MapEntrySerializer());
+    }
+
+    public static class MapEntrySerializer extends Serializer<Map.Entry<?,?>> {
+        {
+            setAcceptsNull(false);
+        }
+
+        @Override
+        public void write(Kryo kryo, Output output, Map.Entry<?, ?> object) {
+            kryo.writeClassAndObject(output, object.getKey());
+            kryo.writeClassAndObject(output, object.getValue());
+        }
+
+
+        @Override
+        public Map.Entry<?, ?> read(Kryo kryo, Input input, Class<? extends Map.Entry<?, ?>> type) {
+            return Map.entry(kryo.readClassAndObject(input), kryo.readClassAndObject(input));
+        }
+    }
+
+    public static class NCopiesSerializer extends Serializer<List<?>> {
+        @Override
+        public void write(Kryo kryo, Output output, List<?> object) {
+            if (object == null) {
+                output.writeInt(-1);
+            } else if (object.isEmpty()) {
+                output.writeInt(0);
+            } else {
+                output.writeInt(object.size());
+                kryo.writeClassAndObject(output, object.get(0));
+            }
+        }
+        @Override
+        public List<?> read(Kryo kryo, Input input, Class<? extends List<?>> type) {
+            int size = input.readInt();
+            if (size == 0) {
+                return Collections.emptyList();
+            } else if (size < 0) {
+                return null;
+            } else {
+                return Collections.nCopies(size, kryo.readClassAndObject(input));
+            }
+        }
     }
 
     public static class FileSerializer extends Serializer<File> {

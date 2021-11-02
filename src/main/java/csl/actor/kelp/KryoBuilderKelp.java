@@ -4,7 +4,9 @@ import com.esotericsoftware.kryo.Kryo;
 import csl.actor.ActorRef;
 import csl.actor.ActorSystem;
 import csl.actor.cluster.KryoBuilderCluster;
+import csl.actor.kelp.actors.ActorKelpSubProcess;
 import csl.actor.kelp.behavior.*;
+import csl.actor.kelp.persist.*;
 import csl.actor.kelp.shuffle.*;
 import csl.actor.remote.ActorAddress;
 import csl.actor.remote.ActorAddressSerializer;
@@ -34,8 +36,39 @@ public class KryoBuilderKelp extends KryoBuilderCluster {
         List<Class<?>> cs = new ArrayList<>(super.getActorClasses());
 
         cs.addAll(Arrays.asList(
-                ActorRefShuffleKelp.class,
-                MessageBundle.class,
+                KelpStageGraphActor.CompletedTask.class,
+                KelpStageGraphActor.GetClockTask.class,
+                KelpStageGraphActor.GetStageStatusOp.class,
+                KelpStageGraphActor.GetStageStatusTask.class,
+                KelpStageGraphActor.GraphBuilding.class,
+                KelpStageGraphActor.StageEndTask.class,
+                KelpStageGraphActor.StageStatus.class,
+                KelpStageGraphActor.StageStatusKey.class,
+                KelpStageGraphActor.StageStatusMulti.class,
+                KelpStageGraphActor.WatchTask.class,
+                KelpStageGraphActor.StageEndBackTask.class,
+
+                KelpStage.CollectStates.class,
+                KelpStage.MergerOperatorConcat.class,
+
+                ConfigKelp.class,
+
+                ActorKelpInternalFactory.DispatcherFactoryDispatcherAll.class,
+                ActorKelpInternalFactory.DispatcherFactoryDispatcherShuffle.class,
+                ActorKelpInternalFactory.DispatcherFactoryDispatcherRandomOne.class,
+                ActorKelpInternalFactory.DispatcherFactoryDispatcherRandomPoisson1.class,
+
+                ActorKelpSerializable.class,
+
+                ActorPlacementKelp.StageGraphAdd.class,
+                ActorPlacementKelp.StageGraphRemove.class,
+                ActorPlacementKelp.StageGraphGet.class,
+
+                ClusterKelp.ActorStat.class,
+                ClusterKelp.HistogramStat.class,
+                ClusterKelp.StageStat.class,
+                ClusterKelp.CallableMessageNewActorStat.class,
+                ClusterKelp.CallableMessageNewStageStat.class,
 
                 ActorKelpFunctions.KeyComparator.class,
                 ActorKelpFunctions.KeyComparatorDefault.class,
@@ -44,20 +77,36 @@ public class KryoBuilderKelp extends KryoBuilderCluster {
                 ActorKelpFunctions.KeyExtractor.class,
                 ActorKelpFunctions.KeyExtractorClass.class,
                 ActorKelpFunctions.KeyExtractorFunction.class,
+                ActorKelpFunctions.KeyExtractorFunctionIdentity.class,
                 ActorKelpFunctions.KeyExtractorList.class,
 
                 ActorKelpFunctions.DispatcherFactory.class,
 
-                ActorKelpMerger.MergeTask.class,
-                ActorKelpMerger.ToStateTask.class,
+                ActorKelpMergerFunctions.Mergeable.class,
 
-                ActorKelpSerializable.class,
-
+                //shuffle
+                ActorRefShuffle.class,
                 ActorRefShuffle.ConnectTask.class,
                 ActorRefShuffle.ShuffleEntry.class,
                 ActorRefShuffle.ToShuffleTask.class,
 
-                ConfigKelp.class,
+                ActorRefShuffleKelp.class,
+                ActorRefShuffleSingle.class,
+
+                ActorKelpMerger.MergeTask.class,
+                ActorKelpMerger.ToStateTask.class,
+
+                ActorKelpStateSharing.MergerOperator.class,
+                ActorKelpStateSharing.SetStateFunction.class,
+                ActorKelpStateSharing.SetStateFunctionThrowException.class,
+                ActorKelpStateSharing.SetStateTask.class,
+                ActorKelpStateSharing.StateSharingRequest.class,
+                ActorKelpStateSharing.StateSharingRequestLambda.class,
+                ActorKelpStateSharing.ToStateFunction.class,
+                ActorKelpStateSharing.ToStateTask.class,
+
+                ActorRefCombinedKelp.class,
+                ActorRefCombinedKelp.DispatchUnitMember.class,
 
                 //behavior
                 ActorBehaviorKelp.HistogramNodeLeaf1.class,
@@ -72,23 +121,21 @@ public class KryoBuilderKelp extends KryoBuilderCluster {
                 HistogramEntry.TraversalProcess.class,
 
                 KeyHistograms.HistogramLeafCell.class,
+                KeyHistograms.HistogramLeafCellArray.class,
                 KeyHistograms.HistogramLeafCellSerializedEnd.class,
                 KeyHistograms.HistogramLeafList.class,
-                KeyHistograms.HistogramNodeLeaf.class,
+                HistogramTreeNodeLeaf.class,
                 KeyHistograms.HistogramNodeLeafMap.class,
-                KeyHistograms.HistogramNodeTree.class,
-                KeyHistograms.HistogramTree.class,
+                HistogramTreeNodeTable.class,
+                HistogramTree.class,
 
-                KeyHistogramsPersistable.HistogramLeafCellOnStorage.class,
-                KeyHistogramsPersistable.HistogramLeafCellOnStorageFile.class,
-                KeyHistogramsPersistable.HistogramLeafListPersistable.class,
-                KeyHistogramsPersistable.HistogramNodeLeafOnStorage.class,
-                KeyHistogramsPersistable.HistogramNodeTreeOnStorage.class,
+                HistogramLeafCellOnStorage.class,
+                HistogramTreeNodeLeafOnStorage.class,
+                HistogramTreeNodeTableOnStorage.class,
                 KeyHistogramsPersistable.HistogramPersistentOperationType.class,
-                KeyHistogramsPersistable.HistogramTreePersistable.class,
+                HistogramTreePersistable.class,
                 KeyHistogramsPersistable.NodeTreeData.class,
-                KeyHistogramsPersistable.PersistentFileReaderSourceWithSize.class,
-                KeyHistogramsPersistable.PutIndexHistory.class,
+                HistogramTreePersistable.PutIndexHistory.class,
 
                 KelpDispatcher.class,
                 KelpDispatcher.DispatcherAll.class,
@@ -97,20 +144,19 @@ public class KryoBuilderKelp extends KryoBuilderCluster {
                 KelpDispatcher.DispatcherShuffle.class,
                 KelpDispatcher.SelectiveDispatcher.class,
 
-                ActorKelpMergerFunctions.Mergeable.class,
-                ActorKelpMerger.MergeTask.class,
-                ActorKelpMerger.ToStateTask.class,
-                ActorKelpStateSharing.MergerOperator.class,
-                ActorKelpStateSharing.SetStateFunction.class,
-                ActorKelpStateSharing.StateSharingRequest.class,
-                ActorKelpStateSharing.StateSharingRequestLambda.class,
-                ActorKelpStateSharing.ToStateFunction.class,
-                ActorKelpStateSharing.ToStateTask.class,
+                ActorKelpStats.class,
+                ActorKelpStats.ActorStats.class,
+                ActorKelpStats.ActorKelpMessageHandledStats.class,
+                ActorKelpStats.ActorKelpMailboxTreeStats.class,
+                ActorKelpStats.ActorKelpProcessingStatsFileSplit.class,
+                ActorKelpStats.ActorKelpProcessingStatsMessageBundle.class,
+                ActorKelpStats.GetActorStatTask.class,
+                ActorKelpStats.ActorKelpStageEndStats.class,
 
-                ActorRefShuffle.ShuffleEntry.class,
-
-                ClusterKelp.ActorStat.class,
-                ClusterKelp.HistogramStat.class
+                //actors
+                ActorKelpSubProcess.ProcessSource.class,
+                ActorKelpSubProcess.ProcessInputType.class,
+                ActorKelpSubProcess.ProcessOutputType.class
         ));
 
         return cs;

@@ -22,6 +22,7 @@ public class ExampleRemoteLaunch {
             int p = Integer.parseInt(port);
             int lp = Integer.parseInt(linkPort);
             ActorSystemRemote sys = new ActorSystemRemote();
+            ActorSystemRemote.debugLog = true;
             sys.startWithoutWait(p);
 
             new CustomCloser(sys);
@@ -32,7 +33,7 @@ public class ExampleRemoteLaunch {
                 System.err.println("init value " + msgVal);
                 Thread.sleep(3000);
                 System.err.println("start");
-                a.tell(Integer.valueOf(msgVal), null);
+                a.tell(Integer.valueOf(msgVal));
             }
         }
     }

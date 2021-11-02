@@ -31,7 +31,11 @@ public class TestTool {
     public <E> void check(String msg, E expected, E actual, BiPredicate<E,E> p) {
         if (p.test(expected, actual)) {
             if (printOk) {
-                printOk(msg + " : " + actual);
+                String data = Objects.toString(actual);
+                if (data.length() > 300) {
+                    data = data.substring(0, 300) + "...";
+                }
+                printOk(msg + " : " + data);
             }
         } else {
             fail.incrementAndGet();

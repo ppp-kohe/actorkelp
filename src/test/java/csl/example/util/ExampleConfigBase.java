@@ -65,7 +65,7 @@ public class ExampleConfigBase {
         }
 
         @Override
-        protected FormatAndArgs logMessageHeader() {
+        public FormatAndArgs logMessageHeader() {
             return super.logMessageHeader().append(new FormatAndArgs("<Example> "));
         }
     }

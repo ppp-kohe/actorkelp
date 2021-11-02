@@ -53,7 +53,7 @@ public abstract class ActorKelpStateSharing<ActorType extends Actor, StateType> 
             share = true;
             StateType state = mergeSync(members);
             members.forEach(m ->
-                    m.tell(new SetStateTask<>(id, state, getSetState())));
+                    m.tell(new SetStateTask<>(id, state, getSetState()).withSender(null)));
             return state;
         } catch (Exception ex) {
             throw new RuntimeException(ex);
@@ -121,7 +121,7 @@ public abstract class ActorKelpStateSharing<ActorType extends Actor, StateType> 
     public abstract StateType merge(StateType l, StateType r);
 
     public static class ToStateTask<ActorType extends Actor, StateType>
-            implements Serializable, CallableMessage<ActorType, StateType>, MailboxKelp.MessageControl {
+            implements Serializable, CallableMessage<ActorType, StateType>, MailboxKelp.MessageDataControl {
         public static final long serialVersionUID = -1;
         public UUID id;
         public boolean suspend;
@@ -149,7 +149,7 @@ public abstract class ActorKelpStateSharing<ActorType extends Actor, StateType> 
     }
 
     public static class SetStateTask<ActorType extends Actor, StateType>
-            implements CallableMessage.CallableMessageConsumer<ActorType>, MailboxKelp.MessageControl {
+            implements CallableMessage.CallableMessageConsumer<ActorType>, MailboxKelp.MessageDataControl {
         public static final long serialVersionUID = -1;
         public UUID id;
         public StateType state;
@@ -194,7 +194,7 @@ public abstract class ActorKelpStateSharing<ActorType extends Actor, StateType> 
         }
 
         public void setNameRandom() {
-            name = getClass().getSimpleName() + "_" + id;
+            name = getClass().getSimpleName() + NAME_ID_SEPARATOR + id;
             system.register(this);
         }
 
@@ -219,7 +219,7 @@ public abstract class ActorKelpStateSharing<ActorType extends Actor, StateType> 
     }
 
     @SuppressWarnings("rawtypes")
-    public static class StateSharingRequest implements Serializable {
+    public static class StateSharingRequest implements Serializable, Message.MessageData {
         public static final long serialVersionUID = -1;
         public ActorRef sender;
         public Instant time;
@@ -278,6 +278,7 @@ public abstract class ActorKelpStateSharing<ActorType extends Actor, StateType> 
     }
 
     public static class SetStateFunctionThrowException<ActorType extends Actor, StateType> implements SetStateFunction<ActorType, StateType> {
+        public static final long serialVersionUID = -1;
         @Override
         public void accept(ActorType self, StateType state) {
             throw new RuntimeException("unsupported : " + self + " : " + state);

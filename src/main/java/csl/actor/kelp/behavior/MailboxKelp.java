@@ -1,11 +1,10 @@
 package csl.actor.kelp.behavior;
 
-import csl.actor.Actor;
-import csl.actor.Mailbox;
-import csl.actor.MailboxDefault;
-import csl.actor.Message;
+import csl.actor.*;
 import csl.actor.kelp.ActorKelpFunctions.KeyComparator;
 import csl.actor.kelp.ActorKelpSerializable;
+import csl.actor.kelp.ActorSystemKelp;
+import csl.actor.persist.MailboxManageable;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -13,36 +12,27 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 public class MailboxKelp implements Mailbox, Cloneable {
-    protected Mailbox mailbox;
+    protected ActorSystemKelp.KelpHistory history;
+    protected MailboxManageable mailbox;
     protected int treeSize;
     protected HistogramEntry[] entries;
     protected KeyHistograms treeFactory;
-
-    protected Mailbox controlMailbox;
     protected Map<Object, ControlEntry> controlEntries = new ConcurrentHashMap<>();
 
-    public MailboxKelp() {
-        this(32);
-    }
-
-    public MailboxKelp(int treeSize) {
-        this(treeSize, new MailboxDefault());
-    }
-
-    public MailboxKelp(int treeSize, Mailbox mailbox) {
+    public MailboxKelp(int treeSize, MailboxManageable mailbox) {
         this(treeSize, mailbox, new KeyHistograms());
     }
 
-    public MailboxKelp(int treeSize, Mailbox mailbox,
+    public MailboxKelp(int treeSize, MailboxManageable mailbox,
                        KeyHistograms treeFactory) {
         this.treeSize = treeSize;
         this.mailbox = mailbox;
         this.treeFactory = treeFactory;
 
-        controlMailbox = new MailboxDefault();
+        history = ActorSystemKelp.KelpHistory.create(ActorSystemKelp.HISTORY_SIZE_OLDEST * 2);
     }
 
-    public Mailbox getMailbox() {
+    public MailboxManageable getMailbox() {
         return mailbox;
     }
 
@@ -50,18 +40,21 @@ public class MailboxKelp implements Mailbox, Cloneable {
         return treeFactory;
     }
 
+    public ActorSystemKelp.KelpHistory getHistory() {
+        return history;
+    }
 
     @Override
     public MailboxKelp create() {
         try {
             MailboxKelp m = (MailboxKelp) super.clone();
-            m.mailbox = mailbox.create();
+            m.mailbox = mailbox.createManageable();
             int size = entries.length;
             m.entries = new HistogramEntry[size];
             for (int i = 0; i < size; ++i) {
                 m.entries[i] = entries[i].create();
             }
-            m.controlMailbox = controlMailbox.create();
+            m.controlEntries = new ConcurrentHashMap<>();
             return m;
         } catch (CloneNotSupportedException cne) {
             throw new RuntimeException(cne);
@@ -70,18 +63,28 @@ public class MailboxKelp implements Mailbox, Cloneable {
 
     @Override
     public void offer(Message<?> message) {
-        if (isControlMessage(message)) {
-            controlMailbox.offer(message);
+        history = history.set(mailbox.getPreviousSizeOnMemory());
+        mailbox.offer(message);
+    }
+
+    public boolean isMessageControl(Message<?> message) {
+        return getMessageControlDataFromMessage(message) != null;
+    }
+
+    public MessageDataControl getMessageControlDataFromMessage(Message<?> message) {
+        return message != null ? getMessageControlData(message.getData()) : null;
+    }
+    public MessageDataControl getMessageControlData(Object data) {
+        if (data instanceof MessageDataControl) {
+            return (MessageDataControl) data;
+        } else if (data instanceof Message.MessageDataHolder<?>) {
+            return getMessageControlData(((Message.MessageDataHolder<?>) data).getData());
         } else {
-            mailbox.offer(message);
+            return null;
         }
     }
 
-    public boolean isControlMessage(Message<?> message) {
-        return message != null && message.getData() instanceof MessageControl;
-    }
-
-    public interface MessageControl {
+    public interface MessageDataControl extends Message.MessageDataSpecial {
         void control(Message<?> message, MailboxKelp mbox);
     }
 
@@ -104,13 +107,6 @@ public class MailboxKelp implements Mailbox, Cloneable {
 
     @Override
     public Message<?> poll() {
-        if (!controlMailbox.isEmpty()) {
-            Message<?> m = controlMailbox.poll();
-            if (m != null) {
-                ((MessageControl) m.getData()).control(m, this);
-                return m;
-            }
-        }
         if (controlEntries.isEmpty()) {
             return mailbox.poll();
         } else {
@@ -120,7 +116,7 @@ public class MailboxKelp implements Mailbox, Cloneable {
 
     @Override
     public boolean isEmpty() {
-        return controlMailbox.isEmpty() && mailbox.isEmpty();
+        return mailbox.isEmpty();
     }
 
     @Override
@@ -137,56 +133,10 @@ public class MailboxKelp implements Mailbox, Cloneable {
 
 
     public interface ReducedSize {
-        boolean needToReduce(long size);
+        boolean needToReduceForComplete(boolean allowPersist, long sizeChecked, int reduceReq);
+
+        boolean needToReduceForTraversal(boolean allowPersist, long treeSize, long treeSizeOnMemory, HistogramTree tree);
         int nextReducedSize(long size);
-    }
-
-    public static class ReducedSizeDefault implements ReducedSize {
-        protected int reduceRuntimeCheckingThreshold;
-        protected double reduceRuntimeRemainingBytesToSizeRatio;
-
-        public ReducedSizeDefault() {
-            this(100_000, 0.003);
-        }
-
-        public ReducedSizeDefault(int reduceRuntimeCheckingThreshold, double reduceRuntimeRemainingBytesToSizeRatio) {
-            this.reduceRuntimeCheckingThreshold = reduceRuntimeCheckingThreshold;
-            this.reduceRuntimeRemainingBytesToSizeRatio = reduceRuntimeRemainingBytesToSizeRatio;
-        }
-
-        @Override
-        public int nextReducedSize(long size) {
-            int consuming = (int) Math.min(Integer.MAX_VALUE, size);
-            int rrt = reduceRuntimeCheckingThreshold;
-            if (consuming > rrt) { //refer free memory size
-                long aom = availableOnMemoryMessages();
-                consuming = (int) Math.min(consuming, Math.max(rrt, aom));
-
-                logReducedSize(size, aom, consuming);
-            }
-            return consuming;
-        }
-
-        protected void logReducedSize(long size, long availableOnMemoryMessages, int consuming) { }
-
-        public long availableOnMemoryMessages() {
-            Runtime rt = Runtime.getRuntime();
-            return (long) ((rt.maxMemory() - rt.totalMemory()) * reduceRuntimeRemainingBytesToSizeRatio);
-        }
-
-        @Override
-        public boolean needToReduce(long size) {
-            int rrt = reduceRuntimeCheckingThreshold;
-            long aom = -1;
-            boolean r = size > rrt &&
-                    size > (aom = availableOnMemoryMessages());
-            if (r) {
-                logNeedToReduce(size, aom);
-            }
-            return r;
-        }
-
-        protected void logNeedToReduce(long size, long availableOnMemoryMessages) { }
     }
 
     public void initMessageEntries(List<HistogramProcessor> processors) {
@@ -203,6 +153,13 @@ public class MailboxKelp implements Mailbox, Cloneable {
         return treeSize;
     }
 
+    public boolean processTraversalReservedAndHistogram(Actor self, ReducedSize reducedSize, Message<?> trigger) {
+        if (trigger.getData() instanceof HistogramEntry.TraversalProcess) {
+            processTraversalReserved(self, reducedSize, ((HistogramEntry.TraversalProcess) trigger.getData()).entryId);
+        }
+        return processHistogram(self);
+    }
+
     public boolean processHistogram(Actor self) {
         for (HistogramEntry e : entries) {
             if (e.processHistogram(self, this)) {
@@ -212,7 +169,7 @@ public class MailboxKelp implements Mailbox, Cloneable {
         return false;
     }
 
-    public KeyHistograms.HistogramTree getHistogram(int entryId) {
+    public HistogramTree getHistogram(int entryId) {
         return entries[entryId].getTree();
     }
 
@@ -228,7 +185,7 @@ public class MailboxKelp implements Mailbox, Cloneable {
     public int prune(long greaterThanLeafSize, double lessThanNonZeroLeafRate) {
         int pruneCount = 0;
         for (HistogramEntry e : entries) {
-            KeyHistograms.HistogramTree t = e.getTree();
+            HistogramTree t = e.getTree();
             if (t.getLeafSize() > greaterThanLeafSize && t.getLeafSizeNonZeroRate() < lessThanNonZeroLeafRate) {
                 t.prune();
                 pruneCount++;
@@ -266,22 +223,36 @@ public class MailboxKelp implements Mailbox, Cloneable {
         }
     }
 
+    public void reserveTraversal(Actor self, int entryId) {
+        entries[entryId].reserveTraversal(self);
+    }
+
+    public void processTraversalReserved(Actor self, ReducedSize reducedSize, int entryId) {
+        entries[entryId].processTraversalReserved(self, reducedSize);
+    }
+
     public void updateScheduledTraversalProcess(Actor self, int entryId) {
         entries[entryId].updateScheduledTraversalProcess(self);
     }
 
-    public void processTraversal(Actor self, int entryId, ReducedSize reducedSize) {
-        entries[entryId].processTraversal(self, reducedSize);
-    }
 
-    public void processPersistableTraversalBeforePut(Actor self, int entryId) {
-        entries[entryId].processPersistableTraversalBeforePut(self);
+    public void processPersistableTraversalBeforePut(Actor self, int entryId, ReducedSize reducedSize) {
+        entries[entryId].processPersistableTraversalBeforePut(self, reducedSize);
     }
 
     public void processStageEnd(Actor self, Object stageKey, ReducedSize reducedSize) {
         for (HistogramEntry e : entries) {
             e.processStageEnd(self, stageKey, reducedSize);
         }
+    }
+
+    public HistogramEntry remainingProcessesEntry() {
+        for (HistogramEntry e : entries) {
+            if (e.hasRemainingProcesses()) {
+                return e;
+            }
+        }
+        return null;
     }
 
 
@@ -298,8 +269,8 @@ public class MailboxKelp implements Mailbox, Cloneable {
         int size = entries.length;
         List<Object> splitPoints = new ArrayList<>(size);
         for (int i = 0; i < size; ++i) {
-            KeyHistograms.HistogramTree rt = entries[i].getTree();
-            KeyHistograms.HistogramTree lt = rt.split();
+            HistogramTree rt = entries[i].getTree();
+            HistogramTree lt = rt.split();
             m1.entries[i].setTree(lt);
             m2.entries[i].setTree(treeFactory.init(rt));
             entries[i] = entries[i].create();
@@ -343,7 +314,7 @@ public class MailboxKelp implements Mailbox, Cloneable {
                 .collect(Collectors.toList()));
     }
 
-    protected KeyHistograms.HistogramTree copyTree(Actor owner, KeyHistograms.HistogramTree tree) {
+    protected HistogramTree copyTree(Actor owner, HistogramTree tree) {
         return tree.copy();
     }
 
@@ -351,7 +322,7 @@ public class MailboxKelp implements Mailbox, Cloneable {
         mailbox.getQueue().addAll(Arrays.asList(state.messages));
         boolean copy = state.internalStateUsed;
         int i = 0;
-        for (KeyHistograms.HistogramTree t : state.histograms) {
+        for (HistogramTree t : state.histograms) {
             if (copy) {
                 t = copyTree(owner, t);
             }

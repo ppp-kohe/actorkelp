@@ -2,6 +2,7 @@ package csl.example.kelp;
 
 import csl.actor.*;
 import csl.actor.cluster.ActorPlacement;
+import csl.actor.kelp.KelpStageGraphActor;
 import csl.example.TestToolRemote;
 import csl.actor.kelp.ActorKelp;
 import csl.actor.kelp.ActorPlacementKelp;
@@ -11,7 +12,6 @@ import csl.actor.remote.ActorAddress;
 import csl.actor.remote.ActorRefRemote;
 import csl.actor.remote.ActorSystemRemote;
 import csl.actor.remote.KryoBuilder;
-import csl.actor.util.StagingActor;
 
 import java.util.Arrays;
 
@@ -34,18 +34,19 @@ public class ExampleActorPlacementKelp {
         Thread.sleep(5000);
 
         ActorRefRemote.get(system, "localhost", 10001, "recv")
-                .tell(ActorRefRemote.get(system, "localhost", 10001, "recv"), null);
+                .tell(ActorRefRemote.get(system, "localhost", 10001, "recv"));
 
         TestActor a = new TestActor(system, "hello", new ConfigKelp());
 
         ActorRef ref = ResponsiveCalls.sendTask(system, a, TestActor::move).get();
         for (int i = 0; i < 100; ++i) {
             for (int j = 0; j < 20; ++j) {
-                ref.tell(i, null);
+                ref.tell(i);
             }
         }
 
-        StagingActor.staging(system).start(ref).get();
+        KelpStageGraphActor.get(system, ref)
+                        .startAwait().get();
         p.close();
         Thread.sleep(3000);
         system.close();
@@ -106,12 +107,12 @@ public class ExampleActorPlacementKelp {
         @Override
         protected ActorBehavior initBehavior() {
             return behaviorBuilder()
-                    .matchWithSender(ActorRef.class, this::recv)
+                    .match(ActorRef.class, this::recv)
                     .build();
         }
 
-        void recv(ActorRef r, ActorRef s) {
-            getSystem().getLogger().log("%s ! %s from %s", this, r, s);
+        void recv(ActorRef r) {
+            getSystem().getLogger().log("%s ! %s", this, r);
         }
     }
 }

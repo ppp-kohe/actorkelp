@@ -9,8 +9,8 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 public interface ActorSystem extends Executor, AutoCloseable {
-    void register(Actor actor);
-    void unregister(Actor actor);
+    boolean register(Actor actor);
+    boolean unregister(Actor actor);
     void send(Message<?> message);
 
     Actor resolveActorLocalNamed(ActorRefLocalNamed ref);
@@ -76,5 +76,30 @@ public interface ActorSystem extends Executor, AutoCloseable {
 
     static OffsetDateTime timeForLog(Instant t) {
         return OffsetDateTime.ofInstant(t, ZoneOffset.systemDefault());
+    }
+
+    default boolean isSpecialMessage(Message<?> message) {
+        if (message != null) {
+            return isSpecialMessageData(message.getData());
+        } else {
+            return false;
+        }
+    }
+
+    default boolean isSpecialMessageData(Object data) {
+        return data instanceof Message.MessageDataSpecial ||
+                isSpecialMessageClocked(data) ||
+                (data instanceof Message.MessageDataHolder<?> &&
+                        isSpecialMessageData(((Message.MessageDataHolder<?>) data).getData()));
+    }
+
+    default boolean isSpecialMessageClocked(Object data) {
+        if (data instanceof Message.MessageDataClock<?>) {
+            Object clockData = ((Message.MessageDataClock<?>) data).body;
+            if (clockData instanceof Message<?>) {
+                return isSpecialMessage((Message<?>) clockData);
+            }
+        }
+        return false;
     }
 }

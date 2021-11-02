@@ -2,14 +2,12 @@ package csl.example.kelp;
 
 import csl.actor.ActorBehavior;
 import csl.actor.ActorSystem;
+import csl.actor.kelp.*;
 import csl.example.TestTool;
-import csl.actor.kelp.ActorKelp;
-import csl.actor.kelp.ActorSystemKelp;
-import csl.actor.kelp.ConfigKelp;
-import csl.actor.kelp.KelpStage;
-import csl.actor.util.StagingActor;
 
+import java.time.Duration;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 
 public class ExampleActorKelp {
     public static void main(String[] args) throws Exception {
@@ -33,13 +31,20 @@ public class ExampleActorKelp {
 
     public void test(KelpStage<MyActor> a) throws Exception {
         ActorSystem system = a.getSystem();
+
+        KelpStageGraphActor sg = a.stageGraph()
+                .withLogPeriodic(Duration.ofMillis(500))
+                .withStageEndHandler((g,n) -> g.logStatusDetail())
+                .start();
+
         String key = "abcdefghijk";
         for (int i = 0; i < 100; ++i) {
             String k = "" + key.charAt(i % key.length());
-            a.tell(k + i);
+            a.tellAndFlush(k + i);
+            Thread.sleep(50);
         }
 
-        StagingActor.staging(system).start(a).get();
+        sg.await().get();
 
         MyActor am = a.merge();
 

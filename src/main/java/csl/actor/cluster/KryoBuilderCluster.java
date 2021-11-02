@@ -17,17 +17,6 @@ public class KryoBuilderCluster extends KryoBuilder {
     }
 
     @Override
-    protected void buildRegisterActor(Kryo kryo) {
-        buildRegisterPersistentFileManager(kryo);
-        super.buildRegisterActor(kryo);
-    }
-
-    protected void buildRegisterPersistentFileManager(Kryo kryo) {
-        kryo.addDefaultSerializer(PersistentFileManager.class,
-                new PersistentFileManager.PersistentFileManagerSerializer(system));
-    }
-
-    @Override
     public List<Class<?>> getActorClasses() {
         List<Class<?>> ts = new ArrayList<>(super.getActorClasses());
         ts.addAll(Arrays.asList(
@@ -45,18 +34,36 @@ public class KryoBuilderCluster extends KryoBuilder {
                 ClusterCommands.CommandToken.class,
                 ClusterCommands.CommandTokenType.class,
 
+                ClusterDeployment.AttachInitRunGetAppName.class,
+                ClusterDeployment.AttachInitRunGetPrimary.class,
+                ClusterDeployment.AttachInitRunGetNodes.class,
+                ClusterDeployment.CallableMessageMove.class,
+                ClusterDeployment.CallMessageLoadAndSendToActor.class,
+
                 ClusterDeployment.ClusterStats.class,
                 ClusterDeployment.ConfigSet.class,
                 ClusterDeployment.NetworkStats.class,
+
+                ClusterDeployment.PlaceGetAttachedSystemStats.class,
+                ClusterDeployment.PlaceGetAttachedSystemNamedActorMap.class,
+                ClusterDeployment.PlaceGetAttachedSystemProcessingCount.class,
+                ClusterDeployment.PlaceGetAttachedSystemRemoteConnectionMap.class,
+                ClusterDeployment.PlaceGetAttachedSystemRemoteServerReceive.class,
+                ClusterDeployment.PlaceGetAttachedPlacementTotalThreads.class,
+                ClusterDeployment.PlaceGetAttachedPlacementCluster.class,
+                ClusterDeployment.PlaceGetAttachedPlacementClusterWithSelf.class,
+                ClusterDeployment.PlaceGetAttachedPlacementCreatedActors.class,
+                ClusterDeployment.PlaceGetAttachedPlacementForClusterRemoteConfig.class,
+
+                ClusterDeployment.PlaceGetEntry.class,
+                ClusterDeployment.PlaceGetEntryPlacementActor.class,
+                ClusterDeployment.PlaceGetRemoteConfig.class,
+
                 ClusterDeployment.ShutdownTask.class,
                 ClusterDeployment.SystemStats.class,
+                ClusterDeployment.ToStringMessage.class,
 
-                ConfigDeployment.class,
-
-                MailboxPersistableReplacement.MessageOnStorage.class,
-
-                PersistentFileManager.PersistentFileEnd.class,
-                PersistentFileManager.PersistentFileReaderSource.class));
+                ConfigDeployment.class));
         return ts;
     }
 }

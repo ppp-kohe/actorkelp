@@ -53,6 +53,25 @@ public class ConfigBase implements Serializable, ToJson {
         return this;
     }
 
+    public List<String> toJvmOptions(String propHead) {
+        return Arrays.stream(getClass().getFields())
+                .filter(ConfigBase::isConfigProperty)
+                .map(f -> toJvmOption(propHead, f))
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+    }
+
+    public String toJvmOption(String propHead, Field f) {
+        String fld = f.getName();
+        String propName = (propHead.isEmpty() ? "" : (propHead + ".")) + fld;
+        Object v = get(f);
+        if (v != null) {
+            return "-D" + propName + "=" + toStringConfigPropertyValueNoEscape(f);
+        } else {
+            return null; //null value will be skipped
+        }
+    }
+
     public ConfigBase read(String propHead, Map<Object, Object> properties) {
         Arrays.stream(getClass().getFields())
                 .filter(ConfigBase::isConfigProperty)
@@ -188,7 +207,7 @@ public class ConfigBase implements Serializable, ToJson {
 
     protected boolean isChangedField(Field f, ConfigBase another) {
         return f.getDeclaringClass().isInstance(another) &&
-                Objects.equals(get(f), another.get(f));
+                !Objects.equals(get(f), another.get(f));
     }
 
     public ConfigBase createDefault() {
@@ -241,7 +260,7 @@ public class ConfigBase implements Serializable, ToJson {
         return "\"" + f.getName() + "\" : " + toStringConfigPropertyValue(f);
     }
 
-    public String toStringConfigPropertyValue(Field f) {
+    public String toStringConfigPropertyValueNoEscape(Field f) {
         try {
             Object v = f.get(this);
             if (v instanceof Integer) {
@@ -255,6 +274,19 @@ public class ConfigBase implements Serializable, ToJson {
             } else if (v instanceof Double) {
                 return String.format("%,f", v).replaceAll("[,]", "_");
             } else if (v instanceof String) {
+                return (String) v;
+            } else {
+                return "" + v;
+            }
+        } catch (Exception ex) {
+            return "//error: " + ex;
+        }
+    }
+
+    public String toStringConfigPropertyValue(Field f) {
+        try {
+            Object v = f.get(this);
+            if (v instanceof String) {
                 StringBuilder buf = new StringBuilder();
                 buf.append("\"");
                 for (char c : ((String) v).toCharArray()) {
@@ -271,7 +303,7 @@ public class ConfigBase implements Serializable, ToJson {
                 buf.append("\"");
                 return buf.toString();
             } else {
-                return "" + v;
+                return toStringConfigPropertyValueNoEscape(f);
             }
         } catch (Exception ex) {
             return "//error: " + ex;
@@ -473,7 +505,7 @@ public class ConfigBase implements Serializable, ToJson {
         }
     }
 
-    protected FormatAndArgs logMessageHeader() {
+    public FormatAndArgs logMessageHeader() {
         return new FormatAndArgs("!!! [%s] ", ActorSystem.timeForLog(Instant.now()));
     }
 
@@ -495,7 +527,7 @@ public class ConfigBase implements Serializable, ToJson {
     }
 
     public int getLogColorDefault() {
-        return 17;
+        return 33;
     }
 
     public static class SystemLoggerHeader implements ActorSystem.SystemLogger {
@@ -514,13 +546,17 @@ public class ConfigBase implements Serializable, ToJson {
 
         @Override
         public void log(boolean flag, int color, String fmt, Object... args) {
-            FormatAndArgs fa = config.logMessage(fmt, args);
+            FormatAndArgs fa = format(fmt, args);
             logger.log(flag, color, fa.format, fa.args);
+        }
+
+        protected ConfigBase.FormatAndArgs format(String fmt, Object... args) {
+            return config.logMessage(fmt, args);
         }
 
         @Override
         public void log(boolean flag, int color, Throwable ex, String fmt, Object... args) {
-            FormatAndArgs fa = config.logMessage(fmt, args);
+            FormatAndArgs fa = format(fmt, args);
             logger.log(flag, color, ex, fa.format, fa.args);
         }
 

@@ -2,24 +2,27 @@ package csl.actor.kelp.behavior;
 
 import csl.actor.Actor;
 import csl.actor.CallableMessage;
+import csl.actor.MessageBundle;
 import csl.actor.kelp.ActorKelp;
+import csl.actor.kelp.persist.PersistentConditionActor;
 
 import java.time.Duration;
 import java.time.Instant;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class HistogramEntry {
     protected int entryId;
     protected HistogramProcessor processor;
-    protected KeyHistograms.HistogramTree tree;
+    protected HistogramTree tree;
     protected volatile ScheduledFuture<?> scheduledProcess;
     protected Instant nextSchedule = Instant.now();
     protected Instant scheduleBackup = Instant.now();
-    protected Instant lastTraversal = Instant.now();
     protected volatile boolean remainingProcessesLock;
+    protected AtomicBoolean traversalReserved = new AtomicBoolean();
 
-    public HistogramEntry(int entryId, HistogramProcessor p, KeyHistograms.HistogramTree tree) {
+    public HistogramEntry(int entryId, HistogramProcessor p, HistogramTree tree) {
         this.entryId = entryId;
         this.processor = p;
         this.tree = tree;
@@ -37,19 +40,15 @@ public class HistogramEntry {
         return nextSchedule;
     }
 
-    public Instant getLastTraversal() {
-        return lastTraversal;
-    }
-
     public Instant getScheduleBackup() {
         return scheduleBackup;
     }
 
-    public KeyHistograms.HistogramTree getTree() {
+    public HistogramTree getTree() {
         return tree;
     }
 
-    public void setTree(KeyHistograms.HistogramTree tree) {
+    public void setTree(HistogramTree tree) {
         this.tree = tree;
     }
 
@@ -61,26 +60,37 @@ public class HistogramEntry {
         }
     }
 
-    public void processTraversal(Actor self, MailboxKelp.ReducedSize reducedSize) {
-        if (processor.needToProcessTraversal(self, tree)) {
-            lastTraversal = Instant.now();
-            processTraversal(self, reducedSize, tree.getRoot());
+    public void reserveTraversal(Actor self) {
+        if (self != null && traversalReserved.compareAndSet(false, true)) {
+            self.tellMessage(new MessageBundle.MessageAccepted<>(self, new TraversalProcess(entryId).withSender(null)));
         }
     }
 
-    public void processTraversal(Actor self, MailboxKelp.ReducedSize reducedSize, KeyHistograms.HistogramNode node) {
+    public void processTraversalReserved(Actor self, MailboxKelp.ReducedSize reducedSize) {
+        if (traversalReserved.compareAndSet(true, false)) {
+            processTraversal(self, reducedSize, true);
+        }
+    }
+
+    public void processTraversal(Actor self, MailboxKelp.ReducedSize reducedSize, boolean reserved) {
+        if (!remainingProcessesLock && processor.needToProcessTraversal(self, tree, reducedSize, reserved)) {
+            processTraversal(self, reducedSize, tree, tree.getRoot());
+        }
+    }
+
+    public void processTraversal(Actor self, MailboxKelp.ReducedSize reducedSize, HistogramTree tree, KeyHistograms.HistogramTreeNode node) {
         if (remainingProcessesLock) {
             updateScheduledTraversalProcess(self);
         } else if (node != null && node.size() > 0) {
-            if (node instanceof KeyHistograms.HistogramNodeTree) {
-                for (KeyHistograms.HistogramNode ch : ((KeyHistograms.HistogramNodeTree) node).getChildren()) {
-                    processTraversal(self, reducedSize, ch);
+            if (node instanceof HistogramTreeNodeTable) {
+                for (KeyHistograms.HistogramTreeNode ch : ((HistogramTreeNodeTable) node).getChildren(tree)) { //TODO loading all persisted sub-nodes
+                    processTraversal(self, reducedSize, tree, ch);
                 }
-            } else if (node instanceof KeyHistograms.HistogramNodeLeaf) {
+            } else if (node instanceof HistogramTreeNodeLeaf) {
                 if (remainingProcessesLock) {
                     updateScheduledTraversalProcess(self);
                 } else {
-                    processor.processTraversal(self, reducedSize, (KeyHistograms.HistogramNodeLeaf) node);
+                    processor.processTraversal(self, reducedSize, (HistogramTreeNodeLeaf) node);
                 }
             }
         }
@@ -111,7 +121,7 @@ public class HistogramEntry {
         }
         if (p == null || p.isCancelled() || p.isDone()) {
             scheduledProcess = self.getSystem().getScheduledExecutor()
-                    .schedule(() -> startTraversalProcess(self), time, TimeUnit.MILLISECONDS);
+                    .schedule(new StartTraversalProcess(this, self), time, TimeUnit.MILLISECONDS);
         }
     }
 
@@ -127,17 +137,18 @@ public class HistogramEntry {
 
         @Override
         public void accept(ActorKelp<?> self) {
-            self.getMailboxAsKelp()
-                    .processTraversal(self, entryId, self.getReducedSize());
+            //the following process will be done by ActorKelp.processMessage(msg) //the class is just a trigger
+//            self.getMailboxAsKelp()
+//                    .processTraversal(self, entryId, self.getReducedSize());
         }
     }
 
-    public synchronized void startTraversalProcess(Actor self) {
+    public synchronized void startTraversalProcess(StartTraversalProcess p) {
         Duration remaining = Duration.between(Instant.now(), nextSchedule);
         if (remaining.isNegative()) {
             //do the job
             scheduledProcess = null;
-            self.tell(new TraversalProcess(entryId));
+            reserveTraversal(p.getSelf());
         } else {
             long nextDelay;
             if (remainingProcessesLock) {
@@ -146,13 +157,34 @@ public class HistogramEntry {
                 nextDelay = remaining.toMillis() + 1L;
             }
             scheduledProcess.cancel(false);
-            scheduledProcess = self.getSystem().getScheduledExecutor()
-                    .schedule(() -> startTraversalProcess(self), nextDelay, TimeUnit.MILLISECONDS);
+            scheduledProcess = p.getSelf().getSystem().getScheduledExecutor()
+                    .schedule(p, nextDelay, TimeUnit.MILLISECONDS);
+        }
+    }
+
+    public static class StartTraversalProcess implements Runnable {
+        protected HistogramEntry entry;
+        protected Actor self;
+
+        public StartTraversalProcess(HistogramEntry entry, Actor self) {
+            this.entry = entry;
+            this.self = self;
+        }
+        public void run() {
+            try {
+                entry.startTraversalProcess(this);
+            } catch (Throwable ex) {
+                ex.printStackTrace();
+            }
+        }
+
+        public Actor getSelf() {
+            return self;
         }
     }
 
     public synchronized boolean hasRemainingProcesses() {
-        KeyHistograms.HistogramTree tree = this.tree;
+        HistogramTree tree = this.tree;
         return scheduledProcess != null || (tree != null && !tree.getCompleted().isEmpty());
     }
 
@@ -172,6 +204,10 @@ public class HistogramEntry {
             p.cancel(false);
         }
         scheduledProcess = null;
+        HistogramTree tree = this.tree;
+        if (tree != null) {
+            tree.close();
+        }
     }
 
     public synchronized void unlockRemainingProcess(Actor self) {
@@ -183,41 +219,26 @@ public class HistogramEntry {
     }
 
     public void processStageEnd(Actor self, Object stageKey, MailboxKelp.ReducedSize reducedSize) {
-        if (processor.needToProcessStageEnd(self, stageKey, tree)) {
+        if (processor.needToProcessStageEnd(self, reducedSize, stageKey, tree)) {
             synchronized (this) {
-                processStageEnd(self, stageKey, reducedSize, tree.getRoot());
+                processStageEnd(self, stageKey, reducedSize, tree, tree.getRoot());
             }
         }
     }
 
-    public void processStageEnd(Actor self, Object stageKey, MailboxKelp.ReducedSize reducedSize, KeyHistograms.HistogramNode node) {
+    public void processStageEnd(Actor self, Object stageKey, MailboxKelp.ReducedSize reducedSize, HistogramTree tree, KeyHistograms.HistogramTreeNode node) {
         if (node != null && node.size() > 0) {
-            if (node instanceof KeyHistograms.HistogramNodeTree) {
-                for (KeyHistograms.HistogramNode ch : ((KeyHistograms.HistogramNodeTree) node).getChildren()) {
-                    processStageEnd(self, stageKey, reducedSize, ch);
+            if (node instanceof HistogramTreeNodeTable) {
+                for (KeyHistograms.HistogramTreeNode ch : ((HistogramTreeNodeTable) node).getChildren(tree)) {
+                    processStageEnd(self, stageKey, reducedSize, tree, ch);
                 }
-            } else if (node instanceof KeyHistograms.HistogramNodeLeaf) {
-                processor.processStageEnd(self, stageKey, reducedSize, (KeyHistograms.HistogramNodeLeaf) node);
+            } else if (node instanceof HistogramTreeNodeLeaf) {
+                processor.processStageEnd(self, stageKey, reducedSize, (HistogramTreeNodeLeaf) node);
             }
         }
-    }
-
-    public void processPersistableTraversalBeforePut(Actor self) {
-        MailboxKelp.ReducedSize rs;
-        if (self instanceof ActorKelp) {
-            rs = ((ActorKelp<?>) self).getReducedSize();
-        } else {
-            rs = new MailboxKelp.ReducedSizeDefault();
-        }
-        processPersistableTraversalBeforePut(self, rs);
     }
 
     public void processPersistableTraversalBeforePut(Actor self, MailboxKelp.ReducedSize reducedSize) {
-        if (!remainingProcessesLock &&
-                Duration.ofMillis(traversalDelayTimeMs(self)).compareTo(Duration.between(Instant.now(), lastTraversal)) < 0 &&
-                (reducedSize.needToReduce(tree.getTreeSizeForReduceCheck()) ||
-                 tree.needToReduce())) {
-            processTraversal(self, reducedSize);
-        }
+        processTraversal(self, reducedSize, false);
     }
 }

@@ -6,8 +6,14 @@ import csl.actor.Message;
 import csl.actor.kelp.ActorKelp;
 import csl.actor.kelp.ActorKelpFunctions;
 import csl.actor.kelp.ActorKelpFunctions.*;
+import csl.actor.kelp.persist.HistogramTreePersistable;
+import csl.actor.kelp.persist.KeyHistogramsPersistable;
+import csl.actor.kelp.persist.PersistentConditionActor;
+import csl.actor.kelp.persist.TreeMerger;
+import csl.actor.persist.PersistentFileManager;
 
 import java.util.*;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.Function;
@@ -77,7 +83,7 @@ public class ActorBehaviorKelp {
         }
 
         @Override
-        protected KeyHistograms.HistogramNodeLeaf createLeaf(Object key, int height) {
+        protected HistogramTreeNodeLeaf createLeaf(Object key, int height) {
             return new HistogramNodeLeaf1(key, this, height);
         }
 
@@ -102,7 +108,7 @@ public class ActorBehaviorKelp {
         @SuppressWarnings("unchecked")
         @Override
         public boolean processHistogram(Actor self, MailboxKelp m) {
-            KeyHistograms.HistogramTree tree = m.getHistogram(matchKeyEntryId);
+            HistogramTree tree = m.getHistogram(matchKeyEntryId);
             HistogramNodeLeaf1 next = ((HistogramNodeLeaf1) tree.takeCompleted());
             if (next != null) {
                 if (next.consume(tree, (BiConsumer<Object,Object>) handler)) {
@@ -145,7 +151,7 @@ public class ActorBehaviorKelp {
         }
     }
 
-    public static abstract class HistogramNodeLeafN extends KeyHistograms.HistogramNodeLeaf {
+    public static abstract class HistogramNodeLeafN extends HistogramTreeNodeLeaf {
         public static final long serialVersionUID = 1L;
 
         public HistogramNodeLeafN() {}
@@ -155,7 +161,7 @@ public class ActorBehaviorKelp {
         }
 
         @Override
-        public HistogramNodeLeafN copy(Map<KeyHistograms.HistogramNode, KeyHistograms.HistogramNode> oldToNew) {
+        public HistogramNodeLeafN copy(Map<KeyHistograms.HistogramTreeNode, KeyHistograms.HistogramTreeNode> oldToNew) {
             return (HistogramNodeLeafN) super.copy(oldToNew);
         }
     }
@@ -172,7 +178,7 @@ public class ActorBehaviorKelp {
         }
 
         @Override
-        public HistogramNodeLeaf1 copy(Map<KeyHistograms.HistogramNode, KeyHistograms.HistogramNode> oldToNew) {
+        public HistogramNodeLeaf1 copy(Map<KeyHistograms.HistogramTreeNode, KeyHistograms.HistogramTreeNode> oldToNew) {
             HistogramNodeLeaf1 node = (HistogramNodeLeaf1) super.copy(oldToNew);
             node.values1 = (values1 == null ? null : values1.copy());
             return node;
@@ -193,10 +199,10 @@ public class ActorBehaviorKelp {
             return !values1.isEmpty();
         }
 
-        public boolean consume(KeyHistograms.HistogramTree tree, BiConsumer<Object, Object> handler) {
+        public boolean consume(HistogramTree tree, BiConsumer<Object, Object> handler) {
             if (completedAfterPut(null)) {  //currently, it can complete before consume, and then it might not be able to consume 2 or more times
                 afterTake(1, tree);
-                handler.accept(getKey(), values1.poll(tree));
+                handler.accept(getKey(), values1.poll(tree, this));
                 return true;
             } else {
                 return false;
@@ -237,7 +243,7 @@ public class ActorBehaviorKelp {
         }
 
         @Override
-        protected KeyHistograms.HistogramNodeLeaf createLeaf(Object key, int height) {
+        protected HistogramTreeNodeLeaf createLeaf(Object key, int height) {
             return new HistogramNodeLeaf2(key, this, height);
         }
 
@@ -266,7 +272,7 @@ public class ActorBehaviorKelp {
         @SuppressWarnings("unchecked")
         @Override
         public boolean processHistogram(Actor self, MailboxKelp m) {
-            KeyHistograms.HistogramTree tree = m.getHistogram(matchKeyEntryId);
+            HistogramTree tree = m.getHistogram(matchKeyEntryId);
             HistogramNodeLeaf2 next = ((HistogramNodeLeaf2) tree.takeCompleted());
             if (next != null) {
                 return next.consume(tree, (TriConsumer<Object, Object ,Object>) handler);
@@ -321,7 +327,7 @@ public class ActorBehaviorKelp {
         }
 
         @Override
-        public HistogramNodeLeaf2 copy(Map<KeyHistograms.HistogramNode, KeyHistograms.HistogramNode> oldToNew) {
+        public HistogramNodeLeaf2 copy(Map<KeyHistograms.HistogramTreeNode, KeyHistograms.HistogramTreeNode> oldToNew) {
             HistogramNodeLeaf2 node = (HistogramNodeLeaf2) super.copy(oldToNew);
             node.values1 = (values1 == null ? null : values1.copy());
             node.values2 = (values2 == null ? null : values2.copy());
@@ -348,10 +354,10 @@ public class ActorBehaviorKelp {
             return !values1.isEmpty() && !values2.isEmpty();
         }
 
-        public boolean consume(KeyHistograms.HistogramTree tree, TriConsumer<Object, Object, Object> handler) {
+        public boolean consume(HistogramTree tree, TriConsumer<Object, Object, Object> handler) {
             if (completedAfterPut(null)) {  //currently, it can complete before consume, and then it might not be able to consume 2 or more times
                 afterTake(2, tree);
-                handler.accept(getKey(), values1.poll(tree), values2.poll(tree));
+                handler.accept(getKey(), values1.poll(tree, this), values2.poll(tree, this));
                 return true;
             } else {
                 return false;
@@ -398,7 +404,7 @@ public class ActorBehaviorKelp {
         }
 
         @Override
-        protected KeyHistograms.HistogramNodeLeaf createLeaf(Object key, int height) {
+        protected HistogramTreeNodeLeaf createLeaf(Object key, int height) {
             return new HistogramNodeLeaf3(key, this, height);
         }
 
@@ -431,7 +437,7 @@ public class ActorBehaviorKelp {
         @SuppressWarnings("unchecked")
         @Override
         public boolean processHistogram(Actor self, MailboxKelp m) {
-            KeyHistograms.HistogramTree tree = m.getHistogram(matchKeyEntryId);
+            HistogramTree tree = m.getHistogram(matchKeyEntryId);
             HistogramNodeLeaf3 next = ((HistogramNodeLeaf3) tree.takeCompleted());
             if (next != null) {
                 return next.consume(tree, (QuadConsumer<Object,Object,Object,Object>) handler);
@@ -491,7 +497,7 @@ public class ActorBehaviorKelp {
         }
 
         @Override
-        public HistogramNodeLeaf3 copy(Map<KeyHistograms.HistogramNode, KeyHistograms.HistogramNode> oldToNew) {
+        public HistogramNodeLeaf3 copy(Map<KeyHistograms.HistogramTreeNode, KeyHistograms.HistogramTreeNode> oldToNew) {
             HistogramNodeLeaf3 node = (HistogramNodeLeaf3) super.copy(oldToNew);
             node.values1 = (values1 == null ? null : values1.copy());
             node.values2 = (values2 == null ? null : values2.copy());
@@ -523,10 +529,10 @@ public class ActorBehaviorKelp {
             return !values1.isEmpty() && !values2.isEmpty() && !values3.isEmpty();
         }
 
-        public boolean consume(KeyHistograms.HistogramTree tree, QuadConsumer<Object, Object, Object, Object> handler) {
+        public boolean consume(HistogramTree tree, QuadConsumer<Object, Object, Object, Object> handler) {
             if (completedAfterPut(null)) {
                 afterTake(3, tree);
-                handler.accept(getKey(), values1.poll(tree), values2.poll(tree), values3.poll(tree));
+                handler.accept(getKey(), values1.poll(tree, this), values2.poll(tree, this), values3.poll(tree, this));
                 return true;
             } else {
                 return false;
@@ -580,7 +586,7 @@ public class ActorBehaviorKelp {
         }
 
         @Override
-        protected KeyHistograms.HistogramNodeLeaf createLeaf(Object key, int height) {
+        protected HistogramTreeNodeLeaf createLeaf(Object key, int height) {
             return new HistogramNodeLeaf4(key, this, height);
         }
 
@@ -617,7 +623,7 @@ public class ActorBehaviorKelp {
         @SuppressWarnings("unchecked")
         @Override
         public boolean processHistogram(Actor self, MailboxKelp m) {
-            KeyHistograms.HistogramTree tree = m.getHistogram(matchKeyEntryId);
+            HistogramTree tree = m.getHistogram(matchKeyEntryId);
             HistogramNodeLeaf4 next = ((HistogramNodeLeaf4) tree.takeCompleted());
             if (next != null) {
                 return next.consume(tree, (QuintConsumer<Object, Object,Object,Object,Object>) handler);
@@ -681,7 +687,7 @@ public class ActorBehaviorKelp {
         }
 
         @Override
-        public HistogramNodeLeaf4 copy(Map<KeyHistograms.HistogramNode, KeyHistograms.HistogramNode> oldToNew) {
+        public HistogramNodeLeaf4 copy(Map<KeyHistograms.HistogramTreeNode, KeyHistograms.HistogramTreeNode> oldToNew) {
             HistogramNodeLeaf4 node = (HistogramNodeLeaf4) super.copy(oldToNew);
             node.values1 = (values1 == null ? null : values1.copy());
             node.values2 = (values2 == null ? null : values2.copy());
@@ -717,10 +723,10 @@ public class ActorBehaviorKelp {
             return !values1.isEmpty() && !values2.isEmpty() && !values3.isEmpty() && !values4.isEmpty();
         }
 
-        public boolean consume(KeyHistograms.HistogramTree tree, QuintConsumer<Object, Object, Object, Object, Object> handler) {
+        public boolean consume(HistogramTree tree, QuintConsumer<Object, Object, Object, Object, Object> handler) {
             if (completedAfterPut(null)) {
                 afterTake(4, tree);
-                handler.accept(getKey(), values1.poll(tree), values2.poll(tree), values3.poll(tree), values4.poll(tree));
+                handler.accept(getKey(), values1.poll(tree, this), values2.poll(tree, this), values3.poll(tree, this), values4.poll(tree, this));
                 return true;
             } else {
                 return false;
@@ -755,7 +761,7 @@ public class ActorBehaviorKelp {
             this.handler = handler;
         }
 
-        public ActorBehaviorMatchKey<KeyType> withKeyValuesReducers(List<BiFunction<KeyType, List<ValueType>, Iterable<ValueType>>> keyValuesReducers) {
+        public ActorBehaviorMatchKey<KeyType> withKeyValuesReducers(List<KeyValuesReducer<KeyType,ValueType>> keyValuesReducers) {
             if (keyValuesReducers.isEmpty()) {
                 return this;
             } else {
@@ -765,7 +771,7 @@ public class ActorBehaviorKelp {
         }
 
         @Override
-        protected KeyHistograms.HistogramNodeLeaf createLeaf(Object key, int height) {
+        protected HistogramTreeNodeLeaf createLeaf(Object key, int height) {
             return new HistogramNodeLeafList(key, this, height);
         }
 
@@ -780,14 +786,14 @@ public class ActorBehaviorKelp {
             } else {
                 return false;
             }
-            put(self, key, true, value);
+            put(self, key, 0, value);
             return true;
         }
 
         @SuppressWarnings({"unchecked", "rawtypes"})
         @Override
         public boolean processHistogram(Actor self, MailboxKelp m) {
-            KeyHistograms.HistogramTree tree = m.getHistogram(matchKeyEntryId);
+            HistogramTree tree = m.getHistogram(matchKeyEntryId);
             HistogramNodeLeafList next = (HistogramNodeLeafList) tree.takeCompleted();
             if (next != null) {
                 return next.consume(putRequiredSize, tree, (BiConsumer) handler);
@@ -832,7 +838,7 @@ public class ActorBehaviorKelp {
         }
 
         @Override
-        public HistogramNodeLeafList copy(Map<KeyHistograms.HistogramNode, KeyHistograms.HistogramNode> oldToNew) {
+        public HistogramNodeLeafList copy(Map<KeyHistograms.HistogramTreeNode, KeyHistograms.HistogramTreeNode> oldToNew) {
             HistogramNodeLeafList node = (HistogramNodeLeafList) super.copy(oldToNew);
             node.values = (values == null ? null : values.copy());
             return node;
@@ -857,11 +863,11 @@ public class ActorBehaviorKelp {
             return r <= size;
         }
 
-        public boolean consume(int requiredSize, KeyHistograms.HistogramTree tree, BiConsumer<Object,List<Object>> handler) {
+        public boolean consume(int requiredSize, HistogramTree tree, BiConsumer<Object,List<Object>> handler) {
             if (completed(requiredSize)) {
                 List<Object> vs = new ArrayList<>(requiredSize);
                 for (int i = 0; i < requiredSize; ++i) {
-                    vs.add(values.poll(tree));
+                    vs.add(values.poll(tree, this));
                 }
                 afterTake(requiredSize, tree);
                 handler.accept(key, vs);
@@ -884,14 +890,16 @@ public class ActorBehaviorKelp {
 
     public static class ActorBehaviorMatchKeyListFuture<KeyType, ParamType, ValueType>
             extends ActorBehaviorMatchKey<KeyType> {
-        protected BiFunction<KeyType, List<ValueType>, Iterable<ValueType>> keyValuesReducer;
+        protected KeyValuesReducer<KeyType, ValueType> keyValuesReducer;
         protected KeyExtractor<KeyType, ParamType> keyExtractorFromValue;
         protected Function<ParamType, ValueType> valueExtractorFromValue;
         protected BiConsumer<KeyType, List<ValueType>> handler;
 
+        protected Actor putActor;
+
         public ActorBehaviorMatchKeyListFuture(int matchKeyEntryId, int requiredSize,
                                                KeyComparator<KeyType> keyComparator,
-                                               BiFunction<KeyType, List<ValueType>, Iterable<ValueType>> keyValuesReducer,
+                                               KeyValuesReducer<KeyType, ValueType> keyValuesReducer,
                                                KeyExtractor<KeyType, ParamType> keyExtractorFromValue,
                                                Function<ParamType, ValueType> valueExtractorFromValue,
                                                BiConsumer<KeyType, List<ValueType>> handler) {
@@ -923,15 +931,17 @@ public class ActorBehaviorKelp {
             } else {
                 return false;
             }
+            putActor = self;
             MailboxKelp mailbox = (MailboxKelp) self.getMailbox();
-            mailbox.processPersistableTraversalBeforePut(self, matchKeyEntryId);
-            put(self, key, true, value);
-            mailbox.updateScheduledTraversalProcess(self, this.matchKeyEntryId);
+            mailbox.processPersistableTraversalBeforePut(self, matchKeyEntryId, getReducedSize());
+            put(self, key, 0, value);
+//            mailbox.updateScheduledTraversalProcess(self, this.matchKeyEntryId);
+            putActor = null;
             return true;
         }
 
         @Override
-        protected KeyHistograms.HistogramNodeLeaf createLeaf(Object key, int height) {
+        protected HistogramTreeNodeLeaf createLeaf(Object key, int height) {
             return new HistogramNodeLeafListReducible(key, this, height);
         }
 
@@ -956,31 +966,119 @@ public class ActorBehaviorKelp {
         }
 
         @Override
-        public boolean needToProcessTraversal(Actor self, KeyHistograms.HistogramTree tree) {
+        public boolean needToProcessTraversal(Actor self, HistogramTree tree, MailboxKelp.ReducedSize reducedSize, boolean reserved) {
             this.putTree = tree;
+            if (reserved) {
+                return true;
+            } else {
+                boolean allowPersist = reduceForPersist();
+                return reducedSize.needToReduceForTraversal(allowPersist, tree.getTreeSize(), tree.getTreeSizeOnMemory(), tree);
+            }
+        }
+
+        @SuppressWarnings({"unchecked", "rawtypes"})
+        @Override
+        public void processTraversal(Actor self, MailboxKelp.ReducedSize reducedSize, HistogramTreeNodeLeaf leaf) {
+            HistogramNodeLeafListReducible list = completedLeaf(putRequiredSize, getListType(), leaf);
+            if (list != null && list.consume(putRequiredSize, keyValuesReducer.requiredSize(), putTree, reducedSize, false, (BiFunction) keyValuesReducer, (BiConsumer) handler)) {
+                ((ActorKelp<?>) self).getMailboxAsKelp().reserveTraversal(self, matchKeyEntryId);
+            }
+        }
+
+        @SuppressWarnings("unchecked")
+        public <LeafType extends HistogramTreeNodeLeaf> LeafType completedLeaf(int requiredSize, Class<LeafType> type,
+                                                                               HistogramTreeNodeLeaf l) {
+            if (l.size() >= requiredSize) {
+                return loadLeaf(type, l);
+            } else {
+                return null;
+            }
+        }
+
+        @SuppressWarnings("unchecked")
+        public <LeafType extends HistogramTreeNodeLeaf> LeafType loadLeaf(Class<LeafType> type,
+                                                                          HistogramTreeNodeLeaf l) {
+            if (!type.isInstance(l)) {
+                return (LeafType) l.load(this);
+            } else {
+                return (LeafType) l;
+            }
+        }
+
+        @SuppressWarnings({"unchecked", "rawtypes"})
+        @Override
+        public void complete(HistogramTreeNodeLeaf leaf) {
+            if (!complete(leaf, false)) { //first try on memory
+                if (reduceForPersist()) {  //if failed, retry with persisted loading
+                    complete(leaf, true);
+                }
+            }
+        }
+
+        @SuppressWarnings({"unchecked", "rawtypes"})
+        protected boolean complete(HistogramTreeNodeLeaf leaf, boolean allowPersist) {
+            int reduceReq = keyValuesReducer.requiredSize();
+            long sizeChecked = allowPersist ? leaf.size() : leaf.sizeOnMemory();
+            MailboxKelp.ReducedSize reducedSize = getReducedSize();
+            if (reducedSize.needToReduceForComplete(allowPersist, sizeChecked, reduceReq)) {
+                HistogramNodeLeafListReducible list = leafToReducible(leaf, allowPersist);
+                if (list != null &&
+                        list.consume(putRequiredSize, keyValuesReducer.requiredSize(), putTree, reducedSize, !allowPersist,
+                                (BiFunction) keyValuesReducer, (BiConsumer) handler)) {
+                    if (putActor != null) {
+                        ((ActorKelp<?>) putActor).getMailboxAsKelp().reserveTraversal(putActor, matchKeyEntryId);
+                    }
+                    return true;
+                } else {
+                    return false;
+                }
+            } else {
+                return false;
+            }
+        }
+
+        protected HistogramNodeLeafListReducible leafToReducible(HistogramTreeNodeLeaf leaf, boolean allowPersist) {
+            if (allowPersist) {
+                return loadLeaf(HistogramNodeLeafListReducible.class, leaf);
+            } else {
+                return (leaf instanceof HistogramNodeLeafListReducible ? (HistogramNodeLeafListReducible) leaf : null);
+            }
+        }
+
+        public boolean reduceForPersist() {
+            return true;
+        }
+
+        public MailboxKelp.ReducedSize getReducedSize() {
+            if (putActor instanceof ActorKelp<?>) {
+                return ((ActorKelp<?>) putActor).getReducedSize();
+            } else {
+                return PersistentConditionActor.DEFAULT_REDUCED_SIZE;
+            }
+        }
+
+        public Class<? extends HistogramNodeLeafListReducible> getListType() {
+            return HistogramNodeLeafListReducible.class;
+        }
+
+        @Override
+        public boolean needToProcessStageEnd(Actor self, MailboxKelp.ReducedSize reducedSize, Object stageKey, HistogramTree tree) {
             return true;
         }
 
         @SuppressWarnings({"unchecked", "rawtypes"})
         @Override
-        public void processTraversal(Actor self, MailboxKelp.ReducedSize reducedSize, KeyHistograms.HistogramNodeLeaf leaf) {
-            HistogramNodeLeafListReducible list = completedLeaf(putRequiredSize, HistogramNodeLeafListReducible.class, leaf);
-            if (list != null && list.consume(putRequiredSize, putTree, reducedSize, (BiFunction) keyValuesReducer, (BiConsumer) handler)) {
-                self.tell(new HistogramEntry.TraversalProcess(matchKeyEntryId), self);
-            }
-        }
+        public void processStageEnd(Actor self, Object stageKey, MailboxKelp.ReducedSize reducedSize, HistogramTreeNodeLeaf leaf) {
+            long prevSize = leaf.size();
+            HistogramNodeLeafListReducible list = completedLeaf(putRequiredSize, getListType(), leaf);
+            if (list != null) {
+                list.consumeStageEndReduceAll(putRequiredSize, keyValuesReducer.requiredSize(), putTree, reducedSize, (BiFunction) keyValuesReducer, (BiConsumer) handler);
 
-        @SuppressWarnings("unchecked")
-        public <LeafType extends KeyHistograms.HistogramNodeLeaf> LeafType completedLeaf(int requiredSize, Class<LeafType> type,
-                                                                                         KeyHistograms.HistogramNodeLeaf l) {
-            if (l.size() >= requiredSize) {
-                if (!type.isInstance(l)) {
-                    return (LeafType) l.load(this);
-                } else {
-                    return (LeafType) l;
+                while (list.consumeStageEnd(putRequiredSize, keyValuesReducer.requiredSize(), putTree, reducedSize, (BiFunction) keyValuesReducer, (BiConsumer) handler)) {
+                    if (prevSize <= leaf.size()) { //no consumption
+                        break;
+                    }
                 }
-            } else {
-                return null;
             }
         }
     }
@@ -995,61 +1093,73 @@ public class ActorBehaviorKelp {
         }
 
         @Override
-        public HistogramNodeLeafListReducible copy(Map<KeyHistograms.HistogramNode, KeyHistograms.HistogramNode> oldToNew) {
+        public HistogramNodeLeafListReducible copy(Map<KeyHistograms.HistogramTreeNode, KeyHistograms.HistogramTreeNode> oldToNew) {
             HistogramNodeLeafListReducible node = (HistogramNodeLeafListReducible) super.copy(oldToNew);
             return node;
         }
 
         @Override
         protected boolean completedAfterPut(KeyHistograms.HistogramPutContext context) {
-            return false; //processed by processTraversal
+            return true;
         }
 
         public boolean consume(int requiredSize,
-                               KeyHistograms.HistogramTree tree,
+                               int reduceRequiredSize,
+                               HistogramTree tree,
                                MailboxKelp.ReducedSize reducedSize,
+                               boolean onMemory,
                                BiFunction<Object, List<Object>, Iterable<Object>> keyValuesReducer,
                                BiConsumer<Object, List<Object>> handler) {
             if (completed(requiredSize)) {
-                List<Object> vs = poll(requiredSize, tree, reducedSize);
+                List<Object> vs = poll(requiredSize, tree, reducedSize, onMemory);
                 int consuming = vs.size();
+                boolean changed;
                 try {
-                    consuming = reduceAndHandle(requiredSize, tree, reducedSize, keyValuesReducer, handler, vs);
+                    ReduceResult res = reduceAndHandle(requiredSize, reduceRequiredSize, tree, reducedSize, keyValuesReducer, handler, vs);
+                    consuming = res.sizeRemoved();
+                    changed = res.isChanged();
                 } finally {
                     afterTake(consuming, tree);
                 }
-                return completed(requiredSize);
+                return changed && completed(requiredSize);
             } else {
                 return false;
             }
         }
 
-        protected List<Object> poll(int requiredSize, KeyHistograms.HistogramTree tree, MailboxKelp.ReducedSize reducedSize) {
+        protected List<Object> poll(int requiredSize, HistogramTree tree, MailboxKelp.ReducedSize reducedSize,
+                                    boolean onMemory) {
             int consuming = Math.max(requiredSize, reducedSize.nextReducedSize(size()));
             List<Object> vs = new ArrayList<>(consuming);
             try {
-                for (int i = 0; i < consuming; ++i) {
-                    vs.add(values.poll(tree));
-                }
+                values.polls(tree, this, consuming, vs, onMemory);
             } catch (Exception ex) {
                 throw new RuntimeException(String.format("size=%,d, consuming=%,d actual=%,d required=%,d", size(), consuming, vs.size(), requiredSize), ex);
             }
             return vs;
         }
 
-        protected int reduceAndHandle(int requiredSize,
-                                      KeyHistograms.HistogramTree tree,
+        protected ReduceResult reduceAndHandle(int requiredSize, int reduceRequiredSize,
+                                      HistogramTree tree,
                                       MailboxKelp.ReducedSize reducedSize,
                                       BiFunction<Object, List<Object>, Iterable<Object>> keyValuesReducer,
                                       BiConsumer<Object, List<Object>> handler,
                                       List<Object> vs) {
             int consuming = vs.size();
             Object key = getKey();
-            List<Object> rs = toList(keyValuesReducer.apply(key, vs));
-            if (!rs.isEmpty()) {
+            List<Object> rs = reduceRequiredSize <= vs.size() ?
+                    toList(keyValuesReducer.apply(key, vs)) : vs;
+            int reduced = rs.size();
+            int handled = 0;
+            if (requiredSize <= rs.size()) {
                 handler.accept(key, rs);
+                handled = rs.size();
+            } else {
+                for (Object r : rs) {
+                    values.add(tree, r);
+                }
             }
-            return consuming;
+            return new ReduceResult(consuming, reduced, handled);
         }
 
         protected List<Object> toList(Iterable<Object> is) {
@@ -1063,13 +1173,119 @@ public class ActorBehaviorKelp {
                 return vs;
             }
         }
+
+        public void consumeStageEndReduceAll(int requiredSize,
+                                             int reduceRequiredSize,
+                                             HistogramTree tree,
+                                             MailboxKelp.ReducedSize reducedSize,
+                                             BiFunction<Object, List<Object>, Iterable<Object>> keyValuesReducer,
+                                             BiConsumer<Object, List<Object>> handler) {
+            consumeStageEndReduceAll(requiredSize, reduceRequiredSize, tree, reducedSize, keyValuesReducer, handler, true);
+        }
+
+        public void consumeStageEndReduceAll(int requiredSize,
+                                             int reduceRequiredSize,
+                                             HistogramTree tree,
+                                             MailboxKelp.ReducedSize reducedSize,
+                                             BiFunction<Object, List<Object>, Iterable<Object>> keyValuesReducer,
+                                             BiConsumer<Object, List<Object>> handler, boolean modifyTree) {
+            long sizeRemoved = 0;
+            long totalConsumed = 0;
+            long currentSize = size();
+            long startSize = currentSize;
+            try {
+                while (currentSize >= reduceRequiredSize) {
+                    List<Object> vs = poll(requiredSize, tree, reducedSize, false);
+                    ReduceResult res = reduce(reduceRequiredSize, tree, keyValuesReducer, vs);
+                    totalConsumed += res.consumed;
+                    sizeRemoved += res.sizeRemoved();
+                    currentSize -= res.sizeRemoved();
+                    if (!res.isChanged() && totalConsumed >= startSize) { //all items are reduced at least once
+                        break;
+                    }
+                }
+            } finally {
+                if (modifyTree) {
+                    afterTake(sizeRemoved, tree);
+                }
+            }
+        }
+
+        public boolean consumeStageEnd(int requiredSize,
+                                       int reduceRequiredSize,
+                                       HistogramTree tree,
+                                       MailboxKelp.ReducedSize reducedSize,
+                                       BiFunction<Object, List<Object>, Iterable<Object>> keyValuesReducer,
+                                       BiConsumer<Object, List<Object>> handler) {
+            return consumeStageEnd(requiredSize, reduceRequiredSize, tree, reducedSize, keyValuesReducer, handler, true);
+        }
+
+        public boolean consumeStageEnd(int requiredSize,
+                                       int reduceRequiredSize,
+                                       HistogramTree tree,
+                                       MailboxKelp.ReducedSize reducedSize,
+                                       BiFunction<Object, List<Object>, Iterable<Object>> keyValuesReducer,
+                                       BiConsumer<Object, List<Object>> handler, boolean modifyTree) {
+            List<Object> vs = poll(requiredSize, tree, reducedSize, false);
+            int consuming = vs.size();
+            boolean changed = consuming > 0;
+            try {
+                if (requiredSize <= vs.size()) {
+                    handler.accept(key, vs);
+                }
+            } finally {
+                if (modifyTree) {
+                    afterTake(consuming, tree);
+                }
+            }
+            return changed && completed(requiredSize);
+        }
+
+        public ReduceResult reduce(int reduceRequiredSize, HistogramTree tree,
+                                      BiFunction<Object, List<Object>, Iterable<Object>> keyValuesReducer,
+                                      List<Object> vs) {
+            Object key = getKey();
+            int consuming = vs.size();
+            Iterable<Object> rs = reduceRequiredSize <= vs.size() ?
+                    keyValuesReducer.apply(key, vs) : vs;
+            int reducedSize = 0;
+            for (Object r : rs) {
+                values.add(tree, r);
+                ++reducedSize;
+            }
+            return new ReduceResult(consuming, reducedSize, 0);
+        }
+    }
+
+    public static class ReduceResult {
+        public final int consumed;
+        public final int reducedSize;
+        public final int handled;
+
+        public ReduceResult(int consumed, int reduced, int handled) {
+            this.consumed = consumed;
+            this.reducedSize = reduced;
+            this.handled = handled;
+        }
+
+        public boolean isChanged() {
+            return !(handled == 0 && //no handling
+                     consumed == reducedSize); //and no reducing
+        }
+
+        public int sizeRemoved() {
+            return consumed  //first consume from the list,
+                    - (reducedSize //next, reduced the consumed items
+                        - handled); //non-handled values are back to the list
+        }
     }
 
     public static class ActorBehaviorMatchKeyListFutureStageEnd<KeyType, ParamType, ValueType>
             extends ActorBehaviorMatchKeyListFuture<KeyType, ParamType, ValueType> {
 
-        public ActorBehaviorMatchKeyListFutureStageEnd(int matchKeyEntryId, int requiredSize, KeyComparator<KeyType> keyComparator,
-                                                       BiFunction<KeyType, List<ValueType>, Iterable<ValueType>> keyValuesReducer,
+        public ActorBehaviorMatchKeyListFutureStageEnd(int matchKeyEntryId, int requiredSize,
+                                                       KeyComparator<KeyType> keyComparator,
+                                                       KeyValuesReducer<KeyType, ValueType> keyValuesReducer,
                                                        KeyExtractor<KeyType, ParamType> keyExtractorFromValue,
                                                        Function<ParamType, ValueType> valueExtractorFromValue,
                                                        BiConsumer<KeyType, List<ValueType>> handler) {
@@ -1077,37 +1293,105 @@ public class ActorBehaviorKelp {
         }
 
         @Override
-        protected KeyHistograms.HistogramNodeLeaf createLeaf(Object key, int height) {
+        protected HistogramTreeNodeLeaf createLeaf(Object key, int height) {
             return new HistogramNodeLeafListReducibleForStageEnd(key, this, height);
         }
 
         @SuppressWarnings({"unchecked", "rawtypes"})
         @Override
-        public void processTraversal(Actor self, MailboxKelp.ReducedSize reducedSize, KeyHistograms.HistogramNodeLeaf leaf) {
-            HistogramNodeLeafListReducible list = completedLeaf(putRequiredSize + 1, HistogramNodeLeafListReducible.class, leaf);
-            if (list != null && list.consume(putRequiredSize + 1, putTree, reducedSize, (BiFunction) keyValuesReducer, (BiConsumer) handler)) {
-                self.tell(new HistogramEntry.TraversalProcess(matchKeyEntryId), self);
+        public void processTraversal(Actor self, MailboxKelp.ReducedSize reducedSize, HistogramTreeNodeLeaf leaf) {
+            HistogramNodeLeafListReducible list = completedLeaf(putRequiredSize, getListType(), leaf);
+            if (list != null &&
+                    !(keyValuesReducer instanceof KeyValuesReducerNone) && //handler will never happen list.consume(...), so just
+                    list.consume(putRequiredSize, keyValuesReducer.requiredSize(), putTree, reducedSize, true, (BiFunction) keyValuesReducer, (BiConsumer) handler)) {
+                ((ActorKelp<?>) self).getMailboxAsKelp().reserveTraversal(self, matchKeyEntryId);
             }
         }
 
         @Override
-        public boolean needToProcessStageEnd(Actor self, Object stageKey, KeyHistograms.HistogramTree tree) {
+        public boolean reduceForPersist() {
+            return false;
+        }
+
+        @SuppressWarnings("unchecked")
+        @Override
+        public boolean needToProcessStageEnd(Actor self, MailboxKelp.ReducedSize reducedSize, Object stageKey, HistogramTree tree) { //entire tree
             this.putTree = tree;
+            if (tree instanceof HistogramTreePersistable) { //there is a full-tree data
+                if (((HistogramTreePersistable) tree).getPreviousFullTreeSource() != null) {
+                    try {
+                        TreeMerger merger = new TreeMerger(tree).withReducer((KeyValuesReducer<Object, Object>) keyValuesReducer);
+                        if (self instanceof ActorKelp<?>) {
+                            ((ActorKelp<?>) self).setStageEndStats(() ->
+                                    new ActorKelpStats.ActorKelpStageEndStats(merger));
+                        }
+                        //the tree data will be cleared by full-tree-persist
+                        PersistentFileManager.PersistentFileReaderSource source = merger.mergeAllFromTree();
+                        if (source != null) {
+                            long length = merger.getLastLength();
+                            TreeMerger.MergeLoader mergeLoader = new TreeMerger.MergeLoader(source);
+                            HistogramNodeLeafListReducibleForStageEnd tmpList = null;
+                            Object key;
+                            ActorKelpStats.ActorKelpStageEndStats baseStats = new ActorKelpStats.ActorKelpStageEndStats(merger);
+                            AtomicLong readKeys = new AtomicLong(baseStats.mergingReadKeys);
+                            AtomicLong readValues = new AtomicLong(baseStats.mergingReadValues);
+
+                            if (self instanceof ActorKelp<?>) {
+                                ((ActorKelp<?>) self).setStageEndStats(() ->
+                                        baseStats.copy(readKeys.get(), readValues.get()));
+                            }
+
+                            while ((key = mergeLoader.nextKey()) != null) {
+                                if (tmpList != null && !key.equals(tmpList.keyStart())) {
+                                    readKeys.incrementAndGet();
+                                    processStageEndList(reducedSize, tmpList);
+                                    tmpList = (HistogramNodeLeafListReducibleForStageEnd) createLeaf(key, 0);
+                                } else if (tmpList == null) {
+                                    tmpList = (HistogramNodeLeafListReducibleForStageEnd) createLeaf(key, 0);
+                                }
+                                putPosition = mergeLoader.currentListPosition();
+                                Object value;
+                                while ((value = mergeLoader.nextValue()) != null) {
+                                    putValue = value;
+                                    readValues.incrementAndGet();
+                                    tmpList.putValueForStageEnd(this); //TODO memory overflow
+                                }
+                            }
+                            if (tmpList != null) {
+                                readKeys.incrementAndGet();
+                                processStageEndList(reducedSize, tmpList);
+                            }
+                        }
+                        return false; //no super call
+                    } catch (Exception ex) {
+                        tree.getPersistent().getLogger().log(true, KeyHistogramsPersistable.logPersistColor,
+                                ex, "merge error");
+                    }
+                }
+            }
             return true;
         }
 
         @SuppressWarnings({"unchecked", "rawtypes"})
-        @Override
-        public void processStageEnd(Actor self, Object stageKey, MailboxKelp.ReducedSize reducedSize, KeyHistograms.HistogramNodeLeaf leaf) {
-            long prevSize = leaf.size();
-            HistogramNodeLeafListReducibleForStageEnd list = completedLeaf(putRequiredSize, HistogramNodeLeafListReducibleForStageEnd.class, leaf);
-            if (list != null) {
-                while (list.consumeStageEnd(putRequiredSize, putTree, reducedSize, (BiFunction) keyValuesReducer, (BiConsumer) handler)) {
-                    if (prevSize <= leaf.size()) { //no consumption
-                        break;
-                    }
+        protected void processStageEndList(MailboxKelp.ReducedSize reducedSize, HistogramNodeLeafListReducibleForStageEnd list) {
+            list.consumeStageEndReduceAll(putRequiredSize, keyValuesReducer.requiredSize(), putTree, reducedSize, (BiFunction) keyValuesReducer, (BiConsumer) handler, false);
+
+            long prevSize = list.size();
+            while (list.consumeStageEnd(putRequiredSize, keyValuesReducer.requiredSize(), putTree, reducedSize, (BiFunction) keyValuesReducer, (BiConsumer) handler, false)) {
+                long nextSize = list.size();
+                if (prevSize <= nextSize) { //no consumption
+                    break;
                 }
+                prevSize = nextSize;
             }
+        }
+
+        /**
+         * @return true: at the stageEnd, eventually processed the entire tree
+         */
+        @Override
+        public boolean allowFullTreePersist() {
+            return true;
         }
     }
 
@@ -1120,43 +1404,32 @@ public class ActorBehaviorKelp {
             super(key, context, height);
         }
         @Override
-        public HistogramNodeLeafListReducibleForStageEnd copy(Map<KeyHistograms.HistogramNode, KeyHistograms.HistogramNode> oldToNew) {
+        public HistogramNodeLeafListReducibleForStageEnd copy(Map<KeyHistograms.HistogramTreeNode, KeyHistograms.HistogramTreeNode> oldToNew) {
             HistogramNodeLeafListReducibleForStageEnd node = (HistogramNodeLeafListReducibleForStageEnd) super.copy(oldToNew);
             return node;
         }
 
-        @Override
-        protected int reduceAndHandle(int requiredSize, KeyHistograms.HistogramTree tree, MailboxKelp.ReducedSize reducedSize,
-                                      BiFunction<Object, List<Object>, Iterable<Object>> keyValuesReducer,
-                                      BiConsumer<Object, List<Object>> handler, List<Object> vs) {
-            Object key = getKey();
-            int consuming = vs.size();
-            Iterable<Object> rs = keyValuesReducer.apply(key, vs);
-            for (Object r : rs) {
-                values.add(tree, r);
-                consuming--;
-            }
-            return consuming;
+        public void putValueForStageEnd(KeyHistograms.HistogramPutContext context) {
+            putValueStruct(context);
+            ++size;
         }
 
-        public boolean consumeStageEnd(int requiredSize,
-                                       KeyHistograms.HistogramTree tree,
-                                       MailboxKelp.ReducedSize reducedSize,
-                                       BiFunction<Object, List<Object>, Iterable<Object>> keyValuesReducer,
-                                       BiConsumer<Object, List<Object>> handler) {
-            if (completed(requiredSize)) {
-                List<Object> vs = poll(requiredSize, tree, reducedSize);
-                int consuming = vs.size();
-                try {
-                    consuming = super.reduceAndHandle(requiredSize, tree, reducedSize, keyValuesReducer, handler, vs);
-                } finally {
-                    afterTake(consuming, tree);
-                }
-                return completed(requiredSize);
-            } else {
-                return false;
+        @Override
+        protected ReduceResult reduceAndHandle(int requiredSize, int reduceRequiredSize, HistogramTree tree, MailboxKelp.ReducedSize reducedSize,
+                                               BiFunction<Object, List<Object>, Iterable<Object>> keyValuesReducer,
+                                               BiConsumer<Object, List<Object>> handler, List<Object> vs) {
+            Object key = getKey();
+            int consuming = vs.size();
+            Iterable<Object> rs = reduceRequiredSize <= vs.size() ?
+                    keyValuesReducer.apply(key, vs) : vs;
+            int reduced = 0;
+            for (Object r : rs) {
+                values.add(tree, r);
+                ++reduced;
             }
+            return new ReduceResult(consuming, reduced, 0);
         }
+
 
     }
 }

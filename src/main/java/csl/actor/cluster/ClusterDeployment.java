@@ -65,6 +65,14 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
     @Target(ElementType.METHOD)
     public @interface PropertyInterface {
         String value() default "";
+        String help() default "";
+    }
+
+    @Retention(RetentionPolicy.RUNTIME)
+    @Target(ElementType.PARAMETER)
+    public @interface PropertyInterfaceArgument {
+        String name();
+        String help() default "";
     }
 
     /**
@@ -170,9 +178,13 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
     }
 
     public Process deployAsRemoteDriver(String confFile, String primaryMainType, List<String> primaryArgs) {
+        return deployAsRemoteDriver(confFile, null, primaryMainType, primaryArgs);
+    }
+
+    public Process deployAsRemoteDriver(String confFile, ConfigDeployment mergeDeployConf, String primaryMainType, List<String> primaryArgs) {
         setPrimaryMainType(primaryMainType);
         getPrimaryMainArgs().addAll(primaryArgs);
-        return deployAsRemoteDriver(confFile);
+        return deployAsRemoteDriver(confFile, mergeDeployConf);
     }
 
     public Process deployAsRemoteDriver(List<ClusterUnit<AppConfType>> units, String primaryMainType, List<String> primaryArgs) {
@@ -182,7 +194,11 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
     }
 
     public Process deployAsRemoteDriver(String confFile) {
-        return deployAsRemoteDriver(loadConfigFile(confFile));
+        return deployAsRemoteDriver(confFile, null);
+    }
+
+    public Process deployAsRemoteDriver(String confFile, ConfigDeployment mergeDeployConf) {
+        return deployAsRemoteDriver(loadConfigFile(confFile, mergeDeployConf));
     }
 
     public Process deployAsRemoteDriver(List<ClusterCommands.ClusterUnit<AppConfType>> units) {
@@ -190,7 +206,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
             deployUnitsAsConfigFile(units);
             deployPrimaryInitPrimary(units);
             deployPrimaryInitAppName();
-            deployFiles(primary);
+            deployFiles(primary, true);
             deployNodesAsRemoteDriver(units);
             deployNodeStartProcess(primary);
             attachAsRemoteDriver(ActorAddress.get(primary.getDeploymentConfig().getAddress()));
@@ -244,7 +260,8 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         }
     }
 
-    public static class ToStringMessage implements CallableMessage<Actor, String> {
+    public static class ToStringMessage implements CallableMessage<Actor, String>, Message.MessageDataSpecial {
+        public static final long serialVersionUID = -1;
         @Override
         public String call(Actor self) {
             return self.toString();
@@ -254,6 +271,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
     /**
      *  {@link #deploy(String)} with the special symbol "-" {@link #NON_DRIVER_SYMBOL_CONF}
      * @return a created system
+     * @see #deploy(String)
      */
     public ActorSystemRemote deploy() {
         return deploy(NON_DRIVER_SYMBOL_CONF);
@@ -270,11 +288,22 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
     }
 
     /**
+     *  {@link #deploy(String, ConfigBase, ConfigDeployment)} )} with the special symbol "-" {@link #NON_DRIVER_SYMBOL_CONF}
+     * @param mergedConf the mergedConf for all unit's appConfig
+     * @param mergedDeployConf  the mergedDeployConf
+     * @return a created system
+     */
+    public ActorSystemRemote deploy(AppConfType mergedConf, ConfigDeployment mergedDeployConf) {
+        return deploy(NON_DRIVER_SYMBOL_CONF, mergedConf, mergedDeployConf);
+    }
+
+    /**
      * {@link #deploy(List)} with units from {@link #loadConfigFile(String)} which loads the confFile
      * @param confFile a cluster commands file parsed by {@link ClusterCommands#loadConfigFile(String)}, or
      *                   special symbol "-" ({@link #NON_DRIVER_SYMBOL_CONF}) and then it loads from the system property {@link #NON_DRIVER_PROPERTY_CONF}.
      *
      * @return a created system
+     * @see #loadConfigFile(String)
      */
     public ActorSystemRemote deploy(String confFile) {
         try {
@@ -300,13 +329,35 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
     }
 
     /**
+     * {@link #deploy(List)} with units from {@link #loadConfigFile(String, ConfigBase, ConfigDeployment)} which loads the confFile with merging the mergedConf
+     * @param confFile a cluster commands file parsed by {@link ClusterCommands#loadConfigFile(String)} )}, or
+     *                   special symbol "-" ({@link #NON_DRIVER_SYMBOL_CONF}) and then it loads from the system property {@link #NON_DRIVER_PROPERTY_CONF}.
+     * @param mergedConf the mergedConf for all unit's appConfig
+     * @param mergedDeployConf  the mergedDeployConf
+     * @return a created system
+     */
+    public ActorSystemRemote deploy(String confFile, AppConfType mergedConf, ConfigDeployment mergedDeployConf) {
+        try {
+            return deploy(loadConfigFile(confFile, mergedConf, mergedDeployConf));
+        } catch (Exception ex) {
+            throw new RuntimeException(ex);
+        }
+    }
+
+    /**
      * load specified config file by {@link ClusterCommands}.
-     * if the confFile is "-" {@link #NON_DRIVER_SYMBOL_CONF}, it loads the path obttained from from the property {@link #NON_DRIVER_PROPERTY_CONF}.
-     *  Also, it changes the {@link #isDriverMode()} flag from {@link #NON_DRIVER_PROPERTY_FLAG}.
+     * if the confFile is "-" ({@link #NON_DRIVER_SYMBOL_CONF}), it loads the path obtained from the property {@link #NON_DRIVER_PROPERTY_CONF}.
+     *  Also, it changes the {@link #isDriverMode()} flag from the property {@link #NON_DRIVER_PROPERTY_FLAG}
+     *    (the default value is the current value of {@link #driverMode}; the initial value is "true").
      *  <p>
      *  If no conf file supplied by {@link #NON_DRIVER_PROPERTY_CONF} with {@link #NON_DRIVER_SYMBOL_CONF}
      *    (or the property is the empty string ""),
-     *     then it just returns a single primary unit created by {@link #primary()}
+     *     then it just returns a single primary unit created by {@link #primary(ConfigDeployment)}.
+     *  </p>
+     *  <p>
+     *    if mergedDeployConf is supplied, it will be merged to all deploymentConfig of units.
+     *    if the conf file is supplied, then the properties customized by the file will be used over the mergedDeployConf.
+     *    As the special exception, only the {@link #defaultConfType} will be overwritten by {@link ConfigDeployment#configType} of mergedDeployConf.
      *  </p>
      *  <p>
      *      Note: the default value of {@link #isDriverMode()} is true.
@@ -315,9 +366,10 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
      *       which is different behavior from {@link #deployAsRemoteDriver(List)}.
      *  </p>
      * @param confFile the source file of configuration parsed by {@link ClusterCommands#loadConfigFile(String)}
+     * @param mergedDeployConf the deployment conf will be merged at unit creation (nullable)
      * @return loaded units
      */
-    public List<ClusterUnit<AppConfType>> loadConfigFile(String confFile) {
+    public List<ClusterUnit<AppConfType>> loadConfigFile(String confFile, ConfigDeployment mergedDeployConf) {
         boolean fromProperty = false;
         if (confFile.equals(NON_DRIVER_SYMBOL_CONF)) {
             confFile = System.getProperty(NON_DRIVER_PROPERTY_CONF, "");
@@ -326,26 +378,46 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         setDriverMode(System.getProperty(NON_DRIVER_PROPERTY_FLAG, Boolean.toString(driverMode)).equals("true"));
         confFile = confFile.replaceAll("/", File.separator);
         if (fromProperty && confFile.isEmpty()) {
-            return Collections.singletonList(primary());
+            return Collections.singletonList(primary(mergedDeployConf));
         } else {
-            return new ClusterCommands<>(defaultConfType).loadConfigFile(confFile);
+            return new ClusterCommands<>(defaultConfType, mergedDeployConf).loadConfigFile(confFile);
         }
     }
 
     /**
-     * load units by {@link #loadConfigFile(String)} and merge a config to all unit's appConfig
+     * {@link #loadConfigFile(String, ConfigDeployment)} with (confFile, null)
      * @param confFile the conf file
-     * @param mergedConf the merged app conf
      * @return loaded units
      */
-    public List<ClusterUnit<AppConfType>> loadConfigFile(String confFile, AppConfType mergedConf) {
-        List<ClusterUnit<AppConfType>> units = loadConfigFile(confFile);
+    public List<ClusterUnit<AppConfType>> loadConfigFile(String confFile) {
+        return loadConfigFile(confFile, (ConfigDeployment) null);
+    }
+
+    /**
+     * load units by {@link #loadConfigFile(String, ConfigDeployment)} and merge a config to all unit's appConfig
+     * @param confFile the conf file
+     * @param mergedConf the merged app conf
+     * @param mergedDeployConf the deployment conf will be merged at unit creation (nullable)
+     * @return loaded units
+     */
+    public List<ClusterUnit<AppConfType>> loadConfigFile(String confFile, AppConfType mergedConf, ConfigDeployment mergedDeployConf) {
+        List<ClusterUnit<AppConfType>> units = loadConfigFile(confFile, mergedDeployConf);
         if (mergedConf != null) {
             ConfigBase base = mergedConf.createDefault();
             units.forEach(u ->
                     u.getAppConfig().mergeChangedFields(mergedConf, base));
         }
         return units;
+    }
+
+    /**
+     *  {@link #loadConfigFile(String, ConfigBase, ConfigDeployment)} with (confFile, mergedConf, null)
+     * @param confFile  the confFile
+     * @param mergedConf the merged app conf
+     * @return loaded units
+     */
+    public List<ClusterUnit<AppConfType>> loadConfigFile(String confFile, AppConfType mergedConf) {
+        return loadConfigFile(confFile, mergedConf, null);
     }
 
     public String getUnitMainType(ClusterUnit<AppConfType> unit) {
@@ -366,6 +438,13 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         }
     }
 
+    /**
+     *  {@link #deployPrimary(List)}, {@link #deployNode(ClusterUnit)},
+     *   and {@link #awaitNodes()}.
+     * @param units units including both a primary unit and node units
+     * @return the system from the primary unit
+     * @throws Exception the error
+     */
     public ActorSystemRemote deploy(List<ClusterCommands.ClusterUnit<AppConfType>> units) throws Exception {
         deployPrimary(units);
         deployNodes(units);
@@ -378,7 +457,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         deployPrimaryInitAppName();
         deployPrimaryInitSystem();
         deployPrimaryInitUncaughtHandler();
-        deployFiles(primary);
+        deployFiles(primary, units.size() != 1); //if unit is primary only, it does not need to create copies
         deployPrimaryStartSystem();
         deployPrimaryAfterSystemInit(units);
     }
@@ -437,7 +516,8 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
     }
 
     protected void deployPrimaryStartSystem() {
-        system.startWithoutWait(ActorAddress.get(primary.getDeploymentConfig().getAddress()));
+        ConfigDeployment conf = primary.getDeploymentConfig();
+        system.startWithoutWait(ActorAddress.get(conf.getAddress()), ActorAddress.get(conf.getAddressForServerStart()));
     }
 
     protected void deployPrimaryAfterSystemInit(List<ClusterUnit<AppConfType>> units) throws Exception {
@@ -522,7 +602,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         try {
             nodes.add(unit);
             unit.log("%s: deploy: %s files", appName, unit.getDeploymentConfig().getAddress());
-            deployFiles(unit);
+            deployFiles(unit, true);
         } catch (Exception ex) {
             throw new RuntimeException(ex);
         }
@@ -572,19 +652,12 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
 
         String additionalOpt = unit.getDeploymentConfig().javaVmOption;
 
+        String propOpts = unit.getDeploymentConfig().toJvmOptions("csl.actor").stream()
+                .map(this::escape)
+                .collect(Collectors.joining(" "));
+
         return propertyOption("csl.actor.logColor", unit.getAppConfig().get("logColor"))  +
-                propertyOption("csl.actor.logFile", unit.getDeploymentConfig().logFile)  +
-                propertyOption("csl.actor.logFilePath", unit.getDeploymentConfig().logFilePath)  +
-                propertyOption("csl.actor.logFilePreserveColor", unit.getDeploymentConfig().logFilePreserveColor)  +
-                propertyOption("csl.actor.kryoBuilderType", unit.getDeploymentConfig().kryoBuilderType)  +
-                propertyOption("csl.actor.throttle", unit.getDeploymentConfig().throttle)  +
-
-                propertyOption("csl.actor.systemThroughput", unit.getDeploymentConfig().systemThroughput) +
-                propertyOption("csl.actor.systemServerWorkerThreadsFactor", unit.getDeploymentConfig().systemServerWorkerThreadsFactor) +
-                propertyOption("csl.actor.systemServerLeaderThreads", unit.getDeploymentConfig().systemServerLeaderThreads) +
-                propertyOption("csl.actor.systemClientThreadsFactor", unit.getDeploymentConfig().systemClientThreadsFactor) +
-                propertyOption("csl.actor.systemThreadFactor", unit.getDeploymentConfig().systemThreadFactor) +
-
+                propOpts + " " +
                 propertyOption(NON_DRIVER_PROPERTY_APP_NAME, getAppName()) +
                 pathProps +
                 getJavaCommandOptionsClassPath(unit) + " " +
@@ -606,14 +679,34 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
                     .collect(Collectors.joining(" "));
             return args;
         } else {
-            return unit.getDeploymentConfig().getAddress() + " " +
+            return getJavaCommandArgSelfAddress(unit) + " " +
                     primary.getDeploymentConfig().getAddress() + " " +
                     escape(getPlaceType().getName());
         }
     }
 
+    protected String getJavaCommandArgSelfAddress(ClusterUnit<AppConfType> unit) {
+        String addr = unit.getDeploymentConfig().getAddress();
+        String serverAddr = unit.getDeploymentConfig().getAddressForServerStart();
+        if (addr.equals(serverAddr)) {
+            return addr;
+        } else {
+            return addr + "/" + serverAddr;
+        }
+    }
+
     protected String escape(String s) {
-        return "'" + s + "'";
+        StringBuilder buf = new StringBuilder();
+        buf.append('\'');
+        for (char c : s.toCharArray()) {
+            if (c == '\'') {
+                buf.append("'\"'\"'");
+            } else {
+                buf.append(c);
+            }
+        }
+        buf.append('\'');
+        return buf.toString();
     }
 
     protected String getJavaCommandOptionsClassPath(ClusterUnit<AppConfType> unit) {
@@ -632,10 +725,22 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         return cmd;
     }
 
-    @SuppressWarnings("unchecked")
+    /**
+     * @return {@link #primary(ConfigDeployment)} with null
+     */
     public ClusterUnit<AppConfType> primary() {
+        return primary(null);
+    }
+
+    /**
+     * @param mergedDeployConf the deployment conf will be merged to the unit's deployment conf
+     * @return a localhost primary unit: it uses the conf-type returned by {@link #getDefaultConfType()}.
+     *   So if you have custom app config, it should be set by the constructor
+     */
+    @SuppressWarnings("unchecked")
+    public ClusterUnit<AppConfType> primary(ConfigDeployment mergedDeployConf) {
         ClusterUnit<AppConfType> unit = new ClusterUnit<>();
-        ConfigDeployment conf = new ConfigDeployment(defaultConfType);
+        ConfigDeployment conf = ConfigDeployment.createAndMerge(defaultConfType, mergedDeployConf);
         conf.primary = true;
         unit.setDeploymentConfig(conf);
         unit.setAppConfig((AppConfType) conf.createAppConfig(defaultConfType));
@@ -644,11 +749,14 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         return unit;
     }
 
+    public ClusterUnit<AppConfType> node(String host, int port) {
+        return node(host, port, null);
+    }
 
     @SuppressWarnings("unchecked")
-    public ClusterUnit<AppConfType> node(String host, int port) {
+    public ClusterUnit<AppConfType> node(String host, int port, ConfigDeployment mergedDeployConf) {
         ClusterUnit<AppConfType> unit = new ClusterUnit<>();
-        ConfigDeployment conf = new ConfigDeployment(defaultConfType);
+        ConfigDeployment conf = ConfigDeployment.createAndMerge(defaultConfType, mergedDeployConf);
         conf.host = host;
         conf.port = port;
         unit.setDeploymentConfig(conf);
@@ -720,11 +828,11 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         }
     }
 
-    public void deployFiles(ClusterUnit<?> unit) throws Exception {
+    public void deployFiles(ClusterUnit<?> unit, boolean needToCopyFiles) throws Exception {
         ConfigDeployment conf = unit.getDeploymentConfig();
 
         if (conf.primary) { //suppose the code is running under the primary
-            if (driverMode) {
+            if (driverMode && needToCopyFiles) {
                 if (conf.sharedDeploy) {
                     //the baseDir is shared between all nodes
                     new ClusterFiles(getAppName(), unit).deployFiles();
@@ -738,7 +846,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
                     .collect(Collectors.toList()));
             }
         } else {
-            if (driverMode) {
+            if (driverMode && needToCopyFiles) {
                 if (conf.sharedDeploy) {
                     String primaryBase = "^" + Pattern.quote(Paths.get(primary.getDeploymentConfig().baseDir).toString());
                     String unitBase = conf.baseDir;
@@ -769,6 +877,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         protected int logColor = ActorSystem.systemPropertyColor("csl.actor.logColor", 0);
         protected ConfigDeployment configDeployment; //from properties
         protected ActorAddress.ActorAddressRemote selfAddress;
+        protected ActorAddress.ActorAddressRemote selfAddressForServer;
         protected ActorSystemRemote system;
         protected ActorPlacement.ActorPlacementDefault place;
         protected String kryoBuilderType;
@@ -777,12 +886,14 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         public void run(String[] args) throws Exception {
             initConfigDeployment();
 
-            String selfAddr = args[0];
+            String selfAddr = args[0]; //host:port[/serverHost:port]
             String joinAddr = args[1];
             String placeType = (args.length > 2 ? args[2] : "");
 
             kryoBuilderType = initKryoBuilderType();
-            selfAddress = initSelfAddress(selfAddr);
+            ActorAddress.ActorAddressRemote[] addrs = initSelfAddress(selfAddr);
+            selfAddress = addrs[0];
+            selfAddressForServer = addrs[1];
             configDeployment.log(logColor, "%s: system  with serializer %s", selfAddress, kryoBuilderType);
             system = initSystem();
 
@@ -802,11 +913,24 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
             setDefaultUncaughtHandler(configDeployment);
         }
 
-        protected ActorAddress.ActorAddressRemote initSelfAddress(String selfAddr) {
-            ActorAddress.ActorAddressRemote selfAddrObj = ActorAddress.get(selfAddr);
-            configDeployment.host = selfAddrObj.getHost();
-            configDeployment.port = selfAddrObj.getPort();
-            return selfAddrObj;
+        protected ActorAddress.ActorAddressRemote[] initSelfAddress(String selfAddr) {
+            int i = selfAddr.indexOf('/');
+            if (i > 0) {
+                ActorAddress.ActorAddressRemote selfAddrObj = ActorAddress.get(selfAddr.substring(0, i));
+                ActorAddress.ActorAddressRemote selfAddrServObj = ActorAddress.get(selfAddr.substring(i + 1));
+                configDeployment.host = selfAddrObj.getHost();
+                configDeployment.port = selfAddrObj.getPort();
+                configDeployment.serverHost = selfAddrServObj.getHost();
+                configDeployment.serverPort = selfAddrServObj.getPort();
+
+                return new ActorAddress.ActorAddressRemote[]{selfAddrObj, selfAddrServObj};
+            } else {
+                ActorAddress.ActorAddressRemote selfAddrObj = ActorAddress.get(selfAddr);
+                configDeployment.host = selfAddrObj.getHost();
+                configDeployment.port = selfAddrObj.getPort();
+
+                return new ActorAddress.ActorAddressRemote[]{selfAddrObj, selfAddrObj};
+            }
         }
 
         protected String initKryoBuilderType() {
@@ -830,11 +954,13 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
             ph.setHost(selfAddress.getHost(), selfAddress.getPort());
             String appName = System.getProperty("csl.actor.path.app", "");
             ph.setApp(appName);
+            ph.setLocalOnlyBaseDir(configDeployment.localOnlyBaseDir);
+            ph.setAllowAbsolutePath(configDeployment.allowAbsolutePath);
             setLogFile(configDeployment, ph);
         }
 
         protected void startSystem() {
-            system.startWithoutWait(selfAddress);
+            system.startWithoutWait(selfAddress, selfAddressForServer);
         }
 
         protected ActorPlacement.ActorPlacementDefault initPlace(String placeType) throws Exception {
@@ -933,7 +1059,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         protected void joined(ActorAddress addr) {
             if (!configSetSent.contains(addr)) {
                 ActorRefRemote.get(getSystem(), addr)
-                        .tell(new ConfigSet(remoteConfig), this);
+                        .tell(new ConfigSet(remoteConfig));
                 configSetSent.add(addr);
                 completed.offer(addr);
             }
@@ -991,7 +1117,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         }
     }
 
-    public static class ConfigSet implements Serializable, KryoSerializable {
+    public static class ConfigSet implements Serializable, KryoSerializable, Message.MessageDataSpecial {
         public static final long serialVersionUID = 1L;
         public Map<ActorAddress, ? extends ConfigBase> remoteConfig;
 
@@ -1076,7 +1202,8 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
 
     public static class PlaceGetEntry<AppConfType extends ConfigBase,
             PlaceType extends ClusterDeployment.ActorPlacementForCluster<AppConfType>>
-            implements CallableMessage<PlaceType, ActorPlacement.AddressListEntry> {
+            implements CallableMessage<PlaceType, ActorPlacement.AddressListEntry>, Message.MessageDataSpecial {
+        public static final long serialVersionUID = -1;
         public ActorAddress address;
 
         public PlaceGetEntry() {}
@@ -1099,7 +1226,8 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
     }
 
     public static class CallableMessageMove<AppConfType extends ConfigBase>
-            implements CallableMessage<ActorPlacementForCluster<AppConfType>, ActorRef> {
+            implements CallableMessage<ActorPlacementForCluster<AppConfType>, ActorRef>, Message.MessageDataSpecial {
+        public static final long serialVersionUID = -1;
         public ActorRef actor;
         public ActorAddress targetHost;
 
@@ -1123,6 +1251,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
     }
 
     public static class CallMessageLoadAndSendToActor implements CallableMessage.CallableMessageConsumer<Actor> {
+        public static final long serialVersionUID = -1;
         public String serializedMailboxPath;
 
         public CallMessageLoadAndSendToActor() {}
@@ -1137,7 +1266,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
             //TODO the serializedMailbxPath is expanded ?
             PersistentFileManager m = PersistentFileManager.createPersistentFile(serializedMailboxPath, a.getSystem());
             MailboxPersistableReplacement.MessageOnStorage msg = new MailboxPersistableReplacement.MessageOnStorage(
-                    new PersistentFileManager.PersistentFileReaderSource(serializedMailboxPath, 0, m));
+                    new PersistentFileManager.PersistentFileReaderSource(serializedMailboxPath, 0, m), 0);
             synchronized (msg) {
                 Message<?> next = msg.readNext();
                 while (next != null) {
@@ -1155,7 +1284,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
                 new ShutdownTask());
     }
 
-    public static class ShutdownTask implements CallableMessage<ActorPlacement.ActorPlacementDefault, String> {
+    public static class ShutdownTask implements CallableMessage<ActorPlacement.ActorPlacementDefault, String>, Message.MessageDataSpecial {
         public static final long serialVersionUID = 1L;
         @Override
         public String call(ActorPlacement.ActorPlacementDefault self) {
@@ -1244,7 +1373,8 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
 
     public static class PlaceGetRemoteConfig<AppConfType extends ConfigBase,
             PlaceType extends ClusterDeployment.ActorPlacementForCluster<AppConfType>>
-            implements CallableMessage<PlaceType, AppConfType> {
+            implements CallableMessage<PlaceType, AppConfType>, Message.MessageDataSpecial {
+        public static final long serialVersionUID = -1;
         @Override
         public AppConfType call(PlaceType self) {
             return self.getRemoteConfig().get(self.getSelfAddress().getHostAddress());
@@ -1291,7 +1421,8 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
 
     public static class AttachInitRunGetAppName<AppConfType extends ConfigBase,
             PlaceType extends ClusterDeployment.ActorPlacementForCluster<AppConfType>>
-        implements CallableMessage<PlaceType, String> {
+        implements CallableMessage<PlaceType, String>, Message.MessageDataSpecial {
+        public static final long serialVersionUID = -1;
         @Override
         public String call(PlaceType self) {
             return self.getDeployment().getAppName();
@@ -1299,7 +1430,8 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
     }
     public static class AttachInitRunGetPrimary<AppConfType extends ConfigBase,
             PlaceType extends ClusterDeployment.ActorPlacementForCluster<AppConfType>>
-            implements CallableMessage<PlaceType, ClusterUnit<AppConfType>> {
+            implements CallableMessage<PlaceType, ClusterUnit<AppConfType>>, Message.MessageDataSpecial {
+        public static final long serialVersionUID = -1;
         @Override
         public ClusterUnit<AppConfType> call(PlaceType self) {
             return self.getDeployment().getPrimary();
@@ -1307,7 +1439,8 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
     }
     public static class AttachInitRunGetNodes<AppConfType extends ConfigBase,
             PlaceType extends ClusterDeployment.ActorPlacementForCluster<AppConfType>>
-            implements CallableMessage<PlaceType, List<ClusterUnit<AppConfType>>> {
+            implements CallableMessage<PlaceType, List<ClusterUnit<AppConfType>>>, Message.MessageDataSpecial {
+        public static final long serialVersionUID = -1;
         @Override
         public List<ClusterUnit<AppConfType>> call(PlaceType self) {
             return self.getDeployment().getNodes();
@@ -1369,7 +1502,8 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
 
     public static class PlaceGetEntryPlacementActor<AppConfType extends ConfigBase,
             PlaceType extends ClusterDeployment.ActorPlacementForCluster<AppConfType>>
-            implements CallableMessage<PlaceType, ActorAddress.ActorAddressRemoteActor> {
+            implements CallableMessage<PlaceType, ActorAddress.ActorAddressRemoteActor>, Message.MessageDataSpecial {
+        public static final long serialVersionUID = -1;
         public ActorAddress.ActorAddressRemote host;
 
         public PlaceGetEntryPlacementActor() {}
@@ -1385,6 +1519,9 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
     }
 
     //////
+
+    public interface MessageDataStats extends Message.MessageDataSpecial {
+    }
 
     @PropertyInterface("system")
     public SystemStats getAttachedSystemStats() {
@@ -1437,7 +1574,8 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
     }
     public static class PlaceGetAttachedSystemStats<AppConfType extends ConfigBase,
             PlaceType extends ClusterDeployment.ActorPlacementForCluster<AppConfType>>
-            implements CallableMessage<PlaceType, SystemStats> {
+            implements CallableMessage<PlaceType, SystemStats>, MessageDataStats {
+        public static final long serialVersionUID = -1;
         @Override
         public SystemStats call(PlaceType self) {
             return new SystemStats().set(self);
@@ -1445,7 +1583,8 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
     }
     public static class PlaceGetAttachedSystemNamedActorMap<AppConfType extends ConfigBase,
             PlaceType extends ClusterDeployment.ActorPlacementForCluster<AppConfType>>
-            implements CallableMessage<PlaceType, Map<String,ActorRef>> {
+            implements CallableMessage<PlaceType, Map<String,ActorRef>>, MessageDataStats {
+        public static final long serialVersionUID = -1;
         @Override
         public Map<String,ActorRef> call(PlaceType self) {
             return toRefMap(((ActorSystemRemote) self.getSystem()).getLocalSystem().getNamedActorMap());
@@ -1453,7 +1592,8 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
     }
     public static class PlaceGetAttachedSystemProcessingCount<AppConfType extends ConfigBase,
             PlaceType extends ClusterDeployment.ActorPlacementForCluster<AppConfType>>
-            implements CallableMessage<PlaceType, Integer> {
+            implements CallableMessage<PlaceType, Integer>, MessageDataStats {
+        public static final long serialVersionUID = -1;
         @Override
         public Integer call(PlaceType self) {
             return ((ActorSystemRemote) self.getSystem()).getLocalSystem().getProcessingCount().get();
@@ -1461,7 +1601,8 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
     }
     public static class PlaceGetAttachedSystemRemoteConnectionMap<AppConfType extends ConfigBase,
             PlaceType extends ClusterDeployment.ActorPlacementForCluster<AppConfType>>
-            implements CallableMessage<PlaceType, Map<ActorAddress, NetworkStats>> {
+            implements CallableMessage<PlaceType, Map<ActorAddress, NetworkStats>>, MessageDataStats {
+        public static final long serialVersionUID = -1;
         @Override
         public Map<ActorAddress, NetworkStats> call(PlaceType self) {
             return ((ActorSystemRemote) self.getSystem()).getConnectionMap().entrySet().stream()
@@ -1470,7 +1611,8 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
     }
     public static class PlaceGetAttachedSystemRemoteServerReceive<AppConfType extends ConfigBase,
             PlaceType extends ClusterDeployment.ActorPlacementForCluster<AppConfType>>
-            implements CallableMessage<PlaceType, NetworkStats> {
+            implements CallableMessage<PlaceType, NetworkStats>, MessageDataStats {
+        public static final long serialVersionUID = -1;
         @Override
         public NetworkStats call(PlaceType self) {
             return new NetworkStats().receive((ActorSystemRemote) self.getSystem());
@@ -1478,7 +1620,8 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
     }
     public static class PlaceGetAttachedPlacementTotalThreads<AppConfType extends ConfigBase,
             PlaceType extends ClusterDeployment.ActorPlacementForCluster<AppConfType>>
-            implements CallableMessage<PlaceType, Integer> {
+            implements CallableMessage<PlaceType, Integer>, MessageDataStats {
+        public static final long serialVersionUID = -1;
         @Override
         public Integer call(PlaceType self) {
             return self.getTotalThreads();
@@ -1486,7 +1629,8 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
     }
     public static class PlaceGetAttachedPlacementCluster<AppConfType extends ConfigBase,
             PlaceType extends ClusterDeployment.ActorPlacementForCluster<AppConfType>>
-            implements CallableMessage<PlaceType, List<ActorPlacement.AddressListEntry>> {
+            implements CallableMessage<PlaceType, List<ActorPlacement.AddressListEntry>>, MessageDataStats {
+        public static final long serialVersionUID = -1;
         @Override
         public List<ActorPlacement.AddressListEntry> call(PlaceType self) {
             return self.getCluster();
@@ -1494,7 +1638,8 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
     }
     public static class PlaceGetAttachedPlacementClusterWithSelf<AppConfType extends ConfigBase,
             PlaceType extends ClusterDeployment.ActorPlacementForCluster<AppConfType>>
-            implements CallableMessage<PlaceType, List<ActorPlacement.AddressListEntry>> {
+            implements CallableMessage<PlaceType, List<ActorPlacement.AddressListEntry>>, MessageDataStats {
+        public static final long serialVersionUID = -1;
         @Override
         public List<ActorPlacement.AddressListEntry> call(PlaceType self) {
             return self.getClusterWithSelf();
@@ -1502,7 +1647,8 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
     }
     public static class PlaceGetAttachedPlacementCreatedActors<AppConfType extends ConfigBase,
             PlaceType extends ClusterDeployment.ActorPlacementForCluster<AppConfType>>
-            implements CallableMessage<PlaceType, Long> {
+            implements CallableMessage<PlaceType, Long>, MessageDataStats {
+        public static final long serialVersionUID = -1;
         @Override
         public Long call(PlaceType self) {
             return self.getCreatedActors();
@@ -1510,7 +1656,8 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
     }
     public static class PlaceGetAttachedPlacementForClusterRemoteConfig<AppConfType extends ConfigBase,
             PlaceType extends ClusterDeployment.ActorPlacementForCluster<AppConfType>>
-            implements CallableMessage<PlaceType, Map<ActorAddress, ? extends ConfigBase>> {
+            implements CallableMessage<PlaceType, Map<ActorAddress, ? extends ConfigBase>>, MessageDataStats {
+        public static final long serialVersionUID = -1;
         @Override
         public Map<ActorAddress, ? extends ConfigBase> call(PlaceType self) {
             return self.getRemoteConfig();

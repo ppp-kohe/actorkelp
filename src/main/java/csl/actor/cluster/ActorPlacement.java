@@ -22,6 +22,21 @@ public interface ActorPlacement {
 
     ActorRef place(Actor a);
 
+    /**
+     * @param system the system might hold a placement as an actor with the name {@link #PLACEMENT_NAME}
+     * @return the actor implementing {@link ActorPlacement}, typically {@link ActorPlacementDefault}
+     */
+    static ActorPlacement getPlacement(ActorSystem system) {
+        Actor placement = system.resolveActorLocalNamed(
+                ActorRefLocalNamed.get(system, ActorPlacement.PLACEMENT_NAME));
+        if (placement instanceof ActorPlacement) {
+            return (ActorPlacement) placement;
+        } else {
+            return null;
+        }
+    }
+
+
     abstract class ActorPlacementDefault extends ActorDefault implements ActorPlacement {
         protected List<AddressListEntry> cluster = new ArrayList<>(); //without self entry
         protected PlacementStrategy strategy;
@@ -111,8 +126,8 @@ public interface ActorPlacement {
             try {
                 int primaryThreads = ResponsiveCalls.sendHostTask(getSystem(), primaryActor, new CallablePrimaryThreads())
                         .get(20, TimeUnit.SECONDS);
-                tell(new AddressList(
-                            new AddressListEntry(primaryActor, primaryThreads)), this);
+                tell(Message.dataWithSender(new AddressList(
+                            new AddressListEntry(primaryActor, primaryThreads)), this));
                 log("join: %s, threads: %,d", primaryActor, primaryThreads);
             } catch (Exception ex) {
                 throw new RuntimeException(ex);
@@ -186,7 +201,7 @@ public interface ActorPlacement {
             for (AddressListEntry r : es) {
                 if (!excluded.contains(r.getPlacementActor())) {
                     ActorRefRemote.get(getSystem(), r.getPlacementActor())
-                            .tell(addressListToOthers, this);
+                            .tell(Message.dataWithSender(addressListToOthers, this));
                 }
             }
         }
@@ -246,7 +261,7 @@ public interface ActorPlacement {
             } catch (Throwable ex) {
                 res = new CallableMessage.CallableFailure(ex);
             }
-            sender.tell(res, this);
+            sender.tell(res);
             long n = createdActors.incrementAndGet();
             if (n > createdActorsNextLog) {
                 log("created: %,d, last: %s", n, res);
@@ -297,7 +312,7 @@ public interface ActorPlacement {
             getSystem().unregister(this);
             LeaveEntry l = new LeaveEntry(getSelfAddress());
             cluster.forEach(e -> e.getPlacementActor()
-                            .ref(getSystem()).tell(l, this));
+                            .ref(getSystem()).tell(l));
         }
 
         public void receiveLeave(LeaveEntry l) {
@@ -325,10 +340,14 @@ public interface ActorPlacement {
         }
 
         public void shutdownAfterWait() {
-            if (cluster.isEmpty()) {
-                log("all members left: system close");
-                shutdownAfterWait = null;
-                getSystem().close();
+            try {
+                if (cluster.isEmpty()) {
+                    log("all members left: system close");
+                    shutdownAfterWait = null;
+                    getSystem().close();
+                }
+            } catch (Throwable ex) {
+                ex.printStackTrace();
             }
         }
 
@@ -340,9 +359,35 @@ public interface ActorPlacement {
         public long getCreatedActors() {
             return createdActors.get();
         }
+
+        public <PlaceType extends ActorPlacementDefault> void sendMessageConsumerToCluster(CallableMessage.CallableMessageConsumer<PlaceType> msg) {
+            getClusterWithSelf().forEach(e ->
+                    e.getPlacementActor().ref(getSystem()).tell(msg.withSender(null)));
+        }
+
+        public <PlaceType extends ActorPlacementDefault, R> CompletableFuture<List<R>> sendMessageToClusterCollect(CallableMessage<PlaceType, R> msg) {
+            List<CompletableFuture<R>> rs = sendMessageToCluster(msg);
+            return CompletableFuture.supplyAsync(() -> {
+                List<R> res = new ArrayList<>();
+                for (CompletableFuture<R> r : rs) {
+                    try {
+                        res.add(r.get());
+                    } catch (Exception ex) {
+                        throw new RuntimeException(ex);
+                    }
+                }
+                return res;
+            });
+        }
+        public <PlaceType extends ActorPlacementDefault, R> List<CompletableFuture<R>> sendMessageToCluster(CallableMessage<PlaceType, R> msg) {
+            return getClusterWithSelf().stream()
+                    .map(e -> ResponsiveCalls.sendTask(getSystem(),
+                            e.getPlacementActor().ref(getSystem()), msg))
+                    .collect(Collectors.toList());
+        }
     }
 
-    class CallablePrimaryThreads implements CallableMessage<Actor, Integer> {
+    class CallablePrimaryThreads implements CallableMessage<Actor, Integer>, Message.MessageDataSpecial {
         public static final long serialVersionUID = 1L;
         @Override
         public Integer call(Actor self) {
@@ -350,7 +395,7 @@ public interface ActorPlacement {
         }
     }
 
-    class AddressList implements Serializable {
+    class AddressList implements Serializable, Message.MessageData {
         public static final long serialVersionUID = 1L;
         public List<AddressListEntry> cluster;
 
@@ -433,7 +478,7 @@ public interface ActorPlacement {
         }
     }
 
-    class ActorCreationRequest implements Serializable {
+    class ActorCreationRequest implements Serializable, Message.MessageData, Message.MessageDataSpecial {
         public static final long serialVersionUID = 1L;
         public Serializable data;
 
@@ -455,7 +500,7 @@ public interface ActorPlacement {
         }
     }
 
-    class LeaveEntry implements Serializable {
+    class LeaveEntry implements Serializable, Message.MessageData {
         public static final long serialVersionUID = 1L;
         public ActorAddress.ActorAddressRemoteActor placementActor;
 

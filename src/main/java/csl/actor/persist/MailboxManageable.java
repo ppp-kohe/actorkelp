@@ -9,8 +9,29 @@ import java.util.concurrent.atomic.AtomicLong;
 
 public interface MailboxManageable extends Mailbox {
     KryoBuilder.SerializerFunction getSerializer();
-    long getPreviousSize();
+    /** @return a past mailbox size info. the value might be different from current size of the mailbox.
+     *      used for determining saving the mailbox data */
+    long getPreviousSizeOnMemory();
+
+    /**
+     * @return the total size including storage saved
+     */
+    long getSize();
+
+    /**
+     * @return the size on memory by atomic operation
+     */
+    long getSizeOnMemory();
+
     PersistentConditionMailbox getCondition();
+
+    default MailboxManageable createManageable() {
+        return (MailboxManageable) create();
+    }
+
+    static int messageSize(Message<?> m) {
+        return m == null ? 0 : m.dataSize();
+    }
 
     class MailboxDefaultManageable extends MailboxDefault implements MailboxManageable {
         protected PersistentFileManager manager;
@@ -28,8 +49,18 @@ public interface MailboxManageable extends Mailbox {
         }
 
         @Override
+        public long getSize() {
+            return size.get();
+        }
+
+        @Override
+        public long getSizeOnMemory() {
+            return size.get();
+        }
+
+        @Override
         public void offer(Message<?> message) {
-            previousSize = size.incrementAndGet();
+            previousSize = size.addAndGet(messageSize(message));
             queue.offer(message);
         }
 
@@ -37,7 +68,7 @@ public interface MailboxManageable extends Mailbox {
         public Message<?> poll() {
             Message<?> m = queue.poll();
             if (m != null) {
-                previousSize = size.decrementAndGet();
+                previousSize = size.addAndGet(-messageSize(m));
             }
             return m;
         }
@@ -48,7 +79,7 @@ public interface MailboxManageable extends Mailbox {
         }
 
         @Override
-        public long getPreviousSize() {
+        public long getPreviousSizeOnMemory() {
             return previousSize;
         }
 

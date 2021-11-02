@@ -10,7 +10,7 @@ import csl.actor.kelp.ConfigKelp;
 import csl.actor.kelp.KelpStage;
 import csl.actor.kelp.behavior.KelpDispatcher;
 import csl.actor.util.ResponsiveCalls;
-import csl.actor.util.StagingActor;
+import csl.actor.util.Staging;
 
 import java.io.Serializable;
 import java.util.Collections;
@@ -18,11 +18,13 @@ import java.util.List;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 
-public class ActorRefShuffleSingle<ActorType extends Actor> implements KelpStage<ActorType>, Serializable, KryoSerializable, StagingActor.StagingNonSubject {
+public class ActorRefShuffleSingle<ActorType extends Actor> implements KelpStage<ActorType>, Serializable, KryoSerializable,
+        Staging.StagingPointMembers {
     public static final long serialVersionUID = 1L;
     protected transient ActorSystem system;
     protected Class<ActorType> actorType;
     protected ActorRefShuffle.ShuffleEntry entry;
+    protected String name;
 
     public ActorRefShuffleSingle() {
     }
@@ -31,6 +33,12 @@ public class ActorRefShuffleSingle<ActorType extends Actor> implements KelpStage
         this.system = system;
         this.actorType = actorType;
         entry = new ActorRefShuffle.ShuffleEntry(ref, bufferSize, 0);
+        this.name = Staging.stageNameArray(Staging.name(ref), "single");
+    }
+
+    @Override
+    public Class<ActorType> getActorType() {
+        return actorType;
     }
 
     @Override
@@ -39,7 +47,7 @@ public class ActorRefShuffleSingle<ActorType extends Actor> implements KelpStage
             return ((KelpStage<?>) entry.getActor()).connects(nextActorType, next);
         } else if (this.actorType.isInstance(KelpStage.class)) {
             return connectsKelpStageSend(nextActorType, next);
-        } else if (this.actorType.isInstance(StagingActor.StagingSupported.class)) {
+        } else if (this.actorType.isInstance(Staging.StagingSupported.class)) {
             return connectsStagingSend(nextActorType, next);
         } else {
             throw new RuntimeException("unsupported: (" + actorType + ", " + entry.getActor() +
@@ -60,6 +68,7 @@ public class ActorRefShuffleSingle<ActorType extends Actor> implements KelpStage
 
     public static class MessageConnectKelpStageSend<NextActorType extends Actor>
             implements CallableMessage<Actor,KelpStage<NextActorType>> {
+        public static final long serialVersionUID = -1;
         public Class<NextActorType> nextActorType;
         public ActorRef next;
 
@@ -89,6 +98,7 @@ public class ActorRefShuffleSingle<ActorType extends Actor> implements KelpStage
 
     public static class MessageConnectStagingSend
             implements CallableMessage.CallableMessageConsumer<Actor> {
+        public static final long serialVersionUID = -1;
         public ActorRef nextRef;
 
         public MessageConnectStagingSend() {}
@@ -99,7 +109,7 @@ public class ActorRefShuffleSingle<ActorType extends Actor> implements KelpStage
 
         @Override
         public void accept(Actor self) {
-            ((StagingActor.StagingSupported) self).setNextStage(nextRef);
+            ((Staging.StagingSupported) self).setNextStage(nextRef);
         }
     }
 
@@ -124,12 +134,14 @@ public class ActorRefShuffleSingle<ActorType extends Actor> implements KelpStage
     @SuppressWarnings("unchecked")
     @Override
     public void read(Kryo kryo, Input input) {
+        name = input.readString();
         actorType = (Class<ActorType>) kryo.readClass(input).getType();
         entry = (ActorRefShuffle.ShuffleEntry) kryo.readClassAndObject(input);
     }
 
     @Override
     public void write(Kryo kryo, Output output) {
+        output.writeString(name);
         kryo.writeClass(output, actorType);
         kryo.writeClassAndObject(output, entry);
     }
@@ -175,13 +187,18 @@ public class ActorRefShuffleSingle<ActorType extends Actor> implements KelpStage
     }
 
     @Override
-    public void flush(ActorRef sender) {
-        entry.flush(sender);
+    public void flush() {
+        entry.flush();
     }
 
     @Override
     public String toString() {
-        return getClass().getSimpleName() + "(" + this.actorType.getName() + ", " + entry.getActor() + ")";
+        return getName() + "(" + this.actorType.getName() + ", " + entry.getActor() + ")";
+    }
+
+    @Override
+    public String getName() {
+        return name;
     }
 
     @Override

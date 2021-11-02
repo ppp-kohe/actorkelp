@@ -1,15 +1,17 @@
 package csl.actor.kelp;
 
-import csl.actor.Actor;
-import csl.actor.ActorRef;
-import csl.actor.ActorSystem;
-import csl.actor.Message;
+import csl.actor.*;
+import csl.actor.cluster.ActorPlacement;
 import csl.actor.cluster.ClusterDeployment;
 import csl.actor.remote.ActorAddress;
 
 import java.io.Serializable;
+import java.util.HashSet;
+import java.util.Set;
 
 public class ActorPlacementKelp<ConfigType extends ConfigKelp> extends ClusterDeployment.ActorPlacementForCluster<ConfigType> {
+    protected Set<ActorRef> stages = new HashSet<>();
+
     public ActorPlacementKelp(ActorSystem system) {
         super(system);
     }
@@ -24,6 +26,15 @@ public class ActorPlacementKelp<ConfigType extends ConfigKelp> extends ClusterDe
 
     public ActorPlacementKelp(ActorSystem system, String name, PlacementStrategy strategy) {
         super(system, name, strategy);
+    }
+
+    public static ActorPlacementKelp<?> getPlacement(ActorSystem system) {
+        ActorPlacement p = ActorPlacement.getPlacement(system);
+        if (p instanceof ActorPlacementKelp<?>) {
+            return (ActorPlacementKelp<?>) p;
+        } else {
+            return null;
+        }
     }
 
     @Override
@@ -75,6 +86,52 @@ public class ActorPlacementKelp<ConfigType extends ConfigKelp> extends ClusterDe
             if (conf != null) {
                 kelp.setConfig(conf);
             }
+        }
+    }
+
+    public static class StageGraphAdd<ConfigType extends ConfigKelp>
+            implements Serializable, CallableMessage.CallableMessageConsumer<ActorPlacementKelp<ConfigType>>, Message.MessageDataSpecial {
+        public static final long serialVersionUID = -1;
+        public ActorRef stageGraph;
+
+        public StageGraphAdd() {}
+
+        public StageGraphAdd(ActorRef stageGraph) {
+            this.stageGraph = stageGraph;
+        }
+
+        @Override
+        public void accept(ActorPlacementKelp<ConfigType> self) {
+            self.stages.add(stageGraph);
+        }
+    }
+
+    public static class StageGraphRemove<ConfigType extends ConfigKelp>
+            implements Serializable, CallableMessage.CallableMessageConsumer<ActorPlacementKelp<ConfigType>>, Message.MessageDataSpecial {
+        public static final long serialVersionUID = -1;
+        public ActorRef stageGraph;
+
+        public StageGraphRemove() {}
+
+        public StageGraphRemove(ActorRef stageGraph) {
+            this.stageGraph = stageGraph;
+        }
+
+        @Override
+        public void accept(ActorPlacementKelp<ConfigType> self) {
+            self.stages.remove(stageGraph);
+        }
+    }
+
+    public static class StageGraphGet<ConfigType extends ConfigKelp>
+            implements Serializable, CallableMessage<ActorPlacementKelp<ConfigType>, Set<ActorRef>>, Message.MessageDataSpecial {
+        public static final long serialVersionUID = -1;
+
+        public StageGraphGet() {}
+
+        @Override
+        public Set<ActorRef> call(ActorPlacementKelp<ConfigType> self) {
+            return new HashSet<>(self.stages);
         }
     }
 }

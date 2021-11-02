@@ -125,7 +125,7 @@ public class PublicFieldSerializer<T> extends Serializer<T> {
             Class<?> conType = resolveValueType(kryo);
             if (conType == null) {
                 if (v == null) {
-                    kryo.writeClassAndObject(output, null);
+                    kryo.writeClass(output, null);
                     return;
                 } else {
                     Registration reg = kryo.writeClass(output, v.getClass());

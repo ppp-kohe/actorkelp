@@ -1,5 +1,7 @@
 package csl.actor;
 
+import java.util.Map;
+
 public abstract class ActorDefault extends Actor {
     protected ActorBehavior behavior;
 
@@ -42,6 +44,30 @@ public abstract class ActorDefault extends Actor {
 
     protected ActorBehaviorBuilder behaviorBuilder() {
         return new ActorBehaviorBuilder();
+    }
+
+
+    /**
+     * obtains a parameterized class for matching: e.g.
+     *    <code>builder.match(this.&lt;String&gt;type(List.class), listStr -&gt; ...)</code>
+     * @param cls the casting type
+     * @param <R> a type arg including generics such as &lt;T&lt;String&gt;&gt;
+     * @return cls with type R
+     */
+    @SuppressWarnings({"unchecked", "rawtype"})
+    public <R> Class<R> type(Class<?> cls) {
+        return (Class<R>) cls;
+    }
+
+    /**
+     * obtains a parameterized class for matching with Map.Entry:
+     *    <code>builder.match(this.&lt;String,Integer&gt;typeEntry(), e -&gt; ...)</code>
+     * @param <K> the key type
+     * @param <V> the value type
+     * @return Class&lt;Map.Entry&lt;K,V&gt;&gt;
+     */
+    public <K,V> Class<Map.Entry<K,V>> typeEntry() {
+        return type(Map.Entry.class);
     }
 
     @Override

@@ -4,6 +4,8 @@ import com.esotericsoftware.kryo.Kryo;
 import csl.actor.*;
 import csl.actor.cluster.ActorSystemCluster;
 import csl.actor.cluster.ConfigDeployment;
+import csl.actor.kelp.behavior.MailboxKelp;
+import csl.actor.kelp.persist.PersistentConditionActor;
 import csl.actor.remote.ActorAddress;
 import csl.actor.remote.ActorSystemRemote;
 import csl.actor.util.ConfigBase;
@@ -13,16 +15,20 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public class ActorSystemKelp extends ActorSystemRemote implements ActorKelpBuilder {
-    protected Map<ActorAddress, ConnectionHost> connectionHostMap;
+    protected Map<ActorAddress, ConnectionHost> hostMap;
     protected volatile ConfigKelp config = ConfigKelp.CONFIG_DEFAULT;
+
+    protected ActorKelpInternalFactory internalFactory;
 
     @Override
     public ActorSystem system() {
@@ -34,6 +40,21 @@ public class ActorSystemKelp extends ActorSystemRemote implements ActorKelpBuild
         return config;
     }
 
+    @Override
+    public ActorKelpInternalFactory internalFactory() {
+        return internalFactory;
+    }
+
+    public static ConfigBase configForLog(ActorSystem system) {
+        if (system instanceof ActorSystemKelp) {
+            return ((ActorSystemKelp) system).config();
+        } else {
+            ConfigBase b = new ConfigBase();
+            b.setLogger(system.getLogger());
+            return b;
+        }
+    }
+
     public static ActorSystemKelp create(ConfigDeployment configDeployment) {
         Function<ActorSystem, Kryo> kryoFactory = configDeployment.kryoBuilder(defaultBuilderType());
         return create(configDeployment, kryoFactory);
@@ -42,6 +63,35 @@ public class ActorSystemKelp extends ActorSystemRemote implements ActorKelpBuild
     public static ActorSystemKelp create(ConfigDeployment configDeployment, Function<ActorSystem, Kryo> kryoFactory) {
         return new ActorSystemKelp(new ActorSystemDefaultForKelp(configDeployment, kryoFactory), kryoFactory);
     }
+
+    public static ActorSystemKelp create(ConfigDeployment configDeployment, ActorKelpInternalFactory internalFactory) {
+        Function<ActorSystem, Kryo> kryoFactory = configDeployment.kryoBuilder(defaultBuilderType());
+        return create(configDeployment, kryoFactory, internalFactory);
+    }
+
+    public static ActorSystemKelp create(ConfigDeployment configDeployment, Function<ActorSystem, Kryo> kryoFactory, ActorKelpInternalFactory internalFactory) {
+        return new ActorSystemKelp(new ActorSystemDefaultForKelp(configDeployment, kryoFactory, internalFactory), kryoFactory);
+    }
+
+    public static ActorSystemKelp create(ConfigKelp config, ConfigDeployment configDeployment) {
+        Function<ActorSystem, Kryo> kryoFactory = configDeployment.kryoBuilder(defaultBuilderType());
+        return create(config, configDeployment, kryoFactory);
+    }
+
+    public static ActorSystemKelp create(ConfigKelp config, ConfigDeployment configDeployment, Function<ActorSystem, Kryo> kryoFactory) {
+        return new ActorSystemKelp(new ActorSystemDefaultForKelp(config, configDeployment, kryoFactory), kryoFactory);
+    }
+
+    public static ActorSystemKelp create(ConfigKelp config, ConfigDeployment configDeployment, ActorKelpInternalFactory internalFactory) {
+        Function<ActorSystem, Kryo> kryoFactory = configDeployment.kryoBuilder(defaultBuilderType());
+        return create(config, configDeployment, kryoFactory, internalFactory);
+    }
+
+    public static ActorSystemKelp create(ConfigKelp config, ConfigDeployment configDeployment, Function<ActorSystem, Kryo> kryoFactory, ActorKelpInternalFactory internalFactory) {
+        return new ActorSystemKelp(new ActorSystemDefaultForKelp(config, configDeployment, kryoFactory, internalFactory), kryoFactory);
+    }
+
+    //////////////////////
 
     public static ActorSystemDefaultForKelp createLocal() {
         return createLocal(new ConfigDeployment());
@@ -56,6 +106,47 @@ public class ActorSystemKelp extends ActorSystemRemote implements ActorKelpBuild
         return new ActorSystemDefaultForKelp(configDeployment, kryoFactory);
     }
 
+    public static ActorSystemDefaultForKelp createLocal(ActorKelpInternalFactory internalFactory) {
+        return createLocal(new ConfigDeployment(), internalFactory);
+    }
+
+    public static ActorSystemDefaultForKelp createLocal(ConfigDeployment configDeployment, ActorKelpInternalFactory internalFactory) {
+        Function<ActorSystem, Kryo> kryoFactory = configDeployment.kryoBuilder(defaultBuilderType());
+        return createLocal(configDeployment, kryoFactory, internalFactory);
+    }
+
+    public static ActorSystemDefaultForKelp createLocal(ConfigDeployment configDeployment, Function<ActorSystem, Kryo> kryoFactory, ActorKelpInternalFactory internalFactory) {
+        return new ActorSystemDefaultForKelp(configDeployment, kryoFactory, internalFactory);
+    }
+
+    public static ActorSystemDefaultForKelp createLocal(ConfigKelp config) {
+        return createLocal(config, new ConfigDeployment());
+    }
+
+    public static ActorSystemDefaultForKelp createLocal(ConfigKelp config, ConfigDeployment configDeployment) {
+        Function<ActorSystem, Kryo> kryoFactory = configDeployment.kryoBuilder(defaultBuilderType());
+        return createLocal(config, configDeployment, kryoFactory);
+    }
+
+    public static ActorSystemDefaultForKelp createLocal(ConfigKelp config, ConfigDeployment configDeployment, Function<ActorSystem, Kryo> kryoFactory) {
+        return new ActorSystemDefaultForKelp(config, configDeployment, kryoFactory);
+    }
+
+    public static ActorSystemDefaultForKelp createLocal(ConfigKelp config, ActorKelpInternalFactory internalFactory) {
+        return createLocal(config, new ConfigDeployment(), internalFactory);
+    }
+
+    public static ActorSystemDefaultForKelp createLocal(ConfigKelp config, ConfigDeployment configDeployment, ActorKelpInternalFactory internalFactory) {
+        Function<ActorSystem, Kryo> kryoFactory = configDeployment.kryoBuilder(defaultBuilderType());
+        return createLocal(config, configDeployment, kryoFactory, internalFactory);
+    }
+
+    public static ActorSystemDefaultForKelp createLocal(ConfigKelp config, ConfigDeployment configDeployment, Function<ActorSystem, Kryo> kryoFactory, ActorKelpInternalFactory internalFactory) {
+        return new ActorSystemDefaultForKelp(config, configDeployment, kryoFactory, internalFactory);
+    }
+
+    //////////////////////
+
     public static Class<KryoBuilderKelp> defaultBuilderType() {
         return KryoBuilderKelp.class;
     }
@@ -65,11 +156,13 @@ public class ActorSystemKelp extends ActorSystemRemote implements ActorKelpBuild
     }
 
     public ActorSystemKelp(ConfigDeployment configDeployment) {
-        this(new ActorSystemDefaultForKelp(configDeployment), configDeployment.kryoBuilder(defaultBuilderType()));
+        this(new ActorSystemDefaultForKelp(new ConfigDeployment()), configDeployment.kryoBuilder(defaultBuilderType()));
     }
 
     public ActorSystemKelp(ActorSystemDefaultForKelp localSystem, Function<ActorSystem, Kryo> kryoFactory) {
         super(localSystem, kryoFactory);
+        this.internalFactory = localSystem.internalFactory();
+        this.config = localSystem.config();
     }
 
     public ExecutorService getMergerExecutors() {
@@ -86,10 +179,26 @@ public class ActorSystemKelp extends ActorSystemRemote implements ActorKelpBuild
         }
     }
 
+    public static class SystemLoggerKelp extends ConfigBase.SystemLoggerHeader {
+        protected ConfigKelp configKelp;
+        public SystemLoggerKelp(SystemLogger logger, ConfigBase configDeployment, ConfigKelp configKelp) {
+            super(logger, configDeployment);
+            this.configKelp = configKelp;
+        }
+        @Override
+        protected ConfigBase.FormatAndArgs format(String fmt, Object... args) {
+            return config.logMessageHeader().append(configKelp.logMessageHeaderCustom()).append(new ConfigBase.FormatAndArgs(fmt, args));
+        }
+    }
+
     public static class ActorSystemDefaultForKelp extends ActorSystemCluster.ActorSystemDefaultForCluster
         implements ActorKelpBuilder {
         protected ConfigDeployment configDeployment;
         protected ExecutorService mergerExecutors;
+        protected ConfigKelp config;
+        protected ActorKelpInternalFactory internalFactory;
+        protected AtomicReference<Double> memoryManagedActors = new AtomicReference<>(0.0);
+        protected SystemLogger originalLogger;
 
         @Override
         public ActorSystem system() {
@@ -98,7 +207,15 @@ public class ActorSystemKelp extends ActorSystemRemote implements ActorKelpBuild
 
         @Override
         public ConfigKelp config() {
-            return (ConfigKelp) configDeployment.createAppConfig(ConfigKelp.class);
+            if (config == null) {
+                withConfig((ConfigKelp) configDeployment.createAppConfig(ConfigKelp.class));
+            }
+            return config;
+        }
+
+        @Override
+        public ActorKelpInternalFactory internalFactory() {
+            return internalFactory;
         }
 
         public ActorSystemDefaultForKelp() {
@@ -110,9 +227,55 @@ public class ActorSystemKelp extends ActorSystemRemote implements ActorKelpBuild
         }
 
         public ActorSystemDefaultForKelp(ConfigDeployment configDeployment, Function<ActorSystem, Kryo> kryoFactory) {
+            this(configDeployment, kryoFactory, ActorKelpInternalFactory.createFromConfig(configDeployment));
+        }
+
+        public ActorSystemDefaultForKelp(ConfigDeployment configDeployment, Function<ActorSystem, Kryo> kryoFactory, ActorKelpInternalFactory internalFactory) {
+            this(null, configDeployment, kryoFactory, internalFactory);
+        }
+
+        public ActorSystemDefaultForKelp(ConfigKelp config) {
+            this(config, new ConfigDeployment(), KryoBuilderKelp.builder());
+        }
+
+        public ActorSystemDefaultForKelp(ConfigKelp config, ConfigDeployment configDeployment) {
+            this(config, configDeployment, configDeployment.kryoBuilder(defaultBuilderType()));
+        }
+
+        public ActorSystemDefaultForKelp(ConfigKelp config, ConfigDeployment configDeployment, Function<ActorSystem, Kryo> kryoFactory) {
+            this(config, configDeployment, kryoFactory, ActorKelpInternalFactory.createFromConfig(configDeployment));
+        }
+
+        public ActorSystemDefaultForKelp(ConfigKelp config, ConfigDeployment configDeployment, Function<ActorSystem, Kryo> kryoFactory, ActorKelpInternalFactory internalFactory) {
             super(kryoFactory);
             this.configDeployment = configDeployment;
+            this.internalFactory = internalFactory;
             super.initSystem();
+            initMergeConfig(config);
+        }
+
+        @Override
+        protected void initLogger() {
+            super.initLogger();
+            originalLogger = logger;
+        }
+
+        protected void initMergeConfig(ConfigKelp config) {
+            Class<? extends ConfigBase> confType = ConfigKelp.class;
+            if (config != null) {
+                confType = config.getClass();
+            }
+            ConfigKelp configFromDep = (ConfigKelp) configDeployment.createAppConfig(confType);
+            if (config != null) {
+                configFromDep.mergeChangedFields(config);
+            }
+            withConfig(configFromDep);
+        }
+
+        public ActorSystemDefaultForKelp withConfig(ConfigKelp config) {
+            this.config = config;
+            setLogger(new SystemLoggerKelp(originalLogger, configDeployment, config));
+            return this;
         }
 
         @Override
@@ -122,9 +285,15 @@ public class ActorSystemKelp extends ActorSystemRemote implements ActorKelpBuild
 
         @Override
         protected void initSystemExecutorService() {
-            executorService = Executors.newFixedThreadPool(
-                    Math.max(1, (int) (threads * configDeployment.systemThreadFactor)));
-            mergerExecutors = Executors.newCachedThreadPool();
+//            executorService = Executors.newFixedThreadPool(
+//                    Math.max(1, (int) (threads * configDeployment.systemThreadFactor)));
+            executorService = Executors.newCachedThreadPool();
+            mergerExecutors = Executors.newCachedThreadPool(new SpecialThreadFactory());
+        }
+
+        @Override
+        protected ScheduledExecutorService initScheduledExecutor() {
+            return Executors.newScheduledThreadPool(getScheduledExecutorThreads(), new ScheduledThreadFactory());
         }
 
         public ExecutorService getMergerExecutors() {
@@ -153,10 +322,164 @@ public class ActorSystemKelp extends ActorSystemRemote implements ActorKelpBuild
             super.close();
             mergerExecutors.shutdownNow();
         }
+
+        @Override
+        protected ProcessMessageSubsequently createProcessMessageSubsequently(Actor target, boolean special, Message<?> msg) {
+            if (special && !(msg instanceof Message.MessageNone) &&
+                    !target.isDelayedMessage(msg)) { //DelayedMessage are not awaited
+                updateAndWait(target);
+            }
+            return new ProcessMessageSubsequentlyKelp(this, target, special);
+        }
+
+        public void updateAndWait(Actor target) {
+            Mailbox mb = target.getMailbox();
+            if (mb instanceof MailboxKelp && !isSpecialThread()) {
+                MailboxKelp kmb = (MailboxKelp) mb;
+                long size = kmb.getMailbox().getPreviousSizeOnMemory();
+                long pendingLimit = config().systemMailboxPendingMessageSize;
+                double factor = config().systemMailboxWaitMsFactor;
+                await(new ActorAwaitLogHandler(this, kmb, pendingLimit, target),
+                        kmb.getHistory(), size, pendingLimit, factor);
+            }
+        }
+
+        @Override
+        public boolean register(Actor actor) {
+            boolean r = super.register(actor);
+            if (r && actor instanceof PersistentConditionActor.MemoryManagedActor) {
+                double p = ((PersistentConditionActor.MemoryManagedActor) actor).memoryManageRatioTotalActor();
+                memoryManagedActors.getAndUpdate(v -> v + p);
+            }
+            return r;
+        }
+
+        @Override
+        public boolean unregister(Actor actor) {
+            boolean r = super.unregister(actor);
+            if (r && actor instanceof PersistentConditionActor.MemoryManagedActor) {
+                double p = ((PersistentConditionActor.MemoryManagedActor) actor).memoryManageRatioTotalActor();
+                memoryManagedActors.getAndUpdate(v -> v - p);
+            }
+            return r;
+        }
+
+        public double getMemoryManagedActors() {
+            return memoryManagedActors.get();
+        }
+    }
+
+    public static class ActorAwaitLogHandler implements AwaitLogHandler {
+        protected ActorSystem system;
+        protected Actor actor;
+        protected MailboxKelp mbox;
+        protected long pendingLimit;
+
+        public ActorAwaitLogHandler(ActorSystem system, MailboxKelp mbox, long pendingLimit, Actor actor) {
+            this.system = system;
+            this.mbox = mbox;
+            this.pendingLimit = pendingLimit;
+            this.actor = actor;
+        }
+
+        @Override
+        public void log(long waitMs, Stream<Long> pendingSize, float sizeDecreasesRate, long averagePendingSize, long pendingLimit) {
+            log( "wait %,d ms, pendingSize=%s, decreasesRate=%.2f, averagePendingSize=%,d/%,d",
+                    waitMs,
+                    pendingSize.map(l -> String.format("%,d", l))
+                            .collect(Collectors.joining(", ")),
+                    sizeDecreasesRate, averagePendingSize, pendingLimit);
+        }
+
+
+        public void log(String fmt, Object... args) {
+            ConfigBase.FormatAndArgs fa = new ConfigBase.FormatAndArgs("ActorSystemDefaultForKelp ")
+                    .append(new ConfigBase.FormatAndArgs(fmt, args)
+                            .append(new ConfigBase.FormatAndArgs(" @ %s %s", actor, Thread.currentThread())));
+            system.getLogger().log(true, debugLogColor, fa.format, fa.args);
+        }
+
+        @Override
+        public void logError(Throwable ex) {
+            system.getLogger().log(true, debugLogColor, ex, "ConnectionHost: wait error %s", actor);
+        }
+
+        @Override
+        public void logAfter(long waitMs, long mboxSize) {
+            long afterSize = mbox.getMailbox().getPreviousSizeOnMemory();
+            log( "after wait %,d ms: pendingSize %,7d -> %,7d (%+,d)",
+                    waitMs, mboxSize, afterSize, (afterSize - mboxSize));
+        }
+    }
+
+    public static boolean isSpecialThread() {
+        return Thread.currentThread() instanceof SpecialThread;
+    }
+
+    public static class SpecialThreadFactory implements ThreadFactory {
+        protected AtomicInteger count = new AtomicInteger();
+        protected static AtomicInteger totalCount = new AtomicInteger();
+        protected int factoryCount;
+        protected ThreadGroup group;
+        protected int priority;
+        public SpecialThreadFactory() {
+            factoryCount = totalCount.getAndIncrement();
+            group = Thread.currentThread().getThreadGroup();
+            priority = Math.max(Thread.MIN_PRIORITY,
+                    Math.min(Thread.MAX_PRIORITY,
+                    initPriority(group.getMaxPriority(), Thread.currentThread().getPriority())));
+        }
+        protected int initPriority(int max, int current) {
+            return (int) (((max - current) * 0.8) + current);
+        }
+        protected String name() {
+            return "kelp-special";
+        }
+        @Override
+        public Thread newThread(Runnable r) {
+            return new SpecialThread(group, r, String.format("%s-%d-%d", name(), factoryCount, count.getAndIncrement()), priority);
+        }
+    }
+
+    public static class ScheduledThreadFactory extends SpecialThreadFactory {
+        @Override
+        protected int initPriority(int max, int current) {
+            return (int) (((max - current) * 0.6) + current);
+        }
+
+        @Override
+        protected String name() {
+            return "kelp-schedule";
+        }
+    }
+
+    public static class SpecialThread extends Thread {
+        public SpecialThread(ThreadGroup group, Runnable r, String name, int priority) {
+            super(group, r, name);
+            setDaemon(false);
+            setPriority(priority);
+        }
+    }
+
+    public static class ProcessMessageSubsequentlyKelp extends ActorSystemDefault.ProcessMessageSubsequently {
+        public ProcessMessageSubsequentlyKelp(ActorSystemDefaultForKelp system, Actor actor, boolean special) {
+            super(system, actor, special);
+        }
+
+        @Override
+        public void submit() {
+            if (special) { //if other actors are busily processing, then it might be awaiting in all executor's threads.
+                // the special message needs to be immediately processed on a free thread
+                ((ActorSystemDefaultForKelp) system).getMergerExecutors().execute(this);
+            } else {
+                super.submit();
+            }
+        }
     }
 
     public void setConfig(ConfigKelp config) {
         this.config = config;
+        ((ActorSystemDefaultForKelp) localSystem).withConfig(config);
     }
 
     public ConfigKelp getConfig() {
@@ -166,7 +489,7 @@ public class ActorSystemKelp extends ActorSystemRemote implements ActorKelpBuild
     @Override
     protected void init() {
         super.init();
-        connectionHostMap = new ConcurrentHashMap<>();
+        hostMap = new ConcurrentHashMap<>();
     }
 
     @Override
@@ -174,7 +497,7 @@ public class ActorSystemKelp extends ActorSystemRemote implements ActorKelpBuild
         if (addr instanceof ActorAddress.ActorAddressRemote) {
             try {
                 return new ConnectionActorKelp(localSystem, this,
-                        connectionHostMap.computeIfAbsent(addr.getHostAddress(), this::createConnectionHost),
+                        hostMap.computeIfAbsent(addr.getHostAddress(), this::createConnectionHost),
                         (ActorAddress.ActorAddressRemote) addr);
             } catch (InterruptedException ex) {
                 getLogger().log(true, debugLogColor, ex, "createConnection: %s", addr);
@@ -190,13 +513,13 @@ public class ActorSystemKelp extends ActorSystemRemote implements ActorKelpBuild
     }
 
     public static class ConnectionHost {
-        protected ActorSystemKelp system;
+        protected ActorSystem system;
         protected ActorAddress address;
         protected AtomicLong size = new AtomicLong();
         protected AtomicLong transferredBytes = new AtomicLong();
         protected volatile Instant previousLogTime = Instant.now();
 
-        public ConnectionHost(ActorSystemKelp system, ActorAddress address) {
+        public ConnectionHost(ActorSystem system, ActorAddress address) {
             this.system = system;
             this.address = address;
         }
@@ -217,25 +540,28 @@ public class ActorSystemKelp extends ActorSystemRemote implements ActorKelpBuild
             return transferredBytes.get();
         }
 
+        protected ConfigKelp getConfig() {
+            return ((ActorKelpBuilder) system).config();
+        }
 
         public double getWaitMsFactor() {
-            return system.getConfig().systemWaitMsFactor;
+            return getConfig().systemWaitMsFactor;
         }
 
         public Duration getHostUpdateTime() {
-            return Duration.ofMillis(system.getConfig().systemHostUpdateMs);
+            return Duration.ofMillis(getConfig().systemHostUpdateMs);
         }
 
         public int getMaxBundle() {
-            return system.getConfig().systemMaxBundle;
+            return getConfig().systemMaxBundle;
         }
 
         public long getPendingMessageSize() {
-            return system.getConfig().systemPendingMessageSize;
+            return getConfig().systemPendingMessageSize;
         }
 
         public long getPendingMessageLimit() {
-            return system.getConfig().systemPendingMessageLimit;
+            return getConfig().systemPendingMessageLimit;
         }
 
         public boolean checkLogTime() {
@@ -252,7 +578,30 @@ public class ActorSystemKelp extends ActorSystemRemote implements ActorKelpBuild
         }
     }
 
-    public static class ConnectionActorKelp extends ConnectionActor {
+    public interface AwaitLogHandler {
+        void log(long waitMs, Stream<Long> pendingSize, float sizeDecreasesRate, long averagePendingSize, long pendingLimit);
+        void logError(Throwable ex);
+        void logAfter(long waitMs, long mboxSize);
+    }
+
+    public static <HistType extends History<HistType>> void await(AwaitLogHandler log, HistType history, long mboxSize,
+                                                                  long pendingMessageLimit, double waitMsFactor) {
+        List<HistType> hs = history.toList(HISTORY_SIZE_OLDEST);
+        float sdr = history.sizeDecreasesRate(hs);
+        long avg = history.averagePendingSize(hs);
+        if (sdr == 0 || avg > pendingMessageLimit) {
+            long ms = (long) (mboxSize * waitMsFactor);
+            log.log(ms, hs.stream().map(h -> h.size), sdr, avg, pendingMessageLimit);
+            try {
+                Thread.sleep(ms);
+            } catch (Exception ex) {
+                log.logError(ex);
+            }
+            log.logAfter(ms, mboxSize);
+        }
+    }
+
+    public static class ConnectionActorKelp extends ConnectionActor implements AwaitLogHandler {
         protected ConnectionHost host;
 
         protected volatile Instant previousLogTime = Instant.now();
@@ -266,15 +615,7 @@ public class ActorSystemKelp extends ActorSystemRemote implements ActorKelpBuild
         }
 
         protected void initHistory() {
-            ConnectionHostHistory tail = new ConnectionHostHistory();
-            ConnectionHostHistory top = tail;
-            for (int i = 0; i < HISTORY_SIZE - 1; ++i) {
-                ConnectionHostHistory n = new ConnectionHostHistory();
-                n.next = top;
-                top = n;
-            }
-            tail.next = top;
-            this.history = top;
+            this.history = ConnectionHostHistory.create(HISTORY_SIZE);
         }
 
         @Override
@@ -320,33 +661,32 @@ public class ActorSystemKelp extends ActorSystemRemote implements ActorKelpBuild
             }
             ConnectionHostHistory newest = history;
             history = history.set(mbox, bs, time);
-            //the current history has oldest values
-            if (newest.size > host.getPendingMessageSize()) {
-                List<ConnectionHostHistory> hsAll = history.toList();
-                List<ConnectionHostHistory> hs = hsAll.subList(hsAll.size() - 7, hsAll.size()); //only recent items
-                float sdr = history.sizeDecreasesRate(hs);
-                long avg = history.averagePendingSize(hs);
-                if (sdr == 0 || avg > host.getPendingMessageLimit()) {
-                    long ms = (long) (mbox * host.getWaitMsFactor());
-                    log( "wait %,d ms, pendingSize=%s, bytesPerSec=%,.2f, decreasesRate=%.2f, averagePendingSize=%,d/%,d",
-                            ms,
-                            hs.stream().map(h -> h.size)
-                                    .map(l -> String.format("%,d", l))
-                                    .collect(Collectors.joining(", ")),
-                            history.bytesPerSec(hs),
-                            sdr, avg, host.getPendingMessageLimit());
-
-                    try {
-                        Thread.sleep(ms);
-                    } catch (Exception ex) {
-                        system.getLogger().log(true, debugLogColor, ex, "ConnectionHost: wait error");
-                    }
-
-                    long afterSize = host.size();
-                    log( "after wait %,d ms: pendingSize %,7d -> %,7d (%+,d)",
-                            ms, mbox, afterSize, (afterSize - mbox));
-                }
+            //the current history has the oldest values
+            if (newest.size > host.getPendingMessageSize() && !isSpecialThread()) {
+                ActorSystemKelp.await(this, history, mbox, host.getPendingMessageLimit(), host.getWaitMsFactor());
             }
+        }
+
+        @Override
+        public void log(long waitMs, Stream<Long> pendingSize, float sizeDecreasesRate, long averagePendingSize, long pendingLimit) {
+            log( "wait %,d ms, pendingSize=%s, bytesPerSec=%,.2f, decreasesRate=%.2f, averagePendingSize=%,d/%,d",
+                    waitMs,
+                    pendingSize.map(l -> String.format("%,d", l))
+                            .collect(Collectors.joining(", ")),
+                    history.bytesPerSec(history.toList(HISTORY_SIZE_OLDEST)),
+                    sizeDecreasesRate, averagePendingSize, host.getPendingMessageLimit());
+        }
+
+        @Override
+        public void logError(Throwable ex) {
+            system.getLogger().log(true, debugLogColor, ex, "ConnectionHost: wait error");
+        }
+
+        @Override
+        public void logAfter(long waitMs, long mboxSize) {
+            long afterSize = host.size();
+            log( "after wait %,d ms: pendingSize %,7d -> %,7d (%+,d)",
+                    waitMs, mboxSize, afterSize, (afterSize - mboxSize));
         }
 
         @Override
@@ -355,22 +695,32 @@ public class ActorSystemKelp extends ActorSystemRemote implements ActorKelpBuild
         }
 
         @Override
-        protected void writeSingleMessage(Message<?> message) {
-            writeObject(message);
+        protected void writeSingleMessage(Message.MessageDataClock<Message<?>> message) {
+            logMsg("%s write %s", this, message);
+            long pre = connection.getRecordSendBytes();
+            try {
+                connection.getChannel().writeAndFlush(new MessageDataTransferred(currentCount(), remoteSystem.getServerAddress(), message)).sync();
+            } catch (Exception ex) {
+                throw new ConnectionSendException(ex, message);
+            }
+            ++count;
+            ++recordSendMessages;
+            long pos = connection.getRecordSendBytes();
+            long len = pos - pre;
+            host.addBytes(len);
         }
 
         @Override
-        protected void writeNonEmpty(List<Object> messageBundle) {
-            writeObject(messageBundle);
-        }
-
-        protected void writeObject(Object msg) {
+        protected void writeNonEmpty(List<? extends Message.MessageDataClock<Message<?>>> messageBundle) {
+            logMsg("%s write %,d messages: %s,...", this, messageBundle.size(), messageBundle.get(0));
             long pre = connection.getRecordSendBytes();
             try {
-                connection.getChannel().writeAndFlush(new TransferredMessage(count, msg)).sync();
+                connection.getChannel().writeAndFlush(new MessageDataTransferred(currentCount(), remoteSystem.getServerAddress(), messageBundle)).sync();
             } catch (Exception ex) {
-                ex.printStackTrace();
+                throw new ConnectionSendException(ex, messageBundle);
             }
+            ++count;
+            recordSendMessages += messageBundle.size();
             long pos = connection.getRecordSendBytes();
             long len = pos - pre;
             host.addBytes(len);
@@ -401,37 +751,40 @@ public class ActorSystemKelp extends ActorSystemRemote implements ActorKelpBuild
     }
 
     public static int HISTORY_SIZE = 100;
+    public static int HISTORY_SIZE_OLDEST = 7;
 
-    public static class ConnectionHostHistory {
+    public static abstract class History<SelfType extends History<SelfType>> {
         public long size;
-        public long transferredBytes;
-        public Duration time = Duration.ofSeconds(1); //use 1 as default
+        public SelfType next;
 
-        public ConnectionHostHistory next;
-
-        public ConnectionHostHistory set(long size, long transferredBytes, Duration time) {
-            this.size = size;
-            this.transferredBytes = transferredBytes;
-            this.time = time;
-            return next;
+        public static <HistoryType extends History<HistoryType>> HistoryType create(int size, Supplier<HistoryType> cons) {
+            HistoryType tail = cons.get();
+            HistoryType top = tail;
+            for (int i = 0; i < size; ++i) {
+                HistoryType n = cons.get();
+                n.next = top;
+            }
+            tail.next = top;
+            return top;
         }
 
-        public List<ConnectionHostHistory> toList() {
-            ConnectionHostHistory h = this.next;
-            List<ConnectionHostHistory> hs = new ArrayList<>(HISTORY_SIZE);
-            hs.add(this);
-            while (h != this) {
+        @SuppressWarnings("unchecked")
+        public List<SelfType> toList(int size) {
+            SelfType h = this.next;
+            List<SelfType> hs = new ArrayList<>(size);
+            hs.add((SelfType) this);
+            while (h != this && hs.size() < size) {
                 hs.add(h);
                 h = h.next;
             }
             return hs;
         }
 
-        public float sizeDecreasesRate(List<ConnectionHostHistory> hs) {
-            ConnectionHostHistory pre = null;
+        public float sizeDecreasesRate(List<SelfType> hs) {
+            SelfType pre = null;
             int count = 0;
             int max = 0;
-            for (ConnectionHostHistory h : hs) {
+            for (SelfType h : hs) {
                 if (pre == null) {
                     pre = h;
                 } else {
@@ -442,6 +795,53 @@ public class ActorSystemKelp extends ActorSystemRemote implements ActorKelpBuild
                 }
             }
             return count / (float)max;
+        }
+
+        public long averagePendingSize(List<SelfType> hs) {
+            long s = 0;
+            for (SelfType h : hs) {
+                s += h.size;
+            }
+            return (long) (s / (double) hs.size());
+        }
+
+        public SelfType set(long size) {
+            this.size = size;
+            return next;
+        }
+    }
+
+    public static class KelpHistory extends History<KelpHistory> {
+        public static KelpHistory create(int size) {
+            return create(size, KelpHistory::new);
+        }
+    }
+
+    /**
+     * a looped chain for recent message transfer statistics.
+     * the default size of the chain is {@link #HISTORY_SIZE}.
+     * <ul>
+     *     <li>{@link #size}: the mail box message size of all {@link ConnectionActorKelp}s of a host.
+     *          it means there are the "size" pending messages on the queue</li>
+     *     <li>{@link #transferredBytes}: the total bytes of transferred messages of all {@link ConnectionActorKelp}s of a host</li>
+     *     <li>{@link #time}: time spent for sending the message data</li>
+     * </ul>
+     * The chain is created for each {@link ConnectionActorKelp} but the stats are shared for same host.
+     */
+    public static class ConnectionHostHistory extends History<ConnectionHostHistory> {
+        public long transferredBytes;
+        public Duration time = Duration.ofSeconds(1); //use 1 as default
+
+        public ConnectionHostHistory next;
+
+        public static ConnectionHostHistory create(int size) {
+            return create(size, ConnectionHostHistory::new);
+        }
+
+        public ConnectionHostHistory set(long size, long transferredBytes, Duration time) {
+            this.transferredBytes = transferredBytes;
+            this.time = time;
+            return set(size);
         }
 
         public double bytesPerSec(List<ConnectionHostHistory> hs) {
@@ -460,12 +860,5 @@ public class ActorSystemKelp extends ActorSystemRemote implements ActorKelpBuild
             return n + nn;
         }
 
-        public long averagePendingSize(List<ConnectionHostHistory> hs) {
-            long s = 0;
-            for (ConnectionHostHistory h : hs) {
-                s += h.size;
-            }
-            return (long) (s / (double) hs.size());
-        }
     }
 }

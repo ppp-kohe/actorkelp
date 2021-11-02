@@ -1,6 +1,9 @@
 package csl.actor.remote;
 
-import com.esotericsoftware.kryo.*;
+import com.esotericsoftware.kryo.Kryo;
+import com.esotericsoftware.kryo.KryoSerializable;
+import com.esotericsoftware.kryo.Registration;
+import com.esotericsoftware.kryo.Serializer;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 import com.esotericsoftware.kryo.serializers.ClosureSerializer;
@@ -9,10 +12,12 @@ import com.esotericsoftware.kryo.serializers.JavaSerializer;
 import com.esotericsoftware.kryo.util.DefaultInstantiatorStrategy;
 import com.esotericsoftware.kryo.util.Pool;
 import csl.actor.*;
+import csl.actor.persist.MailboxPersistableReplacement;
+import csl.actor.persist.PersistentFileManager;
 import csl.actor.util.ConfigBase;
 import csl.actor.util.FileSplitter;
 import csl.actor.util.ResponsiveCalls;
-import csl.actor.util.StagingActor;
+import csl.actor.util.Staging;
 import org.objenesis.instantiator.basic.ObjectStreamClassInstantiator;
 import org.objenesis.strategy.StdInstantiatorStrategy;
 
@@ -29,11 +34,13 @@ import java.text.*;
 import java.time.*;
 import java.time.chrono.*;
 import java.util.*;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.*;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
 public class KryoBuilder {
     protected ActorSystem system;
@@ -132,6 +139,10 @@ public class KryoBuilder {
         kryo.setRegistrationRequired(false);
         kryo.setReferences(true);
         kryo.setInstantiatorStrategy(new DefaultInstantiatorStrategy(new StdInstantiatorStrategy()));
+        buildKryoInitFields(kryo);
+    }
+
+    protected void buildKryoInitFields(Kryo kryo) {
         /*
         var conf = new FieldSerializer.FieldSerializerConfig();
         conf.setFieldsAsAccessible(false);
@@ -143,6 +154,7 @@ public class KryoBuilder {
 
     protected void buildRegisterBasic(Kryo kryo) {
         KyroBaseSerializer.register(kryo);
+        MessageSerializer.register(kryo);
         register(kryo, getDefaultSerializerClasses());
         register(kryo, getBaseClasses());
     }
@@ -155,7 +167,6 @@ public class KryoBuilder {
     }
 
     @SuppressWarnings("unchecked")
-    @Deprecated
     protected void buildRegisterBasicAdditional(Kryo kryo) {
         registerObjectStream(kryo, EnumMap.class);
         registerObjectStream(kryo, SimpleTimeZone.class);
@@ -169,6 +180,7 @@ public class KryoBuilder {
 
     protected void buildRegisterActor(Kryo kryo) {
         buildRegisterActorRef(kryo);
+        buildRegisterPersistentFileManager(kryo);
         register(kryo, getActorClasses());
     }
 
@@ -176,6 +188,11 @@ public class KryoBuilder {
         kryo.addDefaultSerializer(ActorRef.class, new ActorRefRemoteSerializer<>(system)); //for sub-types
          // subsequent kryo.register(t) obtains the default serializer. So the sub-types of ActorRef will use the serializer
         kryo.addDefaultSerializer(ActorAddress.class, new ActorAddressSerializer());
+    }
+
+    protected void buildRegisterPersistentFileManager(Kryo kryo) {
+        kryo.addDefaultSerializer(PersistentFileManager.class,
+                new PersistentFileManager.PersistentFileManagerSerializer(system));
     }
 
     public void register(Kryo kryo, List<Class<?>> types) {
@@ -194,11 +211,16 @@ public class KryoBuilder {
         try {
             cls.getConstructor();
         } catch (Exception ex) {
-            throw new RuntimeException(ex);
+            registerObjectStreamError(kryo, cls, r, ex);
             //java17
             //r.setInstantiator(new ObjectStreamClassInstantiator<>(cls));
             //r.setSerializer(new JavaSerializer());
         }
+    }
+
+    protected void registerObjectStreamError(Kryo kryo, Class<? extends Serializable> cls,
+                                             Registration r, Exception ex) {
+        throw new RuntimeException(ex);
     }
 
 
@@ -253,7 +275,7 @@ public class KryoBuilder {
                 Locale.class,
                 Charset.class,
                 URL.class,
-                Arrays.asList().getClass(),
+
                 void.class,
                 PriorityQueue.class,
                 BitSet.class,
@@ -266,7 +288,7 @@ public class KryoBuilder {
                 ZonedDateTime.class, ZoneId.class, ZoneOffset.class, DayOfWeek.class, Month.class);
     }
     public List<Class<?>> getBaseClasses() { //java.base
-        return Arrays.asList(
+        List<Class<?>> bases = Arrays.asList(
                 //java.io
                 File.class,
 
@@ -283,8 +305,6 @@ public class KryoBuilder {
                 Format.class, Format.Field.class, MessageFormat.class, MessageFormat.Field.class,
                 NumberFormat.class, NumberFormat.Field.class, SimpleDateFormat.class,
 
-
-
                 //java.util
                 ArrayList.class, ArrayDeque.class, BitSet.class,
                 EnumMap.class, GregorianCalendar.class, HashMap.class, HashSet.class,  Hashtable.class, IdentityHashMap.class,
@@ -296,6 +316,45 @@ public class KryoBuilder {
                 Optional.class, OptionalInt.class, OptionalDouble.class, OptionalLong.class,
 
                 UUID.class, Locale.class, Calendar.class, Date.class, Currency.class,
+
+                //those classes are covered by some base serializers, and here register types as int
+                Arrays.asList(1, 2, 3, 4).getClass(), //Arrays.ArrayList
+                List.of(1, 2).getClass(), //List12
+                List.of(1, 2, 3).getClass(), //ListN
+                List.of(1, 2, 3, 4, 5).subList(1, 3).getClass(), //ListN
+                Map.of(1, "").getClass(), //Map12
+                Map.of(1, "" , 2, "", 3, "").getClass(), //MapN
+                new ArrayList<>(Arrays.asList(1, 2, 3, 4, 5)).subList(2, 3).getClass(), //ArrayList.SubList
+                new LinkedList<>(Arrays.asList(1, 2, 3, 4, 5)).subList(2, 3).getClass(), //AbstractList.SubList
+                Arrays.asList(1, 2, 3, 4, 5).subList(2, 3).getClass(), //AbstractList.RandomAccessSubList
+                AbstractMap.SimpleEntry.class,
+                AbstractMap.SimpleImmutableEntry.class,
+                Collections.asLifoQueue(new ArrayDeque<>()).getClass(), //AsLIFOQueue
+                Collections.checkedCollection(new ArrayList<>(), String.class).getClass(), //CheckedCollection
+                Collections.checkedList(new ArrayList<>(), String.class).getClass(), //CheckedRandomAccessList,
+                Collections.checkedList(new LinkedList<>(), String.class).getClass(), //CheckedList
+                Collections.checkedMap(new HashMap<>(), Integer.class, Integer.class).getClass(), //CheckedMap
+                Collections.checkedNavigableMap(new TreeMap<>(), Integer.class, Integer.class).getClass(), //CheckedNavigableMap
+                Collections.checkedNavigableSet(new TreeSet<>(), Integer.class).getClass(), //CheckedNavigableSet
+                Collections.checkedQueue(new ArrayBlockingQueue<>(1), String.class).getClass(), //CheckedQueue
+                Collections.checkedSet(new HashSet<>(), String.class).getClass(), //CheckedSet
+                Collections.checkedSortedMap(new TreeMap<>(), String.class, String.class).getClass(),//CheckedSortedMap
+                Collections.checkedSortedSet(new TreeSet<>(), String.class).getClass(),//CheckedSortedSet
+                Collections.nCopies(1, "").getClass(), //CopiesList
+                Collections.synchronizedCollection(new ArrayList<>()).getClass(),
+                Collections.synchronizedSet(new HashSet<>()).getClass(),
+                Collections.synchronizedList(new ArrayList<>()).getClass(),
+                Collections.synchronizedNavigableSet(new TreeSet<>()).getClass(),
+                Collections.synchronizedSortedSet(new TreeSet<>()).getClass(),
+                Collections.synchronizedList(new LinkedList<>()).getClass(),
+                Collections.unmodifiableCollection(new ArrayList<>()).getClass(),
+                Collections.unmodifiableList(new ArrayList<>()).getClass(),
+                Collections.unmodifiableList(new LinkedList<>()).getClass(),
+                Collections.unmodifiableSet(new HashSet<>()).getClass(),
+                Collections.unmodifiableNavigableSet(new TreeSet<>()).getClass(),
+                Collections.unmodifiableSortedSet(new TreeSet<>()).getClass(),
+                Collections.newSetFromMap(new HashMap<>()).getClass(),
+                Map.entry(1, 2).getClass(), //KeyValueHolder
 
                 //java.util.concurrent
                 TimeUnit.class,
@@ -310,22 +369,58 @@ public class KryoBuilder {
 
                 //java.util.regex,
                 Pattern.class);
+        bases = new ArrayList<>(bases);
+
+        Properties p = new Properties();
+        p.put("a", "a");
+        Stream.<Map<?,?>>of(
+                Collections.synchronizedNavigableMap(new TreeMap<>(Map.of(1,2))),
+                Collections.synchronizedSortedMap(new TreeMap<>(Map.of(1,2))),
+                Collections.unmodifiableMap(new HashMap<>(Map.of(1,2))),
+                Collections.synchronizedMap(new HashMap<>(Map.of(1,2))),
+                Collections.unmodifiableNavigableMap(new TreeMap<>(Map.of(1,2))),
+                Collections.unmodifiableSortedMap(new TreeMap<>(Map.of(1,2))),
+                new HashMap<>(Map.of(1,2)),
+                new LinkedHashMap<>(Map.of(1,2)),
+                new IdentityHashMap<>(Map.of(1,2)),
+                new EnumMap<>(Map.of(Sample.X, "")),
+                new HashMap<>(Map.of(1,2)),
+                new Hashtable<>(Map.of(1,2)),
+                new WeakHashMap<>(Map.of(1, 2)),
+                p)
+                        .map(KryoBuilder::getMapClasses)
+                        .forEach(bases::addAll);
+        //TODO TreeMap members
+        return bases;
     }
+
+    public static List<Class<?>> getMapClasses(Map<?,?> e) {
+        return Arrays.asList(e.getClass(), e.keySet().getClass(), e.entrySet().getClass(), e.entrySet().iterator().next().getClass());
+    }
+
+    public enum Sample { X, Y }
 
     public List<Class<?>> getActorClasses() {
         return Arrays.asList(
                 ActorRef.class,
                 Message.class,
-                ActorAddress.ActorAddressRemote.class,
-                ActorAddress.ActorAddressRemoteActor.class,
-                ActorSystemDefault.DeadLetter.class,
+                Message.MessageDataClock.class,
+                Message.MessageDataPacket.class,
+                Message.MessageNone.class,
+                MessageBundle.class,
+                MessageBundle.MessageAccepted.class,
+
                 CallableMessage.class,
+                CallableMessage.CallablePacket.class,
                 CallableMessage.CallableFailure.class,
                 CallableMessage.CallableResponse.class,
                 CallableMessage.CallableResponseVoid.class,
-                Message.MessageNone.class,
+
+                ActorAddress.ActorAddressRemote.class,
+                ActorAddress.ActorAddressRemoteActor.class,
+                ActorSystemDefault.DeadLetter.class,
                 ActorSystemRemote.ConnectionCloseNotice.class,
-                ActorSystemRemote.TransferredMessage.class,
+                ActorSystemRemote.MessageDataTransferred.class,
 
                 ActorRefRemote.class, //those classes are not serialized, but may appear as class-info by writeClassAndObject
                 Actor.class,
@@ -339,14 +434,12 @@ public class KryoBuilder {
                 ConfigBase.class,
                 FileSplitter.FileSplit.class,
                 ResponsiveCalls.DeadLetterException.class,
-                StagingActor.CallConsumerI.class,
-                StagingActor.CompletionHandlerForActor.class,
-                StagingActor.CompletionHandlerTask.class,
-                StagingActor.StagingCompleted.class,
-                StagingActor.StagingHandlerCompleted.class,
-                StagingActor.StagingNotification.class,
-                StagingActor.StagingTask.class,
-                StagingActor.StagingWatcher.class);
+                Staging.ActorRefCombined.class,
+
+                //persist
+                MailboxPersistableReplacement.MessageOnStorage.class,
+                PersistentFileManager.PersistentFileEnd.class,
+                PersistentFileManager.PersistentFileReaderSource.class);
     }
 
     public interface SerializerFunction {
@@ -361,6 +454,14 @@ public class KryoBuilder {
 
         public SerializerPool(Pool<Kryo> pool) {
             this.pool = pool;
+        }
+
+        public Pool<Kryo> getPool() {
+            return pool;
+        }
+
+        public SerializerPoolCached cached() {
+            return new SerializerPoolCached(pool);
         }
 
         public Object copy(Object src) {
@@ -443,4 +544,49 @@ public class KryoBuilder {
         Kryo createSerializer();
         SerializerFunction getSerializer();
     }
+
+    public static class SerializerPoolCached implements SerializerFunction, AutoCloseable {
+        protected Pool<Kryo> pool;
+        protected Kryo kryo;
+
+        public SerializerPoolCached(Pool<Kryo> pool) {
+            this.pool = pool;
+            this.kryo = pool.obtain();
+        }
+
+        public SerializerPoolCached(Kryo kryo) {
+            this.kryo = kryo;
+        }
+
+        @Override
+        public Object read(Input input) {
+            try {
+                return kryo.readClassAndObject(input);
+            } catch (Exception ex) {
+                throw new RuntimeException(ex);
+            }
+        }
+
+        @Override
+        public void write(Output out, Object o) {
+            try {
+                kryo.writeClassAndObject(out, o);
+            } catch (Exception ex) {
+                throw new RuntimeException(ex);
+            }
+        }
+
+        @Override
+        public Object copy(Object src) {
+            return kryo.copy(src);
+        }
+
+        @Override
+        public void close() {
+            if (pool != null) {
+                pool.free(kryo);
+            }
+        }
+    }
+
 }

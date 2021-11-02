@@ -1,8 +1,12 @@
 package csl.example.exp;
 
 import csl.actor.ActorSystemDefault;
+import csl.actor.kelp.behavior.HistogramTreeNodeLeaf;
 import csl.actor.kelp.behavior.KeyHistograms;
-import csl.actor.kelp.behavior.KeyHistogramsPersistable;
+import csl.actor.kelp.persist.HistogramTreeNodeLeafOnStorage;
+import csl.actor.kelp.persist.HistogramTreeNodeTableOnStorage;
+import csl.actor.kelp.persist.HistogramTreePersistable;
+import csl.actor.kelp.persist.KeyHistogramsPersistable;
 import csl.actor.util.PathModifier;
 import csl.actor.persist.PersistentFileManager;
 import csl.actor.kelp.*;
@@ -15,7 +19,7 @@ import java.nio.file.Paths;
 import java.util.stream.Stream;
 
 public class KeyHistogramsPersistableLoadTest {
-    KeyHistogramsPersistable.HistogramTreePersistable tree;
+    HistogramTreePersistable tree;
     public static void main(String[] args) throws Exception {
         new KeyHistogramsPersistableLoadTest().run(args);
     }
@@ -65,7 +69,7 @@ public class KeyHistogramsPersistableLoadTest {
                 long pos = reader.position();
                 long sibling = reader.nextLong();
                 Object obj = reader.next();
-                KeyHistogramsPersistable.HistogramNodeTreeOnStorage h;
+                HistogramTreeNodeTableOnStorage h;
                 if (obj instanceof PersistentFileManager.PersistentFileEnd) {
                     //break;
                     System.err.println("None");
@@ -74,16 +78,16 @@ public class KeyHistogramsPersistableLoadTest {
                     PersistentFileManager.PersistentFileReaderSource nSrc = (PersistentFileManager.PersistentFileReaderSource) obj;
                     obj = reader.next();
                     KeyHistogramsPersistable.NodeTreeData d = (KeyHistogramsPersistable.NodeTreeData) obj;
-                    h = new KeyHistogramsPersistable.HistogramNodeTreeOnStorage(d, nSrc);
+                    h = new HistogramTreeNodeTableOnStorage(d, nSrc);
                 } else {
                     KeyHistogramsPersistable.NodeTreeData d = (KeyHistogramsPersistable.NodeTreeData) obj;
-                    h = new KeyHistogramsPersistable.HistogramNodeTreeOnStorage(d,
+                    h = new HistogramTreeNodeTableOnStorage(d,
                             src.newSource(pos));
                 }
-                tree = new KeyHistogramsPersistable.HistogramTreePersistable(h,
+                tree = new HistogramTreePersistable(h,
                         new ActorKelpFunctions.KeyComparatorDefault<>(), 1000,
                         new KeyHistogramsPersistable.HistogramTreePersistableConfig() {}, pm,
-                        new KeyHistogramsPersistable.PersistentConditionHistogramSizeLimit(1, 1));
+                        new KeyHistogramsPersistable.PersistentConditionHistogramSizeLimit(1, 1, new ActorSystemDefault.SystemLoggerErr()));
                 long c = run(h);
                 System.err.println(String.format(" tested %,d", c));
 //                if (sibling <= 0) {
@@ -95,14 +99,14 @@ public class KeyHistogramsPersistableLoadTest {
         }
     }
 
-    public long run(KeyHistogramsPersistable.HistogramNodeTreeOnStorage tree) {
+    public long run(HistogramTreeNodeTableOnStorage tree) {
         tree.load(null);
         long count = 0;
-        for (KeyHistograms.HistogramNode c : tree.getChildren()) {
-            if (c instanceof KeyHistogramsPersistable.HistogramNodeTreeOnStorage) {
-                count += run((KeyHistogramsPersistable.HistogramNodeTreeOnStorage) c);
-            } else if (c instanceof KeyHistograms.HistogramNodeLeaf) {
-                count += load((KeyHistograms.HistogramNodeLeaf) c);
+        for (KeyHistograms.HistogramTreeNode c : tree.getChildren(null)) {
+            if (c instanceof HistogramTreeNodeTableOnStorage) {
+                count += run((HistogramTreeNodeTableOnStorage) c);
+            } else if (c instanceof HistogramTreeNodeLeaf) {
+                count += load((HistogramTreeNodeLeaf) c);
             }
         }
         if (tree.size() == count) {
@@ -113,9 +117,9 @@ public class KeyHistogramsPersistableLoadTest {
         return count;
     }
 
-    public long load(KeyHistograms.HistogramNodeLeaf l) {
-        KeyHistograms.HistogramNodeLeaf al = l;
-        if (l instanceof KeyHistogramsPersistable.HistogramNodeLeafOnStorage) {
+    public long load(HistogramTreeNodeLeaf l) {
+        HistogramTreeNodeLeaf al = l;
+        if (l instanceof HistogramTreeNodeLeafOnStorage) {
             KeyHistograms.HistogramPutContextMap ctx = new KeyHistograms.HistogramPutContextMap();
             ctx.putTree = tree;
             al = l.load(ctx);
@@ -124,7 +128,7 @@ public class KeyHistogramsPersistableLoadTest {
         long count = 0;
         for (KeyHistograms.HistogramLeafList list : al.getStructList()) {
             while (!list.isEmpty()) {
-                Object o = list.poll(tree);
+                Object o = list.poll(tree, al);
                 if (o != null) {
                     count++;
                 }

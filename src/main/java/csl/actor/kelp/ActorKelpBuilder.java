@@ -1,69 +1,50 @@
 package csl.actor.kelp;
 
-import csl.actor.ActorBehavior;
-import csl.actor.ActorBehaviorBuilder;
 import csl.actor.ActorSystem;
-import csl.actor.Mailbox;
-import csl.actor.kelp.behavior.ActorBehaviorBuilderKelp;
+import csl.actor.kelp.actors.ActorKelpFileReader;
+import csl.actor.kelp.actors.ActorKelpFileWriter;
+import csl.actor.kelp.actors.ActorKelpLambda;
+import csl.actor.kelp.actors.ActorKelpSubProcess;
 
-import java.io.Serializable;
+import java.util.function.Function;
 
 public interface ActorKelpBuilder {
     ActorSystem system();
     ConfigKelp config();
 
-    default ActorKelpLambda actor(ActorBuilder builderFunction) {
-        return new ActorKelpLambda(system(), config(), builderFunction);
+    default ActorKelpInternalFactory internalFactory() {
+        return ActorKelpInternalFactory.DEFAULT_FACTORY;
     }
 
-    default ActorKelpLambda actor(String name, ActorBuilder builderFunction) {
-        return new ActorKelpLambda(system(), name, config(), builderFunction);
+    default ActorKelpLambda actor(ActorKelpLambda.ActorBuilder builderFunction) {
+        return internalFactory().actor(system(), config(), builderFunction);
     }
 
-    interface ActorBuilder extends Serializable {
-        ActorBehaviorBuilder build(ActorKelpLambda self, ActorBehaviorBuilderKelp builder);
+    default ActorKelpLambda actor(String name, ActorKelpLambda.ActorBuilder builderFunction) {
+        return internalFactory().actor(system(), config(), name, builderFunction);
     }
 
-    class ActorKelpLambda extends ActorKelp<ActorKelpLambda> {
-        protected transient ActorBuilder builderFunction;
+    default ActorKelpFileReader actorReader() {
+        return internalFactory().actorReader(system(), config());
+    }
 
-        public ActorKelpLambda(ActorSystem system, String name, Mailbox mailbox, ActorBehavior behavior, ConfigKelp config) {
-            super(system, name, mailbox, behavior, config);
-        }
+    default ActorKelpFileReader actorReader(String name) {
+        return internalFactory().actorReader(system(), config(), name);
+    }
 
-        //for serialization
-        public ActorKelpLambda(ActorSystem system, String name, ConfigKelp config, Object consState) {
-            super(system, name, config, consState);
-        }
+    default ActorKelpFileWriter actorWriter() {
+        return internalFactory().actorWriter(system(), config());
+    }
 
-        @Override
-        protected void initConstructionState(Object constructionState) {
-            this.builderFunction = (ActorBuilder) constructionState;
-        }
+    default ActorKelpFileWriter actorWriter(String name) {
+        return internalFactory().actorWriter(system(), config(), name);
+    }
 
-        @Override
-        public Object getConstructionState() {
-            return builderFunction;
-        }
+    default ActorKelpSubProcess actorSubProcess(Function<ActorKelpSubProcess.ProcessSource, ActorKelpSubProcess.ProcessSource> init) {
+        return internalFactory().actorSubProcess(system(), config(), init);
+    }
 
-        public ActorKelpLambda(ActorSystem system, String name, ConfigKelp config, ActorBuilder builderFunction) {
-            this(system, name, null, null, config);
-            this.builderFunction = builderFunction;
-            this.mailbox = initMailbox();
-            this.behavior = initBehavior();
-        }
-
-        public ActorKelpLambda(ActorSystem system, ConfigKelp config, ActorBuilder builderFunction) {
-            this(system, null, null, null, config);
-            setNameRandom();
-            this.builderFunction = builderFunction;
-            this.mailbox = initMailbox();
-            this.behavior = initBehavior();
-        }
-
-        @Override
-        protected ActorBehaviorBuilder initBehavior(ActorBehaviorBuilderKelp builder) {
-            return builderFunction.build(this, builder);
-        }
+    default ActorKelpSubProcess actorSubProcess(String name, Function<ActorKelpSubProcess.ProcessSource, ActorKelpSubProcess.ProcessSource> init) {
+        return internalFactory().actorSubProcess(system(), config(), name, init);
     }
 }

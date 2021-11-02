@@ -2,14 +2,11 @@ package csl.example.kelp;
 
 import csl.actor.*;
 import csl.actor.kelp.ActorKelp;
-import csl.actor.kelp.behavior.ActorBehaviorKelp;
-import csl.actor.kelp.behavior.HistogramEntry;
-import csl.actor.kelp.behavior.KeyHistograms;
-import csl.actor.kelp.behavior.MailboxKelp;
+import csl.actor.kelp.KelpStageGraphActor;
+import csl.actor.kelp.behavior.*;
 import csl.actor.util.ResponsiveCalls;
 import csl.actor.remote.ActorRefRemote;
 import csl.actor.remote.ActorSystemRemote;
-import csl.actor.util.StagingActor;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -34,7 +31,8 @@ public class TestToolActorToGraph extends ActorDefault {
         TestToolActorToGraph ag = new TestToolActorToGraph(system);
         ag.tell(a);
         try {
-            StagingActor.staging(system).start(ag).get(100, TimeUnit.SECONDS);
+            KelpStageGraphActor.get(system, ag)
+                    .startAwait().get(100, TimeUnit.SECONDS);
             ResponsiveCalls.sendTaskConsumer(ag, self -> self.save(file)).get();
         } catch (Exception ex) {
             throw new RuntimeException(ex);
@@ -47,7 +45,7 @@ public class TestToolActorToGraph extends ActorDefault {
                 .match(GraphGen.class, this::add)
                 .match(File.class, this::save)
                 .match(ActorRef.class, this::receive)
-                .match(KeyHistograms.HistogramTree.class, this::receive)
+                .match(HistogramTree.class, this::receive)
                 .build();
     }
 
@@ -126,7 +124,7 @@ public class TestToolActorToGraph extends ActorDefault {
         }
     }
 
-    public void receive(KeyHistograms.HistogramTree tree) {
+    public void receive(HistogramTree tree) {
         GraphGen g = new GraphGen(this, saveLeafNode);
         GraphNode n = g.createNode("?:" + Instant.now());
         n.tableLabel = new ArrayList<>();
@@ -239,11 +237,13 @@ public class TestToolActorToGraph extends ActorDefault {
             }
         }
 
-        public void createNodeHistTree(GraphNode n, KeyHistograms.HistogramTree tree, int i) {
+        public void createNodeHistTree(GraphNode n, HistogramTree tree, int i) {
             List<List<String>> table = n.tableLabel;
             table.add(Arrays.asList("t" + i + ".leafSize", String.format("%,d", tree.getLeafSize())));
             table.add(Arrays.asList("t" + i + ".leafSizeNZ", String.format("%,d", tree.getLeafSizeNonZero())));
             table.add(Arrays.asList("t" + i + ".leafSizeNZR", String.format("%1.2f", tree.getLeafSizeNonZeroRate())));
+            table.add(Arrays.asList("t" + i + ".nodeSizeOnMem", String.format("%,d", tree.getNodeSizeOnMemory())));
+            table.add(Arrays.asList("t" + i + ".leafSizeOnMem", String.format("%,d", tree.getLeafSizeOnMemory())));
             table.add(Arrays.asList("t" + i + ".completed", idStr(tree.getCompleted()) + " (" + tree.getCompleted().size() + ")"));
 
             GraphEdge e = createNodeHistNode(n, tree.getRoot());
@@ -253,16 +253,16 @@ public class TestToolActorToGraph extends ActorDefault {
         }
 
 
-        public GraphEdge createNodeHistNode(GraphNode from, KeyHistograms.HistogramNode node) {
+        public GraphEdge createNodeHistNode(GraphNode from, KeyHistograms.HistogramTreeNode node) {
             if (node == null) {
                 GraphNode n = createNode("null:" + Instant.now());
                 n.label = "tree null";
                 return createEdge(from, n);
-            } else if (node instanceof KeyHistograms.HistogramNodeTree) {
-                return createNodeHistTree(from, (KeyHistograms.HistogramNodeTree) node);
-            } else if (node instanceof KeyHistograms.HistogramNodeLeaf) {
+            } else if (node instanceof HistogramTreeNodeTable) {
+                return createNodeHistTree(from, (HistogramTreeNodeTable) node);
+            } else if (node instanceof HistogramTreeNodeLeaf) {
                 if (node.height() > 0 || (saveLeafNode)) {
-                    return createNodeHistLeaf(from, (KeyHistograms.HistogramNodeLeaf) node);
+                    return createNodeHistLeaf(from, (HistogramTreeNodeLeaf) node);
                 } else {
                     return null;
                 }
@@ -271,20 +271,20 @@ public class TestToolActorToGraph extends ActorDefault {
             }
         }
 
-        public GraphEdge createNodeHistTree(GraphNode from, KeyHistograms.HistogramNodeTree t) {
+        public GraphEdge createNodeHistTree(GraphNode from, HistogramTreeNodeTable t) {
             List<List<String>> table = new ArrayList<>();
             table.add(Arrays.asList("height=" + t.height(), "start", "end", "size", "sizet"));
 
             String cIdx;
             if (t.getParent() != null) {
-                cIdx = String.format("%,d", t.getParent().getChildren().indexOf(t));
+                cIdx = String.format("%,d", t.getParent().getChildren(null).indexOf(t));
             } else {
                 cIdx = "null";
             }
             table.add(Arrays.asList("cIdx=" + cIdx, Objects.toString(t.keyStart()), Objects.toString(t.keyEnd()), String.format("%,d", t.size()), ""));
             int i = 0;
             long subTotal = 0;
-            for (KeyHistograms.HistogramNode n : t.getChildren()) {
+            for (KeyHistograms.HistogramTreeNode n : t.getChildren(null)) {
                 subTotal += n.size();
                 table.add(Arrays.asList("child" + i, Objects.toString(n.keyStart()), Objects.toString(n.keyEnd()),
                         String.format("%,d", n.size()),
@@ -295,18 +295,18 @@ public class TestToolActorToGraph extends ActorDefault {
             GraphNode n = createNode("histTree:" + Instant.now());
             n.tableLabel = table;
             GraphEdge e = createEdge(from, n);
-            if (t.getChildren() != null) {
-                t.getChildren().forEach(c -> createNodeHistNode(n, c));
+            if (t.getChildren(null) != null) {
+                t.getChildren(null).forEach(c -> createNodeHistNode(n, c));
             }
             return e;
         }
 
-        public GraphEdge createNodeHistLeaf(GraphNode from, KeyHistograms.HistogramNodeLeaf l) {
+        public GraphEdge createNodeHistLeaf(GraphNode from, HistogramTreeNodeLeaf l) {
             List<List<String>> table = new ArrayList<>();
             int vi = 0;
             table.add(Arrays.asList("height", String.format("%,d", l.height())));
             if (l.getParent() != null) {
-                table.add(Arrays.asList("childIdx", String.format("%,d", l.getParent().getChildren().indexOf(l))));
+                table.add(Arrays.asList("childIdx", String.format("%,d", l.getParent().getChildren(null).indexOf(l))));
             } else {
                 table.add(Arrays.asList("childIdx", "null"));
             }

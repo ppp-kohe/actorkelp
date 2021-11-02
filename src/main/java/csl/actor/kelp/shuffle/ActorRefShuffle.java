@@ -8,25 +8,27 @@ import com.esotericsoftware.kryo.io.Output;
 import csl.actor.*;
 import csl.actor.kelp.ActorKelp;
 import csl.actor.kelp.KelpStage;
-import csl.actor.kelp.MessageBundle;
+import csl.actor.MessageBundle;
 import csl.actor.kelp.behavior.KelpDispatcher;
 import csl.actor.util.ResponsiveCalls;
-import csl.actor.util.StagingActor;
+import csl.actor.util.Staging;
 
+import java.io.Flushable;
 import java.io.Serializable;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 public class ActorRefShuffle implements ActorRef, Serializable, Cloneable, KryoSerializable,
-        StagingActor.StagingNonSubject, KelpDispatcher.DispatchRef {
+        KelpDispatcher.DispatchRef {
     public static final long serialVersionUID = 1L;
     protected transient ActorSystem system;
     protected int bufferSize;
     protected List<ShuffleEntry> dispatchUnits;
     protected List<KelpDispatcher.SelectiveDispatcher> selectiveDispatchers;
+    protected String name;
 
     public static List<ShuffleEntry> createDispatchUnits(Iterable<? extends ActorRef> actors, int bufferSize) {
         ArrayList<ShuffleEntry> refs = new ArrayList<>();
@@ -39,9 +41,15 @@ public class ActorRefShuffle implements ActorRef, Serializable, Cloneable, KryoS
         return refs;
     }
 
-    public static void flush(ActorRef ref, ActorRef sender) {
-        if (ref instanceof ActorRefShuffle) {
-            ((ActorRefShuffle) ref).flush(sender);
+    public static void flush(ActorRef ref) {
+        if (ref instanceof Flushable) {
+            try {
+                ((Flushable) ref).flush();
+            } catch (Exception ex) {
+                throw new RuntimeException(ex);
+            }
+        } else if (ref instanceof KelpDispatcher.DispatchUnit) {
+            ((KelpDispatcher.DispatchUnit) ref).flush();
         }
     }
 
@@ -55,6 +63,7 @@ public class ActorRefShuffle implements ActorRef, Serializable, Cloneable, KryoS
         this.bufferSize = bufferSize;
         initExtractorsAndDispatchers(selectiveDispatchers);
         initDispatchUnits(entries);
+        this.name = Staging.stageNameArray(getClass().getSimpleName());
     }
 
     protected void initDispatchUnits(List<ShuffleEntry> entries) {
@@ -65,16 +74,8 @@ public class ActorRefShuffle implements ActorRef, Serializable, Cloneable, KryoS
         this.selectiveDispatchers = extractorsAndDispatchers;
     }
 
-    /**
-     * do {@link #flush()} before returning.
-     *  The method will cause sending remaining messages to member actors,
-     *    before starting StagingWatcher for the member actors
-     * @return {@link #getMemberActors()}
-     */
-    @Override
-    public List<ActorRef> getStagingSubjectActors() {
-        flush();
-        return getMemberActors();
+    public String getName() {
+        return name;
     }
 
     public List<ActorRef> getMemberActors() {
@@ -134,8 +135,8 @@ public class ActorRefShuffle implements ActorRef, Serializable, Cloneable, KryoS
     @Override
     public void tellMessage(Message<?> message) {
         if (message instanceof MessageBundle) {
-            ((MessageBundle<?>) message).getData().forEach(d ->
-                    tell(d, message.getSender()));
+            ((MessageBundle<?>) message).getData()
+                    .forEach(this::tell);
         } else if (KelpStage.isMessageBroadcastedImpl(message)) {
             getMemberActors().forEach(a ->
                     a.tellMessage(message));
@@ -151,16 +152,8 @@ public class ActorRefShuffle implements ActorRef, Serializable, Cloneable, KryoS
     public static KelpDispatcher.DispatcherShuffle DEFAULT_DISPATCHER = new KelpDispatcher.DispatcherShuffle();
 
     public void flush() {
-        this.flush(null);
-    }
-
-    public void flush(ActorRef sender) {
-        dispatchUnits.forEach(e -> e.flush(sender));
-    }
-
-    public CompletableFuture<Void> connectStage(ActorRef next) {
-        return connectStageWithoutInit(
-                connectStageInitialActor(next, Integer.MAX_VALUE));
+        dispatchUnits
+                .forEach(KelpDispatcher.DispatchUnit::flush);
     }
 
     public CompletableFuture<Void> connectStageWithoutInit(ActorRef next) {
@@ -225,12 +218,12 @@ public class ActorRefShuffle implements ActorRef, Serializable, Cloneable, KryoS
 
         @Override
         public void accept(Actor self) {
-            if (self instanceof StagingActor.StagingSupported) {
+            if (self instanceof Staging.StagingSupported) {
                 ActorRef nr = next;
                 if (next instanceof ActorRefShuffle) {
                     nr = ((ActorRefShuffle) next).use();
                 }
-                ((StagingActor.StagingSupported) self).setNextStage(nr);
+                ((Staging.StagingSupported) self).setNextStage(nr);
             }
         }
     }
@@ -252,19 +245,25 @@ public class ActorRefShuffle implements ActorRef, Serializable, Cloneable, KryoS
         return null;
     }
 
+    public int getBufferingCount() {
+        return this.dispatchUnits.stream()
+                .mapToInt(ShuffleEntry::getBufferingCount)
+                .sum();
+    }
+
     public static class ShuffleEntry implements Serializable, KelpDispatcher.DispatchUnit, KryoSerializable {
         public static final long serialVersionUID = 1L;
-        protected int bufferSize;
-        protected int index;
-        protected ActorRef actor;
-        protected transient ArrayList<Object> buffer;
+        public int bufferSize;
+        public int index;
+        public ActorRef actor;
+        public transient Queue<Object> buffer;
 
         public ShuffleEntry() {}
 
         public ShuffleEntry(ActorRef actor, int bufferSize, int index) {
             this.actor = actor;
             this.bufferSize = bufferSize;
-            buffer = new ArrayList<>(bufferSize);
+            buffer = initBuffer();
             this.index = index;
         }
 
@@ -272,7 +271,7 @@ public class ActorRefShuffle implements ActorRef, Serializable, Cloneable, KryoS
             return actor;
         }
 
-        public List<Object> getBuffer() {
+        public Queue<Object> getBuffer() {
             return buffer;
         }
 
@@ -290,38 +289,56 @@ public class ActorRefShuffle implements ActorRef, Serializable, Cloneable, KryoS
         }
 
         @Override
-        public void tell(Object data) {
-            tell(data, null);
+        public List<? extends ActorRef> getStagingSubjectActors() {
+            return Collections.singletonList(actor);
         }
 
         @Override
-        public void tell(Object data, ActorRef sender) {
-            if (bufferSize <= 0) {
-                actor.tellMessage(new MessageAccepted<>(actor, sender, data));
+        public boolean hasRemainingMessage() {
+            Queue<Object> b = buffer;
+            return b != null && !b.isEmpty();
+        }
+        public boolean isSpecialMessage(Object data) {
+            return isSpecialMessageImpl(data);
+        }
+
+        public static boolean isSpecialMessageImpl(Object data) { //currently, specific impl.
+            return (data instanceof Message.MessageDataSpecial) ||
+                    (data instanceof Message.MessageDataDelayed) ||
+                    (data instanceof Message.MessageDataHolder<?> &&
+                            isSpecialMessageImpl(((Message.MessageDataHolder<?>) data).getData()));
+        }
+
+        @Override
+        public void tell(Object data) {
+            if (isSpecialMessage(data)) {
+                flush();
+                actor.tellMessage(new MessageBundle.MessageAccepted<>(actor, data));
             } else {
-                if (buffer == null) {
-                    buffer = new ArrayList<>(bufferSize);
-                }
-                buffer.add(data);
-                if (buffer.size() >= bufferSize) { //suppose the ref is not shared
-                    actor.tellMessage(new MessageBundle<>(actor, sender, buffer));
-                    buffer.clear();
+                if (bufferSize <= 0) {
+                    actor.tellMessage(new MessageBundle.MessageAccepted<>(actor, data));
+                } else {
+                    if (buffer == null) {
+                        buffer = initBuffer();
+                    }
+                    buffer.add(data);
+                    if (buffer.size() >= bufferSize) { //suppose the ref is not shared
+                        actor.tellMessage(new MessageBundle<>(actor, Arrays.asList(buffer.toArray())));
+                        buffer.clear();
+                    }
                 }
             }
         }
 
         @Override
         public void tellMessage(Message<?> message) {
-            tell(message.getData(), message.getSender());
+            tell(message.getData());
         }
 
         @Override
-        public void flush() {}
-
-        @Override
-        public void flush(ActorRef sender) {
+        public void flush() {
             if (buffer != null && !buffer.isEmpty()) {
-                actor.tellMessage(new MessageBundle<>(actor, sender, buffer));
+                actor.tellMessage(new MessageBundle<>(actor, buffer));
                 buffer.clear();
             }
         }
@@ -338,7 +355,15 @@ public class ActorRefShuffle implements ActorRef, Serializable, Cloneable, KryoS
             actor = (ActorRef) kryo.readClassAndObject(input);
             bufferSize = input.readInt();
             index = input.readInt();
-            buffer = new ArrayList<>(bufferSize);
+            buffer = initBuffer();
+        }
+
+        protected Queue<Object> initBuffer() {
+            return bufferSize <= 0 ? null : new ArrayBlockingQueue<>(bufferSize);
+        }
+
+        public int getBufferingCount() {
+            return buffer == null ? 0 : buffer.size();
         }
     }
 

@@ -27,6 +27,7 @@ public class ActorKelpFunctions {
     }
 
     public static class KeyExtractorFunctionIdentity<T> implements KeyExtractorFunction<T,T> {
+        public static final long serialVersionUID = -1;
         @Override
         public T apply(T o) {
             return o;
@@ -118,10 +119,17 @@ public class ActorKelpFunctions {
         @SuppressWarnings("unchecked")
         @Override
         public int compare(KeyType key1, KeyType key2) {
-            if (key1 instanceof Comparable<?>) {
-                return ((Comparable<Object>) key1).compareTo(key2);
+            //always compared by hashCode: String.hashCode() is cached
+            //  vs String.compareTo(String) always do a loop.
+            int n = Integer.compare(Objects.hashCode(key1), Objects.hashCode(key2));
+            if (n == 0) {
+                if (key1 instanceof Comparable<?>) {
+                    return ((Comparable<Object>) key1).compareTo(key2);
+                } else {
+                    return 0;
+                }
             } else {
-                return Integer.compare(Objects.hash(key1), Objects.hash(key2));
+                return n;
             }
         }
 
@@ -335,11 +343,24 @@ public class ActorKelpFunctions {
         }
     }
 
-    public static class KeyValuesReducerList<KeyType, ValueType> implements BiFunction<KeyType, List<ValueType>, Iterable<ValueType>> {
-        protected List<BiFunction<KeyType, List<ValueType>, Iterable<ValueType>>> keyValuesReducers;
+    public interface KeyValuesReducer<KeyType,ValueType> extends BiFunction<KeyType, List<ValueType>, Iterable<ValueType>> {
+        default int requiredSize() {
+            return 2;
+        }
+    }
 
-        public KeyValuesReducerList(List<BiFunction<KeyType, List<ValueType>, Iterable<ValueType>>> keyValuesReducers) {
+    public static class KeyValuesReducerList<KeyType, ValueType> implements KeyValuesReducer<KeyType, ValueType> {
+        protected List<KeyValuesReducer<KeyType,ValueType>> keyValuesReducers;
+
+        public KeyValuesReducerList(List<KeyValuesReducer<KeyType,ValueType>> keyValuesReducers) {
             this.keyValuesReducers = keyValuesReducers;
+        }
+
+        @Override
+        public int requiredSize() {
+            return keyValuesReducers.stream()
+                            .mapToInt(KeyValuesReducer::requiredSize)
+                            .min().orElse(KeyValuesReducer.super.requiredSize());
         }
 
         @Override
@@ -347,7 +368,7 @@ public class ActorKelpFunctions {
             List<ValueType> nextInput = values;
             Iterable<ValueType> lastResult = values;
             boolean first = true;
-            for (BiFunction<KeyType, List<ValueType>, Iterable<ValueType>> f : keyValuesReducers) {
+            for (KeyValuesReducer<KeyType, ValueType> f : keyValuesReducers) {
                 if (first) {
                     first = false;
                 } else {
@@ -362,10 +383,40 @@ public class ActorKelpFunctions {
                 }
                 if (nextInput.isEmpty()) {
                     break;
+                } else if (nextInput.size() >= f.requiredSize()) {
+                    lastResult = f.apply(key, nextInput);
+                } else {
+                    lastResult = nextInput; //skip the reducer
                 }
-                lastResult = f.apply(key, nextInput);
             }
             return lastResult;
+        }
+    }
+
+    public static class KeyValuesReducerNone<KeyType,ValueType> implements KeyValuesReducer<KeyType,ValueType> {
+        @Override
+        public Iterable<ValueType> apply(KeyType keyType, List<ValueType> valueTypes) {
+            return valueTypes;
+        }
+    }
+
+    public static class KeyValuesReducerWithRequiredSize<KeyType,ValueType> implements KeyValuesReducer<KeyType,ValueType> {
+        protected int requiredSize;
+        protected KeyValuesReducer<KeyType,ValueType> body;
+
+        public KeyValuesReducerWithRequiredSize(int requiredSize, KeyValuesReducer<KeyType, ValueType> body) {
+            this.requiredSize = requiredSize;
+            this.body = body;
+        }
+
+        @Override
+        public Iterable<ValueType> apply(KeyType keyType, List<ValueType> valueTypes) {
+            return body.apply(keyType, valueTypes);
+        }
+
+        @Override
+        public int requiredSize() {
+            return requiredSize;
         }
     }
 }

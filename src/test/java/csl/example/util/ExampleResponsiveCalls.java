@@ -14,7 +14,7 @@ public class ExampleResponsiveCalls {
         try (ActorSystemDefault sys = new ActorSystemDefault()) {
             new ResActor(sys, "res");
 
-            //send to named-actor
+            //send to named-actor: non-MessageDataCallable will be MessageDataPacket
             String data = ResponsiveCalls.<String>send(sys, ActorRefLocalNamed.get(sys, "res"), "hello")
                     .get();
             System.out.println(Instant.now() + ": response: " + data);
@@ -56,7 +56,8 @@ public class ExampleResponsiveCalls {
 
         public void receive(String msg, ActorRef sender) {
             System.out.println(Instant.now() + ": receive: " + msg + " from " + sender);
-            sender.tell("res:" + msg, this);
+
+            sender.tell("res:" + msg); //return to the sender
         }
     }
 }

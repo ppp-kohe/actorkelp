@@ -10,8 +10,8 @@ public class ExampleActor {
         for (int i = 0; i < 100; ++i) {
             last = new MyActor(sys, last);
         }
-        root.tell(last, root);
-        root.tell(0, root);
+        root.tell(last);
+        root.tell(0);
     }
 
     public static class MyActor extends ActorDefault {
@@ -48,7 +48,7 @@ public class ExampleActor {
             if (ref != null) {
                 int v = n + 1;
                 System.err.println(" -> " + v + " -> " + ref);
-                ref.tell(v, this);
+                ref.tell(v);
             }
         }
     }

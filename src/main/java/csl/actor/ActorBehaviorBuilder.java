@@ -14,11 +14,14 @@ public class ActorBehaviorBuilder {
     }
 
     public static class MatchFactory {
-        public <DataType> ActorBehavior get(Class<DataType> dataType, BiConsumer<DataType, ActorRef> handler) {
+        public <DataType> ActorBehavior get(Class<DataType> dataType, Consumer<DataType> handler) {
             return new ActorBehaviorMatch<>(dataType, handler);
         }
+        public <DataType> ActorBehavior getWithSender(Class<DataType> dataType, BiConsumer<DataType, ActorRef> handler) {
+            return new ActorBehaviorMatchWithSender<>(dataType, handler);
+        }
 
-        public ActorBehavior getAny(BiConsumer<Object,ActorRef> handler) {
+        public ActorBehavior getAny(Consumer<Object> handler) {
             return new ActorBehaviorAny(handler);
         }
 
@@ -26,20 +29,24 @@ public class ActorBehaviorBuilder {
             return new ActorBehaviorOr(l, r);
         }
 
-        public <ActorType extends Actor,DataType extends CallableMessage<ActorType,?>> ActorBehavior getCallable(Class<DataType> type) {
+        public <ActorType extends Actor,DataType extends CallableMessage.CallablePacket<ActorType,?>> ActorBehavior getCallable(Class<DataType> type) {
             return new ActorBehaviorCallable<>(type);
+        }
+
+        public ActorBehavior getBundle() {
+            return new ActorBehaviorBundle();
         }
     }
 
     public <DataType> ActorBehaviorBuilder match(Class<DataType> dataType, Consumer<DataType> handler) {
-        return matchWithSender(dataType, (data, sender) -> handler.accept(data));
-    }
-
-    public <DataType> ActorBehaviorBuilder matchWithSender(Class<DataType> dataType, BiConsumer<DataType, ActorRef> handler) {
         return with(matchFactory.get(dataType, handler));
     }
 
-    public ActorBehaviorBuilder matchAny(BiConsumer<Object,ActorRef> handler) {
+    public <DataType> ActorBehaviorBuilder matchWithSender(Class<DataType> dataType, BiConsumer<DataType, ActorRef> handler) {
+        return with(matchFactory.getWithSender(dataType, handler));
+    }
+
+    public ActorBehaviorBuilder matchAny(Consumer<Object> handler) {
         return with(matchFactory.getAny(handler));
     }
 
@@ -53,11 +60,12 @@ public class ActorBehaviorBuilder {
     }
 
     /**
-     * @return the behavior with appending {@link ActorBehaviorCallable} for {@link CallableMessage}
+     * @return the behavior with appending {@link ActorBehaviorCallable}for {@link CallableMessage}
      */
     @SuppressWarnings("unchecked")
     public ActorBehavior build() {
-        return with(matchFactory.getCallable(CallableMessage.class))
+        return with(matchFactory.getCallable(CallableMessage.CallablePacket.class))
+                .with(matchFactory.getBundle())
                 .buildWithoutDefault();
     }
 
@@ -105,9 +113,9 @@ public class ActorBehaviorBuilder {
 
     public static class ActorBehaviorMatch<DataType> implements ActorBehavior {
         protected Class<DataType> dataType;
-        protected BiConsumer<DataType,ActorRef> handler;
+        protected Consumer<DataType> handler;
 
-        public ActorBehaviorMatch(Class<DataType> dataType, BiConsumer<DataType,ActorRef> handler) {
+        public ActorBehaviorMatch(Class<DataType> dataType, Consumer<DataType> handler) {
             this.dataType = dataType;
             this.handler = handler;
         }
@@ -116,7 +124,40 @@ public class ActorBehaviorBuilder {
         public boolean process(Actor self, Message<?> message) {
             Object d = message.getData();
             if (dataType.isInstance(d)) {
-                handler.accept(dataType.cast(d), message.getSender());
+                handler.accept(dataType.cast(d));
+                return true;
+            } else {
+                return false;
+            }
+        }
+
+        /** @return implementation field getter */
+        public Class<DataType> getDataType() {
+            return dataType;
+        }
+
+        /** @return implementation field getter */
+        public Consumer<DataType> getHandler() {
+            return handler;
+        }
+    }
+
+    public static class ActorBehaviorMatchWithSender<DataType> implements ActorBehavior {
+        protected Class<DataType> dataType;
+        protected BiConsumer<DataType, ActorRef> handler;
+
+        public ActorBehaviorMatchWithSender(Class<DataType> dataType, BiConsumer<DataType, ActorRef> handler) {
+            this.dataType = dataType;
+            this.handler = handler;
+        }
+
+        @Override
+        public boolean process(Actor self, Message<?> message) {
+            Object d = message.getData();
+            Object data;
+            if (d instanceof Message.MessageDataPacket &&
+                    dataType.isInstance(data = ((Message.MessageDataPacket<?>) d).getData())) {
+                handler.accept(dataType.cast(data), ((Message.MessageDataPacket<?>) d).getSender());
                 return true;
             } else {
                 return false;
@@ -132,23 +173,25 @@ public class ActorBehaviorBuilder {
         public BiConsumer<DataType, ActorRef> getHandler() {
             return handler;
         }
+
     }
 
-    public static class ActorBehaviorAny implements ActorBehavior {
-        protected BiConsumer<Object,ActorRef> handler;
 
-        public ActorBehaviorAny(BiConsumer<Object, ActorRef> handler) {
+    public static class ActorBehaviorAny implements ActorBehavior {
+        protected Consumer<Object> handler;
+
+        public ActorBehaviorAny(Consumer<Object> handler) {
             this.handler = handler;
         }
 
         @Override
         public boolean process(Actor self, Message<?> message) {
-            handler.accept(message.getData(), message.getSender());
+            handler.accept(message.getData());
             return true;
         }
 
         /** @return implementation field getter */
-        public BiConsumer<Object, ActorRef> getHandler() {
+        public Consumer<Object> getHandler() {
             return handler;
         }
     }
@@ -156,19 +199,19 @@ public class ActorBehaviorBuilder {
     //////
 
     /**
-     * checks the message type and calls the {@link CallableMessage#call(Actor, ActorRef)}
+     * checks the message type of {@link CallableMessage.CallablePacket} and calls the {@link CallableMessage#call(Actor)}
      * <ul>
      *     <li>regular returning of the call becomes a {@link csl.actor.CallableMessage.CallableResponse}</li>
      *     <li>if the call caused an exception,  it becomes {@link CallableMessage.CallableFailure} </li>
-     *     <li>the response will be sent back to the sender (if non-null)</li>
+     *     <li>the response will be sent back to the sender of {@link CallableMessage.CallablePacket} (if non-null)</li>
      * </ul>
-     * Also the handler processes responses of {@link csl.actor.CallableMessage.CallableResponseVoid} and
-     *    {@link csl.actor.CallableMessage.CallableResponse}({@link csl.actor.CallableMessage.CallableResponseVoid}):
+     * Also the handler processes responses of {@link CallableMessage.CallableResponseVoid} and
+     *    {@link CallableMessage.CallableResponse}({@link CallableMessage.CallableResponseVoid}):
      *     for ignoring void responses
      * @param <ActorType> the target actor type
      * @param <DataType> the {@link CallableMessage}
      */
-    public static class ActorBehaviorCallable<ActorType extends Actor,DataType extends CallableMessage<ActorType,?>> implements ActorBehavior {
+    public static class ActorBehaviorCallable<ActorType extends Actor,DataType extends CallableMessage.CallablePacket<ActorType,?>> implements ActorBehavior {
         protected Class<DataType> dataType;
 
         public ActorBehaviorCallable(Class<DataType> dataType) {
@@ -181,14 +224,16 @@ public class ActorBehaviorBuilder {
             Object d = message.getData();
             if (dataType.isInstance(d)) {
                 Object res;
-                ActorRef sender = message.getSender();
+                ActorRef sender = null;
                 try {
-                    res = new CallableMessage.CallableResponse<>(dataType.cast(d).call((ActorType) self, sender));
+                    CallableMessage.CallablePacket<ActorType,?> pack = dataType.cast(d);
+                    sender = pack.sender;
+                    res = new CallableMessage.CallableResponse<>(pack.getData().call((ActorType) self));
                 } catch (Throwable ex) {
                     res = new CallableMessage.CallableFailure(ex);
                 }
                 if (sender != null) { //send res even if null
-                    sender.tell(res, self);
+                    sender.tell(res);
                 }
                 return true;
             } else if (d instanceof CallableMessage.CallableResponseVoid ||
@@ -200,6 +245,16 @@ public class ActorBehaviorBuilder {
             return false;
         }
     }
-
-
+    public static class ActorBehaviorBundle implements ActorBehavior {
+        @SuppressWarnings("unchecked")
+        @Override
+        public boolean process(Actor self, Message<?> message) {
+            if (message instanceof MessageBundle<?>) {
+                MessageBundle.processMessageBundle(self, (MessageBundle<Object>) message);
+                return true;
+            } else {
+                return false;
+            }
+        }
+    }
 }

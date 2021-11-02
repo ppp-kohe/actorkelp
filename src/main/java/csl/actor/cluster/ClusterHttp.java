@@ -4,12 +4,10 @@ import csl.actor.ActorRef;
 import csl.actor.ActorRefLocalNamed;
 import csl.actor.ActorSystem;
 import csl.actor.ActorSystemDefault;
-import csl.actor.kelp.ConfigKelp;
 import csl.actor.remote.ActorAddress;
 import csl.actor.remote.ActorRefRemote;
 import csl.actor.remote.ActorRefRemoteSerializer;
 import csl.actor.remote.ObjectMessageServer;
-import csl.actor.util.ConfigBase;
 import csl.actor.util.ToJson;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
@@ -63,6 +61,10 @@ public class ClusterHttp implements Closeable {
                 .filter(Objects::nonNull)
                 .forEach(m -> methods.computeIfAbsent(m.getName(), n -> new ArrayList<>())
                         .add(m));
+        if (!methods.containsKey("")) {
+            methods.computeIfAbsent("", n -> new ArrayList<>())
+                    .add(new HttpMethodList(this));
+        }
     }
 
 
@@ -175,12 +177,18 @@ public class ClusterHttp implements Closeable {
         }
 
         public FullHttpResponse res(HttpVersion ver, List<String> path, Map<String,String> query) {
-            Pattern pat = Pattern.compile("a\\d+");
-            int size = (int) query.keySet().stream()
-                    .filter(s -> pat.matcher(s).matches())
-                    .count();
-            HttpMethod m;
-            if (path.size() == 1 && (m = owner.getMethod(path.get(0), size)) != null) {
+//            Pattern pat = Pattern.compile("a\\d+");
+//            int size = (int) query.keySet().stream()
+//                    .filter(s -> pat.matcher(s).matches())
+//                    .count();
+            int size = query.size();
+            HttpMethod m = null;
+            if (path.size() == 1) {
+                m = owner.getMethod(path.get(0), size);
+            } else if (path.isEmpty()) {
+                m = owner.getMethod("", size);
+            }
+            if (m != null) {
                 try {
                     Object json = m.invoke(owner.getDeployment(), query);
                     return new DefaultFullHttpResponse(ver, HttpResponseStatus.OK, encode(json));
@@ -224,11 +232,13 @@ public class ClusterHttp implements Closeable {
 
     protected HttpMethod initMethod(Method m) {
         if (!Modifier.isStatic(m.getModifiers())) {
+            Type[] argTypes = m.getGenericParameterTypes();
             return new HttpMethod(m.getAnnotation(ClusterDeployment.PropertyInterface.class).value(),
                     m,
                     jsonConverter(m.getGenericReturnType()),
-                    Arrays.stream(m.getGenericParameterTypes())
-                        .map(this::argumentParser)
+                    IntStream.range(0, argTypes.length)
+                        .mapToObj(i -> initArgument(i, argTypes[i],
+                                m.getParameters()[i].getAnnotation(ClusterDeployment.PropertyInterfaceArgument.class)))
                         .collect(Collectors.toList()));
         }
         return null;
@@ -382,12 +392,22 @@ public class ClusterHttp implements Closeable {
         }
     }
 
-    public Function<String, Object> argumentParser(Type type) {
+    public HttpMethodArgument initArgument(int i, Type type, ClusterDeployment.PropertyInterfaceArgument info) {
+        String name;
+        if (info != null) {
+            name = info.name();
+        } else {
+            name = "a" + i;
+        }
+        return argumentParser(name, type, info);
+    }
+
+    public HttpMethodArgument argumentParser(String name, Type type, ClusterDeployment.PropertyInterfaceArgument info) {
         Class<?> raw = getRawType(type);
         if (type.equals(String.class)) {
-            return s -> s;
+            return new HttpMethodArgument(name, raw, argumentHelp("<String>", info), s -> s);
         } else if (raw != null && ActorAddress.class.isAssignableFrom(raw)) {
-            return s -> {
+            return new HttpMethodArgument(name, raw, argumentHelp("<host>:<port>[/<actorName>]", info), s -> {
                 int n = s.indexOf("/");
                 if (n < 0) {
                     return ActorAddress.get(s);
@@ -396,43 +416,54 @@ public class ClusterHttp implements Closeable {
                     String actor = s.substring(n + 1);
                     return ActorAddress.get(hostAndPort).getActor(actor);
                 }
-            };
+            });
         } else if (type.equals(ActorRef.class)) {
-            Function<String,Object> addr = argumentParser(ActorAddress.class);
-            return s -> {
+            HttpMethodArgument addr = argumentParser(name, ActorAddress.class, info);
+            return new HttpMethodArgument(name, raw, addr.getHelp(), s -> {
                 int n = s.indexOf('/');
                 if (n < 0) {
                     return ActorRefLocalNamed.get(deployment.getSystem(), s);
                 } else {
-                    return ActorRefRemote.get(deployment.getSystem(), (ActorAddress) addr.apply(s));
+                    return ActorRefRemote.get(deployment.getSystem(), (ActorAddress) addr.get(s));
                 }
-            };
+            });
         } else if (type.equals(int.class)) {
-            return Integer::parseInt;
+            return new HttpMethodArgument(name, type, argumentHelp("<int>", info), Integer::parseInt);
         } else if (type.equals(long.class)) {
-            return Long::parseLong;
+            return new HttpMethodArgument(name, type, argumentHelp("<long>", info), Long::parseLong);
         } else if (type.equals(boolean.class)) {
-            return Boolean::parseBoolean;
+            return new HttpMethodArgument(name, type, argumentHelp("<true|false>", info), Boolean::parseBoolean);
         } else if (type.equals(float.class)) {
-            return Float::parseFloat;
+            return new HttpMethodArgument(name, type, argumentHelp("<float>", info), Float::parseFloat);
         } else if (type.equals(double.class)) {
-            return Double::parseDouble;
+            return new HttpMethodArgument(name, type, argumentHelp("<double>", info), Double::parseDouble);
         } else {
             throw new RuntimeException("invalid: " + type);
         }
     }
+    private String argumentHelp(String str, ClusterDeployment.PropertyInterfaceArgument info) {
+        return str + (info == null || info.help().isEmpty() ? "" : (" " + info.help()));
+    }
 
     public static class HttpMethod {
         protected String name;
+        protected String help;
         protected Method method;
         protected Function<Object,Object> returnConverter;
-        protected List<Function<String,Object>> argumentParsers;
+        protected List<HttpMethodArgument> argumentParsers;
 
-        public HttpMethod(String name, Method method, Function<Object, Object> returnConverter, List<Function<String, Object>> argumentParsers) {
+        public HttpMethod(String name, Method method, Function<Object, Object> returnConverter, List<HttpMethodArgument> argumentParsers) {
             this.name = name;
             this.method = method;
             this.returnConverter = returnConverter;
             this.argumentParsers = argumentParsers;
+            help = "";
+            if (method != null) {
+                ClusterDeployment.PropertyInterface pi = method.getAnnotation(ClusterDeployment.PropertyInterface.class);
+                if (pi != null) {
+                    help = pi.help();
+                }
+            }
         }
 
         public String getName() {
@@ -453,10 +484,113 @@ public class ClusterHttp implements Closeable {
 
         public Object invoke(Object target,
                              Map<String,String> params) throws Exception {
-            return returnConverter.apply(method.invoke(target, IntStream.range(0, argumentParsers.size())
-                    .mapToObj(i -> argumentParsers.get(i)
-                            .apply(params.get("a" + i)))
+            return returnConverter.apply(method.invoke(target, argumentParsers.stream()
+                    .map(a -> a.getFromParams(params))
                     .toArray()));
+        }
+
+        public Map<String, Object> toInfoJson() {
+            Map<String, Object> res = new LinkedHashMap<>();
+            res.put("name", getName());
+            res.put("argSize", getArgumentSize());
+            res.put("method", Objects.toString(method));
+            res.put("helpInterface",
+                    getName() + "?" +
+                            argumentParsers.stream()
+                                    .map(a -> a.getName() + "=" + a.getTypeName())
+                                    .collect(Collectors.joining("&")));
+            res.put("helpMessage", help);
+            res.put("helpArguments",
+                    argumentParsers.stream()
+                            .map(HttpMethodArgument::getHelp)
+                            .collect(Collectors.toList()));
+            return res;
+        }
+    }
+
+    public static class HttpMethodArgument {
+        protected String name;
+        protected Type type;
+        protected String help;
+        protected Function<String, Object> parser;
+
+        public HttpMethodArgument(String name, Type type, String help, Function<String, Object> parser) {
+            this.name = name;
+            this.type = type;
+            this.help = help;
+            this.parser = parser;
+        }
+
+        public Object getFromParams(Map<String, String> params) {
+            return get(params.get(name));
+        }
+
+        public Object get(String param) {
+            return parser.apply(param);
+        }
+
+        public String getName() {
+            return name;
+        }
+
+        public Type getType() {
+            return type;
+        }
+
+        public String getHelp() {
+            return help;
+        }
+
+        public Function<String, Object> getParser() {
+            return parser;
+        }
+
+        public String getTypeName() {
+            if (type instanceof Class<?> && ActorAddress.class.isAssignableFrom((Class<?>) type)) {
+                return "actorAddr";
+            } else if (type.equals(ActorRef.class)) {
+                return "actor";
+            } else if (type instanceof Class<?>) {
+                return ((Class<?>) type).getSimpleName();
+            } else {
+                return type.getTypeName();
+            }
+        }
+
+        @Override
+        public String toString() {
+            return getClass().getSimpleName() + "{" +
+                    "name='" + name + '\'' +
+                    ", type=" + type +
+                    ", help='" + help + '\'' +
+                    ", parser=" + parser +
+                    '}';
+        }
+    }
+
+    public static class HttpMethodList extends HttpMethod {
+        protected ClusterHttp http;
+        public HttpMethodList(ClusterHttp http) {
+            super("", null, null, Collections.emptyList());
+            this.http = http;
+        }
+
+        @Override
+        public Map<String, Object> toInfoJson() {
+            Map<String, Object> res = new LinkedHashMap<>();
+            res.put("name", getName());
+            res.put("argSize", getArgumentSize());
+            res.put("call", getName());
+            return res;
+        }
+
+        @Override
+        public Object invoke(Object target, Map<String, String> params) throws Exception {
+            return http.methods.keySet().stream()
+                    .sorted()
+                    .flatMap(k -> http.methods.get(k).stream())
+                    .map(HttpMethod::toInfoJson)
+                    .collect(Collectors.toList());
         }
     }
 

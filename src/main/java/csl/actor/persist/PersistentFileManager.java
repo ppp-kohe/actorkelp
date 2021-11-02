@@ -10,10 +10,7 @@ import csl.actor.remote.ActorSystemRemote;
 import csl.actor.remote.KryoBuilder;
 import csl.actor.util.PathModifier;
 
-import java.io.FileInputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.Serializable;
+import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -210,7 +207,18 @@ public class PersistentFileManager {
         public static final long serialVersionUID = 1L;
     }
 
-    public static class PersistentFileWriter implements AutoCloseable {
+    public interface PersistentWriter extends Closeable {
+        PersistentFileReaderSource createReaderSourceFromCurrentPosition();
+        long position();
+        void writeByte(byte b) throws IOException;
+        void writeLong(long l) throws IOException;
+        void writeVarLong(long n, boolean optimizePositive) throws IOException;
+        void writeVarInt(int n, boolean optimizePositive) throws IOException;
+        void writeInt(int i) throws IOException;
+        void write(Object v) throws IOException;
+    }
+
+    public static class PersistentFileWriter implements PersistentWriter {
         protected String pathExpanded;
         protected Path filePath;
         protected PersistentFileManager manager;
@@ -223,14 +231,40 @@ public class PersistentFileManager {
             Path p = manager.getPathForExpandedPath(pathExpanded, true);
             manager.openForWrite(p);
             this.filePath = p;
-            output = new Output(Files.newOutputStream(p));
+            output = new Output(Files.newOutputStream(p), 50_000);
             serializer = manager.getSerializer();
+            if (serializer instanceof KryoBuilder.SerializerPool) {
+                serializer = ((KryoBuilder.SerializerPool) serializer).cached();
+            }
         }
-
+        @Override
         public long position() {
             return output.total();
         }
+        @Override
+        public void writeByte(byte b) {
+            output.writeByte(b);
+        }
+        @Override
+        public void writeLong(long l) {
+            output.writeLong(l);
+        }
+        @Override
+        public void writeInt(int i) throws IOException {
+            output.writeInt(i);
+        }
 
+        @Override
+        public void writeVarLong(long n, boolean optimizePositive) {
+            output.writeVarLong(n, optimizePositive);
+        }
+
+        @Override
+        public void writeVarInt(int n, boolean optimizePositive) {
+            output.writeVarInt(n, optimizePositive);
+        }
+
+        @Override
         public void write(Object obj) {
             try {
                 serializer.write(output, obj);
@@ -239,7 +273,7 @@ public class PersistentFileManager {
                         pathExpanded, manager.getLogger().toStringLimit(obj)), ex);
             }
         }
-
+        @Override
         public PersistentFileReaderSource createReaderSourceFromCurrentPosition() {
             return new PersistentFileReaderSource(pathExpanded, position(), manager);
         }
@@ -253,6 +287,9 @@ public class PersistentFileManager {
             write(new PersistentFileEnd());
             output.close();
             manager.close(filePath);
+            if (serializer instanceof KryoBuilder.SerializerPoolCached) {
+                ((KryoBuilder.SerializerPoolCached) serializer).close();
+            }
         }
 
         @Override
@@ -306,7 +343,18 @@ public class PersistentFileManager {
         }
     }
 
-    public static class PersistentFileReader implements AutoCloseable {
+    public interface PersistentReader {
+        long position();
+        int nextInt();
+        byte nextByte();
+        long nextLong();
+        long nextVarLong(boolean optimizePositive);
+        int nextVarInt(boolean optimizePositive);
+        Object next();
+        void close();
+    }
+
+    public static class PersistentFileReader implements AutoCloseable, PersistentReader {
         protected String pathExpanded;
         protected PersistentFileManager manager;
         protected KryoBuilder.SerializerFunction serializer;
@@ -314,26 +362,29 @@ public class PersistentFileManager {
         protected long offset;
         protected long position;
         protected InputStream inputStream;
-        protected int bufferSize = 4096;
+        protected int bufferSize = 50_000;
 
         public PersistentFileReader(String pathExpanded, long offset, PersistentFileManager manager) throws IOException {
             this.pathExpanded = pathExpanded;
             this.manager = manager;
             this.serializer = manager.getSerializer();
+            if (serializer instanceof KryoBuilder.SerializerPool) {
+                serializer = ((KryoBuilder.SerializerPool) serializer).cached();
+            }
             inputStream = new FileInputStream(manager.getPathForExpandedPath(pathExpanded, false).toFile()); //Files.newInputStream(path).skip(n) is slow
             this.offset = offset;
             inputStream.skip(offset);
             this.position = offset;
             input = new Input(inputStream, bufferSize);
         }
-
+        @Override
         public Object next()  {
             long prev = input.total();
             Object v = serializer.read(input);
             position += input.total() - prev;
             return v;
         }
-
+        @Override
         public long nextLong() {
             long prev = input.total();
             long v = input.readLong();
@@ -341,6 +392,37 @@ public class PersistentFileManager {
             return v;
         }
 
+        @Override
+        public long nextVarLong(boolean optimizePositive) {
+            long prev = input.total();
+            long v = input.readVarLong(optimizePositive);
+            position += input.total() - prev;
+            return v;
+        }
+
+        @Override
+        public int nextVarInt(boolean optimizePositive) {
+            long prev = input.total();
+            int v = input.readVarInt(optimizePositive);
+            position += input.total() - prev;
+            return v;
+        }
+
+        @Override
+        public int nextInt() {
+            long prev = input.total();
+            int v = input.readInt();
+            position += input.total() - prev;
+            return v;
+        }
+        @Override
+        public byte nextByte() {
+            long prev = input.total();
+            byte v = input.readByte();
+            position += input.total() - prev;
+            return v;
+        }
+        @Override
         public long position() {
             return position;
         }
@@ -353,6 +435,13 @@ public class PersistentFileManager {
         @Override
         public void close() {
             input.close();
+            if (serializer instanceof AutoCloseable) {
+                try {
+                    ((AutoCloseable) serializer).close();
+                } catch (Exception ex) {
+                    throw new RuntimeException(ex);
+                }
+            }
         }
 
         @Override

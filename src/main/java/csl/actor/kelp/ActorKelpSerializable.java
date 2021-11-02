@@ -1,9 +1,12 @@
 package csl.actor.kelp;
 
+import com.esotericsoftware.kryo.io.Input;
+import com.esotericsoftware.kryo.io.Output;
+import csl.actor.Actor;
 import csl.actor.ActorRef;
 import csl.actor.ActorSystem;
 import csl.actor.Message;
-import csl.actor.kelp.behavior.KeyHistograms;
+import csl.actor.kelp.behavior.HistogramTree;
 import csl.actor.remote.KryoBuilder;
 
 import java.io.Serializable;
@@ -19,7 +22,7 @@ public class ActorKelpSerializable<SelfType extends ActorKelp<SelfType>> impleme
     public String name;
     public ConfigKelp config;
     public Message<?>[] messages;
-    public List<KeyHistograms.HistogramTree> histograms;
+    public List<HistogramTree> histograms;
     public Object constructionState;
     /** it is not Serializable, but it needs to have support of reading/writing/copying by a serializer */
     public Object internalState;
@@ -99,7 +102,7 @@ public class ActorKelpSerializable<SelfType extends ActorKelp<SelfType>> impleme
         this.messages = messages;
     }
 
-    public void setHistograms(List<KeyHistograms.HistogramTree> histograms) {
+    public void setHistograms(List<HistogramTree> histograms) {
         this.histograms = histograms;
     }
 
@@ -140,7 +143,7 @@ public class ActorKelpSerializable<SelfType extends ActorKelp<SelfType>> impleme
 
 
     protected String restoreName(long num) {
-        return name == null ? ("$" + num) : name + "$" + num;
+        return name == null ? (Actor.NAME_SYSTEM_SEPARATOR + num) : name + Actor.NAME_SYSTEM_SEPARATOR + num;
     }
 
     @SuppressWarnings("unchecked")
@@ -412,7 +415,10 @@ public class ActorKelpSerializable<SelfType extends ActorKelp<SelfType>> impleme
             try {
                 return serializer.copy(obj);
             } catch (Exception ex) {
-                return obj; //TODO JavaSerializer does not support copying
+                Output output = new Output(4096, Integer.MAX_VALUE);
+                serializer.write(output, obj);
+                Input input = new Input(output.getBuffer(), 0, (int) output.total());
+                return serializer.read(input); //TODO JavaSerializer does not support copying
             }
         }
 

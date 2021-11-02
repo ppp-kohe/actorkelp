@@ -23,7 +23,6 @@ public class ActorAddressSerializer extends Serializer<ActorAddress> {
                     output.write(ANONYMOUS_ACTOR);
                     output.writeString(a.getHost());
                     output.writeInt(a.getPort());
-                    output.writeString(a.getActorName());
                     output.writeString(a.getTypeName());
                     output.writeInt(a.getIdentityHashCode());
                 } else if (object instanceof ActorAddress.ActorAddressError) {
@@ -31,7 +30,6 @@ public class ActorAddressSerializer extends Serializer<ActorAddress> {
                     ActorAddress.ActorAddressError a = (ActorAddress.ActorAddressError) object;
                     output.writeString(a.getHost());
                     output.writeInt(a.getPort());
-                    output.writeString(a.getActorName());
                     output.writeString(a.getInfo());
                 } else {
                     output.write(REMOTE_ACTOR);

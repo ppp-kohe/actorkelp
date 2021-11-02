@@ -48,15 +48,19 @@ public class ActorSystemDefault implements ActorSystem {
         initSystemProcessingCount();
         initNamedActorMap();
     }
+
     protected void initLogger() {
         this.logger = new SystemLoggerErr();
     }
+
     protected void initThroughput() {
         this.throughput = 5;
     }
+
     protected void initSystemThreads() {
         threads = Runtime.getRuntime().availableProcessors();
     }
+
     protected void initSystemExecutorService() {
         executorService = createThreadPoolFixed(threads);
     }
@@ -105,8 +109,11 @@ public class ActorSystemDefault implements ActorSystem {
     }
 
     public void sendDeadLetter(Message<?> message) {
-        if (message.getSender() != null) {
-            message.getSender().tell(toDeadLetter(message));
+        Object data = message.getData();
+        ActorRef sender;
+        if (data instanceof Message.MessageDataPacket<?> &&
+                (sender = ((Message.MessageDataPacket<?>) data).getSender()) != null) {
+            sender.tell(toDeadLetter(message));
         } else {
             getLogger().log("DEAD-LETTER %s", message);
         }
@@ -117,46 +124,103 @@ public class ActorSystemDefault implements ActorSystem {
     }
 
     public void startProcessMessageSubsequently(Actor target, Message<?> message) {
-        if (!(message instanceof Message.MessageNone)) {
-            target.offer(message);
+        if (message instanceof Message.MessageNone) { //launch both
+            startProcessMessageSubsequently(createProcessMessageSubsequently(target, true, message), message);
+            startProcessMessageSubsequently(createProcessMessageSubsequently(target, false, message), message);
+        } else {
+            boolean special = isSpecialMessage(message);
+            startProcessMessageSubsequently(createProcessMessageSubsequently(target, special, message), message);
         }
-        if (!target.processMessageLocked()) { //the guard is experimentally inserted for reducing executorService's backlogs
+    }
+
+    protected ProcessMessageSubsequently createProcessMessageSubsequently(Actor target, boolean special, Message<?> msg) {
+        return new ProcessMessageSubsequently(this, target, special);
+    }
+
+    public void startProcessMessageSubsequently(ProcessMessageSubsequently task, Message<?> message) {
+        task.actor.activate(task.isSpecial());
+        if (!(message instanceof Message.MessageNone)) {
+            task.actor.offer(message);
+        }
+        if (task.isSpecial() ?
+                !task.actor.processMessageLockedSpecial() :
+                !task.actor.processMessageLocked()) { //the guard is experimentally inserted for reducing executorService's backlogs
             // it needs to isEmptyMailbox() at (B) for the (A)->(B) & remainingMessages=false case
             try {
-                execute(() -> processMessageSubsequently(target));
+                task.submit();
             } catch (RejectedExecutionException re) {
-                processMessageRejected(target);
+                processMessageRejected(task.actor);
             }
         }
     }
 
-    protected void processMessageSubsequently(Actor actor) {
-        if (actor.processMessageBefore()) {
+    protected void processMessageSubsequently(ProcessMessageSubsequently task) {
+        Actor actor = task.actor;
+        if (task.isSpecial() ?
+                actor.processMessageBeforeSpecial() :
+                actor.processMessageBefore()) {
             processingCount.incrementAndGet();
             boolean remainingMessages = false;
             try {
                 for (int i = 0; isProcessContinue(i); ++i) {
-                    remainingMessages = actor.processMessageNext();
+                    remainingMessages = task.isSpecial() ?
+                            actor.processMessageNextSpecial() :
+                            actor.processMessageNext();
                     if (!remainingMessages) {
                         break;
                     }
                 }
             } finally { //(A)
-                actor.processMessageAfter();
-                if (remainingMessages || !actor.isEmptyMailbox()) { //(B)
+                if (task.isSpecial()) {
+                    actor.processMessageAfterSpecial();
+                } else {
+                    actor.processMessageAfter();
+                }
+                if (remainingMessages || !actor.isEmptyMailboxAll()) { //(B)
                     try {
-                        execute(() -> processMessageSubsequently(actor));
+                        task.submit();
                     } catch (RejectedExecutionException re) { //shutdown
                         processMessageRejected(actor);
                     }
+                } else {
+                    actor.deactivate(task.isSpecial());
                 }
                 processingCount.decrementAndGet();
             }
         }
     }
 
+    public static class ProcessMessageSubsequently implements Runnable {
+        public ActorSystemDefault system;
+        public Actor actor;
+        protected boolean special;
+
+        public ProcessMessageSubsequently(ActorSystemDefault system, Actor actor, boolean special) {
+            this.system = system;
+            this.actor = actor;
+            this.special = special;
+        }
+
+        public boolean isSpecial() {
+            return special;
+        }
+
+        @Override
+        public void run() {
+            try {
+                system.processMessageSubsequently(this);
+            } catch (Throwable ex) {
+                ex.printStackTrace();
+            }
+        }
+
+        public void submit() {
+            system.execute(this);
+        }
+    }
+
     protected void processMessageRejected(Actor actor) {
-        if (!actor.isEmptyMailbox()) {
+        if (!actor.isEmptyMailboxAll()) {
             getLogger().log("remaining-messages for actor after shut-down: %s", actor);
         }
     }
@@ -179,16 +243,18 @@ public class ActorSystemDefault implements ActorSystem {
     }
 
     @Override
-    public void register(Actor actor) {
+    public boolean register(Actor actor) {
         String name = actor.getName();
         if (name != null) {
-            namedActorMap.put(name, actor);
+            return namedActorMap.put(name, actor) == null;
+        } else {
+            return false;
         }
     }
 
     @Override
-    public void unregister(Actor actor) {
-        namedActorMap.remove(actor.getName(), actor);
+    public boolean unregister(Actor actor) {
+        return namedActorMap.remove(actor.getName(), actor);
     }
 
     @Override
@@ -237,12 +303,16 @@ public class ActorSystemDefault implements ActorSystem {
         if (se == null) {
             synchronized (this) {
                 if (scheduledExecutor == null) {
-                    scheduledExecutor = Executors.newScheduledThreadPool(getScheduledExecutorThreads());
+                    scheduledExecutor = initScheduledExecutor();
                 }
                 se = scheduledExecutor;
             }
         }
         return se;
+    }
+
+    protected ScheduledExecutorService initScheduledExecutor() {
+        return Executors.newScheduledThreadPool(getScheduledExecutorThreads());
     }
 
     protected int getScheduledExecutorThreads() {
@@ -254,7 +324,7 @@ public class ActorSystemDefault implements ActorSystem {
         executorService.awaitTermination(time, unit);
     }
 
-    public static class DeadLetter implements Serializable {
+    public static class DeadLetter implements Serializable, Message.MessageData {
         public static final long serialVersionUID = 1L;
         public Message<?> message;
 

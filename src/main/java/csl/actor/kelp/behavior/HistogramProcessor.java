@@ -18,15 +18,15 @@ public interface HistogramProcessor extends ActorBehavior {
     Object selectFromValue(Object value);
     Object extractKeyFromValue(Object value, Object position);
 
-    default boolean needToProcessTraversal(Actor self, KeyHistograms.HistogramTree tree) {
+    default boolean needToProcessTraversal(Actor self, HistogramTree tree, MailboxKelp.ReducedSize reducedSize, boolean reserved) {
         return false;
     }
 
-    default boolean needToProcessStageEnd(Actor self, Object stageKey, KeyHistograms.HistogramTree tree) {
+    default boolean needToProcessStageEnd(Actor self, MailboxKelp.ReducedSize reducedSize, Object stageKey, HistogramTree tree) {
         return false;
     }
 
-    default void processTraversal(Actor self, MailboxKelp.ReducedSize reducedSize, KeyHistograms.HistogramNodeLeaf leaf) {}
+    default void processTraversal(Actor self, MailboxKelp.ReducedSize reducedSize, HistogramTreeNodeLeaf leaf) {}
 
-    default void processStageEnd(Actor self, Object stageKey, MailboxKelp.ReducedSize reducedSize, KeyHistograms.HistogramNodeLeaf leaf) {}
+    default void processStageEnd(Actor self, Object stageKey, MailboxKelp.ReducedSize reducedSize, HistogramTreeNodeLeaf leaf) {}
 }

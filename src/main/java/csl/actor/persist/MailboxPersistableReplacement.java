@@ -1,5 +1,9 @@
 package csl.actor.persist;
 
+import com.esotericsoftware.kryo.Kryo;
+import com.esotericsoftware.kryo.KryoSerializable;
+import com.esotericsoftware.kryo.io.Input;
+import com.esotericsoftware.kryo.io.Output;
 import csl.actor.ActorSystem;
 import csl.actor.MailboxDefault;
 import csl.actor.Message;
@@ -16,7 +20,8 @@ public class MailboxPersistableReplacement extends MailboxDefault implements Mai
     protected ReentrantLock persistLock;
 
     protected PersistentConditionMailbox condition;
-    protected long onMemorySize;
+    protected AtomicLong sizeOnMemory;
+    protected long onMemorySizeLimit;
 
     protected volatile PersistentFileManager persistentManager;
 
@@ -24,14 +29,14 @@ public class MailboxPersistableReplacement extends MailboxDefault implements Mai
     public static boolean logDebugPersist = System.getProperty("csl.actor.persist.debug", "false").equals("true");
     public static int logColorPersist = ActorSystem.systemPropertyColor("csl.actor.persist.color", 94);
 
-    public MailboxPersistableReplacement(PersistentFileManager persistent, long sizeLimit, long onMemorySize) {
-        this(persistent, new PersistentConditionMailbox.PersistentConditionMailboxSizeLimit(sizeLimit), onMemorySize);
+    public MailboxPersistableReplacement(PersistentFileManager persistent, long sizeLimit, long onMemorySizeLimit) {
+        this(persistent, new PersistentConditionMailbox.PersistentConditionMailboxSizeLimit(sizeLimit, persistent.getLogger()), onMemorySizeLimit);
     }
 
-    public MailboxPersistableReplacement(PersistentFileManager persistent, PersistentConditionMailbox condition, long onMemorySize) {
+    public MailboxPersistableReplacement(PersistentFileManager persistent, PersistentConditionMailbox condition, long onMemorySizeLimit) {
         this.condition = condition;
-        this.onMemorySize = onMemorySize;
         this.persistentManager = persistent;
+        this.onMemorySizeLimit = onMemorySizeLimit;
         init();
     }
 
@@ -41,7 +46,7 @@ public class MailboxPersistableReplacement extends MailboxDefault implements Mai
     }
 
     public ActorSystem.SystemLogger getLogger() {
-        return persistentManager.getLogger();
+        return condition == null ? persistentManager.getLogger() : condition.getLogger();
     }
 
     public PersistentFileWriter createWriter() {
@@ -51,19 +56,19 @@ public class MailboxPersistableReplacement extends MailboxDefault implements Mai
     public ConcurrentLinkedQueue<Message<?>> getQueue() {
         return queue;
     }
+    @Override
+    public long getSize() {
+        return size.get();
+    }
 
-    /** @return implementation field getter */
-    public AtomicLong getSize() {
-        return size;
+    @Override
+    public long getSizeOnMemory() {
+        return sizeOnMemory.get();
     }
 
     /** @return implementation field getter */
-    public long getPreviousSize() {
+    public long getPreviousSizeOnMemory() {
         return previousSize;
-    }
-
-    public long getOnMemorySize() {
-        return onMemorySize;
     }
 
     /** @return implementation field getter */
@@ -87,6 +92,7 @@ public class MailboxPersistableReplacement extends MailboxDefault implements Mai
         size = new AtomicLong();
         previousSize = 0;
         persistLock = new ReentrantLock();
+        this.sizeOnMemory = new AtomicLong();
     }
 
     @Override
@@ -96,10 +102,12 @@ public class MailboxPersistableReplacement extends MailboxDefault implements Mai
 
     @Override
     public void offer(Message<?> message) {
-        long s = size.incrementAndGet();
-        previousSize = s;
+        long dataSize = dataSize(message);
+        size.addAndGet(dataSize);
+        long sizeOnMem = sizeOnMemory.addAndGet(MailboxManageable.messageSize(message)); //MOnS +1
+        previousSize = sizeOnMem;
         queue.offer(message);
-        if (condition.needToPersistInOffer(this, s)) {
+        if (condition.needToPersistInOffer(this, sizeOnMem)) {
             persist();
         }
     }
@@ -115,31 +123,22 @@ public class MailboxPersistableReplacement extends MailboxDefault implements Mai
     }
 
     protected void persistLocked() {
-        long s = size.get();
-        if (condition.needToPersistInPersistLock(this, s)) {
+        if (condition.needToPersistInPersistLock(this, sizeOnMemory.get())) {
 
             ConcurrentLinkedQueue<Message<?>> oldQueue = queue;
             ConcurrentLinkedQueue<Message<?>> newQueue = new ConcurrentLinkedQueue<>();
-            long end = onMemorySize;
 
-            long offered = 0;
+            long offeredOnMem = 0;
 
-            boolean hasOnMemory = false;
-            for (int i = 0; i < end; ++i) {
-                Message<?> m = oldQueue.poll();
-                if (m == null) {
-                    break;
-                }
-                hasOnMemory = true;
-                newQueue.offer(m);
-            }
+            boolean hasOnMemory = persistLockedHasOnMemory(newQueue); //just move, do not change size
             boolean top = true;
-            long polled = 0;
+            long polledOnMem = 0;
             MessageOnStorage reader = null;
             try (PersistentFileWriter ms = createWriter()) {
-                reader = new MessageOnStorage(ms.createReaderSourceFromCurrentPosition());
+                long saved = 0;
+                reader = new MessageOnStorage(ms.createReaderSourceFromCurrentPosition(), 0);
                 newQueue.offer(reader);
-                offered++;
+                offeredOnMem += MailboxManageable.messageSize(reader); //the size of the MessageOnStorage itself is 1
                 queue = newQueue;
                 //from here any other threads cannot touch the oldQueue
                 while (true) {
@@ -150,35 +149,63 @@ public class MailboxPersistableReplacement extends MailboxDefault implements Mai
                     if (top && !hasOnMemory && m instanceof MessageOnStorage) { //top item might be intermediate state
                         MessageOnStorage mOnS = (MessageOnStorage) m;
                         if (mOnS.isOpened()) {
-                            top = !persistRemaining(ms, mOnS);
+                            long mSaved = persistRemaining(ms, mOnS); //just move on storage
+                            top = mSaved <= 0; //no messages, still top
+                            saved += mSaved;
                         } else {
-                            ms.write(m);
+                            ms.write(mOnS);
                             top = false;
+                            saved += mOnS.dataSizeOnStorage();
                         }
                     } else {
                         ms.write(m);
                         top = false;
+                        saved += MailboxManageable.messageSize(m);
                     }
-                    oldQueue.poll();
-                    ++polled;
+                    polledOnMem += MailboxManageable.messageSize(oldQueue.poll()); //MOnS size is also 1
                 }
+                reader.setDataSizeOnStorage(saved);
             } catch (Exception ex) { //retry?
-                getLogger().log(true, logColorPersist, ex, "mailbox persist: polled=%,d", polled);
+                getLogger().log(true, logColorPersist, ex, "mailbox persist: polled=%,d", polledOnMem);
             }
-            getLogger().log(logDebugPersist, logColorPersist, "mailbox persisted: %s sizeDelta=%,d", reader, (-polled + offered));
-            size.addAndGet(-polled + offered);
+            getLogger().log(logDebugPersist, logColorPersist, "mailbox persisted: %s sizeDelta=%,d", reader, (-polledOnMem + offeredOnMem));
+            sizeOnMemory.addAndGet(-polledOnMem + offeredOnMem);
         }
     }
 
-    private boolean persistRemaining(PersistentFileWriter ms, MessageOnStorage mOnS) {
-        boolean saved = false;
+    private boolean persistLockedHasOnMemory(ConcurrentLinkedQueue<Message<?>> newQueue) {
+        ConcurrentLinkedQueue<Message<?>> oldQueue = queue;
+        long end = onMemorySizeLimit;
+        boolean hasOnMemory = false;
+        for (int i = 0; i < end; ) {
+            Message<?> m = oldQueue.poll();
+            if (m == null) {
+                break;
+            }
+            hasOnMemory = true;
+            i += MailboxManageable.messageSize(m);
+            newQueue.offer(m);
+        }
+        return hasOnMemory;
+    }
+
+    private long dataSize(Message<?> m) {
+        if (m instanceof MessageOnStorage) {
+            return ((MessageOnStorage) m).dataSizeOnStorage();
+        } else {
+            return MailboxManageable.messageSize(m);
+        }
+    }
+
+    private long persistRemaining(PersistentFileWriter ms, MessageOnStorage mOnS) {
+        long saved = 0;
         while (true) {
             Message<?> m = mOnS.readNext();
             if (m == null) {
                 break;
             } else {
+                saved += dataSize(m);
                 ms.write(m);
-                saved = true;
             }
         }
         return saved;
@@ -193,7 +220,9 @@ public class MailboxPersistableReplacement extends MailboxDefault implements Mai
             if (m instanceof MessageOnStorage) {
                 return pollByReadNext((MessageOnStorage) m);
             } else if (m != null) {
-                size.decrementAndGet();
+                int s = -MailboxManageable.messageSize(m);
+                size.addAndGet(s); //m is not MOnS
+                previousSize = sizeOnMemory.addAndGet(s);
                 return queue.poll();
             } else {
                 return null;
@@ -204,7 +233,7 @@ public class MailboxPersistableReplacement extends MailboxDefault implements Mai
     }
 
     protected void persistInPoll() {
-        long n = size.get();
+        long n = sizeOnMemory.get();
         if (condition.needToPersistInPoll(this, n)) {
             persist();
         }
@@ -217,28 +246,43 @@ public class MailboxPersistableReplacement extends MailboxDefault implements Mai
             pollClose(mOnS);
             return poll();
         } else {
+            size.addAndGet(-dataSize(next));
             return next;
         }
     }
 
     protected void pollClose(MessageOnStorage mOnS) {
         queue.poll();
-        size.decrementAndGet();
+        previousSize = sizeOnMemory.addAndGet(-MailboxManageable.messageSize(mOnS));
+        //size.addAndGet(dataSize(mOnS)) is 0
     }
 
-    public static class MessageOnStorage extends Message<Object> {
+    public static class MessageOnStorage extends Message<Object> implements KryoSerializable {
         public static final long serialVersionUID = 1L;
         public PersistentFileManager.PersistentFileReaderSource source;
         protected transient PersistentFileManager.PersistentFileReader reader;
         protected transient MessageOnStorage currentMessage;
+        protected long dataSizeOnStorage;
 
         public MessageOnStorage() {
-            super(null, null, null);
+            super(null, null);
         }
 
-        public MessageOnStorage(PersistentFileManager.PersistentFileReaderSource source) {
+        public MessageOnStorage(PersistentFileManager.PersistentFileReaderSource source, long dataSizeOnStorage) {
             this();
             this.source = source;
+            this.dataSizeOnStorage = dataSizeOnStorage;
+        }
+
+        public void setDataSizeOnStorage(long dataSizeOnStorage) {
+            this.dataSizeOnStorage = dataSizeOnStorage;
+        }
+
+        /**
+         * @return the size excluding MessageOnStorage
+         */
+        public long dataSizeOnStorage() {
+            return dataSizeOnStorage;
         }
 
         @Override
@@ -259,6 +303,7 @@ public class MailboxPersistableReplacement extends MailboxDefault implements Mai
                 if (currentMessage != null) {
                     Message<?> m = currentMessage.readNext();
                     if (m != null) {
+                        dataSizeOnStorage -= MailboxManageable.messageSize(m);
                         return m;
                     } else {
                         currentMessage = null;
@@ -280,12 +325,25 @@ public class MailboxPersistableReplacement extends MailboxDefault implements Mai
                         currentMessage = (MessageOnStorage) m;
                         return readNext();
                     } else {
+                        dataSizeOnStorage -= MailboxManageable.messageSize(m);
                         return m;
                     }
                 }
             } catch (Exception ex) {
                 throw new RuntimeException(String.format("readNext: %s", source), ex);
             }
+        }
+
+        @Override
+        public void write(Kryo kryo, Output output) {
+            kryo.writeClassAndObject(output, this.source);
+            output.writeLong(dataSizeOnStorage);
+        }
+
+        @Override
+        public void read(Kryo kryo, Input input) {
+            this.source = (PersistentFileManager.PersistentFileReaderSource) kryo.readClassAndObject(input);
+            this.dataSizeOnStorage = input.readLong();
         }
     }
 }

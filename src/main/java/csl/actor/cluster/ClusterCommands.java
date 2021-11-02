@@ -63,6 +63,7 @@ import java.util.stream.Collectors;
  */
 public class ClusterCommands<AppConfType extends ConfigBase> {
     protected Class<AppConfType> defaultConfType;
+    protected ConfigDeployment mergedDeployConf;
 
     @SuppressWarnings("unchecked")
     public static void main(String[] args) throws Exception {
@@ -84,6 +85,11 @@ public class ClusterCommands<AppConfType extends ConfigBase> {
         this.defaultConfType = defaultConfType;
     }
 
+    public ClusterCommands(Class<AppConfType> defaultConfType, ConfigDeployment mergedDeployConf) {
+        this.defaultConfType = defaultConfType;
+        this.mergedDeployConf = mergedDeployConf;
+    }
+
     public List<ClusterUnit<AppConfType>> loadConfigFile(String path) {
         CommandBlockRoot root = parseConfigFile(path);
         return loadNamed(root);
@@ -99,7 +105,7 @@ public class ClusterCommands<AppConfType extends ConfigBase> {
     @SuppressWarnings("unchecked")
     public ClusterUnit<AppConfType> load(CommandBlock block) {
         ClusterUnit<AppConfType> unit = new ClusterUnit<>();
-        ConfigDeployment conf = new ConfigDeployment(defaultConfType);
+        ConfigDeployment conf = ConfigDeployment.createAndMerge(defaultConfType, mergedDeployConf);
         unit.setDeploymentConfig(conf);
         try {
             if (block instanceof CommandBlockNamed) {

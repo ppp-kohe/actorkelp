@@ -168,7 +168,11 @@ public abstract class ActorAddress {
 
         @Override
         public String toString() {
-            return super.toString() + "/" + actorName;
+            return toStringHostPort() + "/" + actorName;
+        }
+
+        public String toStringHostPort() {
+            return super.toString();
         }
 
         @Override
@@ -192,7 +196,7 @@ public abstract class ActorAddress {
 
         @Override
         public String toString() {
-            return super.toString() + "#anon:" + typeName + "@" + Integer.toHexString(identityHashCode);
+            return super.toStringHostPort() + "/" + Actor.NAME_SYSTEM_SEPARATOR + "anon:" + typeName + "@" + Integer.toHexString(identityHashCode);
         }
 
         @Override

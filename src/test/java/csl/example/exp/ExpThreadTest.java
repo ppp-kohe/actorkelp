@@ -171,7 +171,7 @@ public class ExpThreadTest {
         ra.th = routerThreads;
 
         for (int i = 0; i < num; ++i) {
-            ra.tell("item" + i, null);
+            ra.tell("item" + i);
         }
         log(String.format("finish offer %,d: %s", num, Duration.between(start, Instant.now())));
 
@@ -263,7 +263,7 @@ public class ExpThreadTest {
         }
 
         void receive(Object s) {
-            target.tell(s, this);
+            target.tell(s);
             ++polls;
             if (mailbox.isEmpty()) {
                 empties++;
@@ -309,7 +309,7 @@ public class ExpThreadTest {
 
         protected void receiveItem(String s) {
             last = Instant.now();
-            actors.get(i % actors.size()).tell(s, this);
+            actors.get(i % actors.size()).tell(s);
             ++i;
         }
     }

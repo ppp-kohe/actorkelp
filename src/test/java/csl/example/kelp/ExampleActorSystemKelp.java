@@ -1,11 +1,10 @@
 package csl.example.kelp;
 
-import csl.actor.ActorBehavior;
-import csl.actor.ActorDefault;
-import csl.actor.ActorRef;
-import csl.actor.ActorSystem;
+import csl.actor.*;
 import csl.actor.kelp.ActorSystemKelp;
 import csl.actor.remote.ActorRefRemote;
+
+import java.io.Serializable;
 
 public class ExampleActorSystemKelp {
     public static void main(String[] args) throws Exception {
@@ -27,6 +26,14 @@ public class ExampleActorSystemKelp {
         a1.tell("start");
     }
 
+    public static class Special implements Message.MessageDataSpecial, Serializable {
+        @Override
+        public String toString() {
+            return "Special";
+        }
+    }
+
+
     public static class TestActor extends ActorDefault {
         public ActorRef next;
         public TestActor(ActorSystem system, String name) {
@@ -36,24 +43,38 @@ public class ExampleActorSystemKelp {
         @Override
         protected ActorBehavior initBehavior() {
             return behaviorBuilder()
+                    .match(Special.class, this::runSpecial)
                     .match(String.class, this::receive)
                     .build();
         }
 
         public void receive(String s) {
             if (s.equals("start")) {
-                getSystem().getLogger().log("start: %s", this);
+                getSystem().getLogger().log(true, 10, "start: %s %s clock=%s", this, Thread.currentThread(),getClocks());
                 next.tell("");
+                next.tell(new Special());
             } else if (s.length() < 10) {
-                getSystem().getLogger().log("receive: %s <%s>[%d]", this, s, s.length());
+                getSystem().getLogger().log(true, 10, "receive: %s <%s>[%d] %s clock=%s", this, s, s.length(), Thread.currentThread(),getClocks());
                 next.tell(s + ".");
                 if (s.length() >= 9) {
                     getSystem().close();
                 }
             } else {
-                getSystem().getLogger().log("finish: %s <%s>[%d]", this, s, s.length());
+                getSystem().getLogger().log(true, 10, "finish: %s <%s>[%d] %s clock=%s", this, s, s.length(), Thread.currentThread(),getClocks());
                 getSystem().close();
             }
+        }
+
+        public void runSpecial(Special s) {
+            getSystem().getLogger().log(true, 10,
+                    "ACTOR: %s special %s : %s %s clock=%s", getName(), s, system, Thread.currentThread(), getClocks());
+        }
+
+        @Override
+        protected void processMessageSystemClock(Message.MessageDataClock<?> message) {
+            super.processMessageSystemClock(message);
+            getSystem().getLogger().log(true, 10,
+                    "ACTOR: %s process clock %s : %s %s clock=%s", getName(), message, system, Thread.currentThread(), getClocks());
         }
     }
 }

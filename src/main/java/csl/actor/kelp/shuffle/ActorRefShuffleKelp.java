@@ -7,19 +7,17 @@ import csl.actor.Actor;
 import csl.actor.ActorRef;
 import csl.actor.ActorSystem;
 import csl.actor.kelp.ActorKelp;
-import csl.actor.kelp.ActorKelpFunctions;
 import csl.actor.kelp.ConfigKelp;
 import csl.actor.kelp.KelpStage;
 import csl.actor.kelp.behavior.KelpDispatcher;
-import csl.actor.remote.ActorAddress;
+import csl.actor.util.Staging;
 
 import java.util.List;
-import java.util.Map;
 import java.util.function.BiFunction;
 
-public class ActorRefShuffleKelp<ActorType extends ActorKelp<ActorType>> extends ActorRefShuffle implements KelpStage<ActorType> {
+public class ActorRefShuffleKelp<ActorType extends ActorKelp<ActorType>> extends ActorRefShuffle implements KelpStage<ActorType>, Staging.StagingPointMembers {
     public static final long serialVersionUID = 1L;
-    protected Class<?> actorType;
+    protected Class<ActorType> actorType;
     protected ConfigKelp config;
 
     public ActorRefShuffleKelp() {
@@ -27,10 +25,15 @@ public class ActorRefShuffleKelp<ActorType extends ActorKelp<ActorType>> extends
 
     public ActorRefShuffleKelp(ActorSystem system, List<ShuffleEntry> entries,
                                List<KelpDispatcher.SelectiveDispatcher> extractorsAndDispatchers, int bufferSize,
-                               Class<?> actorType, ConfigKelp config) {
+                               Class<ActorType> actorType, ConfigKelp config, String name) {
         super(system, entries, extractorsAndDispatchers, bufferSize);
         this.actorType = actorType;
         this.config = config;
+        this.name = Staging.stageNameArray(name, "shuffle");
+    }
+    @Override
+    public Class<ActorType> getActorType() {
+        return actorType;
     }
 
     @Override
@@ -47,14 +50,17 @@ public class ActorRefShuffleKelp<ActorType extends ActorKelp<ActorType>> extends
     @Override
     public void write(Kryo kryo, Output output) {
         super.write(kryo, output);
+        output.writeString(name);
         kryo.writeClass(output, actorType);
         kryo.writeClassAndObject(output, config);
     }
 
+    @SuppressWarnings("unchecked")
     @Override
     public void read(Kryo kryo, Input input) {
         super.read(kryo, input);
-        actorType = kryo.readClass(input).getType();
+        name = input.readString();
+        actorType = (Class<ActorType>) kryo.readClass(input).getType();
         config = (ConfigKelp) kryo.readClassAndObject(input);
     }
 

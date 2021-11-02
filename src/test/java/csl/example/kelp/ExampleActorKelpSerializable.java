@@ -4,13 +4,10 @@ import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 import csl.actor.ActorBehavior;
 import csl.actor.ActorSystem;
-import csl.actor.kelp.ActorKelp;
-import csl.actor.kelp.ActorKelpSerializable;
-import csl.actor.kelp.ActorSystemKelp;
-import csl.actor.kelp.ConfigKelp;
-import csl.actor.kelp.behavior.KeyHistogramsPersistable;
+import csl.actor.kelp.*;
+import csl.actor.kelp.persist.HistogramTreePersistable;
 import csl.actor.remote.ActorSystemRemote;
-import csl.actor.util.StagingActor;
+import csl.example.TestTool;
 
 import java.util.Arrays;
 
@@ -25,7 +22,8 @@ public class ExampleActorKelpSerializable {
             m.tell("hello" + i);
             m.tell("world" + i);
         }
-        StagingActor.staging(r).start(m).get();
+        KelpStageGraphActor.get(r, m)
+                .startAwait().get();
 
         ActorKelpSerializable<TestActor> s = m.toSerializable();
 
@@ -36,10 +34,10 @@ public class ExampleActorKelpSerializable {
         ActorKelpSerializable<?> s2 = (ActorKelpSerializable<?>) r.getSerializer().read(in);
         ActorKelp<?> a = s2.restore(r, 2, s2.config);
 
-        KeyHistogramsPersistable.HistogramTreePersistable p = (KeyHistogramsPersistable.HistogramTreePersistable) a.getMailboxAsKelp().getHistogram(0);
+        HistogramTreePersistable p = (HistogramTreePersistable) a.getMailboxAsKelp().getHistogram(0);
         System.out.println(Arrays.toString(p.getHistory().totalMean()));
 
-        StagingActor.staging(r).start(a).get();
+        TestTool.assertEquals("restored ", m.value, ((TestActor) a).value);
         r.close();
     }
 

@@ -1,28 +1,25 @@
 package csl.actor.kelp;
 
-import csl.actor.Actor;
-import csl.actor.ActorRef;
-import csl.actor.ActorSystem;
-import csl.actor.CallableMessage;
+import csl.actor.*;
 import csl.actor.cluster.ClusterCommands;
 import csl.actor.cluster.ClusterDeployment;
 import csl.actor.cluster.ConfigDeployment;
 import csl.actor.kelp.behavior.HistogramEntry;
-import csl.actor.kelp.behavior.KeyHistograms;
-import csl.actor.kelp.behavior.KeyHistogramsPersistable;
+import csl.actor.kelp.behavior.HistogramTree;
+import csl.actor.kelp.persist.HistogramTreePersistable;
 import csl.actor.kelp.behavior.MailboxKelp;
-import csl.actor.persist.MailboxManageable;
 import csl.actor.remote.ActorAddress;
 import csl.actor.remote.ActorRefRemote;
 import csl.actor.remote.ActorSystemRemote;
 import csl.actor.remote.KryoBuilder;
-import csl.actor.util.ConfigBase;
 import csl.actor.util.ToJson;
 
 import java.io.Serializable;
 import java.time.Instant;
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * <pre>
@@ -30,8 +27,8 @@ import java.util.function.Function;
  *   public class PrimaryMain {
  *     public static void main(String[] args) throws Exception {
  *         try (ClusterKelp&lt;ConfigKelp&gt; c = ClusterKelp.createAndDeploy()) {
- *             ActorKelp.FileReader f = new ActorKelp.FileReader(c.getSystem(), c.getPrimaryConfig());
- *             KelpStage&lt;MyActor&gt; a = f.connects(new MyActor(c.getSystem(), c.getPrimaryConfig()));
+ *             ActorKelpFileReader f = c.actorReader();
+ *             KelpStage&lt;MyActor&gt; a = f.connects(new MyActor(c.system(), c.config()));
  *                                     //suppose MyActor is a sub-class of ActorKelp
  *
  *             f.startReading(args[0]).get();
@@ -48,15 +45,19 @@ import java.util.function.Function;
  */
 public class ClusterKelp<ConfigType extends ConfigKelp> extends ClusterDeployment<ConfigType, ActorPlacementKelp<ConfigType>>
         implements ActorKelpBuilder {
-
     @Override
-    public ActorSystem system() {
+    public ActorSystemKelp system() {
         return getSystem();
     }
 
     @Override
-    public ConfigKelp config() {
+    public ConfigType config() {
         return getPrimaryConfig();
+    }
+
+    @Override
+    public ActorKelpInternalFactory internalFactory() {
+        return getSystem().internalFactory();
     }
 
     public static void main(String[] args) throws Exception {
@@ -79,6 +80,13 @@ public class ClusterKelp<ConfigType extends ConfigKelp> extends ClusterDeploymen
         super(defaultConfType, (Class<ActorPlacementKelp<ConfigType>>) (Class) placeType);
     }
 
+    /**
+     * @return create a cluster with {@link ConfigKelp} as the default config;
+     *    if no cluster conf file is provided with {@link #deploy()} or {@link #deploy(String)} with ("-") or (""),
+     *     then the {@link ConfigKelp} will be used.
+     * @see #loadConfigFile(String) 
+     * @see #primary() 
+     */
     public static ClusterKelp<ConfigKelp> create() {
         return create(ConfigKelp.class);
     }
@@ -102,7 +110,7 @@ public class ClusterKelp<ConfigType extends ConfigKelp> extends ClusterDeploymen
     protected void deployPrimaryInitSystem() {
         primary.log("primary %s: create system with serializer %s", primary.getDeploymentConfig().getAddress(), primary.getDeploymentConfig().kryoBuilderType);
         system = createSystemKelpPrimary(primary.getDeploymentConfig());
-        system.getLocalSystem().setLogger(new ConfigBase.SystemLoggerHeader(system.getLogger(), primary.getAppConfig()));
+        //system.getLocalSystem().setLogger(new ConfigBase.SystemLoggerHeader(system.getLogger(), primary.getAppConfig()));
     }
 
     public ActorSystemKelp createSystemKelpPrimary(ConfigDeployment configDeployment) {
@@ -135,9 +143,7 @@ public class ClusterKelp<ConfigType extends ConfigKelp> extends ClusterDeploymen
 
         @Override
         protected ActorSystemRemote initSystem() {
-            ActorSystemRemote system = createSystemKelpNode(kryoBuilderType, this.configDeployment);
-            system.getLocalSystem().setLogger(new ConfigBase.SystemLoggerHeader(system.getLogger(), configDeployment));
-            return system;
+            return createSystemKelpNode(kryoBuilderType, this.configDeployment);
         }
 
         public ActorSystemKelp createSystemKelpNode(String buildType, ConfigDeployment configDeployment) {
@@ -150,6 +156,42 @@ public class ClusterKelp<ConfigType extends ConfigKelp> extends ClusterDeploymen
         }
     }
 
+    //////////////
+
+    @Override
+    public ActorSystemKelp deploy() {
+        return (ActorSystemKelp) super.deploy();
+    }
+
+    @Override
+    public ActorSystemKelp deploy(ConfigType mergedConf) {
+        return (ActorSystemKelp) super.deploy(mergedConf);
+    }
+
+    @Override
+    public ActorSystemKelp deploy(String confFile) {
+        return (ActorSystemKelp) super.deploy(confFile);
+    }
+
+    @Override
+    public ActorSystemKelp deploy(String confFile, ConfigType mergedConf) {
+        return (ActorSystemKelp) super.deploy(confFile, mergedConf);
+    }
+
+    @Override
+    public ActorSystemKelp deploy(List<ClusterCommands.ClusterUnit<ConfigType>> clusterUnits) throws Exception {
+        return (ActorSystemKelp) super.deploy(clusterUnits);
+    }
+
+    @Override
+    public ActorSystemKelp deploy(ConfigType mergedConf, ConfigDeployment mergedDeployConf) {
+        return (ActorSystemKelp) super.deploy(mergedConf, mergedDeployConf);
+    }
+
+    @Override
+    public ActorSystemKelp deploy(String confFile, ConfigType mergedConf, ConfigDeployment mergedDeployConf) {
+        return (ActorSystemKelp) super.deploy(confFile, mergedConf, mergedDeployConf);
+    }
 
     ///////////// stats
 
@@ -158,7 +200,7 @@ public class ClusterKelp<ConfigType extends ConfigKelp> extends ClusterDeploymen
             ActorAddress.ActorAddressRemote host = ((ActorRefRemote) actor).getAddress().getHostAddress();
             return placeGet(host, getter);
         } else {
-            return getter.call(getPrimaryPlace(), null);
+            return getter.call(getPrimaryPlace());
         }
     }
 
@@ -167,8 +209,34 @@ public class ClusterKelp<ConfigType extends ConfigKelp> extends ClusterDeploymen
         return placeGetForActor(actor, new CallableMessageNewActorStat<>(actor));
     }
 
+    @PropertyInterface("stages")
+    public List<StageStat> getStagesStat() {
+        return getStagesStat(true);
+    }
+
+    @PropertyInterface("stages")
+    public List<StageStat> getStagesStat(boolean detail) {
+        List<ActorRef> stages = new ArrayList<>(placeGet(new ActorPlacementKelp.StageGraphGet<>()));
+        List<StageStat> stats = new ArrayList<>(stages.size());
+        for (ActorRef stage : stages) {
+            try {
+                StageStat s = placeGetForActor(stage, new CallableMessageNewStageStat<>(stage));
+                stats.add(s);
+                if (s != null && detail) {
+                    s.actorStats = s.getActors().stream()
+                            .map(this::getActorStat)
+                            .collect(Collectors.toList());
+                }
+            } catch (Exception ex) {
+                throw new RuntimeException(ex);
+            }
+        }
+        return stats;
+    }
+
     public static class CallableMessageNewActorStat<ConfigType extends ConfigKelp>
-            implements CallableMessage<ActorPlacementKelp<ConfigType>, ClusterKelp.ActorStat> {
+            implements CallableMessage<ActorPlacementKelp<ConfigType>, ClusterKelp.ActorStat>, MessageDataStats {
+        public static final long serialVersionUID = -1;
         public ActorRef actor;
 
         public CallableMessageNewActorStat() {}
@@ -180,6 +248,22 @@ public class ClusterKelp<ConfigType extends ConfigKelp> extends ClusterDeploymen
         @Override
         public ActorStat call(ActorPlacementKelp<ConfigType> self) {
             return new ClusterKelp.ActorStat().set(actor.asLocal());
+        }
+    }
+    public static class CallableMessageNewStageStat<ConfigType extends ConfigKelp>
+            implements CallableMessage<ActorPlacementKelp<ConfigType>, StageStat>, MessageDataStats {
+        public static final long serialVersionUID = -1;
+        public ActorRef actor;
+
+        public CallableMessageNewStageStat() {}
+
+        public CallableMessageNewStageStat(ActorRef actor) {
+            this.actor = actor;
+        }
+
+        @Override
+        public StageStat call(ActorPlacementKelp<ConfigType> self) {
+            return new ClusterKelp.StageStat().set((KelpStageGraphActor) actor.asLocal());
         }
     }
 
@@ -223,9 +307,7 @@ public class ClusterKelp<ConfigType extends ConfigKelp> extends ClusterDeploymen
 
         public void setMailbox(ActorKelp<?> actor, MailboxKelp mbox) {
             mailboxClassName = mbox.getMailbox().getClass().getName();
-            if (mbox.getMailbox() instanceof MailboxManageable) {
-                mailboxPreviousSize = ((MailboxManageable) mbox.getMailbox()).getPreviousSize();
-            }
+            mailboxPreviousSize = mbox.getMailbox().getPreviousSizeOnMemory();
             histograms = new ArrayList<>(mbox.getEntrySize());
             for (HistogramEntry e : mbox.getEntries()) {
                 histograms.add(new HistogramStat().set(actor, mbox, e));
@@ -254,7 +336,6 @@ public class ClusterKelp<ConfigType extends ConfigKelp> extends ClusterDeploymen
         public static final long serialVersionUID = 1L;
         public int entryId;
         public Instant nextSchedule;
-        public Instant lastTraversal;
         public boolean persistable;
 
         public long valueSize;
@@ -263,20 +344,18 @@ public class ClusterKelp<ConfigType extends ConfigKelp> extends ClusterDeploymen
         public long persistedSize;
         public float[] persistHistoryTotalMean;
 
-
         public HistogramStat set(ActorKelp<?> actor, MailboxKelp mbox, HistogramEntry e) {
             entryId = e.getEntryId();
             nextSchedule = e.getNextSchedule();
-            lastTraversal = e.getLastTraversal();
-            KeyHistograms.HistogramTree tree = e.getTree();
+            HistogramTree tree = e.getTree();
             if (tree != null) {
                 valueSize = tree.getTreeSize();
                 leafSize = tree.getLeafSize();
                 leafSizeNonZero = tree.getLeafSizeNonZero();
 
-                if (tree instanceof KeyHistogramsPersistable.HistogramTreePersistable) {
+                if (tree instanceof HistogramTreePersistable) {
                     persistable = true;
-                    KeyHistogramsPersistable.HistogramTreePersistable pTree = (KeyHistogramsPersistable.HistogramTreePersistable) tree;
+                    HistogramTreePersistable pTree = (HistogramTreePersistable) tree;
                     persistedSize = pTree.getPersistedSize();
                     persistHistoryTotalMean = pTree.getHistory().totalMean();
                 }
@@ -289,7 +368,6 @@ public class ClusterKelp<ConfigType extends ConfigKelp> extends ClusterDeploymen
             Map<String, Object> json = new LinkedHashMap<>();
             json.put("entryId", toJson(valueConverter, (long) entryId));
             json.put("nextSchedule", toJson(valueConverter, nextSchedule, Instant.EPOCH));
-            json.put("lastTraversal", toJson(valueConverter, lastTraversal, Instant.EPOCH));
             json.put("persistable", toJson(valueConverter, persistable));
             json.put("valueSize", toJson(valueConverter, valueSize));
             json.put("leafSize", toJson(valueConverter, leafSize));
@@ -305,6 +383,78 @@ public class ClusterKelp<ConfigType extends ConfigKelp> extends ClusterDeploymen
                 json.put("persistHistoryTotalMean", new ArrayList<>());
             }
             return json;
+        }
+    }
+
+    public static class StageStat implements Serializable, ToJson {
+        public static final long serialVersionUID = 1L;
+        public String name;
+        public KelpStageGraphActor.StageStatusI status;
+        public List<ActorRef> actors;
+        public List<ActorStat> actorStats;
+
+        public StageStat() {}
+
+        public StageStat set(KelpStageGraphActor graph) {
+            try {
+                name = graph.getName();
+                status = graph.getStageStatusAll().get(20, TimeUnit.SECONDS);
+                actors = graph.getActorNodes().stream()
+                        .map(KelpStageGraphActor.GraphActorNode::getActor)
+                        .collect(Collectors.toList());
+            } catch (Exception ex) {
+                ex.printStackTrace();
+            }
+            return this;
+        }
+
+        public List<ActorRef> getActors() {
+            return actors;
+        }
+
+        public Map<String, Object> toJson(KelpStageGraphActor.StageStatusI status, Function<Object, Object> valueConverter) {
+            Map<String, Object> json = new LinkedHashMap<>();
+            json.put("finishedTime", toJson(valueConverter, status.getFinishedTime()));
+            json.put("progress", toJson(valueConverter, status.getTotalProgress()));
+            json.put("maxProgress", toJson(valueConverter, status.getMaxProgress()));
+            if (status instanceof KelpStageGraphActor.StageStatusMulti) {
+                KelpStageGraphActor.StageStatusMulti multi = (KelpStageGraphActor.StageStatusMulti) status;
+                json.put("stages", multi.getStatusList().stream()
+                        .map(e -> toJson(e, valueConverter))
+                        .collect(Collectors.toList()));
+            } else if (status instanceof KelpStageGraphActor.StageStatus) {
+                KelpStageGraphActor.StageStatus st = (KelpStageGraphActor.StageStatus) status;
+                json.put("key", st.getKey().format());
+                json.put("remaining", st.getRemainingIndices().stream()
+                        .sorted()
+                        .map(i -> toJsonActor(i, valueConverter))
+                        .collect(Collectors.toList()));
+                json.put("finished", st.getFinishedIndices().stream()
+                        .sorted()
+                        .map(i -> toJsonActor(i, valueConverter))
+                        .collect(Collectors.toList()));
+            }
+            return json;
+        }
+
+        public Object toJsonActor(int i, Function<Object, Object> valueConverter) {
+            if (actorStats != null && i < actorStats.size()) {
+                return actorStats.get(i).toJson(valueConverter);
+            } else {
+                return toJson(valueConverter, actors.get(i));
+            }
+        }
+
+        @Override
+        public Map<String, Object> toJson(Function<Object, Object> valueConverter) {
+            if (status != null) {
+                Map<String, Object> json = new LinkedHashMap<>();
+                json.put("name", name);
+                json.put("status", toJson(status, valueConverter));
+                return json;
+            } else {
+                return new HashMap<>();
+            }
         }
     }
 }

@@ -4,9 +4,11 @@ open module actorkelp {
     exports csl.actor.kelp;
     exports csl.actor.kelp.behavior;
     exports csl.actor.kelp.shuffle;
+    exports csl.actor.kelp.actors;
     exports csl.actor.persist;
     exports csl.actor.remote;
     exports csl.actor.util;
+    exports csl.actor.kelp.persist;
 
     requires java.base;
     requires java.sql;

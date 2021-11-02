@@ -1,6 +1,9 @@
 package csl.actor.remote;
 
 import com.esotericsoftware.kryo.Kryo;
+import com.esotericsoftware.kryo.KryoSerializable;
+import com.esotericsoftware.kryo.io.Input;
+import com.esotericsoftware.kryo.io.Output;
 import csl.actor.*;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
@@ -9,15 +12,16 @@ import io.netty.channel.socket.SocketChannelConfig;
 import java.io.Serializable;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 public class ActorSystemRemote implements ActorSystem, KryoBuilder.SerializerFactory {
     protected ActorSystemDefault localSystem;
@@ -29,6 +33,8 @@ public class ActorSystemRemote implements ActorSystem, KryoBuilder.SerializerFac
 
     protected MessageDeliveringActor deliverer;
     protected Map<ActorAddress, ConnectionActor> connectionMap;
+    protected Map<ActorAddress, LinkedList<ConnectionActor>> connectionHostMap;
+    protected AtomicInteger createdConnections = new AtomicInteger();
 
     protected Function<ActorSystem, Kryo> kryoFactory;
     protected KryoBuilder.SerializerFunction serializer;
@@ -43,6 +49,9 @@ public class ActorSystemRemote implements ActorSystem, KryoBuilder.SerializerFac
     public static int debugLogMsgColorDeliver = ActorSystem.systemPropertyColor("csl.actor.debugMsg.color.deliver", 160);
 
     protected List<Function<ActorAddress,ActorAddress>> addressNormalizers;
+
+    protected AtomicInteger clock = new AtomicInteger();
+    protected Map<ActorRefRemote, Integer> clockTable = Collections.synchronizedMap(new WeakHashMap<>());
 
     public ActorSystemRemote() {
         this(new ActorSystemDefaultForRemote(), KryoBuilder.builder());
@@ -63,6 +72,7 @@ public class ActorSystemRemote implements ActorSystem, KryoBuilder.SerializerFac
 
     protected void initConnectionMap() {
         connectionMap = new ConcurrentHashMap<>();
+        connectionHostMap = new ConcurrentHashMap<>();
     }
 
     protected void initSerializer() {
@@ -135,10 +145,14 @@ public class ActorSystemRemote implements ActorSystem, KryoBuilder.SerializerFac
     }
 
     public void start(ActorAddress.ActorAddressRemote serverAddress) {
+        start(serverAddress, serverAddress);
+    }
+    public void start(ActorAddress.ActorAddressRemote serverAddress,
+                      ActorAddress.ActorAddressRemote serverAddressForBind) {
         setServerAddress(serverAddress);
         try {
-            server.setHost(serverAddress.getHost())
-                    .setPort(serverAddress.getPort());
+            server.setHost(serverAddressForBind.getHost())
+                    .setPort(serverAddressForBind.getPort());
             server.start();
         } catch (Exception ex) {
             throw new RuntimeException(ex);
@@ -156,11 +170,15 @@ public class ActorSystemRemote implements ActorSystem, KryoBuilder.SerializerFac
     }
 
     public void startWithoutWait(ActorAddress.ActorAddressRemote serverAddress) {
+        startWithoutWait(serverAddress, serverAddress);
+    }
+    public void startWithoutWait(ActorAddress.ActorAddressRemote serverAddress,
+                                 ActorAddress.ActorAddressRemote serverAddressForBind) {
         setServerAddress(serverAddress);
         try {
-            logDebug("startWithoutWait: %s", this);
-            server.setHost(serverAddress.getHost())
-                    .setPort(serverAddress.getPort());
+            logDebug("startWithoutWait: %s bind:%s", this, serverAddressForBind);
+            server.setHost(serverAddressForBind.getHost())
+                    .setPort(serverAddressForBind.getPort());
             server.startWithoutWait();
         } catch (Exception ex) {
             throw new RuntimeException(ex);
@@ -191,11 +209,12 @@ public class ActorSystemRemote implements ActorSystem, KryoBuilder.SerializerFac
                 localSystem.send(message.renewTarget(localize(target)));
             } else {
                 ActorAddress addr = getAddressForConnection(addrActor);
-                getLogger().log(debugLogMsg, debugLogMsgColorSend, "%s: client tell <%s> to remote %s", this,
-                        message.getData(), addrActor);
-                ConnectionActor a = connectionMap.computeIfAbsent(addr, k -> createConnection(addr));
+                Message.MessageDataClock<Message<?>> clockMessage = createClockMessageForSend(message);
+                getLogger().log(debugLogMsg, debugLogMsgColorSend, "%s: client tell <%d: %s> to remote %s", this,
+                        clockMessage.clock, message.getData(), addrActor);
+                ConnectionActor a = connection(addr, addrHost);
                 if (a != null) {
-                    a.tell(message);
+                    a.tell(clockMessage); //the network message sending is processed as regular message by ConnectionActor with localSystem
                 } else {
                     localSystem.sendDeadLetter(message);
                 }
@@ -203,6 +222,97 @@ public class ActorSystemRemote implements ActorSystem, KryoBuilder.SerializerFac
         } else {
             localSystem.send(message);
         }
+    }
+
+    public void sendClockedMessage(Message.MessageDataClock<Message<?>> message) { //internal use from ConnectionActor: simple version of send(m)
+        ActorRef target = message.body.getTarget();
+        if (target instanceof ActorRefRemote) {
+            ActorAddress addrActor = ((ActorRefRemote) target).getAddress();
+            ActorAddress addrHost = addrActor.getHostAddress();
+            ActorAddress addr = getAddressForConnection(addrActor);
+            ConnectionActor a = connection(addr, addrHost);
+            if (a != null) {
+                a.tell(message);
+            } else {
+                localSystem.sendDeadLetter(message.body);
+            }
+        } else {
+            send(message.body);
+        }
+    }
+
+    protected synchronized ConnectionActor connection(ActorAddress addr, ActorAddress addrHost) {
+        ConnectionActor exa = connectionMap.get(addr);
+        if (exa == null) {
+            LinkedList<ConnectionActor> hostCons = connectionHostMap.computeIfAbsent(addrHost, k -> new LinkedList<>());
+            //it needs to create a new connection
+            if (createdConnections.get() >= getConnectionMax()) {
+                //reuse existing
+                if (hostCons.isEmpty()) {
+                    setupConnectionMapRestructure();
+                }
+                exa = hostCons.removeFirst();
+                hostCons.addLast(exa); //rotate
+                connectionMap.put(addr, exa);
+            } else {
+                exa = createConnectionAndIncrement(addrHost);
+                connectionMap.put(addr, exa);
+                hostCons.add(exa);
+            }
+        }
+        return exa;
+    }
+
+    protected int getConnectionMax() {
+        return 128;
+    }
+
+    protected void setupConnectionMapRestructure() {
+        int n = Math.max(1, createdConnections.get() / connectionHostMap.size());
+        for (Map.Entry<ActorAddress, LinkedList<ConnectionActor>> e : connectionHostMap.entrySet().stream()
+                .sorted(Comparator.comparing((Map.Entry<ActorAddress, LinkedList<ConnectionActor>> a) -> a.getValue().size()).reversed())
+                .collect(Collectors.toList())) {
+            LinkedList<ConnectionActor> cons = e.getValue();
+            int diff = cons.size() - n;
+            while (diff > 0) {
+                ConnectionActor ex = cons.removeFirst();
+                ex.close(); //removed from connectionMap. remaining messages are re-sent by sendClockMessage(m). it might change the order of messages
+                --diff;
+            }
+            while (diff < 0) {
+                ConnectionActor a = createConnectionAndIncrement(e.getKey());
+                cons.add(a);
+                ++diff;
+            }
+        }
+    }
+
+    protected ConnectionActor createConnectionAndIncrement(ActorAddress addrHost) {
+        ConnectionActor a = createConnection(addrHost);
+        createdConnections.incrementAndGet();
+        return a;
+    }
+
+    protected Message.MessageDataClock<Message<?>> createClockMessageForSend(Message<?> message) {
+        Message.MessageDataClock<Message<?>> clockMessage = new Message.MessageDataClock<>(getClockNext(), message);
+        getClockTable().compute((ActorRefRemote) message.getTarget(), (_t, last) -> last == null ?
+                clockMessage.clock : Math.max(last, clockMessage.clock));
+        return clockMessage;
+    }
+
+    public int getClockNext() {
+        return clock.getAndIncrement();
+    }
+
+    public int getClockCurrent() {
+        return clock.get();
+    }
+
+    /**
+     * @return {remoteActor -&gt; sentClock}
+     */
+    public Map<ActorRefRemote, Integer> getClockTable() {
+        return clockTable;
     }
 
     protected ActorAddress getAddressForConnection(ActorAddress target) {
@@ -241,8 +351,8 @@ public class ActorSystemRemote implements ActorSystem, KryoBuilder.SerializerFac
 
     public int receive(Object msg) {
         deliverer.deliver(msg);
-        if (msg instanceof TransferredMessage) {
-            return ((TransferredMessage) msg).id;
+        if (msg instanceof MessageDataTransferred) {
+            return ((MessageDataTransferred) msg).id;
         } else {
             return 200;
         }
@@ -261,13 +371,13 @@ public class ActorSystemRemote implements ActorSystem, KryoBuilder.SerializerFac
 
 
     @Override
-    public void register(Actor actor) {
-        localSystem.register(actor);
+    public boolean register(Actor actor) {
+        return localSystem.register(actor);
     }
 
     @Override
-    public void unregister(Actor actor) {
-        localSystem.unregister(actor);
+    public boolean unregister(Actor actor) {
+        return localSystem.unregister(actor);
     }
 
     @Override
@@ -303,8 +413,10 @@ public class ActorSystemRemote implements ActorSystem, KryoBuilder.SerializerFac
         return "remote";
     }
 
-    public void connectionClosed(ConnectionActor ca) {
-        connectionMap.remove(ca.getAddress(), ca);
+    public synchronized void connectionClosed(ConnectionActor ca) {
+        connectionMap.entrySet()
+                .removeIf(e -> e.getValue().equals(ca));
+        createdConnections.decrementAndGet();
         checkClose();
     }
 
@@ -374,25 +486,6 @@ public class ActorSystemRemote implements ActorSystem, KryoBuilder.SerializerFac
         }
     }
 
-    public boolean isSpecialMessage(Message<?> message) {
-        if (message != null) {
-            return isSpecialMessageData(message.getData());
-        } else {
-            return false;
-        }
-    }
-
-    public boolean isSpecialMessageData(Object data) {
-        return data instanceof SpecialMessage ||
-                data instanceof ConnectionCloseNotice ||
-                data instanceof CallableMessage ||
-                data instanceof CallableMessage.CallableFailure ||
-                data instanceof CallableMessage.CallableResponse<?> ||
-                data instanceof CallableMessage.CallableResponseVoid;
-    }
-
-    public interface SpecialMessage {}
-
     public static class ConnectionActor extends Actor {
         protected ActorSystemRemote remoteSystem;
         protected ActorAddress address;
@@ -402,6 +495,7 @@ public class ActorSystemRemote implements ActorSystem, KryoBuilder.SerializerFac
 
         protected long recordSendMessages;
         protected Duration recordSendMessageTime;
+        protected AtomicBoolean closed = new AtomicBoolean();
 
         public ConnectionActor(ActorSystem system, ActorSystemRemote remoteSystem, ActorAddress.ActorAddressRemote address)
             throws InterruptedException {
@@ -416,33 +510,83 @@ public class ActorSystemRemote implements ActorSystem, KryoBuilder.SerializerFac
         }
 
         @Override
-        public void processMessage(Message<?> message) {
-            send((Message<?>) message.getData());
+        public void offer(Message<?> message) {
+            if (getRemoteSystem().isSpecialMessage(message)) {
+                specialMailbox.offer(message); //TODO clock order is broken?
+            } else {
+                mailbox.offer(message); //no delayedMailbox: any messages are in order, sorted by clock
+            }
         }
 
-        public void send(Message<?> message) {
+
+        @Override
+        protected void processMessageSystemClock(Message.MessageDataClock<?> message) {
+            if (message.body instanceof Message<?>) {
+                processMessageClocked(message);
+            } else {
+                super.processMessageSystemClock(message);
+            }
+        }
+
+        @SuppressWarnings("unchecked")
+        protected void processMessageClocked(Message.MessageDataClock<?> message) {
+            if (closed.get()) {
+                resendClockMessage((Message.MessageDataClock<Message<?>>) message);
+            } else {
+                try {
+                    send((Message.MessageDataClock<Message<?>>) message);
+                } catch (ConnectionSendException sendEx) {
+                    sendEx.getMessages().forEach(this::resendClockMessage);
+                }
+            }
+        }
+
+        protected void resendClockMessage(Message.MessageDataClock<Message<?>> message) {
+            remoteSystem.sendClockedMessage(message);
+        }
+
+        @SuppressWarnings("unchecked")
+        @Override
+        public void processMessage(Message<?> message) {
+            processMessageClocked((Message.MessageDataClock<Message<?>>) message.getData());
+        }
+
+        @SuppressWarnings("unchecked")
+        @Override
+        public void processMessageSpecial(Message<?> message) {
             Instant start = Instant.now();
             try {
-                if (remoteSystem.isSpecialMessage(message)) {
-                    writeSpecial(message);
+                writeSpecial((Message.MessageDataClock<Message<?>>) message.getData());
+            } finally {
+                recordSendMessageTime = Duration.between(start, Instant.now());
+            }
+        }
+
+        @SuppressWarnings("unchecked")
+        public void send(Message.MessageDataClock<Message<?>> clockMessage) {
+            Instant start = Instant.now();
+            try {
+                if (remoteSystem.isSpecialMessage(clockMessage.body)) {
+                    writeSpecial(clockMessage);
                 } else {
-                    if (mailbox.isEmpty()) {
-                        writeSingleMessage(message);
+                    if (isEmptyMailboxAll()) {
+                        writeSingleMessage(clockMessage);
                     } else {
                         int maxBundle = getMaxBundle();
-                        List<Object> messageBundle = new ArrayList<>(Math.max(0, maxBundle));
-                        messageBundle.add(message);
+                        List<Message.MessageDataClock<Message<?>>> messageBundle = new ArrayList<>(Math.max(0, maxBundle));
+                        messageBundle.add(clockMessage);
                         int i = 1;
                         while (i < maxBundle) {
-                            Message<?> msg = mailbox.poll();
-                            if (remoteSystem.isSpecialMessage(msg)) {
+                            Message<?> msg = pollNextMessage();
+                            Message.MessageDataClock<Message<?>> clockMsg = (Message.MessageDataClock<Message<?>>) (msg == null ? null : msg.getData());
+                            if (clockMsg != null && remoteSystem.isSpecialMessage(clockMsg.body)) {
                                 write(messageBundle);
                                 messageBundle.clear();
 
-                                writeSpecial(msg);
+                                writeSpecial(clockMsg);
                                 break;
                             } else if (msg != null) {
-                                messageBundle.add((Message<?>) msg.getData()); //the data of the msg is a Message for remote actor
+                                messageBundle.add(clockMsg); //the data of the msg is a Message for remote actor
                                 ++i;
                             } else {
                                 break;
@@ -456,34 +600,56 @@ public class ActorSystemRemote implements ActorSystem, KryoBuilder.SerializerFac
             }
         }
 
+        public Message<?> pollNextMessage() {
+            Message<?> msg = mailbox.poll();
+            if (msg != null) {
+                return msg;
+            } else {
+                Mailbox dm = delayedMailbox;
+                return dm == null ? null : dm.poll(); //never, for confirmation
+            }
+        }
+
         public int getMaxBundle() {
             return 30;
         }
 
-        private void write(List<Object> messageBundle) {
+        private void write(List<? extends Message.MessageDataClock<Message<?>>> messageBundle) {
             if (!messageBundle.isEmpty()) {
                 writeNonEmpty(messageBundle);
             }
         }
 
-        protected void writeSingleMessage(Message<?> message) {
+        protected void writeSingleMessage(Message.MessageDataClock<Message<?>> message) {
             logMsg("%s write %s", this, message);
-            connection.write(new TransferredMessage(count, message));
+            try {
+                connection.write(new MessageDataTransferred(currentCount(), remoteSystem.getServerAddress(), message));
+            } catch (Exception ex) {
+                throw new ConnectionSendException(ex, message);
+            }
             ++count;
             ++recordSendMessages;
         }
 
-        protected void writeNonEmpty(List<Object> messageBundle) {
+        protected int currentCount() {
+            return 0x0FFF_FFFF & count;
+        }
+
+        protected void writeNonEmpty(List<? extends Message.MessageDataClock<Message<?>>> messageBundle) {
             logMsg("%s write %,d messages: %s,...", this, messageBundle.size(), messageBundle.get(0));
-            connection.write(new TransferredMessage(count, messageBundle));
+            try {
+                connection.write(new MessageDataTransferred(currentCount(), remoteSystem.getServerAddress(), messageBundle));
+            } catch (Exception ex) {
+                throw new ConnectionSendException(ex, messageBundle);
+            }
             ++count;
             recordSendMessages += messageBundle.size();
         }
 
-        protected void writeSpecial(Message<?> message) {
+        protected void writeSpecial(Message.MessageDataClock<Message<?>> message) {
             logMsg("%s special", message);
-            boolean close = (message.getData() instanceof ConnectionCloseNotice);
-            int id = close ? ObjectMessageServer.RESULT_CLOSE : count;
+            boolean close = (message.body.getData() instanceof ConnectionCloseNotice);
+            int id = close ? ObjectMessageServer.RESULT_CLOSE : currentCount();
             if (!close || connection.isOpen()) {
                 writeSpecial(message, id);
             }
@@ -494,8 +660,12 @@ public class ActorSystemRemote implements ActorSystem, KryoBuilder.SerializerFac
             }
         }
 
-        protected void writeSpecial(Message<?> message, int id) {
-            connection.write(new TransferredMessage(id, message));
+        protected void writeSpecial(Message.MessageDataClock<Message<?>> message, int id) {
+            try {
+                connection.write(new MessageDataTransferred(id, remoteSystem.getServerAddress(), message));
+            } catch (Exception ex) {
+                throw new ConnectionSendException(ex, message);
+            }
         }
 
         protected void logMsg(String fmt, Object... args) {
@@ -504,10 +674,9 @@ public class ActorSystemRemote implements ActorSystem, KryoBuilder.SerializerFac
 
         public void notifyAndClose() {
             remoteSystem.logDebug("%s %s notifyAncClose -> %s", remoteSystem, this, address);
-            tell(new Message<Object>(
+            tell(new Message.MessageDataClock<>(remoteSystem.getClockNext(), new Message<Object>(
                     ActorRefRemote.get(remoteSystem, address.getActor(NAME_CONNECTION_ACTOR)),
-                    this,
-                    new ConnectionCloseNotice(remoteSystem.getServerAddress())));
+                    new ConnectionCloseNotice(remoteSystem.getServerAddress()))));
             try {
                 Thread.sleep(50);
             } catch (Exception ex) {
@@ -517,9 +686,10 @@ public class ActorSystemRemote implements ActorSystem, KryoBuilder.SerializerFac
         }
 
         public void close() {
+            closed.set(true);
             if (connection.isOpen()) {
                 logMsg("write empty for closing -> %s", address);
-                connection.write(new TransferredMessage(ObjectMessageServer.RESULT_CLOSE, new ArrayList<>()));
+                connection.write(new MessageDataTransferred(ObjectMessageServer.RESULT_CLOSE,remoteSystem.getServerAddress(), new ArrayList<>()));
             }
             connection.close();
             remoteSystem.connectionClosed(this);
@@ -557,9 +727,26 @@ public class ActorSystemRemote implements ActorSystem, KryoBuilder.SerializerFac
         }
     }
 
-    public static final String NAME_CONNECTION_ACTOR = "$ConnectionClose";
+    public static class ConnectionSendException extends RuntimeException {
+        protected List<? extends Message.MessageDataClock<Message<?>>> messages;
 
-    public static class ConnectionCloseNotice implements Serializable {
+        public ConnectionSendException(Throwable cause, List<? extends Message.MessageDataClock<Message<?>>> messages) {
+            super(cause);
+            this.messages = messages;
+        }
+
+        public ConnectionSendException(Throwable cause, Message.MessageDataClock<Message<?>> message) {
+            this(cause, Collections.singletonList(message));
+        }
+
+        public List<? extends Message.MessageDataClock<Message<?>>> getMessages() {
+            return messages;
+        }
+    }
+
+    public static final String NAME_CONNECTION_ACTOR = Actor.NAME_SYSTEM_SEPARATOR + "ConnectionClose";
+
+    public static class ConnectionCloseNotice implements Serializable, Message.MessageDataSpecial {
         public static final long serialVersionUID = 1L;
         public ActorAddress address;
 
@@ -627,35 +814,56 @@ public class ActorSystemRemote implements ActorSystem, KryoBuilder.SerializerFac
         }
 
         @Override
+        protected void processMessageSystemClock(Message.MessageDataClock<?> message) {
+            deliver(message);
+        }
+
+        @Override
         public void processMessage(Message<?> message) {
             deliver(message.getData());
         }
 
+        @SuppressWarnings("unchecked")
         public void deliver(Object msg) {
-            if (msg instanceof TransferredMessage) {
-                msg = ((TransferredMessage) msg).body;
+            ActorAddress.ActorAddressRemote fromAddr = null;
+            if (msg instanceof MessageDataTransferred) {
+                MessageDataTransferred tMsg = (MessageDataTransferred) msg;
+                msg = tMsg.body;
+                fromAddr = tMsg.fromAddress; //serverAddress
             }
-            if (msg instanceof List<?>) { //message bundle
+            int clock = -1;
+            if (msg instanceof Message.MessageDataClock) {
+                Message.MessageDataClock<?> cMsg = (Message.MessageDataClock<?>) msg;
+                clock = cMsg.clock;
+                msg = cMsg.body;
+            }
+            if (msg instanceof List<?>) { //message bundle: all sub-messages are clocked
                 List<?> msgs = (List<?>) msg;
                 logMsg("%s receive-remote: messages %,d", this, msgs.size());
                 int i = 0;
                 for (Object elem : msgs) {
-                    Message<?> msgElem = (Message<?>) elem;
-                    logMsg("%s receive-remote: [%,d] %s", this, i, msgElem);
-                    remote.getLocalSystem().send(msgElem.renewTarget(
-                            remote.localize(msgElem.getTarget())));
+                    Message.MessageDataClock<Message<?>> cMsg = (Message.MessageDataClock<Message<?>>) elem;
+                    Message<?> msgElem = cMsg.body;
+                    logMsg("%s receive-remote: [%,d] <%d:%s>", this, i, cMsg.clock, msgElem);
+                    sendLocal(cMsg.clock, fromAddr, msgElem);
                     ++i;
                     receiveMessages.incrementAndGet();
                 }
             } else if (msg instanceof Message<?>) {
                 Message<?> m = (Message<?>)  msg;
-                logMsg("%s receive-remote: %s", this, m);
-                remote.getLocalSystem().send(m.renewTarget(
-                        remote.localize(m.getTarget())));
+                logMsg("%s receive-remote: <%d:%s>", this, clock, m);
+                sendLocal(clock, fromAddr, m);
                 receiveMessages.incrementAndGet();
             } else {
                 logMsg("%s receive unintended object: %s", this, msg);
             }
+        }
+
+        protected void sendLocal(int clock, ActorAddress.ActorAddressRemote fromAddr, Message<?> msg) {
+            ActorSystem localSys = remote.getLocalSystem();
+            ActorRef target = remote.localize(msg.getTarget());
+            localSys.send(new Message<>(target, new Message.MessageDataClock<>(clock, fromAddr))); //send activation clock from the host: non-special
+            localSys.send(msg.renewTarget(target));
         }
 
         protected void logMsg(String fmt, Object... args) {
@@ -673,24 +881,45 @@ public class ActorSystemRemote implements ActorSystem, KryoBuilder.SerializerFac
         }
     }
 
-    public static class TransferredMessage implements Serializable {
+    public static class MessageDataTransferred implements Serializable, Message.MessageDataHolder<Object>, KryoSerializable {
         public static final long serialVersionUID = 1L;
         public int id;
+        public ActorAddress.ActorAddressRemote fromAddress;
         public Object body;
 
-        public TransferredMessage() {}
+        public MessageDataTransferred() {}
 
-        public TransferredMessage(int id, Object body) {
+        public MessageDataTransferred(int id, ActorAddress.ActorAddressRemote fromAddress, Object body) {
             this.id = id;
+            this.fromAddress = fromAddress;
             this.body = body;
+        }
+
+        @Override
+        public Object getData() {
+            return body;
         }
 
         @Override
         public String toString() {
             return "TransferredMessage{" +
                     "id=" + id +
+                    ",from=" + fromAddress +
                     ", body=" + body +
                     '}';
+        }
+        @Override
+        public void write(Kryo kryo, Output output) {
+            output.writeInt(id);
+            kryo.writeClassAndObject(output, fromAddress);
+            kryo.writeClassAndObject(output, body);
+        }
+
+        @Override
+        public void read(Kryo kryo, Input input) {
+            id = input.readInt();
+            fromAddress = (ActorAddress.ActorAddressRemote) kryo.readClassAndObject(input);
+            body = kryo.readClassAndObject(input);
         }
     }
 

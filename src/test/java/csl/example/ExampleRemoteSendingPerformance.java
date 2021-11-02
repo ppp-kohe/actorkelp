@@ -19,7 +19,7 @@ import java.util.concurrent.TimeUnit;
 public class ExampleRemoteSendingPerformance {
     public static void main(String[] args) throws Exception {
         int msgBytes = 1000_000;
-        int msgs = 1_000;
+        int msgs = 2_000;
         ActorSystemRemote s2 = new ActorSystemRemote();
         s2.startWithoutWait(20001);
 
@@ -42,10 +42,10 @@ public class ExampleRemoteSendingPerformance {
         ActorRef rec = ActorAddress.get("localhost", 20000).getActor("r").ref(s2);
 
         System.err.println("remote target: " + rec);
-        rec.tell("start", null);
+        rec.tell("start");
 
         for (long[] d : data) {
-            rec.tell(d, null);
+            rec.tell(d);
         }
 
         rec.tell("end");
@@ -106,7 +106,7 @@ public class ExampleRemoteSendingPerformance {
         protected ActorBehavior initBehavior() {
             return behaviorBuilder()
                     .match(long[].class, this::receive)
-                    .matchWithSender(String.class, this::info)
+                    .match(String.class, this::info)
                     .build();
         }
 
@@ -122,12 +122,12 @@ public class ExampleRemoteSendingPerformance {
             }
         }
 
-        void info(String msg, ActorRef sender) {
+        void info(String msg) {
             printInfo(msg);
             prevTime = Instant.now();
             if (msg.equals("end") || msg.equals("extension")) {
                 if (receivedMessages < maxMessages) {
-                    getSystem().getScheduledExecutor().schedule(() -> tell("extension", this), nextExtension, TimeUnit.SECONDS);
+                    getSystem().getScheduledExecutor().schedule(() -> tell("extension"), nextExtension, TimeUnit.SECONDS);
                     nextExtension *= 2L;
                 }
                 if (msg.equals("end")) {

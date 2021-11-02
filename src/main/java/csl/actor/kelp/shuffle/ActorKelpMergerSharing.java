@@ -41,6 +41,7 @@ public class ActorKelpMergerSharing<ActorType extends ActorKelp<ActorType>> exte
     }
 
     public static class SetStateFunctionSetSerializable<ActorType extends ActorKelp<ActorType>> implements SetStateFunction<ActorType, ActorKelpSerializable<ActorType>> {
+        @SuppressWarnings({"unchecked", "rawtypes"})
         @Override
         public void accept(ActorType self, ActorKelpSerializable<ActorType> state) {
             self.setSerializable((ActorKelpSerializable) state);

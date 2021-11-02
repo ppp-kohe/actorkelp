@@ -4,12 +4,10 @@ import csl.actor.*;
 import csl.actor.kelp.ActorKelp;
 import csl.actor.kelp.ActorKelpFunctions;
 import csl.actor.kelp.ActorKelpFunctions.*;
-import csl.actor.kelp.MessageBundle;
 import csl.actor.kelp.behavior.ActorBehaviorKelp.ActorBehaviorMatchKeyList;
 import csl.actor.kelp.behavior.ActorBehaviorKelp.ActorBehaviorMatchKeyListFuture;
 import csl.actor.kelp.behavior.ActorBehaviorKelp.ActorBehaviorMatchKeyListFutureStageEnd;
 import csl.actor.util.FileSplitter;
-import csl.actor.util.StagingActor;
 
 import java.util.*;
 import java.util.function.BiConsumer;
@@ -55,21 +53,33 @@ public class ActorBehaviorBuilderKelp extends ActorBehaviorBuilder {
     }
 
     @Override
-    public ActorBehaviorBuilderKelp matchAny(BiConsumer<Object, ActorRef> handler) {
+    public ActorBehaviorBuilderKelp matchAny(Consumer<Object> handler) {
         super.matchAny(handler);
         return this;
     }
 
-    public <DataType> ActorBehaviorBuilderKelp match(Class<DataType> dataType, DispatcherFactory dispatcher, Consumer<DataType> handler) {
-        return matchWithSender(dataType, dispatcher, (data,sender) -> handler.accept(data));
+    public ActorBehaviorBuilderKelp matchAnyData(Consumer<Object> handler) {
+        with(matchKeyFactory.getAnyData(handler));
+        return this;
     }
 
-    public <DataType> ActorBehaviorBuilderKelp matchWithSender(Class<DataType> dataType, DispatcherFactory dispatcher, BiConsumer<DataType, ActorRef> handler) {
+    public ActorBehaviorBuilderKelp matchAnyData(DispatcherFactory dispatcher, Consumer<Object> handler) {
+        with(matchKeyFactory.getAnyData(handler, dispatcher));
+        return this;
+    }
+
+    public <DataType> ActorBehaviorBuilderKelp match(Class<DataType> dataType, DispatcherFactory dispatcher, Consumer<DataType> handler) {
         with(matchKeyFactory.get(dataType, handler, dispatcher));
         return this;
     }
 
-    public ActorBehaviorBuilderKelp matchAny(DispatcherFactory dispatcher, BiConsumer<Object, ActorRef> handler) {
+    public <DataType> ActorBehaviorBuilderKelp matchWithSender(Class<DataType> dataType, DispatcherFactory dispatcher, BiConsumer<DataType, ActorRef> handler) {
+        with(matchKeyFactory.getWithSender(dataType, handler, dispatcher));
+        return this;
+    }
+
+
+    public ActorBehaviorBuilderKelp matchAny(DispatcherFactory dispatcher, Consumer<Object> handler) {
         with(matchKeyFactory.getAny(handler, dispatcher));
         return this;
     }
@@ -85,10 +95,7 @@ public class ActorBehaviorBuilderKelp extends ActorBehaviorBuilder {
 
     @Override
     public ActorBehavior build() {
-        withTop(new ActorBehaviorDispatcher());
-        with(new ActorBehaviorBundle());
-        with(new ActorBehaviorKelpCompleted());
-        with(new ActorBehaviorKelpFileSplit());
+        buildKelpDefaults();
         ActorBehavior b = super.build();
         histogramProcessorsTarget.accept(
                 processors.entrySet().stream()
@@ -97,6 +104,12 @@ public class ActorBehaviorBuilderKelp extends ActorBehaviorBuilder {
                     .collect(Collectors.toList()));
         selectiveDispatchersTarget.accept(selectiveDispatchers);
         return b;
+    }
+
+    protected void buildKelpDefaults() {
+        withTop(new ActorBehaviorDispatcher());
+        with(new ActorBehaviorBundleKelp());
+        with(new ActorBehaviorKelpFileSplit());
     }
 
     protected void withTop(ActorBehavior behavior) {
@@ -110,9 +123,58 @@ public class ActorBehaviorBuilderKelp extends ActorBehaviorBuilder {
     public static class ActorBehaviorMatchWithDispatcher<DataType> extends ActorBehaviorMatch<DataType> implements ActorBehaviorKelp.SelectiveDispatcherFactory {
         protected DispatcherFactory dispatcher;
 
-        public ActorBehaviorMatchWithDispatcher(Class<DataType> dataType, BiConsumer<DataType, ActorRef> handler, DispatcherFactory dispatcher) {
+        public ActorBehaviorMatchWithDispatcher(Class<DataType> dataType, Consumer<DataType> handler, DispatcherFactory dispatcher) {
             super(dataType, handler);
             this.dispatcher = dispatcher;
+        }
+
+        @Override
+        public KelpDispatcher.SelectiveDispatcher createSelectiveDispatcher(ActorKelp<?> self) {
+            return new KelpDispatcher.SelectiveDispatcher(Collections.singletonList(ActorKelpFunctions.DEFAULT_KEY_EXTRACTOR),
+                    self.createDispatcher(dispatcher));
+        }
+    }
+
+    public static class ActorBehaviorMatchWithSenderAndDispatcher<DataType> extends ActorBehaviorMatchWithSender<DataType> implements ActorBehaviorKelp.SelectiveDispatcherFactory {
+        protected DispatcherFactory dispatcher;
+
+        public ActorBehaviorMatchWithSenderAndDispatcher(Class<DataType> dataType, BiConsumer<DataType,ActorRef> handler, DispatcherFactory dispatcher) {
+            super(dataType, handler);
+            this.dispatcher = dispatcher;
+        }
+
+        @Override
+        public KelpDispatcher.SelectiveDispatcher createSelectiveDispatcher(ActorKelp<?> self) {
+            return new KelpDispatcher.SelectiveDispatcher(Collections.singletonList(ActorKelpFunctions.DEFAULT_KEY_EXTRACTOR),
+                    self.createDispatcher(dispatcher));
+        }
+    }
+
+    public static class ActorBehaviorAnyDataWithDispatcher extends ActorBehaviorAny implements ActorBehaviorKelp.SelectiveDispatcherFactory {
+        protected DispatcherFactory dispatcher;
+
+        public ActorBehaviorAnyDataWithDispatcher(Consumer<Object> handler) {
+            super(handler);
+        }
+
+        public ActorBehaviorAnyDataWithDispatcher(Consumer<Object> handler, DispatcherFactory dispatcher) {
+            super(handler);
+            this.dispatcher = dispatcher;
+        }
+
+        @Override
+        public boolean process(Actor self, Message<?> message) {
+            if (isRegularData(self, message)) {
+                return super.process(self, message);
+            } else {
+                return false;
+            }
+        }
+
+        public boolean isRegularData(Actor self, Message<?> m) {
+            return m != null && !(m instanceof MessageBundle<?>) &&
+                    !self.getSystem().isSpecialMessage(m) &&
+                    !(m.getData() instanceof CallableMessage.CallablePacket<?,?>);
         }
 
         @Override
@@ -125,7 +187,7 @@ public class ActorBehaviorBuilderKelp extends ActorBehaviorBuilder {
     public static class ActorBehaviorAnyWithDispatcher extends ActorBehaviorAny implements ActorBehaviorKelp.SelectiveDispatcherFactory {
         protected DispatcherFactory dispatcher;
 
-        public ActorBehaviorAnyWithDispatcher(BiConsumer<Object, ActorRef> handler, DispatcherFactory dispatcher) {
+        public ActorBehaviorAnyWithDispatcher(Consumer<Object> handler, DispatcherFactory dispatcher) {
             super(handler);
             this.dispatcher = dispatcher;
         }
@@ -139,7 +201,7 @@ public class ActorBehaviorBuilderKelp extends ActorBehaviorBuilder {
 
     /**
      * all messages arrived as regular {@link Message} will be selected by {@link KelpDispatcher}.
-     * After the selection, a message will be {@link MessageBundle} or {@link csl.actor.kelp.shuffle.MessageAccepted}.
+     * After the selection, a message will be {@link MessageBundle} or {@link MessageBundle.MessageAccepted}.
      * The dispatcher mechanism can be separated to the call-site part, and thus the selection is usually done by the call-site,
      *    and the arrived message will be those selected one.
      *   Otherwise, the behavior process the selection on the receiver-site.
@@ -157,36 +219,13 @@ public class ActorBehaviorBuilderKelp extends ActorBehaviorBuilder {
         }
     }
 
-    public static class ActorBehaviorBundle implements ActorBehavior {
+    public static class ActorBehaviorBundleKelp implements ActorBehavior {
         @SuppressWarnings("unchecked")
         @Override
         public boolean process(Actor self, Message<?> message) {
-            if (message instanceof MessageBundle) {
-                if (self instanceof ActorKelp<?>) {
-                    ((ActorKelp<?>) self).processMessageBundle(
-                            (MessageBundle<Object>) message);
-                } else {
-                    ActorKelp.processMessageBundle(self,
-                            (MessageBundle<Object>) message);
-                }
-                return true;
-            }
-            return false;
-        }
-    }
-
-    public static class ActorBehaviorKelpCompleted implements ActorBehavior {
-        @Override
-        public boolean process(Actor self, Message<?> message) {
-            if (message.getData() instanceof StagingActor.StagingCompleted &&
-                    self instanceof StagingActor.StagingSupported) {
-                if (self instanceof ActorKelp<?>) {
-                    ((ActorKelp<?>) self).processStagingCompleted(
-                            (StagingActor.StagingCompleted) message.getData());
-                } else {
-                    ActorKelp.processStagingCompleted(self,
-                            (StagingActor.StagingCompleted) message.getData());
-                }
+            if (message instanceof MessageBundle && self instanceof ActorKelp<?>) {
+                ((ActorKelp<?>) self).processMessageBundle(
+                        (MessageBundle<Object>) message);
                 return true;
             }
             return false;
@@ -300,6 +339,7 @@ public class ActorBehaviorBuilderKelp extends ActorBehaviorBuilder {
 
     }
 
+
     public static class KelpMatchKey1<KeyType, ParamType, ValueType> extends KelpMatchKey<KeyType> {
         protected KeyExtractor<KeyType, ParamType> extractor1;
         protected Function<ParamType, ValueType> valueExtractor1;
@@ -363,6 +403,11 @@ public class ActorBehaviorBuilderKelp extends ActorBehaviorBuilder {
             return this;
         }
 
+        public KelpMatchKeyListPhase<KeyType, ValueType> eventually() {
+            return reduce(new KeyValuesReducerNone<>())
+                    .eventually();
+        }
+
         /**
          * inserting intermediate reducing operation.
          *   <pre>
@@ -372,10 +417,13 @@ public class ActorBehaviorBuilderKelp extends ActorBehaviorBuilder {
          *           =&gt; {k=&gt;[v1'], k'=&gt;[v3'], ...} //reduced lists
          *   </pre>
          *   The reducing will happen on demands.
+         *   <p>
+         *   Note: the reducing will only happen when each list has the size larger than 2.
+         *     To restrict the min size for reducing, use {@link #reduce(int, KeyValuesReducer)} 
          * @param keyValuesReducer the reducer (k,vs) -&gt; vs'
          * @return a list builder
          */
-        public KelpMatchKeyList<KeyType, ValueType> reduce(BiFunction<KeyType, List<ValueType>, Iterable<ValueType>> keyValuesReducer) {
+        public KelpMatchKeyList<KeyType, ValueType> reduce(KeyValuesReducer<KeyType, ValueType> keyValuesReducer) {
             return new KelpMatchKeyList<>(builder, keyComparator, keyValuesReducer,
                     Collections.singletonList(extractor1),
                     Collections.singletonList(valueExtractor1));
@@ -390,11 +438,47 @@ public class ActorBehaviorBuilderKelp extends ActorBehaviorBuilder {
          *           =&gt; {k=&gt;[v1'], k'=&gt;[v3'], ...} //reduced lists
          *   </pre>
          *   The reducing will happen on demands.
+         *   Note: the reducing will only happen when each list has the size larger than 2.
+         *     To restrict the min size for reducing, use {@link #fold(int, BiFunction)}
          * @param keyValuesReducer the reducer (k,vs) -&gt; v'
          * @return a list builder
          */
         public KelpMatchKeyList<KeyType, ValueType> fold(BiFunction<KeyType, List<ValueType>, ValueType> keyValuesReducer) {
             return reduce((k,vs) -> Collections.singletonList(keyValuesReducer.apply(k, vs)));
+        }
+
+        /**
+         * inserting intermediate reducing operation.
+         *   <pre>
+         *       .matchKey(T1.class, t1-&gt;k, t1-&gt;v)
+         *           =&gt; constructing {k=&gt;[v1,v2], k'=&gt;[v3,v4,v5,...], ...}
+         *         .reduce(3, (k,vs) -&gt; vs')
+         *           =&gt; {k=&gt;[v1,v2], k'=&gt;[v3'], ...} //reduced lists
+         *   </pre>
+         *   The reducing will happen on demands.
+         * @param reduceRequiredSize the required size for reducing
+         * @param keyValuesReducer the reducer (k,vs) -&gt; vs'
+         * @return a list builder
+         */
+        public KelpMatchKeyList<KeyType, ValueType> reduce(int reduceRequiredSize, KeyValuesReducer<KeyType, ValueType> keyValuesReducer) {
+            return reduce(new KeyValuesReducerWithRequiredSize<>(reduceRequiredSize, keyValuesReducer));
+        }
+
+        /**
+         * inserting intermediate reducing operation.
+         *   <pre>
+         *       .matchKey(T1.class, t1-&gt;k, t1-&gt;v)
+         *           =&gt; constructing {k=&gt;[v1,v2], k'=&gt;[v3,v4,v5,...], ...}
+         *         .fold(3, (k,vs) -&gt; v')
+         *           =&gt; {k=&gt;[v1,v2], k'=&gt;[v3'], ...} //reduced lists
+         *   </pre>
+         *   The reducing will happen on demands.
+         * @param reduceRequiredSize the required size for reducing
+         * @param keyValuesReducer the reducer (k,vs) -&gt; v'
+         * @return a list builder
+         */
+        public KelpMatchKeyList<KeyType, ValueType> fold(int reduceRequiredSize, BiFunction<KeyType, List<ValueType>, ValueType> keyValuesReducer) {
+            return reduce(reduceRequiredSize, (k,vs) -> Collections.singletonList(keyValuesReducer.apply(k, vs)));
         }
 
         /**
@@ -417,10 +501,24 @@ public class ActorBehaviorBuilderKelp extends ActorBehaviorBuilder {
             return forEachKeyValue((k,v) -> handler.accept(v));
         }
 
+        /**
+         * a terminal action for specified size of values with same key.
+         * The action will be invoked when a value is arrived and the required size values are completed.
+         * @param requiredSize the size of values.
+         * @param handler the action (k,vs[requiredSize])-&gt;(). the size is always fixed as requiredSize
+         * @return an end of matchKey construction
+         */
         public ActorBehaviorBuilderKelp forEachKeyList(int requiredSize, BiConsumer<KeyType, List<ValueType>> handler) {
             return action(id -> builder.getMatchKeyFactory().getList(id, requiredSize, keyComparator, extractor1, valueExtractor1, handler));
         }
 
+        /**
+         * a terminal action for all values with same key.
+         * The size of the values list might be varied.
+         * The action will be invoked at the end of the stage.
+         * @param handler the action (k,vs)-&gt;()
+         * @return an end of matchKey construction
+         */
         public ActorBehaviorBuilderKelp forEachKeyList(BiConsumer<KeyType, List<ValueType>> handler) {
             return action(id -> builder.getMatchKeyFactory().getListFuture(id, keyComparator, extractor1, valueExtractor1, handler));
         }
@@ -444,12 +542,44 @@ public class ActorBehaviorBuilderKelp extends ActorBehaviorBuilder {
             this.valueExtractor2 = valueExtractor2;
         }
 
+        /**
+         * optionally matching to another message type.
+         * extracted values are paired by "matchKey" and "or" selections with grouping by the same key.
+         *   <pre>
+         *       .matchKey(T1.class, t1-&gt;k)
+         *             .or(T2.class, t2-&gt;k)
+         *             .or(T3.class, t3-&gt;k)
+         *           =&gt; constructing {k=&gt;[(t1,t2,t3)], k'=&gt;[(t1',t2',t3')], ...}
+         *   </pre>
+         * @param valueType another value type
+         * @param keyExtractorFromValue a function extracting a key from the value message
+         * @param <ValueType3> another value message type
+         * @return a subsequent builder
+         */
         public <ValueType3> KelpMatchKey3<KeyType, ParamType1, ParamType2, ValueType3, ValueType1, ValueType2, ValueType3> or(
                 Class<ValueType3> valueType, KeyExtractorFunction<ValueType3, KeyType> keyExtractorFromValue) {
             return new KelpMatchKey3<>(builder, extractor1, extractor2, new KeyExtractorClass<>(valueType, keyExtractorFromValue),
                     valueExtractor1, valueExtractor2, Function.identity());
         }
 
+        /**
+         *
+         * optionally matching to another message type.
+         * extracted values are paired by "matchKey" and "or" selections with grouping by the same key.
+         *   <pre>
+         *       .matchKey(T1.class, t1-&gt;k, t1-&gt;v1)
+         *             .or(T2.class, t2-&gt;k, t2-&gt;v2)
+         *             .or(T2.class, t3-&gt;k, t3-&gt;v3)
+         *           =&gt; constructing {k=&gt;[(v1,v2,v3)], k'=&gt;[(v1',v2',v3')], ...}
+         *   </pre>
+         * @param valueType another message type
+         * @param keyExtractorFromValue a function extracting a key from the value message
+         * @param valueExtractorFromValue a function extracting a value from the message
+         * @param <ParamType3> another message type
+         * @param <ValueType3> another value type
+         * @return a subsequent builder
+         *
+         */
         public <ParamType3, ValueType3> KelpMatchKey3<KeyType, ParamType1, ParamType2, ParamType3, ValueType1, ValueType2, ValueType3> or(
                 Class<ParamType3> valueType, KeyExtractorFunction<ParamType3, KeyType> keyExtractorFromValue, Function<ParamType3, ValueType3> valueExtractorFromValue) {
             return new KelpMatchKey3<>(builder, extractor1, extractor2, new KeyExtractorClass<>(valueType, keyExtractorFromValue),
@@ -468,36 +598,174 @@ public class ActorBehaviorBuilderKelp extends ActorBehaviorBuilder {
             return this;
         }
 
+        public KelpMatchKeyListPhase<KeyType, Object> eventually() {
+            return reduce(new KeyValuesReducerNone<>())
+                    .eventually();
+        }
+
+        /**
+         * inserting intermediate reducing operation.
+         *   <pre>
+         *       .matchKey(T1.class, t1-&gt;k, t1-&gt;v)
+         *            .or (T2.class, t2-&gt;k, t2-&gt;v)
+         *           =&gt; constructing {k=&gt;[(v1,v2),(_,v3),...], k'=&gt;[(v4,_),...], ...} // there are incomplete groups (_)
+         *           =&gt; constructing {k=&gt;[v1,v2,v3,...], k'=[v4,...], ...} //actually constructing key to flatten values
+         *         .reduce((k,vs) -&gt; vs')
+         *           =&gt; {k=&gt;[v1',v3',...], k'=&gt;[v4',...], ...} //reduced lists
+         *   </pre>
+         *   The type of construction will change from key-to-groups to key-to-flatten-lists.
+         *   The reducing will happen on demands.
+         *   <p>
+         *   Note: the reducing will only happen when each list has the size larger than 2.
+         *     To restrict the min size for reducing, use {@link #reduce(int, KeyValuesReducer)}
+         * @param keyValuesReducer the reducer (k,vs) -&gt; vs'
+         * @return a list builder
+         */
         @SuppressWarnings("unchecked")
-        public KelpMatchKeyList<KeyType, Object> reduce(BiFunction<KeyType, List<Object>, Iterable<Object>> keyValuesReducer) {
+        public KelpMatchKeyList<KeyType, Object> reduce(KeyValuesReducer<KeyType, Object> keyValuesReducer) {
             return new KelpMatchKeyList<>(builder, keyComparator, keyValuesReducer,
                     Arrays.asList(extractor1, extractor2),
                     Arrays.asList((Function<?,Object>) valueExtractor1, (Function<?,Object>) valueExtractor2));
         }
 
+        /**
+         * inserting intermediate reducing operation.
+         *   <pre>
+         *       .matchKey(T1.class, t1-&gt;k, t1-&gt;v)
+         *            .or (T2.class, t2-&gt;k, t2-&gt;v)
+         *           =&gt; constructing {k=&gt;[(v1,v2),(_,v3),...], k'=&gt;[(v4,_),...], ...} // there are incomplete group (_)
+         *           =&gt; constructing {k=&gt;[v1,v2,v3,...], k'=[v4,...], ...} //actually constructing key to flatten values
+         *         .fold((k,vs) -&gt; v')
+         *           =&gt; {k=&gt;[v1',v3'], k'=&gt;[v4'], ...} //reduced lists
+         *   </pre>
+         *   The type of construction will change from key-to-groups to key-to-flatten-lists.
+         *   The reducing will happen on demands.
+         *   <p>
+         *   Note: the reducing will only happen when each list has the size larger than 2.
+         *     To restrict the min size for reducing, use {@link #fold(int, BiFunction)}
+         * @param keyValuesReducer the reducer (k,vs) -&gt; v'
+         * @return a list builder
+         */
         public KelpMatchKeyList<KeyType, Object> fold(BiFunction<KeyType, List<Object>, Object> keyValuesReducer) {
             return reduce((k,vs) -> Collections.singletonList(keyValuesReducer.apply(k, vs)));
         }
 
+        /**
+         * inserting intermediate reducing operation.
+         *   <pre>
+         *       .matchKey(T1.class, t1-&gt;k, t1-&gt;v)
+         *            .or (T2.class, t2-&gt;k, t2-&gt;v)
+         *           =&gt; constructing {k=&gt;[(v1,v2),(_,v3)], k'=&gt;[(v4,_)], ...} // there are incomplete groups (_)
+         *           =&gt; constructing {k=&gt;[v1,v2,v3], k'=[v4], ...} //actually constructing key to flatten values
+         *         .reduce(3, (k,vs) -&gt; vs')
+         *           =&gt; {k=&gt;[v1',v3'], k'=&gt;[v4], ...} //reduced lists (the size is larger than 3)
+         *   </pre>
+         *   The type of construction will change from key-to-groups to key-to-flatten-lists.
+         *   The reducing will happen on demands.
+         * @param reduceRequiredSize the required size for reducing
+         * @param keyValuesReducer the reducer (k,vs) -&gt; vs'
+         * @return a list builder
+         */
+        public KelpMatchKeyList<KeyType, Object> reduce(int reduceRequiredSize, KeyValuesReducer<KeyType, Object> keyValuesReducer) {
+            return reduce(new KeyValuesReducerWithRequiredSize<>(reduceRequiredSize, keyValuesReducer));
+        }
+
+        /**
+         * inserting intermediate reducing operation.
+         *   <pre>
+         *       .matchKey(T1.class, t1-&gt;k, t1-&gt;v)
+         *            .or (T2.class, t2-&gt;k, t2-&gt;v)
+         *           =&gt; constructing {k=&gt;[(v1,v2),(_,v3)], k'=&gt;[(v4,_)], ...} // there are incomplete group (_)
+         *           =&gt; constructing {k=&gt;[v1,v2,v3], k'=[v4], ...} //actually constructing key to flatten values
+         *         .fold(3, (k,vs) -&gt; v')
+         *           =&gt; {k=&gt;[v1'], k'=&gt;[v4], ...} //reduced lists (for the size larger than 3)
+         *   </pre>
+         *   The type of construction will change from key-to-groups to key-to-flatten-lists.
+         *   The reducing will happen on demands.
+         * @param reduceRequiredSize the required size for reducing
+         * @param keyValuesReducer the reducer (k,vs) -&gt; v'
+         * @return a list builder
+         */
+        public KelpMatchKeyList<KeyType, Object> fold(int reduceRequiredSize, BiFunction<KeyType, List<Object>, Object> keyValuesReducer) {
+            return reduce(reduceRequiredSize, (k,vs) -> Collections.singletonList(keyValuesReducer.apply(k, vs)));
+        }
+
+        /**
+         * a terminal action for iterating over the value group of the key-values.
+         * The action will be immediately invoked when the value arrived and completed a group.
+         * @param handler the action (v1,v2)-&gt;()
+         * @return an end of matchKey construction
+         */
         public ActorBehaviorBuilderKelp forEachPair(BiConsumer<ValueType1, ValueType2> handler) {
             return forEachKeyPair((k,v1,v2) -> handler.accept(v1,v2));
         }
 
+        /**
+         * a terminal action for iterating over the value group of the key-values with the key.
+         * The action will be immediately invoked when the value arrived and completed a group.
+         * @param handler the action (k,v1,v2)-&gt;()
+         * @return an end of matchKey construction
+         */
         public ActorBehaviorBuilderKelp forEachKeyPair(TriConsumer<KeyType, ValueType1, ValueType2> handler) {
             return action(id -> builder.getMatchKeyFactory().get2(id,
                     keyComparator, extractor1, extractor2, valueExtractor1, valueExtractor2, handler));
         }
 
+        /**
+         * a terminal action for iterating over key-value pairs.
+         *   <pre>
+         *       .matchKey(T1.class, t1-&gt;k, t1-&gt;v)
+         *            .or (T2.class, t2-&gt;k, t2-&gt;v)
+         *           =&gt; constructing {k=&gt;[(v1,v2),(_,v3),...], k'=&gt;[(v4,_),...], ...} // there are incomplete group (_)
+         *           =&gt; constructing {k=&gt;[v1,v2,v3,...], k'=[v4,...], ...} //actually constructing key to flatten values
+         *         .forEachKeyValue((k,v) -&gt; h)
+         *           =&gt; h(k,v1), h(k,v2), h(k,v3), ..., h(k',v4)
+         *   </pre>
+         *   The type of construction will change from key-to-groups to key-to-flatten-lists.
+         * The action will be immediately invoked when the value arrived.
+         * @param handler the action (k,v)-&gt;()
+         * @return an end of matchKey construction
+         */
         public ActorBehaviorBuilderKelp forEachKeyValue(BiConsumer<KeyType, Object> handler) {
-            return forEachKeyList(1, (k,vs) -> handler.accept(k, vs.get(0)));
+            return forEachKeyList(1, (k,vs) -> vs.forEach(v -> handler.accept(k, v)));
         }
 
+        /**
+         * a terminal action for specified size of values with same key.
+         * The action will be invoked when a value is arrived and the required size values are completed.
+         *   <pre>
+         *       .matchKey(T1.class, t1-&gt;k, t1-&gt;v)
+         *            .or (T2.class, t2-&gt;k, t2-&gt;v)
+         *           =&gt; constructing {k=&gt;[(v1,v2),(_,v3),(v4,_)], k'=&gt;[(v5,_),(v6,_),...], ...} // there are incomplete group (_)
+         *           =&gt; constructing {k=&gt;[v1,v2,v3,v4], k'=[v5,v6,...], ...} //actually constructing key to flatten values
+         *         .forEachKeyList(2, (k,vs) -&gt; h)
+         *           =&gt; h(k,[v1,v2]), h(k,[v3,v4]), h(k',[v5,v6]), ...
+         *   </pre>
+         *   The type of construction will change from key-to-groups to key-to-flatten-lists.
+         * @param requiredSize the size of values.
+         * @param handler the action (k,vs[requiredSize])-&gt;(). the size is always fixed as requiredSize
+         * @return an end of matchKey construction
+         */
         public ActorBehaviorBuilderKelp forEachKeyList(int requiredSize, BiConsumer<KeyType, List<Object>> handler) {
             return action(id -> builder.getMatchKeyFactory().getList(id, requiredSize, keyComparator,
                     new KeyExtractorList<>(extractor1, extractor2),
                     new ExtractorWithSelection2<>(extractor1, extractor2, valueExtractor1, valueExtractor2), handler));
         }
 
+        /**
+         * a terminal action for all values with same key.
+         * The action will be invoked at the end of the stage.
+         *   <pre>
+         *       .matchKey(T1.class, t1-&gt;k, t1-&gt;v)
+         *            .or (T2.class, t2-&gt;k, t2-&gt;v)
+         *           =&gt; constructing {k=&gt;[(v1,v2),(_,v3),(v4,_)], k'=&gt;[(v5,_),(v6,_),...], ...} // there are incomplete group (_)
+         *           =&gt; constructing {k=&gt;[v1,v2,v3,v4], k'=[v5,v6,...], ...} //actually constructing key to flatten values
+         *         .forEachKeyList((k,vs) -&gt; h)
+         *           =&gt; h(k,[v1,v2,v3]), h(k,[v4]) h(k',[v5,v6]), ... //the size of vs might be varied
+         *   </pre>
+         * @param handler the action (k,vs)-&gt;()
+         * @return an end of matchKey construction
+         */
         public ActorBehaviorBuilderKelp forEachKeyList(BiConsumer<KeyType, List<Object>> handler) {
             return action(id -> builder.getMatchKeyFactory().getListFuture(id, keyComparator,
                     new KeyExtractorList<>(extractor1, extractor2),
@@ -554,8 +822,13 @@ public class ActorBehaviorBuilderKelp extends ActorBehaviorBuilder {
             return this;
         }
 
+        public KelpMatchKeyListPhase<KeyType, Object> eventually() {
+            return reduce(new KeyValuesReducerNone<>())
+                    .eventually();
+        }
+
         @SuppressWarnings("unchecked")
-        public KelpMatchKeyList<KeyType, Object> reduce(BiFunction<KeyType, List<Object>, Iterable<Object>> keyValuesReducer) {
+        public KelpMatchKeyList<KeyType, Object> reduce(KeyValuesReducer<KeyType, Object> keyValuesReducer) {
             return new KelpMatchKeyList<>(builder, keyComparator, keyValuesReducer,
                     Arrays.asList(extractor1, extractor2, extractor3),
                     Arrays.asList((Function<?,Object>) valueExtractor1, (Function<?,Object>) valueExtractor2, (Function<?,Object>) valueExtractor3));
@@ -563,6 +836,14 @@ public class ActorBehaviorBuilderKelp extends ActorBehaviorBuilder {
 
         public KelpMatchKeyList<KeyType, Object> fold(BiFunction<KeyType, List<Object>, Object> keyValuesReducer) {
             return reduce((k,vs) -> Collections.singletonList(keyValuesReducer.apply(k, vs)));
+        }
+
+        public KelpMatchKeyList<KeyType, Object> reduce(int reduceRequiredSize, KeyValuesReducer<KeyType, Object> keyValuesReducer) {
+            return reduce(new KeyValuesReducerWithRequiredSize<>(reduceRequiredSize, keyValuesReducer));
+        }
+
+        public KelpMatchKeyList<KeyType, Object> fold(int reduceRequiredSize, BiFunction<KeyType, List<Object>, Object> keyValuesReducer) {
+            return reduce(reduceRequiredSize, (k,vs) -> Collections.singletonList(keyValuesReducer.apply(k, vs)));
         }
 
         public ActorBehaviorBuilderKelp forEachTriple(TriConsumer<ValueType1, ValueType2, ValueType3> handler) {
@@ -575,7 +856,7 @@ public class ActorBehaviorBuilderKelp extends ActorBehaviorBuilder {
         }
 
         public ActorBehaviorBuilderKelp forEachKeyValue(BiConsumer<KeyType, Object> handler) {
-            return forEachKeyList(1, (k,vs) -> handler.accept(k, vs.get(0)));
+            return forEachKeyList(1, (k,vs) -> vs.forEach(v -> handler.accept(k, v)));
         }
 
         public ActorBehaviorBuilderKelp forEachKeyList(int requiredSize, BiConsumer<KeyType, List<Object>> handler) {
@@ -651,8 +932,13 @@ public class ActorBehaviorBuilderKelp extends ActorBehaviorBuilder {
             return this;
         }
 
+        public KelpMatchKeyListPhase<KeyType, Object> eventually() {
+            return reduce(new KeyValuesReducerNone<>())
+                    .eventually();
+        }
+
         @SuppressWarnings("unchecked")
-        public KelpMatchKeyList<KeyType, Object> reduce(BiFunction<KeyType, List<Object>, Iterable<Object>> keyValuesReducer) {
+        public KelpMatchKeyList<KeyType, Object> reduce(KeyValuesReducer<KeyType, Object> keyValuesReducer) {
             return new KelpMatchKeyList<>(builder, keyComparator, keyValuesReducer,
                     Arrays.asList(extractor1, extractor2, extractor3, extractor4),
                     Arrays.asList((Function<?,Object>) valueExtractor1, (Function<?,Object>) valueExtractor2, (Function<?,Object>) valueExtractor3, (Function<?,Object>) valueExtractor4));
@@ -660,6 +946,12 @@ public class ActorBehaviorBuilderKelp extends ActorBehaviorBuilder {
 
         public KelpMatchKeyList<KeyType, Object> fold(BiFunction<KeyType, List<Object>, Object> keyValuesReducer) {
             return reduce((k,vs) -> Collections.singletonList(keyValuesReducer.apply(k, vs)));
+        }
+        public KelpMatchKeyList<KeyType, Object> reduce(int reduceRequiredSize, KeyValuesReducer<KeyType, Object> keyValuesReducer) {
+            return reduce(new KeyValuesReducerWithRequiredSize<>(reduceRequiredSize, keyValuesReducer));
+        }
+        public KelpMatchKeyList<KeyType, Object> fold(int reduceRequiredSize, BiFunction<KeyType, List<Object>, Object> keyValuesReducer) {
+            return reduce(reduceRequiredSize, (k,vs) -> Collections.singletonList(keyValuesReducer.apply(k, vs)));
         }
 
         public ActorBehaviorBuilderKelp forEachQuad(QuadConsumer<ValueType1, ValueType2, ValueType3, ValueType4> handler) {
@@ -695,7 +987,7 @@ public class ActorBehaviorBuilderKelp extends ActorBehaviorBuilder {
     public static class KelpMatchKeyList<KeyType, ValueType> extends KelpMatchKey<KeyType> {
         protected List<KeyExtractor<KeyType,?>> extractors;
         protected List<Function<?, ValueType>> valueExtractors;
-        protected List<BiFunction<KeyType, List<ValueType>, Iterable<ValueType>>> keyValuesReducers;
+        protected List<KeyValuesReducer<KeyType, ValueType>> keyValuesReducers;
 
         public KelpMatchKeyList(ActorBehaviorBuilderKelp builder,
                                 List<KeyExtractor<KeyType, ?>> extractors,
@@ -708,7 +1000,7 @@ public class ActorBehaviorBuilderKelp extends ActorBehaviorBuilder {
 
         public KelpMatchKeyList(ActorBehaviorBuilderKelp builder,
                                 KeyComparator<KeyType> keyComparator,
-                                BiFunction<KeyType, List<ValueType>, Iterable<ValueType>> keyValuesReducer,
+                                KeyValuesReducer<KeyType, ValueType> keyValuesReducer,
                                 List<KeyExtractor<KeyType, ?>> extractors,
                                 List<Function<?, ValueType>> valueExtractors) {
             super(builder, keyComparator);
@@ -720,7 +1012,7 @@ public class ActorBehaviorBuilderKelp extends ActorBehaviorBuilder {
 
         public KelpMatchKeyList(ActorBehaviorBuilderKelp builder,
                                 KeyComparator<KeyType> keyComparator,
-                                List<BiFunction<KeyType, List<ValueType>, Iterable<ValueType>>> keyValuesReducers,
+                                List<KeyValuesReducer<KeyType, ValueType>> keyValuesReducers,
                                 List<KeyExtractor<KeyType, ?>> extractors,
                                 List<Function<?, ValueType>> valueExtractors) {
             super(builder, keyComparator);
@@ -754,7 +1046,7 @@ public class ActorBehaviorBuilderKelp extends ActorBehaviorBuilder {
             return this;
         }
 
-        public KelpMatchKeyList<KeyType, ValueType> reduce(BiFunction<KeyType, List<ValueType>, Iterable<ValueType>> keyValuesReducer) {
+        public KelpMatchKeyList<KeyType, ValueType> reduce(KeyValuesReducer<KeyType, ValueType> keyValuesReducer) {
             keyValuesReducers.add(keyValuesReducer);
             return this;
         }
@@ -763,12 +1055,20 @@ public class ActorBehaviorBuilderKelp extends ActorBehaviorBuilder {
             return reduce((k,vs) -> Collections.singletonList(keyValuesReducer.apply(k, vs)));
         }
 
+        public KelpMatchKeyList<KeyType, ValueType> reduce(int reduceRequiredSize, KeyValuesReducer<KeyType, ValueType> keyValuesReducer) {
+            return reduce(new KeyValuesReducerWithRequiredSize<>(reduceRequiredSize, keyValuesReducer));
+        }
+
+        public KelpMatchKeyList<KeyType, ValueType> fold(int reduceRequiredSize, BiFunction<KeyType, List<ValueType>, ValueType> keyValuesReducer) {
+            return reduce(reduceRequiredSize, (k,vs) -> Collections.singletonList(keyValuesReducer.apply(k, vs)));
+        }
+
         public ActorBehaviorBuilderKelp forEachKeyValue(BiConsumer<KeyType, ValueType> handler) {
-            return forEachKeyList(1, (k,vs) -> handler.accept(k, vs.get(0)));
+            return forEachKeyList(1, (k,vs) -> vs.forEach(v -> handler.accept(k, v)));
         }
 
         public ActorBehaviorBuilderKelp forEach(Consumer<ValueType> handler) {
-            return forEachKeyList(1, (k,vs) -> handler.accept(vs.get(0)));
+            return forEachKeyList(1, (k,vs) -> vs.forEach(handler));
         }
 
         public ActorBehaviorBuilderKelp forEachKeyList(int requiredSize, BiConsumer<KeyType, List<ValueType>> handler) {
@@ -802,14 +1102,14 @@ public class ActorBehaviorBuilderKelp extends ActorBehaviorBuilder {
         }
 
         public KelpMatchKeyListPhase(ActorBehaviorBuilderKelp builder, KeyComparator<KeyType> keyComparator,
-                                     BiFunction<KeyType, List<ValueType>, Iterable<ValueType>> keyValuesReducer,
+                                     KeyValuesReducer<KeyType, ValueType> keyValuesReducer,
                                      List<KeyExtractor<KeyType, ?>> keyExtractors,
                                      List<Function<?, ValueType>> valueExtractors) {
             super(builder, keyComparator, keyValuesReducer, keyExtractors, valueExtractors);
         }
 
         public KelpMatchKeyListPhase(ActorBehaviorBuilderKelp builder, KeyComparator<KeyType> keyComparator,
-                                     List<BiFunction<KeyType, List<ValueType>, Iterable<ValueType>>> keyValuesReducers,
+                                     List<KeyValuesReducer<KeyType, ValueType>> keyValuesReducers,
                                      List<KeyExtractor<KeyType, ?>> extractors,
                                      List<Function<?, ValueType>> valueExtractors) {
             super(builder, keyComparator, keyValuesReducers, extractors, valueExtractors);
@@ -835,11 +1135,23 @@ public class ActorBehaviorBuilderKelp extends ActorBehaviorBuilder {
 
 
     public static class ActorBehaviorMatchKeyFactory {
-        public <DataType> ActorBehavior get(Class<DataType> dataType, BiConsumer<DataType, ActorRef> handler, DispatcherFactory dispatcher) {
+        public <DataType> ActorBehavior get(Class<DataType> dataType, Consumer<DataType> handler, DispatcherFactory dispatcher) {
             return new ActorBehaviorMatchWithDispatcher<>(dataType, handler, dispatcher);
         }
 
-        public ActorBehavior getAny(BiConsumer<Object, ActorRef> handler, DispatcherFactory dispatcher) {
+        public <DataType> ActorBehavior getWithSender(Class<DataType> dataType, BiConsumer<DataType, ActorRef> handler, DispatcherFactory dispatcher) {
+            return new ActorBehaviorMatchWithSenderAndDispatcher<>(dataType, handler, dispatcher);
+        }
+
+        public ActorBehavior getAnyData(Consumer<Object> handler) {
+            return new ActorBehaviorAnyDataWithDispatcher(handler);
+        }
+
+        public ActorBehavior getAnyData(Consumer<Object> handler, DispatcherFactory dispatcher) {
+            return new ActorBehaviorAnyDataWithDispatcher(handler, dispatcher);
+        }
+
+        public ActorBehavior getAny(Consumer<Object> handler, DispatcherFactory dispatcher) {
             return new ActorBehaviorAnyWithDispatcher(handler, dispatcher);
         }
 
@@ -911,7 +1223,7 @@ public class ActorBehaviorBuilderKelp extends ActorBehaviorBuilder {
 
         public <KeyType, ParamType, ValueType> ActorBehaviorMatchKeyListFuture<KeyType, ParamType, ValueType> getListFuture(int matchKeyEntryId,
                                                KeyComparator<KeyType> keyComparator,
-                                               BiFunction<KeyType, List<ValueType>, Iterable<ValueType>> keyValuesReducer,
+                                               KeyValuesReducer<KeyType, ValueType> keyValuesReducer,
                                                KeyExtractor<KeyType, ParamType> keyExtractorFromValue,
                                                Function<ParamType, ValueType> valueExtractorFromValue,
                                                BiConsumer<KeyType, List<ValueType>> handler) {
@@ -922,7 +1234,7 @@ public class ActorBehaviorBuilderKelp extends ActorBehaviorBuilder {
 
         public <KeyType, ParamType, ValueType> ActorBehaviorMatchKeyListFuture<KeyType, ParamType, ValueType> getListFuture(int matchKeyEntryId, int requiredSize,
                                               KeyComparator<KeyType> keyComparator,
-                                              BiFunction<KeyType, List<ValueType>, Iterable<ValueType>> keyValuesReducer,
+                                              KeyValuesReducer<KeyType, ValueType> keyValuesReducer,
                                               KeyExtractor<KeyType, ParamType> keyExtractorFromValue,
                                               Function<ParamType, ValueType> valueExtractorFromValue,
                                               BiConsumer<KeyType, List<ValueType>> handler) {
@@ -933,7 +1245,7 @@ public class ActorBehaviorBuilderKelp extends ActorBehaviorBuilder {
 
         public <KeyType, ParamType, ValueType> ActorBehaviorMatchKeyListFutureStageEnd<KeyType, ParamType, ValueType> getListFuturePhase(int matchKeyEntryId, int requiredSize,
                                                                                                                                          KeyComparator<KeyType> keyComparator,
-                                                                                                                                         BiFunction<KeyType, List<ValueType>, Iterable<ValueType>> keyValuesReducer,
+                                                                                                                                         KeyValuesReducer<KeyType, ValueType> keyValuesReducer,
                                                                                                                                          KeyExtractor<KeyType, ParamType> keyExtractorFromValue,
                                                                                                                                          Function<ParamType, ValueType> valueExtractorFromValue,
                                                                                                                                          BiConsumer<KeyType, List<ValueType>> handler) {

@@ -15,9 +15,13 @@ public class TestToolRemote {
     static String classpath;
     public static void setMvnClasspath() {
         try {
+            System.err.println("PATH: " + System.getenv("PATH"));
+            System.err.println("PWD: " + System.getenv("PWD"));
             ProcessBuilder pb = new ProcessBuilder();
             pb.environment().put("MAVEN_OPTS", "");
+            pb.environment().put("JAVA_HOME", System.getProperty("java.home"));
             boolean win = System.getProperty("os.name", "").contains("Windows");
+            pb.redirectError(ProcessBuilder.Redirect.INHERIT);
             Process proc = pb.command(win ? "mvn.cmd" : "mvn", "dependency:build-classpath", "-DincludeScope=test")
                     .start();
             try (BufferedReader r = new BufferedReader(new InputStreamReader(proc.getInputStream(), StandardCharsets.UTF_8))) {

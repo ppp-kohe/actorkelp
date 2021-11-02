@@ -58,7 +58,7 @@ public class ActorSystemCluster extends ActorSystemRemote implements PersistentF
 
         @Override
         public void sendDeadLetter(Message<?> message) {
-            if (message.getData() instanceof ActorPlacement.LeaveEntry) {
+            if (Message.unwrapHolder(message.getData()) instanceof ActorPlacement.LeaveEntry) {
                 //the target might be already left
             } else {
                 super.sendDeadLetter(message);
@@ -97,7 +97,7 @@ public class ActorSystemCluster extends ActorSystemRemote implements PersistentF
 
         @Override
         public void sendDeadLetter(Message<?> message) {
-            if (message.getData() instanceof ActorPlacement.LeaveEntry) {
+            if (Message.unwrapHolder(message.getData()) instanceof ActorPlacement.LeaveEntry) {
                 //the target might be already left
             } else {
                 super.sendDeadLetter(message);
@@ -303,8 +303,7 @@ public class ActorSystemCluster extends ActorSystemRemote implements PersistentF
         }
 
         public ClusterDeployment.ActorPlacementForCluster<?> getPlacement() {
-            Actor placement = getSystem().resolveActorLocalNamed(
-                    ActorRefLocalNamed.get(getSystem(), ActorPlacement.PLACEMENT_NAME));
+            ActorPlacement placement = ActorPlacement.getPlacement(getSystem());
             if (placement instanceof ClusterDeployment.ActorPlacementForCluster<?>) {
                 return (ClusterDeployment.ActorPlacementForCluster<?>) placement;
             } else {
@@ -314,6 +313,7 @@ public class ActorSystemCluster extends ActorSystemRemote implements PersistentF
     }
 
     public static class PersistentFileManagerThrottleUpdateStatus implements CallableMessage.CallableMessageConsumer<Actor> {
+        public static final long serialVersionUID = -1;
         public boolean start;
         public Instant future;
         public ActorAddress.ActorAddressRemote addr;
@@ -384,13 +384,7 @@ public class ActorSystemCluster extends ActorSystemRemote implements PersistentF
         }
 
         protected boolean isSpecial(Object msg) {
-            if (msg instanceof TransferredMessage) {
-                return isSpecial(((TransferredMessage) msg).body);
-            } else if (msg instanceof Message<?>) {
-                return isSpecial(((Message<?>) msg).getData());
-            } else {
-                return ((ObjectMessageClientThrottle) getClient()).isSpecial(msg);
-            }
+            return ((ObjectMessageClientThrottle) getClient()).isSpecial(msg);
         }
     }
 }

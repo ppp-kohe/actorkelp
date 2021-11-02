@@ -2,10 +2,12 @@ package csl.example.kelp;
 
 import csl.actor.ActorBehavior;
 import csl.actor.ActorSystem;
+import csl.actor.Message;
 import csl.actor.kelp.*;
-import csl.actor.util.StagingActor;
 
+import java.io.Serializable;
 import java.nio.file.Paths;
+import java.time.Duration;
 
 public class ExampleCluster {
     public static void main(String[] args) throws Exception {
@@ -30,12 +32,16 @@ public class ExampleCluster {
 
         KelpStage<TestActor> tests = s.connects(a);
 
+        KelpStageGraphActor g = s.stageGraph()
+                .withLogPeriodic(Duration.ofSeconds(3))
+                .start();
+
         ///input
         s.tell(n);
 
-        StagingActor.staging(d.getSystem())
-                .start(s)
-                .get();
+        Thread.sleep(5);
+
+        g.await().get();
 
         ///merge
         tests.merge();
@@ -51,6 +57,7 @@ public class ExampleCluster {
     public static class TestSource extends ActorKelp<TestSource> {
         public TestSource(ActorSystem system, String name, ConfigKelp config) {
             super(system, name, config);
+            config.log("new TestSource(%s, %s)", system, name);
         }
         @Override
         protected ActorBehavior initBehavior() {
@@ -75,6 +82,17 @@ public class ExampleCluster {
     public static class TestActor extends ActorKelp<TestActor> {
         public TestActor(ActorSystem system, String name, ConfigKelp config) {
             super(system, name, config);
+            config.log("new TestActor(%s, %s)", system, name);
+        }
+
+        @Override
+        public void offer(Message<?> message) {
+            if (!(Message.unwrapHolder(message.getData()) instanceof KelpStageGraphActor.WatchTask)
+                && !(message.getData() instanceof String)
+                && !(message.getData() instanceof Message.MessageDataClock<?>)) {
+                config.log("%s : offer %s", this, message);
+            }
+            super.offer(message);
         }
 
         @Override
@@ -83,14 +101,19 @@ public class ExampleCluster {
                     .matchKey(String.class, ActorKelpFunctions.KeyExtractorFunction.identity(), s -> new Tuple(s, 1))
                     .fold((k,v) -> v.stream().reduce((a,b) -> new Tuple(a.value, a.count + b.count))
                             .orElse(new Tuple("",0)))
-                    .forEach(o -> {})
+                    .forEach(o -> {
+                        getConfig().log("TestActor %s", o);
+                    })
                     .build();
         }
     }
 
-    public static class Tuple {
-        String value;
-        int count;
+    public static class Tuple implements Serializable {
+        public static final long serialVersionUID = 1;
+        public String value;
+        public int count;
+
+        public Tuple() {}
 
         public Tuple(String value, int count) {
             this.value = value;

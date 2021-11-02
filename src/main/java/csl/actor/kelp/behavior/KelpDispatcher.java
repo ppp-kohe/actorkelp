@@ -3,7 +3,9 @@ package csl.actor.kelp.behavior;
 import csl.actor.ActorRef;
 import csl.actor.Message;
 import csl.actor.kelp.ActorKelpFunctions;
+import csl.actor.util.Staging;
 
+import java.io.Flushable;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
@@ -38,19 +40,28 @@ public interface KelpDispatcher extends Serializable {
 
     KelpDispatcher.DispatcherShuffle DEFAULT_DISPATCHER = new KelpDispatcher.DispatcherShuffle();
 
-    interface DispatchRef {
+    interface DispatchRef extends Flushable {
         List<? extends DispatchUnit> getDispatchUnits();
         int getDispatchUnitSize();
         DispatchUnit getDispatchUnit(int index);
+
+        default boolean hasRemainingMessage() {
+            return getDispatchUnits().stream()
+                    .anyMatch(DispatchUnit::hasRemainingMessage);
+        }
+
+        @Override
+        default void flush() {
+            getDispatchUnits()
+                    .forEach(DispatchUnit::flush);
+        }
     }
 
-    interface DispatchUnit extends ActorRef {
+    interface DispatchUnit extends ActorRef, Staging.StagingNonSubject {
         int getIndex();
-        void flush(ActorRef sender);
+        void flush();
 
-        default void flush() {
-            flush(null);
-        }
+        boolean hasRemainingMessage();
     }
 
     class SelectiveDispatcher implements Serializable, Cloneable {
@@ -204,7 +215,7 @@ public interface KelpDispatcher extends Serializable {
             }
         }
 
-        boolean nextBoolean() {
+        protected boolean nextBoolean() { //returns same results with poisson(1.0, random)
             return random.nextDouble() > POISSON_1_0;
         }
     }

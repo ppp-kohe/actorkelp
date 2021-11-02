@@ -16,7 +16,7 @@ public class ResponsiveCalls {
     public static final String CALLABLE_NAME = ResponsiveCalls.class.getName() + ".callable";
 
     public static String nextId() {
-        return ResponsiveCalls.class.getName() + "." + id.getAndIncrement();
+        return ResponsiveCalls.class.getName() + Actor.NAME_ID_SEPARATOR + id.getAndIncrement();
     }
 
     /**
@@ -25,13 +25,15 @@ public class ResponsiveCalls {
      *    class RemoteTargetActor extends Actor {
      *        protected void processMessage(Message m) {
      *            Object msg = m.getData();
-     *            Object result;
-     *            try {
-     *              result = processMsg(msg);
-     *            } catch (Throwable e) {
-     *              result = new CallableFailure(e);
+     *            if (msg instanceof MessageDataPacket p) {
+     *                Object result;
+     *                try {
+     *                  result = processMsg(p.getData());
+     *                } catch (Throwable e) {
+     *                  result = new CallableFailure(e);
+     *                }
+     *                p.getSender().tell(result);
      *            }
-     *            m.getSender().tell(result, this);
      *        }
      *    }
      * </pre>
@@ -53,7 +55,7 @@ public class ResponsiveCalls {
      *                  System.out.println(res);
      *                } catch (Exception ex) {}
      *              } else if (m.getData().equals("getFromTarget")) { //5. it cannot run the code:
-     *                  m.getSender().tell("backToTarget", this);      //   above Future.get() possesses the actor
+     *                  target.tell("backToTarget", this);      //   above Future.get() possesses the actor
      *              }
      *          }
      *      }
@@ -62,12 +64,14 @@ public class ResponsiveCalls {
      *          Target backTarget;
      *          Target(ActorSystem s, Sender s) { super(s); owner = s; }
      *          protected void processMessage(Message m) {
-     *              if (m.getData().equals("msg")) { //3. receive from ResponsiveCall
-     *                  backTarget = m.getSender();
+     *             if (m.getData() instanceof MessageDataPack p) {
+     *              if (p.getData().equals("msg")) { //3. receive from ResponsiveCall
+     *                  backTarget = p.getSender();
      *                  owner.tell("getFromTarget", this); //4. not a message sender but the owner
      *              } else if (m.getData().equals("backToTarget")) {
      *                  backTarget.tell("result", this);
      *              }
+     *             }
      *          }
      *      }
      *  </pre>
@@ -141,7 +145,7 @@ public class ResponsiveCalls {
     }
 
     public static <A extends Actor,T> void sendTask(ActorSystem system, ActorRef target, CallableMessage<A,T> task, ResponsiveCompletable<T> resultHandler) {
-        target.tell(task, new ResponsiveSenderActor<>(system, resultHandler));
+        target.tell(task.withSender(new ResponsiveSenderActor<>(system, resultHandler)));
     }
 
     public static <A extends Actor> void sendTaskConsumer(ActorSystem system, ActorRef target, CallableMessage.CallableMessageConsumer<A> task, ResponsiveCompletable<CallableResponseVoid> resultHandler) {
@@ -173,8 +177,8 @@ public class ResponsiveCalls {
 
     @FunctionalInterface
     public interface ResponsiveCompletable<T> {
-        void complete(Actor a, T t, ActorRef sender);
-        default void completeExceptionally(Actor a, Throwable ex, ActorRef sender) {
+        void complete(Actor a, T t);
+        default void completeExceptionally(Actor a, Throwable ex) {
             a.getSystem().getLogger().log(true, -1, ex, "completeExceptionally %s", this);
         }
     }
@@ -191,12 +195,12 @@ public class ResponsiveCalls {
         }
 
         @Override
-        public void complete(Actor a, T t, ActorRef sender) {
+        public void complete(Actor a, T t) {
             future.complete(t);
         }
 
         @Override
-        public void completeExceptionally(Actor a, Throwable ex, ActorRef sender) {
+        public void completeExceptionally(Actor a, Throwable ex) {
             future.completeExceptionally(ex);
         }
 
@@ -225,30 +229,30 @@ public class ResponsiveCalls {
         @Override
         protected ActorBehavior initBehavior() {
             return behaviorBuilder()
-                    .matchWithSender(ActorSystemDefault.DeadLetter.class, this::fail)
+                    .match(ActorSystemDefault.DeadLetter.class, this::fail)
                     .matchAny(this::receive)
                     .build();
         }
 
         @SuppressWarnings("unchecked")
-        public void receive(Object v, ActorRef sender) {
+        public void receive(Object v) {
             getSystem().unregister(this);
             if (v instanceof CallableMessage.CallableFailure) {
-                resultHolder.completeExceptionally(this, ((CallableMessage.CallableFailure) v).getError(), sender);
+                resultHolder.completeExceptionally(this, ((CallableMessage.CallableFailure) v).getError());
             } else {
                 try {
                     if (v instanceof CallableMessage.CallableResponse<?>) {
                         v = ((CallableMessage.CallableResponse<?>) v).getValue();
                     }
-                    resultHolder.complete(this, (T) v, sender);
+                    resultHolder.complete(this, (T) v);
                 } catch (Throwable ce) {
-                    resultHolder.completeExceptionally(this, ce, sender);
+                    resultHolder.completeExceptionally(this, ce);
                 }
             }
         }
 
-        public void fail(ActorSystemDefault.DeadLetter l, ActorRef sender) {
-            resultHolder.completeExceptionally(this, new DeadLetterException(l), sender);
+        public void fail(ActorSystemDefault.DeadLetter l) {
+            resultHolder.completeExceptionally(this, new DeadLetterException(l));
         }
 
         public ResponsiveCompletable<T> getResultHolder() {
@@ -266,7 +270,14 @@ public class ResponsiveCalls {
         }
 
         public CompletableFuture<T> send(ActorRef target, Object data) {
-            target.tell(data, this);
+            if (!(data instanceof Message.MessageDataPacket<?>)) {
+                if (data instanceof CallableMessage<?,?>) {
+                    data = ((CallableMessage<?, ?>) data).withSender(this);
+                } else {
+                    data = Message.dataWithSender(data, this);
+                }
+            }
+            target.tell(data);
             return ((ResponsiveCompletableFuture<T>) resultHolder).getFuture();
         }
     }

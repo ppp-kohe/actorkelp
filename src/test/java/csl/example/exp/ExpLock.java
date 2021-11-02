@@ -1,6 +1,7 @@
 package csl.example.exp;
 
 import csl.actor.*;
+import csl.actor.kelp.behavior.HistogramTree;
 import csl.example.kelp.TestToolThreadChecker;
 import csl.actor.kelp.ActorKelpFunctions;
 import csl.actor.kelp.behavior.KeyHistograms;
@@ -221,7 +222,7 @@ public class ExpLock {
         public MapActor(ActorSystem system, ActorRef end) {
             super(system);
             this.end = end;
-            tree = new KeyHistograms.HistogramTree(new ActorKelpFunctions.KeyComparatorDefault<>());
+            tree = new HistogramTree(new ActorKelpFunctions.KeyComparatorDefault<>());
         }
 
         @Override
@@ -231,7 +232,7 @@ public class ExpLock {
         }
         TestToolThreadChecker leafChecker = new TestToolThreadChecker(this);
 
-        KeyHistograms.HistogramTree tree;
+        HistogramTree tree;
 
         void receive(String s) {
             boolean t = leafChecker.before();
@@ -265,7 +266,7 @@ public class ExpLock {
         public LeafActor(ActorSystem system, ActorRef end) {
             super(system);
             this.end = end;
-            tree = new KeyHistograms.HistogramTree(new ActorKelpFunctions.KeyComparatorDefault<>());
+            tree = new HistogramTree(new ActorKelpFunctions.KeyComparatorDefault<>());
         }
 
         @Override
@@ -275,7 +276,7 @@ public class ExpLock {
         }
         TestToolThreadChecker leafChecker = new TestToolThreadChecker(this);
 
-        KeyHistograms.HistogramTree tree;
+        HistogramTree tree;
 
 
         void receive(String s) {

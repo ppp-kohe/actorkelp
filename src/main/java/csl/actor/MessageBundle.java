@@ -1,7 +1,4 @@
-package csl.actor.kelp;
-
-import csl.actor.ActorRef;
-import csl.actor.Message;
+package csl.actor;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -13,8 +10,13 @@ public class MessageBundle<DataType> extends Message<List<DataType>> {
 
     public MessageBundle() {}
 
-    public MessageBundle(ActorRef target, ActorRef sender, Iterable<? extends DataType> items) {
-        super(target, sender, toList(items));
+    public MessageBundle(ActorRef target, Iterable<? extends DataType> items) {
+        super(target, toList(items));
+    }
+
+    @Override
+    public int dataSize() {
+        return data.size();
     }
 
     public static <DataType> List<DataType> toList(Iterable<? extends DataType> items) {
@@ -28,19 +30,19 @@ public class MessageBundle<DataType> extends Message<List<DataType>> {
 
     @Override
     public Message<List<DataType>> renewTarget(ActorRef target) {
-        return new MessageBundle<>(target, sender, data);
+        return new MessageBundle<>(target, data);
     }
 
     @Override
     public String toString() {
         return getClass().getSimpleName() + "(" +
-                toStringData(Objects::toString) + " : " + target + " <- " + sender + ")";
+                toStringData(Objects::toString) + " : " + target  + ")";
     }
 
     @Override
     public String toString(Function<Object, Object> dataToStr) {
         return getClass().getSimpleName() + "(" +
-                toStringData(dataToStr) + " : " + target + " <- " + sender + ")";
+                toStringData(dataToStr) + " : " + target  + ")";
     }
 
     public String toStringData(Function<Object, Object> dataToStr) {
@@ -51,6 +53,21 @@ public class MessageBundle<DataType> extends Message<List<DataType>> {
         } else {
             return String.format("[%,d]{%s, ...}", data.size(),
                     dataToStr.apply(data.get(0)));
+        }
+    }
+
+    public static void processMessageBundle(Actor self, MessageBundle<Object> mb) {
+        mb.getData().forEach(d ->
+                self.processMessage(new MessageBundle.MessageAccepted<>(self, d))); //MessageBundle is already accepted by Dispatcher
+    }
+
+    public static class MessageAccepted<T> extends Message<T> {
+        public static final long serialVersionUID = -1;
+
+        public MessageAccepted() {}
+
+        public MessageAccepted(ActorRef target, T data) {
+            super(target, data);
         }
     }
 }
