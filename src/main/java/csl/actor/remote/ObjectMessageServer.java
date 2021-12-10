@@ -153,7 +153,7 @@ public class ObjectMessageServer implements Closeable {
     protected void initSerializer() {
         if (serializer == null) {
             serializer = defaultSerializer;
-            logger.log(ActorSystemRemote.debugLog, debugLogServerColor, "%s use default serializer", this);
+            if (ActorSystemRemote.debugLog) logger.log(ActorSystemRemote.debugLog, debugLogServerColor, "%s use default serializer", this);
         }
     }
 
@@ -295,7 +295,7 @@ public class ObjectMessageServer implements Closeable {
         @Override
         protected void initChannel(SocketChannel socketChannel) throws Exception {
             ChannelHandler handler = initHandler(socketChannel);
-            owner.getLogger().log(ActorSystemRemote.debugLog, debugLogServerColor,
+            if (ActorSystemRemote.debugLog) owner.getLogger().log(true, debugLogServerColor,
                     "%s local:%s, remote:%s, handler:%s", this, socketChannel.localAddress(), socketChannel.remoteAddress(), handler);
             ActorSystemRemote.settingsSocketChannel(socketChannel);
 
@@ -359,11 +359,11 @@ public class ObjectMessageServer implements Closeable {
                 if (msg instanceof ByteBuf) {
                     ByteBuf buf = (ByteBuf) msg;
                     int length = buf.readInt();
-                    logger.log(ActorSystemRemote.debugLogMsg, debugLogServerColor, "%s %s bytes %,d  len %,d, serializer=%s", this, clientAddress, buf.readableBytes(), length, serializer);
+                    if (ActorSystemRemote.debugLogMsg) logger.log(true, debugLogServerColor, "%s %s bytes %,d  len %,d, serializer=%s", this, clientAddress, buf.readableBytes(), length, serializer);
                     int r = channelReadByteBuf(ctx, buf, length, n);
-                    logger.log(ActorSystemRemote.debugLogMsg, debugLogServerColor, "%s %s read finish: %d", this, clientAddress, r);
+                    if (ActorSystemRemote.debugLogMsg) logger.log(true, debugLogServerColor, "%s %s read finish: %d", this, clientAddress, r);
                 } else {
-                    logger.log(ActorSystemRemote.debugLogMsg, debugLogServerColor, "%s %s ignore %s", this, clientAddress, msg);
+                    if (ActorSystemRemote.debugLogMsg) logger.log(true, debugLogServerColor, "%s %s ignore %s", this, clientAddress, msg);
                 }
             } finally {
                 if (owner != null) {
@@ -398,7 +398,7 @@ public class ObjectMessageServer implements Closeable {
                 logger.log(true, debugLogServerColor, cause, "%s %s exceptionCaught", this, clientAddress);
                 firstError = false;
             } else {
-                logger.log(ActorSystemRemote.debugLogMsg, debugLogServerColor, cause, "%s %s exceptionCaught", this, clientAddress);
+                if (ActorSystemRemote.debugLogMsg) logger.log(true, debugLogServerColor, cause, "%s %s exceptionCaught", this, clientAddress);
             }
             ctx.close();
             if (owner != null) {

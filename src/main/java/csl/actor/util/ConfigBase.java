@@ -546,8 +546,10 @@ public class ConfigBase implements Serializable, ToJson {
 
         @Override
         public void log(boolean flag, int color, String fmt, Object... args) {
-            FormatAndArgs fa = format(fmt, args);
-            logger.log(flag, color, fa.format, fa.args);
+            if (flag) {
+                FormatAndArgs fa = format(fmt, args);
+                logger.log(true, color, fa.format, fa.args);
+            }
         }
 
         protected ConfigBase.FormatAndArgs format(String fmt, Object... args) {
@@ -556,8 +558,10 @@ public class ConfigBase implements Serializable, ToJson {
 
         @Override
         public void log(boolean flag, int color, Throwable ex, String fmt, Object... args) {
-            FormatAndArgs fa = format(fmt, args);
-            logger.log(flag, color, ex, fa.format, fa.args);
+            if (flag) {
+                FormatAndArgs fa = format(fmt, args);
+                logger.log(true, color, ex, fa.format, fa.args);
+            }
         }
 
         @Override

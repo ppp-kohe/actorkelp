@@ -416,7 +416,7 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
 
         //clear histogram
         //TODO avoid multiple execution?
-        getSystem().getLogger().log(logDebugKelp, logDebugKelpColor, "%s processStagingCompletedImpl(%s)",
+        if (logDebugKelp) getSystem().getLogger().log(true, logDebugKelpColor, "%s processStagingCompletedImpl(%s)",
                 this, taskKey);
 
         getMailboxAsKelp()

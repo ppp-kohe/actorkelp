@@ -210,7 +210,7 @@ public class ActorSystemRemote implements ActorSystem, KryoBuilder.SerializerFac
             } else {
                 ActorAddress addr = getAddressForConnection(addrActor);
                 Message.MessageDataClock<Message<?>> clockMessage = createClockMessageForSend(message);
-                getLogger().log(debugLogMsg, debugLogMsgColorSend, "%s: client tell <%d: %s> to remote %s", this,
+                if (debugLogMsg) getLogger().log(true, debugLogMsgColorSend, "%s: client tell <%d: %s> to remote %s", this,
                         clockMessage.clock, message.getData(), addrActor);
                 ConnectionActor a = connection(addr, addrHost);
                 if (a != null) {
@@ -334,7 +334,7 @@ public class ActorSystemRemote implements ActorSystem, KryoBuilder.SerializerFac
 
 
     public void logDebug(String msg, Object... args) {
-        getLogger().log(debugLog, debugLogColor, msg, args);
+        if (debugLog) getLogger().log(true, debugLogColor, msg, args);
     }
 
     public KryoBuilder.SerializerFunction getSerializer() {
@@ -621,7 +621,7 @@ public class ActorSystemRemote implements ActorSystem, KryoBuilder.SerializerFac
         }
 
         protected void writeSingleMessage(Message.MessageDataClock<Message<?>> message) {
-            logMsg("%s write %s", this, message);
+            if (debugLogMsg) logMsg("%s write %s", this, message);
             try {
                 connection.write(new MessageDataTransferred(currentCount(), remoteSystem.getServerAddress(), message));
             } catch (Exception ex) {
@@ -636,7 +636,7 @@ public class ActorSystemRemote implements ActorSystem, KryoBuilder.SerializerFac
         }
 
         protected void writeNonEmpty(List<? extends Message.MessageDataClock<Message<?>>> messageBundle) {
-            logMsg("%s write %,d messages: %s,...", this, messageBundle.size(), messageBundle.get(0));
+            if (debugLogMsg) logMsg("%s write %,d messages: %s,...", this, messageBundle.size(), messageBundle.get(0));
             try {
                 connection.write(new MessageDataTransferred(currentCount(), remoteSystem.getServerAddress(), messageBundle));
             } catch (Exception ex) {
@@ -647,7 +647,7 @@ public class ActorSystemRemote implements ActorSystem, KryoBuilder.SerializerFac
         }
 
         protected void writeSpecial(Message.MessageDataClock<Message<?>> message) {
-            logMsg("%s special", message);
+            if (debugLogMsg) logMsg("%s special", message);
             boolean close = (message.body.getData() instanceof ConnectionCloseNotice);
             int id = close ? ObjectMessageServer.RESULT_CLOSE : currentCount();
             if (!close || connection.isOpen()) {
@@ -669,7 +669,7 @@ public class ActorSystemRemote implements ActorSystem, KryoBuilder.SerializerFac
         }
 
         protected void logMsg(String fmt, Object... args) {
-            remoteSystem.getLogger().log(debugLogMsg, debugLogMsgColorConnect, fmt, args);
+            if (debugLogMsg) remoteSystem.getLogger().log(true, debugLogMsgColorConnect, fmt, args);
         }
 
         public void notifyAndClose() {
@@ -688,7 +688,7 @@ public class ActorSystemRemote implements ActorSystem, KryoBuilder.SerializerFac
         public void close() {
             closed.set(true);
             if (connection.isOpen()) {
-                logMsg("write empty for closing -> %s", address);
+                if (debugLogMsg) logMsg("write empty for closing -> %s", address);
                 connection.write(new MessageDataTransferred(ObjectMessageServer.RESULT_CLOSE,remoteSystem.getServerAddress(), new ArrayList<>()));
             }
             connection.close();
@@ -839,23 +839,23 @@ public class ActorSystemRemote implements ActorSystem, KryoBuilder.SerializerFac
             }
             if (msg instanceof List<?>) { //message bundle: all sub-messages are clocked
                 List<?> msgs = (List<?>) msg;
-                logMsg("%s receive-remote: messages %,d", this, msgs.size());
+                if (debugLogMsg) logMsg("%s receive-remote: messages %,d", this, msgs.size());
                 int i = 0;
                 for (Object elem : msgs) {
                     Message.MessageDataClock<Message<?>> cMsg = (Message.MessageDataClock<Message<?>>) elem;
                     Message<?> msgElem = cMsg.body;
-                    logMsg("%s receive-remote: [%,d] <%d:%s>", this, i, cMsg.clock, msgElem);
+                    if (debugLogMsg) logMsg("%s receive-remote: [%,d] <%d:%s>", this, i, cMsg.clock, msgElem);
                     sendLocal(cMsg.clock, fromAddr, msgElem);
                     ++i;
                     receiveMessages.incrementAndGet();
                 }
             } else if (msg instanceof Message<?>) {
                 Message<?> m = (Message<?>)  msg;
-                logMsg("%s receive-remote: <%d:%s>", this, clock, m);
+                if (debugLogMsg) logMsg("%s receive-remote: <%d:%s>", this, clock, m);
                 sendLocal(clock, fromAddr, m);
                 receiveMessages.incrementAndGet();
             } else {
-                logMsg("%s receive unintended object: %s", this, msg);
+                if (debugLogMsg) logMsg("%s receive unintended object: %s", this, msg);
             }
         }
 
@@ -867,7 +867,7 @@ public class ActorSystemRemote implements ActorSystem, KryoBuilder.SerializerFac
         }
 
         protected void logMsg(String fmt, Object... args) {
-            remote.getLogger().log(debugLogMsg, debugLogMsgColorDeliver, fmt, args);
+            if (debugLogMsg) remote.getLogger().log(true, debugLogMsgColorDeliver, fmt, args);
         }
 
         @Override

@@ -405,7 +405,7 @@ public class ActorKelpStats implements Cloneable, Serializable {
             s.time = Instant.now();
             s.set(self);
             if (logDebug) {
-                self.getSystem().getLogger().log(logDebug, logColor,
+                self.getSystem().getLogger().log(true, logColor,
                         "GetActorStatTask %s actor=%s : from=(%s %s)",
                         Thread.currentThread(), self.getName(),
                         time, Duration.between(time, Instant.now()));

@@ -112,13 +112,13 @@ public class TreeMerger {
 
     public PersistentFileManager.PersistentFileReaderSource mergeAll(KeyHistogramsPersistable.FullTreeLoader loader) throws IOException {
         Instant start = Instant.now();
-        logger.log(logMerge, KeyHistogramsPersistable.logPersistColor, "%s mergeAll from %s",
+        if (logMerge) logger.log(true, KeyHistogramsPersistable.logPersistColor, "%s mergeAll from %s",
                 logHeader(), loader.getSource());
         remainingLoader = loader;
         while (remainingLoader != null) {
             merge(remainingLoader);
         }
-        logger.log(logMerge, KeyHistogramsPersistable.logPersistColor, "%s mergeAll finish %s %,d loaders",
+        if (logMerge) logger.log(true, KeyHistogramsPersistable.logPersistColor, "%s mergeAll finish %s %,d loaders",
                 logHeader(), Duration.between(start, Instant.now()),
                 mergedLoaders);
         return lastSource;
@@ -137,8 +137,8 @@ public class TreeMerger {
         remainingLoader = loader;
         loadLoopCount.incrementAndGet();
         totalMergedLoaders.set(currentKeyToLoaders.size());
-        if (log) {
-            logger.log(logMerge, KeyHistogramsPersistable.logPersistColor, "%s timing=%,d init %,d loaders%s",
+        if (log && logMerge) {
+            logger.log(true, KeyHistogramsPersistable.logPersistColor, "%s timing=%,d init %,d loaders%s",
                     logHeader(), logTimingLoop.getLast(), currentKeyToLoaders.size(),
                     (remainingLoader != null ? String.format(", remaining %s", remainingLoader.getSource()) : ", no remaining"));
         }
@@ -180,7 +180,7 @@ public class TreeMerger {
                             totalMergedValues.addAndGet(mergeWriter.getWrittenValues());
                             totalWriteBytes.addAndGet(mergeWriter.position() - prevCheckPos);
                             prevCheckPos = mergeWriter.position();
-                            logger.log(logMerge, KeyHistogramsPersistable.logPersistColor,
+                            if (logMerge) logger.log(true, KeyHistogramsPersistable.logPersistColor,
                                     "%s timing=%,d merging %s read=(key:%,d values:%,d) merged=(values:%,d size=%s)",
                                     logHeader(), logTiming.getLast(),
                                     Duration.between(start, Instant.now()), totalKeys.get(), totalValues.get(), totalMergedValues.get(),
@@ -205,8 +205,8 @@ public class TreeMerger {
             totalWriteBytes.addAndGet(mergeWriter.position() - prevCheckPos);
         } finally {
             TreeWritings.unlockWriter();
-            if (log) {
-                logger.log(logMerge, KeyHistogramsPersistable.logPersistColor,
+            if (log && logMerge) {
+                logger.log(true, KeyHistogramsPersistable.logPersistColor,
                         "%s timing=%,d merged %s read=(key:%,d values:%,d) merged=(values:%,d size=%s %s)",
                         logHeader(), logTimingLoop.getLast(),
                         Duration.between(start, Instant.now()), totalKeys.get(), totalValues.get(), totalMergedValues.get(),

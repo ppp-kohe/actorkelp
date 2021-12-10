@@ -91,7 +91,7 @@ public class PersistentFileManager {
 
     public PersistentFileWriter createWriterForPathExpanded(String pathExpanded) {
         try {
-            logger.log(logPersist, logColorPersist, "createWriter: %s", pathExpanded);
+            if (logPersist) logger.log(true, logColorPersist, "createWriter: %s", pathExpanded);
             return new PersistentFileWriter(pathExpanded, this);
         } catch (IOException e) {
             throw new RuntimeException(e);
@@ -120,7 +120,7 @@ public class PersistentFileManager {
 
     public Path getPathForExpandedPath(String pathExpanded, boolean createParent) {
         Path p = pathModifier.get(pathExpanded);
-        logger.log(logDebugPersist, logColorPersist, "getPath: %s -> %s", pathExpanded, p);
+        if (logDebugPersist) logger.log(true, logColorPersist, "getPath: %s -> %s", pathExpanded, p);
         Path dir = p.getParent();
         if (createParent && dir != null && !Files.exists(dir)) {
             try {
@@ -322,7 +322,7 @@ public class PersistentFileManager {
 
         public PersistentFileReader createReader() {
             try {
-                manager.getLogger().log(logDebugPersist, logColorPersist, "open: %s", this);
+                if (logDebugPersist) manager.getLogger().log(true, logColorPersist, "open: %s", this);
                 return new PersistentFileReader(pathExpanded, offset, manager);
             } catch (IOException ex) {
                 throw new RuntimeException("createReader: " + toString(), ex);

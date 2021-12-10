@@ -1177,7 +1177,7 @@ public class KelpStageGraphActor extends ActorDefault {
                     remain = lowerBound;
                 }
                 if (ActorKelpStats.logDebug) {
-                    system.getLogger().log(ActorKelpStats.logDebug, ActorKelpStats.logColor,
+                    system.getLogger().log(true, ActorKelpStats.logColor,
                             "start getActorInfo %s :  await=%s from=(%s %s)",
                             getActorHeadInfo(a), remain,
                             start, Duration.between(start, Instant.now()));
@@ -1188,7 +1188,7 @@ public class KelpStageGraphActor extends ActorDefault {
                     next = f.get(1, TimeUnit.SECONDS);
                 }
                 if (ActorKelpStats.logDebug) {
-                    system.getLogger().log(ActorKelpStats.logDebug, ActorKelpStats.logColor,
+                    system.getLogger().log(true, ActorKelpStats.logColor,
                             "end   getActorInfo %s : awaited=%s from=(%s %s) -> %s",
                             getActorHeadInfo(a), Duration.between(checkStart, Instant.now()),
                             start, Duration.between(start, Instant.now()),
@@ -1272,8 +1272,8 @@ public class KelpStageGraphActor extends ActorDefault {
         }
         protected void incrementRetryCount(Actor self) {
             if (retryCount >= 100) {
-                if (retryCount == 100) {
-                    self.getSystem().getLogger().log(ActorKelp.logDebugKelp, ActorKelp.logDebugKelpColor,
+                if (retryCount == 100 && ActorKelp.logDebugKelp) {
+                    self.getSystem().getLogger().log(true, ActorKelp.logDebugKelpColor,
                             "%s incrementRetryCount > 100 : %s empty?=%s, remoteClocks=%s",
                             this, self, checkEmptyMailbox(self), remoteClocks);
                 }

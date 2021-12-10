@@ -696,7 +696,7 @@ public class ActorSystemKelp extends ActorSystemRemote implements ActorKelpBuild
 
         @Override
         protected void writeSingleMessage(Message.MessageDataClock<Message<?>> message) {
-            logMsg("%s write %s", this, message);
+            if (debugLogMsg) logMsg("%s write %s", this, message);
             long pre = connection.getRecordSendBytes();
             try {
                 connection.getChannel().writeAndFlush(new MessageDataTransferred(currentCount(), remoteSystem.getServerAddress(), message)).sync();
@@ -712,7 +712,7 @@ public class ActorSystemKelp extends ActorSystemRemote implements ActorKelpBuild
 
         @Override
         protected void writeNonEmpty(List<? extends Message.MessageDataClock<Message<?>>> messageBundle) {
-            logMsg("%s write %,d messages: %s,...", this, messageBundle.size(), messageBundle.get(0));
+            if (debugLogMsg) logMsg("%s write %,d messages: %s,...", this, messageBundle.size(), messageBundle.get(0));
             long pre = connection.getRecordSendBytes();
             try {
                 connection.getChannel().writeAndFlush(new MessageDataTransferred(currentCount(), remoteSystem.getServerAddress(), messageBundle)).sync();

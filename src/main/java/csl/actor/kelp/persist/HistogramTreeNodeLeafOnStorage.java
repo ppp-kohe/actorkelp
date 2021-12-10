@@ -152,7 +152,7 @@ public class HistogramTreeNodeLeafOnStorage extends HistogramTreeNodeLeaf implem
                     ns.set(idx, leaf);
                 }
             }
-            r.getManager().getLogger().log(PersistentFileManager.logDebugPersist, KeyHistogramsPersistable.logPersistColor, "close: %s", r);
+            if (PersistentFileManager.logDebugPersist) r.getManager().getLogger().log(true, KeyHistogramsPersistable.logPersistColor, "close: %s", r);
 
             if (context.putTree != null) {
                 context.putTree.addLeafSizeOnMemory(1L);

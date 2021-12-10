@@ -63,8 +63,8 @@ public interface PersistentConditionMailbox {
         @Override
         public boolean needToPersist(MailboxManageable mailbox, long size) {
             boolean res = size > sizeLimit;
-            if (res && logger != null) {
-                logger.log(MailboxPersistableReplacement.logPersist, MailboxPersistableReplacement.logColorPersist,
+            if (res && logger != null && MailboxPersistableReplacement.logPersist) {
+                logger.log(true, MailboxPersistableReplacement.logColorPersist,
                         "Mailbox needToPersist -> true : %,d > limit:%,d", size, sizeLimit);
             }
             return res;
@@ -73,8 +73,8 @@ public interface PersistentConditionMailbox {
         @Override
         public boolean needToPersistInPersistLock(MailboxManageable mailbox, long size) {
             boolean res = size > sizeLimit;
-            if (res && logger != null) {
-                logger.log(MailboxPersistableReplacement.logPersist, MailboxPersistableReplacement.logColorPersist,
+            if (res && logger != null && MailboxPersistableReplacement.logPersist) {
+                logger.log(true, MailboxPersistableReplacement.logColorPersist,
                         "Mailbox needToPersist -> true : %,d > limit:%,d", size, sizeLimit);
             }
             return res;
@@ -141,8 +141,8 @@ public interface PersistentConditionMailbox {
             long free = runtimeAvailableBytes();
             long estimated = (size + sizeLimit) * currentSample;
             boolean res = estimated > free;
-            if (log || res) {
-                logger.log(MailboxPersistableReplacement.logPersist, MailboxPersistableReplacement.logColorPersist,
+            if ((log || res) && MailboxPersistableReplacement.logPersist) {
+                logger.log(true, MailboxPersistableReplacement.logColorPersist,
                         "Mailbox needToPersist -> %s: size=%,d sizeLimit=%,d sample=%,d estimated=%,d free=%,d (%3.1f%%)",
                         res, size, sizeLimit, currentSample, estimated, free, free == 0 ? Double.POSITIVE_INFINITY : ((estimated / (double) free) * 100.0));
             }
@@ -227,14 +227,14 @@ public interface PersistentConditionMailbox {
                 output.flush();
                 long sampleSize = output.total();
                 long v = sampleTotal.addAndGet(sampleSize) / sampleCount.incrementAndGet();
-                if (log) {
-                    logger.log(MailboxPersistableReplacement.logPersist, MailboxPersistableReplacement.logColorPersist, "updateCurrentSample timing=%,d lastSample=[%,d] <%s> total=%,d count=%,d -> %,d",
+                if (log && MailboxPersistableReplacement.logPersist) {
+                    logger.log(true, MailboxPersistableReplacement.logColorPersist, "updateCurrentSample timing=%,d lastSample=[%,d] <%s> total=%,d count=%,d -> %,d",
                             sampleTiming, sampleSize, logger.toStringLimit(data), sampleTotal.get(), sampleCount.get(), v);
                 }
                 return v;
             } catch (Exception ex) {
-                if (log) {
-                    logger.log(MailboxPersistableReplacement.logPersist, MailboxPersistableReplacement.logColorPersist, "updateCurrentSample timing=%,d lastSample=<%s> total=%,d count=%,d error:%s",
+                if (log && MailboxPersistableReplacement.logPersist) {
+                    logger.log(true, MailboxPersistableReplacement.logColorPersist, "updateCurrentSample timing=%,d lastSample=<%s> total=%,d count=%,d error:%s",
                             sampleTiming, logger.toStringLimit(data), sampleTotal.get(), sampleCount.get(), ex);
                 }
                 if (ex instanceof KryoException && ex.getMessage().contains("overflow")) {

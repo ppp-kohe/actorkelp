@@ -172,7 +172,7 @@ public class HistogramTreeNodeTableOnStorage extends HistogramTreeNodeTable impl
                 cs.trimToSize();
                 this.children = cs;
                 updateChildren();
-                r.getManager().getLogger().log(PersistentFileManager.logDebugPersist, KeyHistogramsPersistable.logPersistColor, "close: %s", r);
+                if (PersistentFileManager.logDebugPersist) r.getManager().getLogger().log(true, KeyHistogramsPersistable.logPersistColor, "close: %s", r);
             } catch (Exception ex) {
                 throw new RuntimeException("load: " + source, ex);
             }

@@ -246,10 +246,10 @@ public class ObjectMessageClient implements Closeable {
                     s = s.substring(0, 100) + "...";
                 }
                 if (channel == null) {
-                    client.getLogger().log(ActorSystemRemote.debugLogMsg, debugLogClientColor, "%s %s, msg=%s, retry=%d, channel=null",
+                    client.getLogger().log(true, debugLogClientColor, "%s %s, msg=%s, retry=%d, channel=null",
                             this, msg, s, retryCount);
                 } else {
-                    client.getLogger().log(ActorSystemRemote.debugLogMsg, debugLogClientColor, "%s %s, msg=%s, retry=%d, open=%s, active=%s, writable=%s",
+                    client.getLogger().log(true, debugLogClientColor, "%s %s, msg=%s, retry=%d, open=%s, active=%s, writable=%s",
                             this, msg, s, retryCount,
                             channel.isOpen(), channel.isActive(),
                             channel.isWritable());
@@ -258,8 +258,7 @@ public class ObjectMessageClient implements Closeable {
         }
 
         public void setResult(int result) {
-            client.getLogger().log(ActorSystemRemote.debugLogMsg, debugLogClientColor, "%s result-code %d", this, result);
-
+            if (ActorSystemRemote.debugLogMsg) client.getLogger().log(true, debugLogClientColor, "%s result-code %d", this, result);
         }
 
         protected void clearResult() throws Exception {
@@ -288,7 +287,7 @@ public class ObjectMessageClient implements Closeable {
         protected void checkResult(ChannelFuture f) throws Exception {
             last.add(f);
             f.addListener(sf -> {
-                client.getLogger().log(ActorSystemRemote.debugLogMsg, debugLogClientColor, "%s finish write", this);
+                if (ActorSystemRemote.debugLogMsg) client.getLogger().log(true, debugLogClientColor, "%s finish write", this);
                 if (last.remove(f)) {
                     lastSize.decrementAndGet();
                 }
@@ -386,7 +385,7 @@ public class ObjectMessageClient implements Closeable {
 
         @Override
         public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
-            owner.getLogger().log(ActorSystemRemote.debugLogMsg,
+            if (ActorSystemRemote.debugLogMsg) owner.getLogger().log(true,
                     ActorSystemRemote.debugLogMsgColorConnect,
                     "ClientInitializer error: %s", cause);
             super.exceptionCaught(ctx, cause);
