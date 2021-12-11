@@ -77,7 +77,7 @@ public class HistogramTreePersistable extends HistogramTree implements KeyHistog
         super(tree.getRoot(), tree.getComparator(), tree.getTreeLimit(), persistent);
         this.leafSize = tree.getLeafSize();
         this.leafSizeNonZero = tree.getLeafSizeNonZero();
-        this.completed.addAll(tree.getCompleted());
+        tree.getCompleted().forEach(this::complete);
         initConfig(config);
         this.condition = condition;
         initHistory();

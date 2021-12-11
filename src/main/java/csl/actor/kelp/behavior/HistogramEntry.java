@@ -185,7 +185,7 @@ public class HistogramEntry {
 
     public synchronized boolean hasRemainingProcesses() {
         HistogramTree tree = this.tree;
-        return scheduledProcess != null || (tree != null && !tree.getCompleted().isEmpty());
+        return scheduledProcess != null || (tree != null && tree.hasCompleted());
     }
 
     public synchronized void lockRemainingProcess() {

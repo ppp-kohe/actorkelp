@@ -25,8 +25,9 @@ public class HistogramTreeNodeTable implements KeyHistograms.HistogramTreeNode, 
 
     public HistogramTreeNodeTable(int height, int capacity, KeyHistograms.HistogramTreeNode... children) {
         this.height = height;
-        this.children = new ArrayList<>(capacity);
-        this.children.addAll(Arrays.asList(children));
+        ArrayList<KeyHistograms.HistogramTreeNode> cs = new ArrayList<>(capacity);
+        Collections.addAll(cs, children);
+        this.children = cs;
         updateChildren();
     }
 

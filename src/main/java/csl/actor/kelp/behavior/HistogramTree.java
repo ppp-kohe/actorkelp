@@ -15,6 +15,7 @@ public class HistogramTree implements Serializable, KryoSerializable, Cloneable 
     protected KeyHistograms.HistogramTreeNode root;
     protected ActorKelpFunctions.KeyComparator<?> comparator;
     protected int treeLimit;
+    protected HistogramTreeNodeLeaf completed0;
     protected LinkedList<HistogramTreeNodeLeaf> completed = new LinkedList<>();
     protected long leafSize;
     protected long leafSizeNonZero;
@@ -166,8 +167,7 @@ public class HistogramTree implements Serializable, KryoSerializable, Cloneable 
                 root = merge(treeLimit, comparator, root, rootAnother);
             }
         }
-
-        completed.addAll(tree.getCompleted());
+        tree.getCompleted().forEach(this::complete);
         leafSize = 0;
         leafSizeNonZero = 0;
         prune(true);
@@ -196,14 +196,24 @@ public class HistogramTree implements Serializable, KryoSerializable, Cloneable 
     }
 
     public void complete(HistogramTreeNodeLeaf n) {
-        completed.add(n);
+        if (completed0 == null) {
+            completed0 = n;
+        } else {
+            completed.add(n);
+        }
     }
 
     public HistogramTreeNodeLeaf takeCompleted() {
-        if (completed.isEmpty()) {
-            return null;
+        if (completed0 != null) {
+            HistogramTreeNodeLeaf r = completed0;
+            if (completed.isEmpty()) {
+                completed0 = null;
+            } else {
+                completed0 = completed.removeFirst();
+            }
+            return r;
         } else {
-            return completed.removeFirst();
+            return null;
         }
     }
 
@@ -231,11 +241,19 @@ public class HistogramTree implements Serializable, KryoSerializable, Cloneable 
         return comparator;
     }
 
-    /**
-     * @return implementation field getter
-     */
-    public LinkedList<HistogramTreeNodeLeaf> getCompleted() {
-        return completed;
+    public boolean hasCompleted() {
+        return completed0 != null || !completed.isEmpty();
+    }
+
+    public List<HistogramTreeNodeLeaf> getCompleted() {
+        if (completed0 != null) {
+            ArrayList<HistogramTreeNodeLeaf> l = new ArrayList<>();
+            l.add(completed0);
+            l.addAll(completed);
+            return l;
+        } else {
+            return completed;
+        }
     }
 
     public void prune() {
@@ -313,6 +331,7 @@ public class HistogramTree implements Serializable, KryoSerializable, Cloneable 
     public void read(Kryo kryo, Input input) {
         this.root = (KeyHistograms.HistogramTreeNode) kryo.readClassAndObject(input);
         this.comparator = (ActorKelpFunctions.KeyComparator<?>) kryo.readClassAndObject(input);
+        this.completed0 = (HistogramTreeNodeLeaf) kryo.readClassAndObject(input);
         this.completed = (LinkedList<HistogramTreeNodeLeaf>) kryo.readClassAndObject(input);
         this.leafSize = input.readVarLong(true);
         this.leafSizeNonZero = input.readVarLong(true);
@@ -325,6 +344,7 @@ public class HistogramTree implements Serializable, KryoSerializable, Cloneable 
     public void write(Kryo kryo, Output output) {
         kryo.writeClassAndObject(output, this.root);
         kryo.writeClassAndObject(output, this.comparator);
+        kryo.writeClassAndObject(output, this.completed0);
         kryo.writeClassAndObject(output, this.completed);
         output.writeVarLong(this.leafSize, true);
         output.writeVarLong(this.leafSizeNonZero, true);
@@ -339,6 +359,9 @@ public class HistogramTree implements Serializable, KryoSerializable, Cloneable 
             Map<KeyHistograms.HistogramTreeNode, KeyHistograms.HistogramTreeNode> leafMap = new IdentityHashMap<>();
             if (root != null) {
                 tree.root = root.copy(leafMap);
+            }
+            if (completed0 != null) {
+                tree.completed0 = (HistogramTreeNodeLeaf) leafMap.get(completed0);
             }
             tree.completed = new LinkedList<>();
             completed.forEach(i ->
@@ -421,8 +444,13 @@ public class HistogramTree implements Serializable, KryoSerializable, Cloneable 
         nodeSizeOnMemory = 0;
         leafSizeOnMemory = 0;
         if (clearCompleted) {
-            completed.clear();
+            clearCompleted();
         }
+    }
+
+    protected void clearCompleted() {
+        completed0 = null;
+        completed.clear();
     }
 
     public RestructureIterator leafIterator(boolean load) {

@@ -167,7 +167,7 @@ public interface PersistentConditionActor {
         protected int treeNodeTableSize;
         protected SystemLoggerConditionActor logger;
         protected PersistentConditionMailbox.MailboxSampler sampler;
-        protected PersistentConditionMailbox.SampleTiming actorUpdateTiming = new PersistentConditionMailbox.SampleTiming(1 << 7, 1 << 22, 1 << 10, 1);
+        protected PersistentConditionMailbox.SampleTiming actorUpdateTiming = new PersistentConditionMailbox.SampleTiming(1 << 7, 1 << 23, 1 << 11, 4);
         protected RuntimeMemoryGuard memoryGuard;
 
         /**

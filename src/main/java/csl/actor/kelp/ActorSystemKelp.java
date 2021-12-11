@@ -518,6 +518,7 @@ public class ActorSystemKelp extends ActorSystemRemote implements ActorKelpBuild
         protected AtomicLong size = new AtomicLong();
         protected AtomicLong transferredBytes = new AtomicLong();
         protected volatile Instant previousLogTime = Instant.now();
+        protected long totalTransferredBytes;
 
         public ConnectionHost(ActorSystem system, ActorAddress address) {
             this.system = system;
@@ -538,6 +539,14 @@ public class ActorSystemKelp extends ActorSystemRemote implements ActorKelpBuild
 
         public long getTransferredBytes() {
             return transferredBytes.get();
+        }
+
+        public void clearTransferredBytes() {
+            totalTransferredBytes += transferredBytes.getAndSet(0);
+        }
+
+        public long getTotalTransferredBytes() {
+            return totalTransferredBytes + getTransferredBytes();
         }
 
         protected ConfigKelp getConfig() {
@@ -607,6 +616,8 @@ public class ActorSystemKelp extends ActorSystemRemote implements ActorKelpBuild
         protected volatile Instant previousLogTime = Instant.now();
         protected volatile ConnectionHostHistory history;
 
+        protected AtomicLong updateCount = new AtomicLong();
+
         public ConnectionActorKelp(ActorSystem system, ActorSystemRemote remoteSystem, ConnectionHost host, ActorAddress.ActorAddressRemote address) throws InterruptedException {
             super(system, remoteSystem, address);
             this.host = host;
@@ -637,6 +648,7 @@ public class ActorSystemKelp extends ActorSystemRemote implements ActorKelpBuild
         }
 
         public void update() {
+            updateCount.incrementAndGet();
             Instant now = Instant.now();
             Duration d = Duration.between(previousLogTime, now);
             if (d.compareTo(host.getHostUpdateTime()) > 0) {
@@ -655,12 +667,15 @@ public class ActorSystemKelp extends ActorSystemRemote implements ActorKelpBuild
 
             long bs = host.getTransferredBytes();
             long mbox = host.size();
+            host.clearTransferredBytes();
+            long totalBs = host.getTotalTransferredBytes();
 
             if (host.checkLogTime()) { // in order to avoid log flooding
-                log("transferredBytes=%,14d, pendingSize=%,7d, elapsed=%s", bs, mbox, time);
+                log("tells=%,7d transferredBytes=%,14d totalBytes=%,14d, pendingSize=%,7d, elapsed=%s",
+                        updateCount.get(), bs, totalBs, mbox, time);
             }
             ConnectionHostHistory newest = history;
-            history = history.set(mbox, bs, time);
+            history = history.set(mbox, totalBs, time);
             //the current history has the oldest values
             if (newest.size > host.getPendingMessageSize() && !isSpecialThread()) {
                 ActorSystemKelp.await(this, history, mbox, host.getPendingMessageLimit(), host.getWaitMsFactor());

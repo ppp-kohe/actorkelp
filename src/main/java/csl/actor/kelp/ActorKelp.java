@@ -39,6 +39,7 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
     protected boolean unit = false;
     protected int shuffleIndex = -1;
     protected int mergedCount = 1;
+    protected int pruneCount;
     protected Set<String> mergedActorNames = Collections.emptySet();
     protected Set<ActorRef> shuffleOriginals = new HashSet<>(1);
     protected List<KelpDispatcher.SelectiveDispatcher> selectiveDispatchers = null; //initialized by initBehavior
@@ -453,9 +454,14 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
      *     </p>
      */
     public void processPrune() {
-        getMailboxAsKelp().prune(
-                getPruneGreaterThanLeaf(),
-                getPruneLessThanNonZeroLeafRate());
+        if (pruneCount >= 100_000) {
+            pruneCount = 0;
+            getMailboxAsKelp().prune(
+                    getPruneGreaterThanLeaf(),
+                    getPruneLessThanNonZeroLeafRate());
+        } else {
+            ++pruneCount;
+        }
     }
 
     public void processHistogram(Message<?> message) {
@@ -517,23 +523,26 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
             Duration totalWait = Duration.ZERO;
             while (readingSplitIterator.hasNext()) {
                 processFileSplitLine(readingSplitIterator.next());
-                stats.updateRate(Duration.between(startTime, Instant.now()), totalWait, readingSplitIterator);
-                if (waitLines > 0 && lines % waitLines == 0) {
-                    Instant now = Instant.now();
-                    Duration time = waitMsD.minus(Duration.between(prevCheck, now));
-                    prevCheck = now;
-                    if (!time.isNegative() && !time.isZero()) {
-                        if (!time.minus(Duration.ofSeconds(10)).isNegative()) {
-                            getLogger().log("read waits > 10s: %s", time);
+                if (waitLines > 0) {
+                    if (lines % waitLines == 0) {
+                        Instant now = Instant.now();
+                        Duration time = waitMsD.minus(Duration.between(prevCheck, now));
+                        prevCheck = now;
+                        if (!time.isNegative() && !time.isZero()) {
+                            if (!time.minus(Duration.ofSeconds(10)).isNegative()) {
+                                getLogger().log("read waits > 10s: %s", time);
+                            }
+                            try {
+                                int n = (time.toNanosPart() % 1000_000);
+                                Thread.sleep(time.toMillis(), n);
+                            } catch (IllegalArgumentException ex) {
+                                getLogger().log(ex, "%s : %s", ex, time);
+                            }
+                            totalWait = totalWait.plus(time);
                         }
-                        try {
-                            int n = (time.toNanosPart() % 1000_000);
-                            Thread.sleep(time.toMillis(), n);
-                        } catch (IllegalArgumentException ex) {
-                            getLogger().log(ex, "%s : %s", ex, time);
-                        }
-                        totalWait = totalWait.plus(time);
+                        stats.updateRate(Duration.between(startTime, Instant.now()), totalWait, readingSplitIterator);
                     }
+                } else if (lines % 10_000L == 0) {
                     stats.updateRate(Duration.between(startTime, Instant.now()), totalWait, readingSplitIterator);
                 }
                 ++lines;
