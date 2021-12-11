@@ -383,7 +383,7 @@ public class KeyHistograms {
             }
             while (!tail.offer(value)) {
                 if (tail.next == null) {
-                    int cap = Math.max(Math.min(1_000_000, tail.sizeOnMemory() * 2), 10_000); //100 -> 10_000 -> 20_000 -> 40_000 -> ...
+                    int cap = Math.max(Math.min(10_000_000, tail.sizeOnMemory() * 2), 10_000); //100 -> 10_000 -> 20_000 -> 40_000 -> ...
                     tail.setNext(new HistogramLeafCellArray(cap));
                 }
                 tail = tail.next;
