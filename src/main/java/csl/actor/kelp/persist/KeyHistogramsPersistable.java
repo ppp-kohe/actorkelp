@@ -67,6 +67,14 @@ public class KeyHistogramsPersistable extends KeyHistograms {
         return new HistogramTreePersistable(comparator, treeLimit, config, persistent, condition);
     }
 
+    public HistogramTreePersistableConfig getConfig() {
+        return config;
+    }
+
+    public PersistentConditionHistogram getCondition() {
+        return condition;
+    }
+
     @Override
     public HistogramTree init(HistogramTree tree) {
         if (tree instanceof HistogramTreePersistable) {
@@ -85,6 +93,7 @@ public class KeyHistogramsPersistable extends KeyHistograms {
         default long getHistogramPersistOnMemorySize() { return 100; }
         default double getHistogramPersistSizeRatioThreshold() { return 0.00001; }
         default long getHistogramPersistRandomSeed() { return 0; }
+        default int getHistogramMergerMax() { return 64; }
     }
 
     public static class HistogramTreePersistableConfigKelp implements HistogramTreePersistableConfig {
@@ -100,6 +109,10 @@ public class KeyHistogramsPersistable extends KeyHistograms {
         public long getHistogramPersistOnMemorySize() { return config.histogramPersistOnMemorySize; }
         public double getHistogramPersistSizeRatioThreshold() { return config.histogramPersistSizeRatioThreshold; }
         public long getHistogramPersistRandomSeed() { return config.histogramPersistRandomSeed; }
+
+        public int getHistogramMergerMax() {
+            return config.histogramMergerMax;
+        }
     }
 
     public interface PersistentConditionHistogram {

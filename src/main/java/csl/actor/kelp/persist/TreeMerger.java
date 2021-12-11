@@ -23,7 +23,7 @@ public class TreeMerger {
     protected KeyHistogramsPersistable.FullTreeLoader remainingLoader;
 
     protected int bufferMax = 500_000;
-    protected int loaderMax = 8;
+    protected int loaderMax = 16;
     protected ActorKelpFunctions.KeyValuesReducer<Object, Object> reducer = new ActorKelpFunctions.KeyValuesReducerNone<>();
 
     protected PersistentFileManager.PersistentFileReaderSource lastSource;

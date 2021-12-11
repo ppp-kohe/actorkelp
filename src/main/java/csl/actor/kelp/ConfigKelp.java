@@ -25,7 +25,7 @@ public class ConfigKelp extends ConfigBase {
     public long systemPendingMessageLimit = 150_000;
 
     public long fileLineWaitMs = 10; //wait per fileLineWaitLines
-    public long fileLineWaitLines = 1_000;
+    public long fileLineWaitLines = 0; //1_000;
 
     public int shuffleBufferSize = 512;
     public int shuffleBufferSizeFile = 0;
@@ -50,6 +50,8 @@ public class ConfigKelp extends ConfigBase {
     public long histogramPersistOnMemorySize = 100;
     public double histogramPersistSizeRatioThreshold = 0.00001;
     public long histogramPersistRandomSeed = 0;
+
+    public int histogramMergerMax = 64;
 
     public long dispatcherRandomSeed = 10101;
 

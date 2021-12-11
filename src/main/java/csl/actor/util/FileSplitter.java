@@ -3,7 +3,6 @@ package csl.actor.util;
 import csl.actor.Message;
 
 import java.io.IOException;
-import java.io.RandomAccessFile;
 import java.io.Serializable;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
@@ -274,7 +273,8 @@ public class FileSplitter {
 
     public static class FileSplitReader {
         protected FileSplit split;
-        protected RandomAccessFile file;
+        //protected RandomAccessFile file;
+        protected MmapState.MmapStateRead file;
         protected ByteBuffer buffer;
         protected boolean over;
         protected int bufferLineStart;
@@ -313,7 +313,8 @@ public class FileSplitter {
                 close();
             }
             actualPath = pathModifier.getExpanded(split.path);
-            RandomAccessFile f = new RandomAccessFile(actualPath.toFile(), "r");
+            //RandomAccessFile f = new RandomAccessFile(actualPath.toFile(), "r");
+            MmapState.MmapStateRead f = new MmapState.MmapStateRead(actualPath);
             if (buffer == null) {
                 buffer = ByteBuffer.allocate(4096);
             } else {

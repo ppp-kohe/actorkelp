@@ -1313,6 +1313,17 @@ public class ActorBehaviorKelp {
             return false;
         }
 
+        public static int getLoaderMax(Actor self) {
+            if (self.getMailbox() instanceof MailboxKelp) {
+                MailboxKelp m = (MailboxKelp) self.getMailbox();
+                if (m.getTreeFactory() instanceof KeyHistogramsPersistable) {
+                    KeyHistogramsPersistable p = (KeyHistogramsPersistable) m.getTreeFactory();
+                    return p.getConfig().getHistogramMergerMax();
+                }
+            }
+            return 64;
+        }
+
         @SuppressWarnings("unchecked")
         @Override
         public boolean needToProcessStageEnd(Actor self, MailboxKelp.ReducedSize reducedSize, Object stageKey, HistogramTree tree) { //entire tree
@@ -1320,7 +1331,9 @@ public class ActorBehaviorKelp {
             if (tree instanceof HistogramTreePersistable) { //there is a full-tree data
                 if (((HistogramTreePersistable) tree).getPreviousFullTreeSource() != null) {
                     try {
-                        TreeMerger merger = new TreeMerger(tree).withReducer((KeyValuesReducer<Object, Object>) keyValuesReducer);
+                        TreeMerger merger = new TreeMerger(tree)
+                                .withReducer((KeyValuesReducer<Object, Object>) keyValuesReducer)
+                                .withLoaderMax(getLoaderMax(self));
                         if (self instanceof ActorKelp<?>) {
                             ((ActorKelp<?>) self).setStageEndStats(() ->
                                     new ActorKelpStats.ActorKelpStageEndStats(merger));
