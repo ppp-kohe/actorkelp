@@ -12,6 +12,7 @@ import csl.actor.remote.ActorAddress;
 import csl.actor.remote.ActorRefRemote;
 import csl.actor.remote.ActorSystemRemote;
 import csl.actor.remote.KryoBuilder;
+import csl.actor.util.ConfigBase;
 import csl.actor.util.ToJson;
 
 import java.io.Serializable;
@@ -110,7 +111,7 @@ public class ClusterKelp<ConfigType extends ConfigKelp> extends ClusterDeploymen
     protected void deployPrimaryInitSystem() {
         primary.log("primary %s: create system with serializer %s", primary.getDeploymentConfig().getAddress(), primary.getDeploymentConfig().kryoBuilderType);
         system = createSystemKelpPrimary(primary.getDeploymentConfig());
-        //system.getLocalSystem().setLogger(new ConfigBase.SystemLoggerHeader(system.getLogger(), primary.getAppConfig()));
+//        system.getLocalSystem().setLogger(new ConfigBase.SystemLoggerHeader(system.getLogger(), primary.getAppConfig()));
     }
 
     public ActorSystemKelp createSystemKelpPrimary(ConfigDeployment configDeployment) {

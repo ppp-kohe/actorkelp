@@ -477,7 +477,7 @@ public class ConfigBase implements Serializable, ToJson {
 
     public void log(int color, String msg, Object... args) {
         FormatAndArgs fa = logMessage(msg, args);
-        getLogger().log(true, color, fa.format, fa.args);
+        getLogger().log(color, fa.format, fa.args);
     }
 
     public FormatAndArgs logMessage(String msg, Object... args) {
@@ -541,14 +541,20 @@ public class ConfigBase implements Serializable, ToJson {
 
         @Override
         public void log(String fmt, Object... args) {
-            log(true, config.getLogColorDefault(), fmt, args);
+            log(config.getLogColorDefault(), fmt, args);
+        }
+
+        @Override
+        public void log(int color, String fmt, Object... args) {
+            FormatAndArgs fa = format(fmt, args);
+            logger.log(color, fa.format, fa.args);
         }
 
         @Override
         public void log(boolean flag, int color, String fmt, Object... args) {
             if (flag) {
                 FormatAndArgs fa = format(fmt, args);
-                logger.log(true, color, fa.format, fa.args);
+                logger.log(color, fa.format, fa.args);
             }
         }
 
@@ -567,6 +573,15 @@ public class ConfigBase implements Serializable, ToJson {
         @Override
         public ActorSystem.SystemLogToStringLimit toStringLimit(Object o) {
             return logger.toStringLimit(o);
+        }
+
+        @Override
+        public String toString() {
+            return String.format("%s@%h(<%s>, %s)",
+                    getClass().getSimpleName(),
+                    System.identityHashCode(this),
+                    (config != null ? config.logMessage("") : "null"),
+                    logger);
         }
     }
 

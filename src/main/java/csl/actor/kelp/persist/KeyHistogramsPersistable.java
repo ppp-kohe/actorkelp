@@ -171,8 +171,8 @@ public class KeyHistogramsPersistable extends KeyHistograms {
                         result = new HistogramPersistentOperationTree(sizeLimit); //TODO the sizeLimit of the op means the size of values, not leaves
                     }
                 }
-                if (logger != null && PersistentFileManager.logPersist) {
-                    logger.log(true, logPersistColor,
+                if (logger != null) {
+                    logger.log(PersistentFileManager.logPersist, logPersistColor,
                             "Histogram(%h) %s: needToPersist -> %s : leafNZ=(%,d limit:%,d) leafNZValuesRatio=(%3.2f %s limit:%3.2f)",
                             System.identityHashCode(tree), callerInfo, result,
                             tree.getLeafSizeNonZero(), sizeLimit,

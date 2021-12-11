@@ -168,7 +168,7 @@ public class MailboxPersistableReplacement extends MailboxDefault implements Mai
             } catch (Exception ex) { //retry?
                 getLogger().log(true, logColorPersist, ex, "mailbox persist: polled=%,d", polledOnMem);
             }
-            if (logDebugPersist) getLogger().log(true, logColorPersist, "mailbox persisted: %s sizeDelta=%,d", reader, (-polledOnMem + offeredOnMem));
+            if (logDebugPersist) getLogger().log(logColorPersist, "mailbox persisted: %s sizeDelta=%,d", reader, (-polledOnMem + offeredOnMem));
             sizeOnMemory.addAndGet(-polledOnMem + offeredOnMem);
         }
     }
@@ -314,7 +314,7 @@ public class MailboxPersistableReplacement extends MailboxDefault implements Mai
                 }
                 Object o = reader.next();
                 if (o instanceof PersistentFileManager.PersistentFileEnd) {
-                    if (logDebugPersist) reader.getManager().getLogger().log(true, logColorPersist, "readNext finish: %s", reader);
+                    if (logDebugPersist) reader.getManager().getLogger().log(logColorPersist, "readNext finish: %s", reader);
                     reader.close();
                     reader = null;
                     return null;

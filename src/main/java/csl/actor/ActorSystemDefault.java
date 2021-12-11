@@ -3,6 +3,7 @@ package csl.actor;
 import java.io.PrintWriter;
 import java.io.Serializable;
 import java.io.StringWriter;
+import java.util.Arrays;
 import java.util.Map;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -346,18 +347,32 @@ public class ActorSystemDefault implements ActorSystem {
 
     public static class SystemLoggerErr implements SystemLogger {
         @Override
+        public void log(String fmt, Object... args) {
+            System.err.printf(fmt + "%n", args);
+        }
+
+        @Override
+        public void log(int color, String fmt, Object... args) {
+            System.err.println(toColorFormat(color, fmt, args));
+        }
+
+        @Override
         public void log(boolean flag, int color, String fmt, Object... args) {
             if (flag) {
-                System.err.println(toColorLine(color, String.format(fmt, args)));
+                log(color, fmt, args);
+            }
+        }
+
+        public String toColorFormat(int color, String fmt, Object... args) {
+            if (color >= 0) {
+                return String.format("\033[38;5;" + color + "m" + fmt + "\033[0m", args);
+            } else {
+                return String.format(fmt, args);
             }
         }
 
         public String toColorLine(int color, String line) {
-            if (color >= 0) {
-                return String.format("\033[38;5;%dm%s\033[0m", color, line);
-            } else {
-                return line;
-            }
+            return toColorFormat(color, "%s", line);
         }
 
         @Override
@@ -368,7 +383,7 @@ public class ActorSystemDefault implements ActorSystem {
                 ex.printStackTrace(w);
                 w.close();
                 String line = sw.getBuffer().toString();
-                log(true, color, "%s %s", String.format(fmt, args), line);
+                log(color, "%s %s", String.format(fmt, args), line);
             }
         }
 

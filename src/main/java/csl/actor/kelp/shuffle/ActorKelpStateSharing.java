@@ -209,8 +209,7 @@ public abstract class ActorKelpStateSharing<ActorType extends Actor, StateType> 
             if (endTime.isBefore(req.getTime())) {
                 return;
             }
-            
-            config.log("share state");
+            getSystem().getLogger().log("share state");
             try (ActorKelpStateSharing<?,?> m = req.create(system, config)) {
                 m.shareSync(getMembers());
                 endTime = Instant.now();

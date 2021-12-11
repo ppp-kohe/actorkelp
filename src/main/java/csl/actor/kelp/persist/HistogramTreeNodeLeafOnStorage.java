@@ -58,13 +58,11 @@ public class HistogramTreeNodeLeafOnStorage extends HistogramTreeNodeLeaf implem
 
     @Override
     protected void putValueStruct(KeyHistograms.HistogramPutContext context) {
-        if (PersistentFileManager.logPersist) { //use regular logPersist
-            PersistentFileManager m = getFileManager();
-            if (m != null) {
-                m.getLogger().log(true, KeyHistogramsPersistable.logPersistColor,
-                        "HistogramNodeLeafOnStorage.putValueStruct: illegal operation %s",
-                        this);
-            }
+        PersistentFileManager m = getFileManager();
+        if (m != null) {
+            m.getLogger().log(PersistentFileManager.logPersist, KeyHistogramsPersistable.logPersistColor,
+                    "HistogramNodeLeafOnStorage.putValueStruct: illegal operation %s",
+                    this);
         }
     }
 
@@ -152,7 +150,7 @@ public class HistogramTreeNodeLeafOnStorage extends HistogramTreeNodeLeaf implem
                     ns.set(idx, leaf);
                 }
             }
-            if (PersistentFileManager.logDebugPersist) r.getManager().getLogger().log(true, KeyHistogramsPersistable.logPersistColor, "close: %s", r);
+            if (PersistentFileManager.logDebugPersist) r.getManager().getLogger().log(KeyHistogramsPersistable.logPersistColor, "close: %s", r);
 
             if (context.putTree != null) {
                 context.putTree.addLeafSizeOnMemory(1L);

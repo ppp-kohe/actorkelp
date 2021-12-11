@@ -64,14 +64,14 @@ public class ExampleActorPlacementKelp {
         protected ActorBehavior initBehavior() {
             return behaviorBuilder()
                     .matchKey(Integer.class, i-> i)
-                    .forEachKeyList(5, (k,vs) -> config.log("%s : %s -> %s", getSystem(), k, vs))
+                    .forEachKeyList(5, (k,vs) -> getLogger().log("%s : %s -> %s", getSystem(), k, vs))
                     .matchWithSender(String.class, this::info)
                     .build();
         }
 
         public ActorRef move() {
             ActorRef ref = getPlacement().place(this);
-            config.log("%s : place -> %s", this, ref);
+            getSystem().getLogger().log("%s : place -> %s", this, ref);
             return ref;
         }
 

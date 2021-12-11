@@ -108,7 +108,7 @@ public class ObjectMessageClient implements Closeable {
     protected void initSerializer() {
         if (serializer == null) {
             serializer = ObjectMessageServer.defaultSerializer;
-            getLogger().log(ActorSystemRemote.debugLog, debugLogClientColor, "%s use default serializer", this);
+            if (ActorSystemRemote.debugLog) getLogger().log(debugLogClientColor, "%s use default serializer", this);
         }
     }
 
@@ -142,7 +142,7 @@ public class ObjectMessageClient implements Closeable {
     public ObjectMessageConnection connect() {
         synchronized (this) {
             if (!isStarted()) {
-                getLogger().log(ActorSystemRemote.debugLog, debugLogClientColor, "%s connect start", this);
+                if (ActorSystemRemote.debugLog) getLogger().log(debugLogClientColor, "%s connect start", this);
                 start();
             }
         }
@@ -199,7 +199,7 @@ public class ObjectMessageClient implements Closeable {
         }
 
         public ObjectMessageConnection open() throws InterruptedException {
-            client.getLogger().log(ActorSystemRemote.debugLog, debugLogClientColor, "%s open", this);
+            if (ActorSystemRemote.debugLog) client.getLogger().log(debugLogClientColor, "%s open", this);
             channel = client.getBootstrap()
                     .handler(new ClientInitializer(client, this))
                     .connect(host, port)
@@ -246,10 +246,10 @@ public class ObjectMessageClient implements Closeable {
                     s = s.substring(0, 100) + "...";
                 }
                 if (channel == null) {
-                    client.getLogger().log(true, debugLogClientColor, "%s %s, msg=%s, retry=%d, channel=null",
+                    client.getLogger().log(debugLogClientColor, "%s %s, msg=%s, retry=%d, channel=null",
                             this, msg, s, retryCount);
                 } else {
-                    client.getLogger().log(true, debugLogClientColor, "%s %s, msg=%s, retry=%d, open=%s, active=%s, writable=%s",
+                    client.getLogger().log(debugLogClientColor, "%s %s, msg=%s, retry=%d, open=%s, active=%s, writable=%s",
                             this, msg, s, retryCount,
                             channel.isOpen(), channel.isActive(),
                             channel.isWritable());
@@ -258,7 +258,7 @@ public class ObjectMessageClient implements Closeable {
         }
 
         public void setResult(int result) {
-            if (ActorSystemRemote.debugLogMsg) client.getLogger().log(true, debugLogClientColor, "%s result-code %d", this, result);
+            if (ActorSystemRemote.debugLogMsg) client.getLogger().log(debugLogClientColor, "%s result-code %d", this, result);
         }
 
         protected void clearResult() throws Exception {
@@ -287,7 +287,7 @@ public class ObjectMessageClient implements Closeable {
         protected void checkResult(ChannelFuture f) throws Exception {
             last.add(f);
             f.addListener(sf -> {
-                if (ActorSystemRemote.debugLogMsg) client.getLogger().log(true, debugLogClientColor, "%s finish write", this);
+                if (ActorSystemRemote.debugLogMsg) client.getLogger().log(debugLogClientColor, "%s finish write", this);
                 if (last.remove(f)) {
                     lastSize.decrementAndGet();
                 }
@@ -385,7 +385,7 @@ public class ObjectMessageClient implements Closeable {
 
         @Override
         public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
-            if (ActorSystemRemote.debugLogMsg) owner.getLogger().log(true,
+            if (ActorSystemRemote.debugLogMsg) owner.getLogger().log(
                     ActorSystemRemote.debugLogMsgColorConnect,
                     "ClientInitializer error: %s", cause);
             super.exceptionCaught(ctx, cause);
@@ -470,7 +470,7 @@ public class ObjectMessageClient implements Closeable {
                     ReferenceCountUtil.release(buf);
                 }
             } else {
-                logger.log(true, debugLogClientColor, "? %s", logger.toStringLimit(msg));
+                logger.log( debugLogClientColor, "? %s", logger.toStringLimit(msg));
             }
         }
 
@@ -480,7 +480,7 @@ public class ObjectMessageClient implements Closeable {
                 logger.log(true, debugLogClientColor, cause, "response-handler exception");
                 firstError = false;
             } else {
-                logger.log(true, debugLogClientColor, "response-handler exception: %s", cause);
+                logger.log(debugLogClientColor, "response-handler exception: %s", cause);
             }
             super.exceptionCaught(ctx, cause);
         }

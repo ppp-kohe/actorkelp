@@ -745,7 +745,6 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         unit.setDeploymentConfig(conf);
         unit.setAppConfig((AppConfType) conf.createAppConfig(defaultConfType));
         unit.setName("localhost");
-        unit.setAppConfigLogHeader();
         return unit;
     }
 
@@ -762,7 +761,6 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         unit.setDeploymentConfig(conf);
         unit.setAppConfig((AppConfType) conf.createAppConfig(defaultConfType));
         unit.setName(host + ":" + port);
-        unit.setAppConfigLogHeader();
         return unit;
     }
 

@@ -57,7 +57,7 @@ public class ExampleCluster {
     public static class TestSource extends ActorKelp<TestSource> {
         public TestSource(ActorSystem system, String name, ConfigKelp config) {
             super(system, name, config);
-            config.log("new TestSource(%s, %s)", system, name);
+            getLogger().log("new TestSource(%s, %s)", system, name);
         }
         @Override
         protected ActorBehavior initBehavior() {
@@ -82,7 +82,7 @@ public class ExampleCluster {
     public static class TestActor extends ActorKelp<TestActor> {
         public TestActor(ActorSystem system, String name, ConfigKelp config) {
             super(system, name, config);
-            config.log("new TestActor(%s, %s)", system, name);
+            getLogger().log("new TestActor(%s, %s)", system, name);
         }
 
         @Override
@@ -90,7 +90,7 @@ public class ExampleCluster {
             if (!(Message.unwrapHolder(message.getData()) instanceof KelpStageGraphActor.WatchTask)
                 && !(message.getData() instanceof String)
                 && !(message.getData() instanceof Message.MessageDataClock<?>)) {
-                config.log("%s : offer %s", this, message);
+                getSystem().getLogger().log("%s : offer %s", this, message);
             }
             super.offer(message);
         }
@@ -102,7 +102,7 @@ public class ExampleCluster {
                     .fold((k,v) -> v.stream().reduce((a,b) -> new Tuple(a.value, a.count + b.count))
                             .orElse(new Tuple("",0)))
                     .forEach(o -> {
-                        getConfig().log("TestActor %s", o);
+                        getSystem().getLogger().log("TestActor %s", o);
                     })
                     .build();
         }

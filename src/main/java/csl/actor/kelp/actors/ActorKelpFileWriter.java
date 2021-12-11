@@ -98,7 +98,7 @@ public class ActorKelpFileWriter extends ActorKelp<ActorKelpFileWriter> {
                     filePaths.add(localPath);
                 }
                 writer = new PrintWriter(Files.newBufferedWriter(path));
-                getConfig().log("start writing: %s", path);
+                getLogger().log("start writing: %s", path);
             }
             writer.println(line);
             nextStageTell(data);
@@ -109,7 +109,7 @@ public class ActorKelpFileWriter extends ActorKelp<ActorKelpFileWriter> {
             } else {
                 errStr = line;
             }
-            getConfig().log("write error %s %s %s : %s", this, filePath, ex, errStr);
+            getLogger().log("write error %s %s %s : %s", this, filePath, ex, errStr);
         }
     }
 

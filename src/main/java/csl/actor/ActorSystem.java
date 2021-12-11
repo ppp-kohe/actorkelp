@@ -31,10 +31,22 @@ public interface ActorSystem extends Executor, AutoCloseable {
 
     interface SystemLogger {
         default void log(String fmt, Object... args) {
-            log(true, -1, fmt, args);
+            log( -1, fmt, args);
+        }
+        default void log(int color, String fmt, Object... args) {
+            log(true, color, fmt, args);
         }
         void log(boolean flag, int color, String fmt, Object... args);
         void log(boolean flag, int color, Throwable ex, String fmt, Object... args);
+
+        default void log(Throwable ex, String fmt, Object... args) {
+            log( -1, ex, fmt, args);
+        }
+
+        default void log(int color, Throwable ex, String fmt, Object... args) {
+            log(true, color, ex, fmt, args);
+        }
+
 
         default SystemLogToStringLimit toStringLimit(Object o) {
             return new SystemLogToStringLimit(o);

@@ -304,8 +304,8 @@ public interface PersistentConditionActor {
             logFmt = updateActorMailbox(self, mboxMemory, logFmt);
             logFmt = updateActorHistogram(self, treeCount, treeNodeMemory, treeValuesMemory, logFmt);
 
-            if (logFmt != null && logPersist) {
-                logger.log(true, logColorPersist, logFmt.format, logFmt.args);
+            if (logFmt != null) {
+                logger.log(logPersist, logColorPersist, logFmt.format, logFmt.args);
             }
         }
 
@@ -435,8 +435,8 @@ public interface PersistentConditionActor {
             int threshold = -1;
             boolean r = timingOk &&
                     sizeChecked >= (threshold = Math.max(reduceReq, reduceRuntimeCheckingThreshold));
-            if (r && logger != null && logPersist) {
-                logger.log(true, logColorPersist, "needToReduceComplete: timing:%,d %s:%,d >= threshold:%,d",
+            if (r && logger != null) {
+                logger.log(logPersist, logColorPersist, "needToReduceComplete: timing:%,d %s:%,d >= threshold:%,d",
                         t, (allowPersist ? "allVals" : "valsOnMem"), sizeChecked, threshold);
             }
             return r;
@@ -462,9 +462,9 @@ public interface PersistentConditionActor {
 
         protected void logReducedSize(long size, long availableOnMemoryMessages, int consuming) {
             if (logger != null) {
-                if (logReduce.next() && logPersist) {
+                if (logReduce.next()) {
                     int n = logReduce.getLast();
-                    logger.log(true, logColorPersist, "nextReduceSize: timing:%,d vals:%,d - consuming:%,d -> after:%,d %s", n, size, consuming,
+                    logger.log(logPersist, logColorPersist, "nextReduceSize: timing:%,d vals:%,d - consuming:%,d -> after:%,d %s", n, size, consuming,
                             (size - consuming),
                             (availableOnMemoryMessages >= 0 ? String.format("(availableMsgsOnMem:%,d)", availableOnMemoryMessages) : ""));
                 }
@@ -533,13 +533,13 @@ public interface PersistentConditionActor {
         }
 
         protected void logNeedToReduce(boolean allowPersist, long treeSize, long treeSizeOnMemory, String rest) {
-            if (logger != null && logPersist) {
+            if (logger != null) {
                 String time = String.format("timing:%,d lastTrav:%s >%,dms", traversalTiming(), lastDuration, traversalDelayMs);
                 if (allowPersist) {
-                    logger.log(true, logColorPersist, "needToReduceTrav true: %s && allVals:%,d >= threshold:%,d (valsOnMem:%,d) %s",
+                    logger.log(logColorPersist, "needToReduceTrav true: %s && allVals:%,d >= threshold:%,d (valsOnMem:%,d) %s",
                             time, treeSize, reduceRuntimeCheckingThreshold, treeSizeOnMemory, rest);
                 } else {
-                    logger.log(true, logColorPersist, "needToReduceTrav true: %s && valsOnMem:%,d >= threshold:%,d (allVals:%,d)  %s",
+                    logger.log(logColorPersist, "needToReduceTrav true: %s && valsOnMem:%,d >= threshold:%,d (allVals:%,d)  %s",
                             time, treeSizeOnMemory, reduceRuntimeCheckingThreshold, treeSize, rest);
                 }
             }
@@ -596,15 +596,15 @@ public interface PersistentConditionActor {
         public boolean needToPersist(MailboxManageable mailbox, long size) {
             if (size > sizeLimit) {
                 if (memoryGuard.hasSufficientFree()) {
-                    if (logTiming.next() && logPersist) {
-                        logger.log(true, MailboxPersistableReplacement.logColorPersist, "persist mailbox: (cancel %s) timing:%,d %,d > limit:%,d",
+                    if (logTiming.next()) {
+                        logger.log(logPersist, MailboxPersistableReplacement.logColorPersist, "persist mailbox: (cancel %s) timing:%,d %,d > limit:%,d",
                                 memoryGuard.report(),
                                 logTiming.getLast(),
                                 size, sizeLimit);
                     }
                     return false;
                 } else {
-                    if (logTiming.next() && logPersist) logger.log(true, MailboxPersistableReplacement.logColorPersist, "persist mailbox: %,d > limit:%,d", size, sizeLimit);
+                    if (logTiming.next()) logger.log(logPersist, MailboxPersistableReplacement.logColorPersist, "persist mailbox: %,d > limit:%,d", size, sizeLimit);
                     return true;
                 }
             } else {
@@ -683,8 +683,8 @@ public interface PersistentConditionActor {
                 }
             }
 
-            if (log && PersistentFileManager.logPersist) {
-                logger.log(true, KeyHistogramsPersistable.logPersistColor,
+            if (log) {
+                logger.log(PersistentFileManager.logPersist, KeyHistogramsPersistable.logPersistColor,
                         "Histogram(%h) %s: needToPersist -> %s : %s timing:%,d treeVals=(%,d limit:%,d) nodes=(tbl:%,d leaf:%,d limit:%,d leafNZValuesRatio:%3.2f)",
                         System.identityHashCode(tree), callerInfo, result, memInfo, logTiming,
                         treeValues, sizeValuesLimit,
@@ -748,10 +748,16 @@ public interface PersistentConditionActor {
         }
 
         @Override
+        public void log(int color, String fmt, Object... args) {
+            ConfigBase.FormatAndArgs fa = format(fmt, args);
+            logger.log(color, fa.format, fa.args);
+        }
+
+        @Override
         public void log(boolean flag, int color, String fmt, Object... args) {
             if (flag) {
                 ConfigBase.FormatAndArgs fa = format(fmt, args);
-                logger.log(true, color, fa.format, fa.args);
+                logger.log(color, fa.format, fa.args);
             }
         }
 
@@ -791,6 +797,15 @@ public interface PersistentConditionActor {
                     return Objects.toString(o);
                 }
             };
+        }
+
+        @Override
+        public String toString() {
+            return String.format("%s@%h(%s, actor=%h)",
+                    getClass().getSimpleName(),
+                    System.identityHashCode(this),
+                    logger,
+                    System.identityHashCode(actor));
         }
     }
 }

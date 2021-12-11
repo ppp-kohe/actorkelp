@@ -195,7 +195,7 @@ public class ActorSystemCluster extends ActorSystemRemote implements PersistentF
             } else {
                 ++runningCount;
             }
-            if (logThrottle) system.getLogger().log(true, logColorThrottle, "updateTime: %s %s %s -> %s (%s) waiting=%,d running=%,d",
+            system.getLogger().log(logThrottle, logColorThrottle, "updateTime: %s %s %s -> %s (%s) waiting=%,d running=%,d",
                     address, (start ? "start" : "finish"), ActorSystem.timeForLog(this.time), ActorSystem.timeForLog(time),
                     Duration.between(Instant.now(), time), waitingThreads.size(), runningCount);
             if (time.compareTo(this.time) < 0) { //shorter time
@@ -222,7 +222,7 @@ public class ActorSystemCluster extends ActorSystemRemote implements PersistentF
                 }
                 Thread th = Thread.currentThread();
                 if (!t.isNegative()) {
-                    if (logThrottle) system.getLogger().log(true, logColorThrottle, "awaits: %s %s (%s) thread=%s %s",
+                    system.getLogger().log(logThrottle, logColorThrottle, "awaits: %s %s (%s) thread=%s %s",
                             address, ActorSystem.timeForLog(time), t, th, info);
                     synchronized (this) {
                         waitingThreads.add(th);

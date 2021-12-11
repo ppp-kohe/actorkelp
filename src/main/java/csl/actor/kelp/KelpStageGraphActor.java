@@ -28,7 +28,7 @@ import java.util.stream.IntStream;
 
 public class KelpStageGraphActor extends ActorDefault {
     protected UUID id;
-    protected ConfigBase logger;
+    protected ActorSystem.SystemLogger logger;
     protected List<GraphActorNode> startNodes;
     protected Map<String, GraphStageNode> nameToStageNode;
     protected Map<String, GraphActorNode> nameToActorNode;
@@ -63,7 +63,7 @@ public class KelpStageGraphActor extends ActorDefault {
 
     public KelpStageGraphActor(ActorSystem system) {
         super(system);
-        logger = ActorSystemKelp.configForLog(system);
+        logger = system.getLogger();
         this.id = UUID.randomUUID();
         this.name = createName();
         this.nameToStageNode = new HashMap<>();
@@ -1177,7 +1177,7 @@ public class KelpStageGraphActor extends ActorDefault {
                     remain = lowerBound;
                 }
                 if (ActorKelpStats.logDebug) {
-                    system.getLogger().log(true, ActorKelpStats.logColor,
+                    system.getLogger().log(ActorKelpStats.logColor,
                             "start getActorInfo %s :  await=%s from=(%s %s)",
                             getActorHeadInfo(a), remain,
                             start, Duration.between(start, Instant.now()));
@@ -1188,7 +1188,7 @@ public class KelpStageGraphActor extends ActorDefault {
                     next = f.get(1, TimeUnit.SECONDS);
                 }
                 if (ActorKelpStats.logDebug) {
-                    system.getLogger().log(true, ActorKelpStats.logColor,
+                    system.getLogger().log(ActorKelpStats.logColor,
                             "end   getActorInfo %s : awaited=%s from=(%s %s) -> %s",
                             getActorHeadInfo(a), Duration.between(checkStart, Instant.now()),
                             start, Duration.between(start, Instant.now()),
@@ -1273,7 +1273,7 @@ public class KelpStageGraphActor extends ActorDefault {
         protected void incrementRetryCount(Actor self) {
             if (retryCount >= 100) {
                 if (retryCount == 100 && ActorKelp.logDebugKelp) {
-                    self.getSystem().getLogger().log(true, ActorKelp.logDebugKelpColor,
+                    self.getSystem().getLogger().log(ActorKelp.logDebugKelpColor,
                             "%s incrementRetryCount > 100 : %s empty?=%s, remoteClocks=%s",
                             this, self, checkEmptyMailbox(self), remoteClocks);
                 }
@@ -1310,7 +1310,7 @@ public class KelpStageGraphActor extends ActorDefault {
                     .forEach(this::complete);
             boolean b = remoteClocks.isEmpty();
             if (!b && (retryCount % 100) == 0) {
-                self.getSystem().getLogger().log(true, 10, "retry=%,d remainingClocks=%s collectClockTable for %s",
+                self.getSystem().getLogger().log(10, "retry=%,d remainingClocks=%s collectClockTable for %s",
                         retryCount, remoteClocks, self);
                 remoteClocks = collectClockTable(self.getSystem(), self, true);
                 return false;

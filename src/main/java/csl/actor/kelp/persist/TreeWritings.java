@@ -367,7 +367,7 @@ public class TreeWritings {
             });
             w.dataStoreSeek(backPos);
             pointToData.clear();
-            if (PersistentFileManager.logPersist) w.getManager().getLogger().log(true, KeyHistogramsPersistable.logPersistColor,
+            if (PersistentFileManager.logPersist) w.getManager().getLogger().log(KeyHistogramsPersistable.logPersistColor,
                     "flush sorted pointers %s", Duration.between(n, Instant.now()));
         }
     }

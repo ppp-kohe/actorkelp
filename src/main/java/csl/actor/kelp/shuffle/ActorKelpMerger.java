@@ -92,7 +92,7 @@ public class ActorKelpMerger<ActorType extends ActorKelp<ActorType>> implements 
             try {
                 return executor.submit(() -> merge(l.get(), r.get()));
             } catch (Exception ex) {
-                config.log(ex, "error: %s : ", l, r);
+                system.getLogger().log(ex, "error: %s : ", l, r);
                 return l;
             }
         }
@@ -102,7 +102,7 @@ public class ActorKelpMerger<ActorType extends ActorKelp<ActorType>> implements 
         try {
             return ResponsiveCalls.sendTask(system, l, new MergeTask(l, r, isDisableAtMerging(), isStateIncludeMailbox())).get();
         } catch (Exception ex) {
-            config.log(ex, "error: %s : ", l, r);
+            system.getLogger().log(ex, "error: %s : ", l, r);
             return l;
         }
     }

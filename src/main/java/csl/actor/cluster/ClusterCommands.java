@@ -121,9 +121,6 @@ public class ClusterCommands<AppConfType extends ConfigBase> {
             block.getClusterLines()
                     .forEach(cs -> set(conf, cs));
             unit.setAppConfig(ConfigBase.createConfig((Class<AppConfType>) Class.forName(conf.configType)));
-
-            unit.setAppConfigLogHeader();
-
             block.getConfigLines()
                     .forEach(cs -> set(unit.getAppConfig(), cs));
         } catch (Exception e) {
@@ -768,15 +765,6 @@ public class ClusterCommands<AppConfType extends ConfigBase> {
             return this;
         }
 
-
-        public void setAppConfigLogHeader() {
-            try {
-                String lh = getDeploymentConfig().logMessageHeaderHostPort().format();
-                getAppConfig().set("logHeader", lh);
-            } catch (Exception ex) {
-                //ignore
-            }
-        }
 
         @Override
         public Map<String, Object> toJson(Function<Object, Object> valueConverter) {

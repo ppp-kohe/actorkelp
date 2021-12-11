@@ -507,7 +507,7 @@ public class KryoBuilder {
             if (debugLog) {
                 getLogger().log(true, debugLogColor, ex, fmt, args);
             } else {
-                getLogger().log(true, debugLogColor, fmt, args);
+                getLogger().log(debugLogColor, fmt, args);
             }
         }
     }

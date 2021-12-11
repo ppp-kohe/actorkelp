@@ -334,7 +334,7 @@ public class ActorSystemRemote implements ActorSystem, KryoBuilder.SerializerFac
 
 
     public void logDebug(String msg, Object... args) {
-        if (debugLog) getLogger().log(true, debugLogColor, msg, args);
+        if (debugLog) getLogger().log(debugLogColor, msg, args);
     }
 
     public KryoBuilder.SerializerFunction getSerializer() {
@@ -669,7 +669,7 @@ public class ActorSystemRemote implements ActorSystem, KryoBuilder.SerializerFac
         }
 
         protected void logMsg(String fmt, Object... args) {
-            if (debugLogMsg) remoteSystem.getLogger().log(true, debugLogMsgColorConnect, fmt, args);
+            if (debugLogMsg) remoteSystem.getLogger().log(debugLogMsgColorConnect, fmt, args);
         }
 
         public void notifyAndClose() {
@@ -867,7 +867,7 @@ public class ActorSystemRemote implements ActorSystem, KryoBuilder.SerializerFac
         }
 
         protected void logMsg(String fmt, Object... args) {
-            if (debugLogMsg) remote.getLogger().log(true, debugLogMsgColorDeliver, fmt, args);
+            if (debugLogMsg) remote.getLogger().log(debugLogMsgColorDeliver, fmt, args);
         }
 
         @Override

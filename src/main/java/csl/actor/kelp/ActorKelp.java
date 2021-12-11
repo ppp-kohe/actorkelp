@@ -141,6 +141,10 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
         return (SelfType) this;
     }
 
+    public ActorSystem.SystemLogger getLogger() {
+        return getSystem().getLogger();
+    }
+
     public void setUnit(boolean unit) {
         this.unit = unit;
     }
@@ -382,13 +386,16 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
         ActorKelpStats.ActorKelpProcessingStatsMessageBundle stats =
                 new ActorKelpStats.ActorKelpProcessingStatsMessageBundle(prevStats, mb.dataSize(), System.identityHashCode(mb));
         self.processingStats = stats;
-        int i = 0;
-        for (Object d : mb.getData()) {
-            self.processMessage(new MessageBundle.MessageAccepted<>(self, d));  //MessageBundle is already accepted by Dispatcher
-            stats.update(i);
-            ++i;
+        try {
+            int i = 0;
+            for (Object d : mb.getData()) {
+                self.processMessage(new MessageBundle.MessageAccepted<>(self, d));  //MessageBundle is already accepted by Dispatcher
+                stats.update(i);
+                ++i;
+            }
+        } finally {
+            self.processingStats = prevStats;
         }
-        self.processingStats = prevStats;
     }
 
     @Override
@@ -416,7 +423,7 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
 
         //clear histogram
         //TODO avoid multiple execution?
-        if (logDebugKelp) getSystem().getLogger().log(true, logDebugKelpColor, "%s processStagingCompletedImpl(%s)",
+        if (logDebugKelp) getSystem().getLogger().log(logDebugKelpColor, "%s processStagingCompletedImpl(%s)",
                 this, taskKey);
 
         getMailboxAsKelp()
@@ -491,7 +498,7 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
             }
             flush();
         } catch (Exception ex) {
-            config.log(ex, "splitter=%s split=%s", fileSplitter, split);
+            getSystem().getLogger().log(ex, "splitter=%s split=%s", fileSplitter, split);
         }
     }
 
@@ -499,41 +506,43 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
         Iterator<String> readingSplitIterator = fileSplitter.openLineIterator(split);
         ActorKelpStats.ActorKelpProcessingStats prevStats = processingStats;
         ActorKelpStats.ActorKelpProcessingStatsFileSplit stats = new ActorKelpStats.ActorKelpProcessingStatsFileSplit(prevStats, split);
-        this.processingStats = stats;
-        long lines = 0;
-        long waitLines = getFileLineWaitLines();
-        long waitMs = getFileLineWaitMs();
-        Duration waitMsD = Duration.ofMillis(waitMs);
-        Instant prevCheck = Instant.now();
-        Instant startTime = prevCheck;
-        Duration totalWait = Duration.ZERO;
-        while (readingSplitIterator.hasNext()) {
-            processFileSplitLine(readingSplitIterator.next());
-            stats.updateRate(Duration.between(startTime, Instant.now()), totalWait, readingSplitIterator);
-            if (waitLines > 0 && lines % waitLines == 0) {
-                Instant now = Instant.now();
-                Duration time = waitMsD.minus(Duration.between(prevCheck, now));
-                prevCheck = now;
-                if (!time.isNegative() && !time.isZero()) {
-                    if (!time.minus(Duration.ofSeconds(10)).isNegative()) {
-                        config.log("read waits > 10s: %s", time);
-                    }
-                    try {
-                        int n = (time.toNanosPart() % 1000_000);
-                        Thread.sleep(time.toMillis(), n);
-                    } catch (IllegalArgumentException ex) {
-                        System.err.println(ex + " : " + time);
-                        ex.printStackTrace();
-                    }
-                    totalWait = totalWait.plus(time);
-                }
+        try {
+            this.processingStats = stats;
+            long lines = 0;
+            long waitLines = getFileLineWaitLines();
+            long waitMs = getFileLineWaitMs();
+            Duration waitMsD = Duration.ofMillis(waitMs);
+            Instant prevCheck = Instant.now();
+            Instant startTime = prevCheck;
+            Duration totalWait = Duration.ZERO;
+            while (readingSplitIterator.hasNext()) {
+                processFileSplitLine(readingSplitIterator.next());
                 stats.updateRate(Duration.between(startTime, Instant.now()), totalWait, readingSplitIterator);
+                if (waitLines > 0 && lines % waitLines == 0) {
+                    Instant now = Instant.now();
+                    Duration time = waitMsD.minus(Duration.between(prevCheck, now));
+                    prevCheck = now;
+                    if (!time.isNegative() && !time.isZero()) {
+                        if (!time.minus(Duration.ofSeconds(10)).isNegative()) {
+                            getLogger().log("read waits > 10s: %s", time);
+                        }
+                        try {
+                            int n = (time.toNanosPart() % 1000_000);
+                            Thread.sleep(time.toMillis(), n);
+                        } catch (IllegalArgumentException ex) {
+                            getLogger().log(ex, "%s : %s", ex, time);
+                        }
+                        totalWait = totalWait.plus(time);
+                    }
+                    stats.updateRate(Duration.between(startTime, Instant.now()), totalWait, readingSplitIterator);
+                }
+                ++lines;
             }
-            ++lines;
+            getLogger().log("read finish: %s totalWait=%s: %s", split, totalWait, this);
+            stats.updateRate(Duration.between(startTime, Instant.now()), totalWait, 1.0);
+        } finally {
+            this.processingStats = prevStats;
         }
-        config.log("read finish: %s totalWait=%s: %s", split, totalWait, this);
-        stats.updateRate(Duration.between(startTime, Instant.now()), totalWait, 1.0);
-        this.processingStats = prevStats;
     }
 
     public void processFileSplitLine(String line) {

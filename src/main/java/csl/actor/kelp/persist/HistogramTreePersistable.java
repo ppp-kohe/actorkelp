@@ -251,8 +251,8 @@ public class HistogramTreePersistable extends HistogramTree implements KeyHistog
                 restructure(false);
                 op = checkPersistWithoutRestructure(callerInfo + "+restruct");
                 PersistentFileManager m = getPersistent();
-                if (m != null && PersistentFileManager.logPersist) {
-                    logger(m).log(true, KeyHistogramsPersistable.logPersistColor,
+                if (m != null) {
+                    logger(m).log(PersistentFileManager.logPersist, KeyHistogramsPersistable.logPersistColor,
                             "Histogram(%h) restructure prevNodes=%,d leaves=%,d minTables=%,d ratio=%1.2f -> nodes=%,d leaves=%,d %s",
                             System.identityHashCode(this),
                             prevNodes, prevLeaf, minTables, tableRatio,
@@ -631,7 +631,7 @@ public class HistogramTreePersistable extends HistogramTree implements KeyHistog
                     if (PersistentFileManager.logDebugPersist) {
                         long n = Arrays.stream(headers).mapToLong(l -> l.size).sum();
                         if (data.size != n) {
-                            logger(w.getManager()).log(true, KeyHistogramsPersistable.logPersistColor,
+                            logger(w.getManager()).log(KeyHistogramsPersistable.logPersistColor,
                                     "KeyHistogramPersistable.persistTreeNodeReplace error: inconsistent leaf.size=%,d vs sum(list)=%,d : %s",
                                     data.size, n, w);
                         }
@@ -933,8 +933,8 @@ public class HistogramTreePersistable extends HistogramTree implements KeyHistog
         }
 
         public void logBefore(Supplier<String> logStr) {
-            if (log && manager != null && PersistentFileManager.logPersist) {
-                manager.getLogger().log(true, PersistentFileManager.logColorPersist,
+            if (log && manager != null) {
+                manager.getLogger().log(PersistentFileManager.logPersist, PersistentFileManager.logColorPersist,
                         "Histogram(%h) persist(%s) start : timing=%,d %s",
                         System.identityHashCode(this),
                         persistTreeOpName(tag),
@@ -951,8 +951,8 @@ public class HistogramTreePersistable extends HistogramTree implements KeyHistog
             Duration time = Duration.between(start, Instant.now());
             Duration total = manager.addPersistTime(time);
 
-            if (log && manager != null && PersistentFileManager.logPersist) {
-                manager.getLogger().log(true, PersistentFileManager.logColorPersist,
+            if (log && manager != null) {
+                manager.getLogger().log(PersistentFileManager.logPersist, PersistentFileManager.logColorPersist,
                         "Histogram(%h) persist(%s) FINISH time=(+%s total:%s) %s: timing=%,d %s",
                         System.identityHashCode(this),
                         persistTreeOpName(tag),

@@ -45,16 +45,6 @@ public class ActorSystemKelp extends ActorSystemRemote implements ActorKelpBuild
         return internalFactory;
     }
 
-    public static ConfigBase configForLog(ActorSystem system) {
-        if (system instanceof ActorSystemKelp) {
-            return ((ActorSystemKelp) system).config();
-        } else {
-            ConfigBase b = new ConfigBase();
-            b.setLogger(system.getLogger());
-            return b;
-        }
-    }
-
     public static ActorSystemKelp create(ConfigDeployment configDeployment) {
         Function<ActorSystem, Kryo> kryoFactory = configDeployment.kryoBuilder(defaultBuilderType());
         return create(configDeployment, kryoFactory);
@@ -188,6 +178,16 @@ public class ActorSystemKelp extends ActorSystemRemote implements ActorKelpBuild
         @Override
         protected ConfigBase.FormatAndArgs format(String fmt, Object... args) {
             return config.logMessageHeader().append(configKelp.logMessageHeaderCustom()).append(new ConfigBase.FormatAndArgs(fmt, args));
+        }
+
+        @Override
+        public String toString() {
+            return String.format("%s@%h(dep=<%s> kelp=<%s>, %s)",
+                    getClass().getSimpleName(),
+                    System.identityHashCode(this),
+                    config.logMessageHeader().format(),
+                    configKelp.logMessageHeaderCustom().format(),
+                    logger);
         }
     }
 
@@ -396,7 +396,7 @@ public class ActorSystemKelp extends ActorSystemRemote implements ActorKelpBuild
             ConfigBase.FormatAndArgs fa = new ConfigBase.FormatAndArgs("ActorSystemDefaultForKelp ")
                     .append(new ConfigBase.FormatAndArgs(fmt, args)
                             .append(new ConfigBase.FormatAndArgs(" @ %s %s", actor, Thread.currentThread())));
-            system.getLogger().log(true, debugLogColor, fa.format, fa.args);
+            system.getLogger().log(debugLogColor, fa.format, fa.args);
         }
 
         @Override
@@ -633,7 +633,7 @@ public class ActorSystemKelp extends ActorSystemRemote implements ActorKelpBuild
             ConfigBase.FormatAndArgs fa = new ConfigBase.FormatAndArgs("ConnectionActorKelp ")
                     .append(new ConfigBase.FormatAndArgs(fmt, args)
                     .append(new ConfigBase.FormatAndArgs(" @ %s", address)));
-            system.getLogger().log(true, debugLogColor, fa.format, fa.args);
+            system.getLogger().log(debugLogColor, fa.format, fa.args);
         }
 
         public void update() {
