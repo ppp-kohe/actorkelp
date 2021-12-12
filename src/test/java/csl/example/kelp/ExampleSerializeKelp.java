@@ -2,6 +2,8 @@ package csl.example.kelp;
 
 import csl.actor.*;
 import csl.actor.kelp.persist.KeyHistogramsPersistable;
+import csl.actor.remote.ActorSystemRemote;
+import csl.actor.util.ConfigBase;
 import csl.example.ExampleSerialize;
 import csl.example.TestToolSerialize;
 import csl.actor.kelp.*;
@@ -27,6 +29,7 @@ public class ExampleSerializeKelp extends ExampleSerialize {
         system = new ActorSystemKelp.ActorSystemDefaultForKelp();
         p = new KryoBuilder.SerializerPoolDefault(system);
 
+        runMessage();
         runNodeTreeData();
         runHistogramLeafList(new HistogramTree());
         runActorAddressRemote();
@@ -38,6 +41,59 @@ public class ExampleSerializeKelp extends ExampleSerialize {
         runShuffle();
 
         system.close();
+    }
+
+    private void runMessage() {
+        MyActor actor = new MyActor(system, "A", new ConfigKelp());
+        Message<?> m = new Message<>(actor, "hello");
+        ts.writeRead(p, m, (a,b) ->
+            system.resolveActor(b.target).equals(actor) &&
+                    a.data.equals(b.data) &&
+                    a.getClass().equals(b.getClass()));
+
+        Message.MessageNone n = new Message.MessageNone(actor);
+        ts.writeRead(p, n, (a,b) ->
+                system.resolveActor(b.target).equals(actor) &&
+                        a.getClass().equals(b.getClass()));
+
+        MessageBundle.MessageAccepted<String> acc = new MessageBundle.MessageAccepted<>(actor, "hello");
+        ts.writeRead(p, acc, (a,b) ->
+                system.resolveActor(b.target).equals(actor) &&
+                        a.data.equals(b.data) &&
+                        a.getClass().equals(b.getClass()));
+
+        MessageBundle<String> bs = new MessageBundle<>(actor,
+                Arrays.asList("hello", "world"));
+        ts.writeRead(p, bs, (a,b) ->
+                system.resolveActor(b.target).equals(actor) &&
+                        a.data.equals(b.data) &&
+                        a.getClass().equals(b.getClass()));
+
+        Message.MessageDataClock<String> clock = new Message.MessageDataClock<>(123, "hello");
+        ts.writeRead(p, clock, (a,b) ->
+                        a.body.equals(b.body) &&
+                        a.clock == (b.clock) &&
+                        a.getClass().equals(b.getClass()));
+
+        Message.MessageDataPacket<String> pkt = new Message.MessageDataPacket<>("hello", actor);
+        ts.writeRead(p, pkt, (a,b) ->
+                a.data.equals(b.data) &&
+                        system.resolveActor(b.sender).equals(a.sender) &&
+                        a.getClass().equals(b.getClass()));
+
+        CallableMessage.CallablePacket<Actor,String> clp = new CallableMessage.CallablePacket<>((s) -> "hello", actor);
+        ts.writeRead(p, clp, (a,b) ->
+                a.data.call(null).equals(b.data.call(null)) &&
+                        system.resolveActor(b.sender).equals(a.sender) &&
+                        a.getClass().equals(b.getClass()));
+
+        ActorSystemRemote.MessageDataTransferred t = new ActorSystemRemote.MessageDataTransferred(123,
+                ActorAddress.get("localhost", -1, "A"), "hello");
+        ts.writeRead(p, t, (a,b) ->
+                a.fromAddress.equals(b.fromAddress) &&
+                        a.body.equals(b.body) &&
+                        a.id == (b.id) &&
+                        a.getClass().equals(b.getClass()));
     }
 
     private void runNodeTreeData() {

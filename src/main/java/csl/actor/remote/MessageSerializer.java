@@ -14,7 +14,7 @@ public class MessageSerializer {
         kryo.register(MessageBundle.MessageAccepted.class, new MessageSerializerAccepted());
         kryo.register(MessageBundle.class, new MessageSerializerBundle());
 
-        kryo.register(Message.MessageDataClock.class, new MessageDataHolderSerializerDataPacket());
+        kryo.register(Message.MessageDataClock.class, new MessageDataHolderSerializerClock());
         kryo.register(CallableMessage.CallablePacket.class, new MessageDataHolderSerializerCallable());
         kryo.register(Message.MessageDataPacket.class, new MessageDataHolderSerializerDataPacket());
         kryo.register(ActorSystemRemote.MessageDataTransferred.class, new MessageDataHolderSerializerTransferred());
@@ -131,7 +131,7 @@ public class MessageSerializer {
 
         @Override
         public void write(Kryo kryo, Output output, CallableMessage.CallablePacket<?,?> object) {
-            Message.MessageDataPacket<?> m = object;
+            CallableMessage.CallablePacket<?,?> m = object;
             kryo.writeClassAndObject(output, m.data);
             kryo.writeClassAndObject(output, m.sender);
         }
