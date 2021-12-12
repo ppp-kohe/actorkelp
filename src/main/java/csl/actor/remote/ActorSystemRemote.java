@@ -881,7 +881,7 @@ public class ActorSystemRemote implements ActorSystem, KryoBuilder.SerializerFac
         }
     }
 
-    public static class MessageDataTransferred implements Serializable, Message.MessageDataHolder<Object>, KryoSerializable {
+    public static class MessageDataTransferred implements Serializable, Message.MessageDataHolder<Object> {
         public static final long serialVersionUID = 1L;
         public int id;
         public ActorAddress.ActorAddressRemote fromAddress;
@@ -907,19 +907,6 @@ public class ActorSystemRemote implements ActorSystem, KryoBuilder.SerializerFac
                     ",from=" + fromAddress +
                     ", body=" + body +
                     '}';
-        }
-        @Override
-        public void write(Kryo kryo, Output output) {
-            output.writeInt(id);
-            kryo.writeClassAndObject(output, fromAddress);
-            kryo.writeClassAndObject(output, body);
-        }
-
-        @Override
-        public void read(Kryo kryo, Input input) {
-            id = input.readInt();
-            fromAddress = (ActorAddress.ActorAddressRemote) kryo.readClassAndObject(input);
-            body = kryo.readClassAndObject(input);
         }
     }
 

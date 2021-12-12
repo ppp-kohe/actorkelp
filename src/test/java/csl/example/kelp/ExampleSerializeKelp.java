@@ -43,7 +43,7 @@ public class ExampleSerializeKelp extends ExampleSerialize {
     private void runNodeTreeData() {
         KeyHistogramsPersistable.NodeTreeData d = new KeyHistogramsPersistable.NodeTreeData();
         d.height = 123;
-        d.leaf = true;
+        d.leaf = false;
         d.keyStart = "hello";
         d.size = 123456789;
         d.keyEnd = "word";
