@@ -13,9 +13,10 @@ public abstract class Actor implements ActorRef {
     protected Mailbox specialMailbox;
     protected volatile Mailbox delayedMailbox;
 
-    protected AtomicBoolean active = new AtomicBoolean();
-    protected AtomicBoolean activeSpecial = new AtomicBoolean();
     protected Map<Object, Integer> clocks = new HashMap<>();
+
+    public ActorSystem.ProcessMessage messageRunner;
+    public ActorSystem.ProcessMessage messageRunnerSpecial;
 
     public Actor(ActorSystem system) {
         this(system, null);
@@ -34,11 +35,14 @@ public abstract class Actor implements ActorRef {
         }
         this.mailbox = mailbox;
         this.specialMailbox = new MailboxDefault();
+        if (system != null) {
+            messageRunner = system.createProcessMessageSubsequently(this, false);
+            messageRunnerSpecial = system.createProcessMessageSubsequently(this, true);
+        }
     }
 
     public static final String NAME_SYSTEM_SEPARATOR = "#";
     public static final String NAME_ID_SEPARATOR = "@";
-
 
     /**
      * the naming rule for actors:
@@ -95,33 +99,6 @@ public abstract class Actor implements ActorRef {
         return data instanceof Message.MessageDataDelayed ||
                 (data instanceof Message.MessageDataHolder<?> &&
                         isDelayedMessageData(((Message.MessageDataHolder<?>) data).getData()));
-    }
-
-    public void activate(boolean special) {
-        if (special) {
-            activeSpecial.set(true);
-        } else {
-            active.set(true);
-        }
-    }
-    public void deactivate(boolean special) {
-        if (special) {
-            activeSpecial.set(false);
-        } else {
-            active.set(false);
-        }
-    }
-
-    public boolean isActive() {
-        return active.get() || activeSpecial.get();
-    }
-
-    public boolean isActive(boolean special) {
-        if (special) {
-            return activeSpecial.get();
-        } else {
-            return active.get();
-        }
     }
 
     public void putClock(Object addr, int clock) {

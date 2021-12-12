@@ -324,12 +324,19 @@ public class ActorSystemKelp extends ActorSystemRemote implements ActorKelpBuild
         }
 
         @Override
-        protected ProcessMessageSubsequently createProcessMessageSubsequently(Actor target, boolean special, Message<?> msg) {
+        protected ProcessMessage getProcessMessageSubsequently(Actor target, boolean special, Message<?> msg) {
             if (special && !(msg instanceof Message.MessageNone) &&
                     !target.isDelayedMessage(msg)) { //DelayedMessage are not awaited
                 updateAndWait(target);
             }
-            return new ProcessMessageSubsequentlyKelp(this, target, special);
+            return super.getProcessMessageSubsequently(target, special, msg);
+        }
+
+        @Override
+        public ProcessMessageSubsequently createProcessMessageSubsequently(Actor target, boolean special) {
+            return special ?
+                    new ProcessMessageSubsequentlyKelpSpecial(this, target) :
+                    new ProcessMessageSubsequently(this, target);
         }
 
         public void updateAndWait(Actor target) {
@@ -461,21 +468,19 @@ public class ActorSystemKelp extends ActorSystemRemote implements ActorKelpBuild
         }
     }
 
-    public static class ProcessMessageSubsequentlyKelp extends ActorSystemDefault.ProcessMessageSubsequently {
-        public ProcessMessageSubsequentlyKelp(ActorSystemDefaultForKelp system, Actor actor, boolean special) {
-            super(system, actor, special);
+    public static class ProcessMessageSubsequentlyKelpSpecial extends ActorSystemDefault.ProcessMessageSubsequentlySpecial {
+        public ProcessMessageSubsequentlyKelpSpecial(ActorSystemDefaultForKelp system, Actor actor) {
+            super(system, actor);
         }
 
         @Override
         public void submit() {
-            if (special) { //if other actors are busily processing, then it might be awaiting in all executor's threads.
-                // the special message needs to be immediately processed on a free thread
-                ((ActorSystemDefaultForKelp) system).getMergerExecutors().execute(this);
-            } else {
-                super.submit();
-            }
+            //if other actors are busily processing, then it might be awaiting in all executor's threads.
+            // the special message needs to be immediately processed on a free thread
+            ((ActorSystemDefaultForKelp) system).getMergerExecutors().execute(this);
         }
     }
+
 
     public void setConfig(ConfigKelp config) {
         this.config = config;

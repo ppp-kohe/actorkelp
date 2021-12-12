@@ -114,4 +114,10 @@ public interface ActorSystem extends Executor, AutoCloseable {
         }
         return false;
     }
+
+    ProcessMessage createProcessMessageSubsequently(Actor target, boolean special);
+
+    interface ProcessMessage extends Runnable {
+        void submit(Message<?> msg);
+    }
 }

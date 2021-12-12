@@ -199,6 +199,11 @@ public class ActorSystemRemote implements ActorSystem, KryoBuilder.SerializerFac
     }
 
     @Override
+    public ProcessMessage createProcessMessageSubsequently(Actor target, boolean special) {
+        return localSystem.createProcessMessageSubsequently(target, special);
+    }
+
+    @Override
     public void send(Message<?> message) {
         ActorRef target = message.getTarget();
         if (target instanceof ActorRefRemote) {
