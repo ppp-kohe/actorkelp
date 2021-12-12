@@ -4,6 +4,7 @@ import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.KryoSerializable;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
+import csl.actor.ActorRef;
 import csl.actor.ActorSystem;
 import csl.actor.MailboxDefault;
 import csl.actor.Message;
@@ -29,11 +30,14 @@ public class MailboxPersistableReplacement extends MailboxDefault implements Mai
     public static boolean logDebugPersist = System.getProperty("csl.actor.persist.debug", "false").equals("true");
     public static int logColorPersist = ActorSystem.systemPropertyColor("csl.actor.persist.color", 94);
 
-    public MailboxPersistableReplacement(PersistentFileManager persistent, long sizeLimit, long onMemorySizeLimit) {
-        this(persistent, new PersistentConditionMailbox.PersistentConditionMailboxSizeLimit(sizeLimit, persistent.getLogger()), onMemorySizeLimit);
+    protected transient ActorRef target;
+
+    public MailboxPersistableReplacement(ActorRef target, PersistentFileManager persistent, long sizeLimit, long onMemorySizeLimit) {
+        this(target, persistent, new PersistentConditionMailbox.PersistentConditionMailboxSizeLimit(sizeLimit, persistent.getLogger()), onMemorySizeLimit);
     }
 
-    public MailboxPersistableReplacement(PersistentFileManager persistent, PersistentConditionMailbox condition, long onMemorySizeLimit) {
+    public MailboxPersistableReplacement(ActorRef target, PersistentFileManager persistent, PersistentConditionMailbox condition, long onMemorySizeLimit) {
+        this.target = target;
         this.condition = condition;
         this.persistentManager = persistent;
         this.onMemorySizeLimit = onMemorySizeLimit;
@@ -158,6 +162,7 @@ public class MailboxPersistableReplacement extends MailboxDefault implements Mai
                             saved += mOnS.dataSizeOnStorage();
                         }
                     } else {
+                        m.target = null;
                         ms.write(m);
                         top = false;
                         saved += MailboxManageable.messageSize(m);
@@ -247,6 +252,7 @@ public class MailboxPersistableReplacement extends MailboxDefault implements Mai
             return poll();
         } else {
             size.addAndGet(-dataSize(next));
+            next.target = target;
             return next;
         }
     }

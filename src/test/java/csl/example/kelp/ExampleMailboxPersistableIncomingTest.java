@@ -21,7 +21,7 @@ public class ExampleMailboxPersistableIncomingTest {
     public void runOfferPoll() {
         System.err.println("------------------ runOfferPoll");
         test((system, manager) -> {
-            MailboxPersistableIncoming mbox = new MailboxPersistableIncoming(manager, 100);
+            MailboxPersistableIncoming mbox = new MailboxPersistableIncoming(null, manager, 100);
 
 
             TestTool.assertEquals("before offer: sizeOnMem", 0L, mbox.getSizeOnMemory());
@@ -86,7 +86,7 @@ public class ExampleMailboxPersistableIncomingTest {
         MailboxPersistableIncoming.storageClearSize = 100;
         System.err.println("------------------ runOfferWithPoll");
         test((system, manager) -> {
-            MailboxPersistableIncoming mbox = new MailboxPersistableIncoming(manager, 100);
+            MailboxPersistableIncoming mbox = new MailboxPersistableIncoming(null, manager, 100);
 
 
             TestTool.assertEquals("before offer: sizeOnMem", 0L, mbox.getSizeOnMemory());

@@ -1,5 +1,6 @@
 package csl.actor.persist;
 
+import csl.actor.ActorRef;
 import csl.actor.MailboxDefault;
 import csl.actor.Message;
 import csl.actor.remote.KryoBuilder;
@@ -23,11 +24,14 @@ public class MailboxPersistableIncoming extends MailboxDefault implements Mailbo
     protected PersistentFileManager manager;
     protected AtomicLong writeSize;
 
-    public MailboxPersistableIncoming(PersistentFileManager manager, long onMemorySize) {
-        this(manager, new PersistentConditionMailbox.PersistentConditionMailboxSizeLimit(onMemorySize, manager.getLogger()));
+    protected transient ActorRef target;
+
+    public MailboxPersistableIncoming(ActorRef target, PersistentFileManager manager, long onMemorySize) {
+        this(target, manager, new PersistentConditionMailbox.PersistentConditionMailboxSizeLimit(onMemorySize, manager.getLogger()));
     }
 
-    public MailboxPersistableIncoming(PersistentFileManager manager, PersistentConditionMailbox condition) {
+    public MailboxPersistableIncoming(ActorRef target, PersistentFileManager manager, PersistentConditionMailbox condition) {
+        this.target = target;
         this.manager = manager;
         this.condition = condition;
         init();
@@ -90,6 +94,7 @@ public class MailboxPersistableIncoming extends MailboxDefault implements Mailbo
                 writer = manager.createWriterForHead("mbox");
                 source = writer.createReaderSourceFromCurrentPosition();
             }
+            message.target = null; // clear: at the time, target is useless. avoid serialization
             writer.write(message);
             previousSizeOnMem = totalSize - writeSize.addAndGet(dataSize);
         } finally {
@@ -147,6 +152,7 @@ public class MailboxPersistableIncoming extends MailboxDefault implements Mailbo
                         }
 
                     }
+                    msg.target = target; //non-null
                     return msg;
                 } catch (Exception ex) {
                     throw new RuntimeException(ex);

@@ -193,7 +193,7 @@ public class ExampleMailboxPersistableReplacementTest {
 
         @Override
         protected Mailbox initMailbox() {
-            return new TestMailboxPersistableReplacement(PersistentFileManager.getPersistentFile(system, "target/debug-persist"),
+            return new TestMailboxPersistableReplacement(this, PersistentFileManager.getPersistentFile(system, "target/debug-persist"),
                     5_000,
                     100);
         }
@@ -227,8 +227,8 @@ public class ExampleMailboxPersistableReplacementTest {
         public long persistCount;
         Message<?> prev;
 
-        public TestMailboxPersistableReplacement(PersistentFileManager manager, long sizeLimit, long onMemorySize) {
-            super(manager, sizeLimit, onMemorySize);
+        public TestMailboxPersistableReplacement(ActorRef r, PersistentFileManager manager, long sizeLimit, long onMemorySize) {
+            super(r, manager, sizeLimit, onMemorySize);
         }
 
         @Override
@@ -301,7 +301,7 @@ public class ExampleMailboxPersistableReplacementTest {
         @Override
         protected Mailbox initMailbox() {
             if (persist) {
-                return new TestMailboxPersistableReplacement(PersistentFileManager.getPersistentFile(system, "target/debug-persist"),
+                return new TestMailboxPersistableReplacement(this, PersistentFileManager.getPersistentFile(system, "target/debug-persist"),
                         100_000,
                         100);
             } else {

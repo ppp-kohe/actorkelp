@@ -81,7 +81,7 @@ public class ActorKelpInternalFactory {
         PersistentConditionMailbox condition = self.getMemoryCondition().getConditionMailbox();
         MailboxManageable mbox;
         if (self.isPersist()) {
-            mbox = new MailboxPersistableIncoming(m, condition);
+            mbox = new MailboxPersistableIncoming(self, m, condition);
         } else {
             mbox = new MailboxManageable.MailboxDefaultManageable(m, condition);
         }
