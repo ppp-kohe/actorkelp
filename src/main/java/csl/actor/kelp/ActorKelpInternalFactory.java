@@ -111,11 +111,6 @@ public class ActorKelpInternalFactory {
         return ActorRefCombinedKelp.combine(self.getSystem(), Staging.stageNameArray(self.getName(), "next"), prevNextStage, nextStage);
     }
 
-    public void processMessageBefore(ActorKelp<?> self) {}
-    public void processMessageAfter(ActorKelp<?> self) {}
-
-    public void processStagingCompleted(ActorKelp<?> self, Object taskKey) {}
-
     public KelpStageGraphActor stageGraph(ActorKelp<?> self) throws Exception {
         return KelpStageGraphActor.get(self.getSystem(), self);
     }

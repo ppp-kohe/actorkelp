@@ -37,9 +37,10 @@ public class ActorBehaviorKelp {
 
         protected void put(Actor self, KeyType key, Comparable<?> position, Object value) {
             MailboxKelp m = (MailboxKelp) self.getMailbox();
+            this.putActor = self;
             this.putPosition = position;
             this.putValue = value;
-            m.getHistogram(matchKeyEntryId).put(key, this);
+            m.getHistogram(matchKeyEntryId).put(key, this); //putTree will be set
         }
 
         @Override
@@ -92,33 +93,27 @@ public class ActorBehaviorKelp {
         public boolean process(Actor self, Message<?> message) {
             Object value = message.getData();
             KeyType key;
-            Comparable<?> pos;
+            //Comparable<?> pos;
             if (keyExtractorFromValue1.matchValue(value)) {
                 key = keyExtractorFromValue1.toKey((ParamType1) value);
-                pos = 0;
+                //pos = 0;
                 value = valueExtractorFromValue1.apply((ParamType1) value);
             } else {
                 return false;
             }
-
+            /*
             put(self, key, pos, value);
+            if (putTree.getTreeSize() == 0) {
+                putTree.prune(); //always prune for clearing root node
+            }*/
+            handler.accept(key, (ValueType1) value); //optimize for no-using tree
             return true;
         }
 
         @SuppressWarnings("unchecked")
         @Override
-        public boolean processHistogram(Actor self, MailboxKelp m) {
-            HistogramTree tree = m.getHistogram(matchKeyEntryId);
-            HistogramNodeLeaf1 next = ((HistogramNodeLeaf1) tree.takeCompleted());
-            if (next != null) {
-                if (next.consume(tree, (BiConsumer<Object,Object>) handler)) {
-                    if (tree.getTreeSize() == 0) {
-                        tree.prune(); //always prune for clearing root node
-                    }
-                    return true;
-                }
-            }
-            return false;
+        public void complete(HistogramTreeNodeLeaf leaf) {
+            ((HistogramNodeLeaf1) leaf).consume(putTree, (BiConsumer<Object, Object>) handler);
         }
 
         @Override
@@ -271,13 +266,8 @@ public class ActorBehaviorKelp {
 
         @SuppressWarnings("unchecked")
         @Override
-        public boolean processHistogram(Actor self, MailboxKelp m) {
-            HistogramTree tree = m.getHistogram(matchKeyEntryId);
-            HistogramNodeLeaf2 next = ((HistogramNodeLeaf2) tree.takeCompleted());
-            if (next != null) {
-                return next.consume(tree, (TriConsumer<Object, Object ,Object>) handler);
-            }
-            return false;
+        public void complete(HistogramTreeNodeLeaf leaf) {
+            ((HistogramNodeLeaf2) leaf).consume(putTree, (TriConsumer<Object, Object ,Object>) handler);
         }
 
         @Override
@@ -436,13 +426,8 @@ public class ActorBehaviorKelp {
 
         @SuppressWarnings("unchecked")
         @Override
-        public boolean processHistogram(Actor self, MailboxKelp m) {
-            HistogramTree tree = m.getHistogram(matchKeyEntryId);
-            HistogramNodeLeaf3 next = ((HistogramNodeLeaf3) tree.takeCompleted());
-            if (next != null) {
-                return next.consume(tree, (QuadConsumer<Object,Object,Object,Object>) handler);
-            }
-            return false;
+        public void complete(HistogramTreeNodeLeaf leaf) {
+            ((HistogramNodeLeaf3) leaf).consume(putTree, (QuadConsumer<Object,Object,Object,Object>) handler);
         }
 
         @Override
@@ -622,13 +607,8 @@ public class ActorBehaviorKelp {
 
         @SuppressWarnings("unchecked")
         @Override
-        public boolean processHistogram(Actor self, MailboxKelp m) {
-            HistogramTree tree = m.getHistogram(matchKeyEntryId);
-            HistogramNodeLeaf4 next = ((HistogramNodeLeaf4) tree.takeCompleted());
-            if (next != null) {
-                return next.consume(tree, (QuintConsumer<Object, Object,Object,Object,Object>) handler);
-            }
-            return false;
+        public void complete(HistogramTreeNodeLeaf leaf) {
+            ((HistogramNodeLeaf4) leaf).consume(putTree, (QuintConsumer<Object, Object,Object,Object,Object>) handler);
         }
 
         @Override
@@ -792,13 +772,8 @@ public class ActorBehaviorKelp {
 
         @SuppressWarnings({"unchecked", "rawtypes"})
         @Override
-        public boolean processHistogram(Actor self, MailboxKelp m) {
-            HistogramTree tree = m.getHistogram(matchKeyEntryId);
-            HistogramNodeLeafList next = (HistogramNodeLeafList) tree.takeCompleted();
-            if (next != null) {
-                return next.consume(putRequiredSize, tree, (BiConsumer) handler);
-            }
-            return false;
+        public void complete(HistogramTreeNodeLeaf leaf) {
+            ((HistogramNodeLeafList) leaf).consume(putRequiredSize, putTree, (BiConsumer) handler);
         }
 
         @Override
@@ -895,8 +870,6 @@ public class ActorBehaviorKelp {
         protected Function<ParamType, ValueType> valueExtractorFromValue;
         protected BiConsumer<KeyType, List<ValueType>> handler;
 
-        protected Actor putActor;
-
         public ActorBehaviorMatchKeyListFuture(int matchKeyEntryId, int requiredSize,
                                                KeyComparator<KeyType> keyComparator,
                                                KeyValuesReducer<KeyType, ValueType> keyValuesReducer,
@@ -931,23 +904,16 @@ public class ActorBehaviorKelp {
             } else {
                 return false;
             }
-            putActor = self;
             MailboxKelp mailbox = (MailboxKelp) self.getMailbox();
             mailbox.processPersistableTraversalBeforePut(self, matchKeyEntryId, getReducedSize());
             put(self, key, 0, value);
 //            mailbox.updateScheduledTraversalProcess(self, this.matchKeyEntryId);
-            putActor = null;
             return true;
         }
 
         @Override
         protected HistogramTreeNodeLeaf createLeaf(Object key, int height) {
             return new HistogramNodeLeafListReducible(key, this, height);
-        }
-
-        @Override
-        public boolean processHistogram(Actor self, MailboxKelp m) {
-            return false; //instead, consuming is done by TraversalProcess
         }
 
         @Override

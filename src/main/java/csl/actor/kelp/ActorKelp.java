@@ -358,12 +358,9 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
 
     @Override
     public void processMessage(Message<?> message) {
-        internalFactory.processMessageBefore(this);
         memoryCondition.updateActor(this);
         processPrune();
         super.processMessage(message);
-        processHistogram(message);
-        internalFactory.processMessageAfter(this);
         if (message instanceof MessageBundle.MessageAccepted) {
             handledStats.increment();
         }
@@ -404,7 +401,6 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
         if (reserveTraversalBeforeComplete()) {
             return false;
         } else {
-            internalFactory.processStagingCompleted(this, taskKey);
             processStagingCompletedAndFlushImpl(taskKey);
             return true;
         }
@@ -462,11 +458,6 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
         } else {
             ++pruneCount;
         }
-    }
-
-    public void processHistogram(Message<?> message) {
-        getMailboxAsKelp().processTraversalReservedAndHistogram(this, getReducedSize(), message);
-        //ActorBehaviorMatchKey1 immediately process and prune a single value
     }
 
     @Override

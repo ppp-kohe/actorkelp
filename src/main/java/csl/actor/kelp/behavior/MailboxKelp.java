@@ -153,22 +153,6 @@ public class MailboxKelp implements Mailbox, Cloneable {
         return treeSize;
     }
 
-    public boolean processTraversalReservedAndHistogram(Actor self, ReducedSize reducedSize, Message<?> trigger) {
-        if (trigger.getData() instanceof HistogramEntry.TraversalProcess) {
-            processTraversalReserved(self, reducedSize, ((HistogramEntry.TraversalProcess) trigger.getData()).entryId);
-        }
-        return processHistogram(self);
-    }
-
-    public boolean processHistogram(Actor self) {
-        for (HistogramEntry e : entries) {
-            if (e.processHistogram(self, this)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     public HistogramTree getHistogram(int entryId) {
         return entries[entryId].getTree();
     }
@@ -229,10 +213,6 @@ public class MailboxKelp implements Mailbox, Cloneable {
 
     public void processTraversalReserved(Actor self, ReducedSize reducedSize, int entryId) {
         entries[entryId].processTraversalReserved(self, reducedSize);
-    }
-
-    public void updateScheduledTraversalProcess(Actor self, int entryId) {
-        entries[entryId].updateScheduledTraversalProcess(self);
     }
 
 

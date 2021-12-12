@@ -4,6 +4,7 @@ import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.KryoSerializable;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
+import csl.actor.Actor;
 import csl.actor.kelp.ActorKelpFunctions.KeyComparator;
 import csl.actor.persist.PersistentFileManager;
 
@@ -36,6 +37,8 @@ public class KeyHistograms {
     }
 
     public static abstract class HistogramPutContext {
+        /** set by actor caller*/
+        public Actor putActor;
         /** (in most cases) fixed at construction */
         public int putRequiredSize;
         /** fixed by put and processing methods */

@@ -336,7 +336,6 @@ public class ClusterKelp<ConfigType extends ConfigKelp> extends ClusterDeploymen
     public static class HistogramStat  implements Serializable, ToJson {
         public static final long serialVersionUID = 1L;
         public int entryId;
-        public Instant nextSchedule;
         public boolean persistable;
 
         public long valueSize;
@@ -347,7 +346,6 @@ public class ClusterKelp<ConfigType extends ConfigKelp> extends ClusterDeploymen
 
         public HistogramStat set(ActorKelp<?> actor, MailboxKelp mbox, HistogramEntry e) {
             entryId = e.getEntryId();
-            nextSchedule = e.getNextSchedule();
             HistogramTree tree = e.getTree();
             if (tree != null) {
                 valueSize = tree.getTreeSize();
@@ -368,7 +366,6 @@ public class ClusterKelp<ConfigType extends ConfigKelp> extends ClusterDeploymen
         public Map<String, Object> toJson(Function<Object, Object> valueConverter) {
             Map<String, Object> json = new LinkedHashMap<>();
             json.put("entryId", toJson(valueConverter, (long) entryId));
-            json.put("nextSchedule", toJson(valueConverter, nextSchedule, Instant.EPOCH));
             json.put("persistable", toJson(valueConverter, persistable));
             json.put("valueSize", toJson(valueConverter, valueSize));
             json.put("leafSize", toJson(valueConverter, leafSize));

@@ -7,14 +7,6 @@ import csl.actor.kelp.ActorKelpFunctions;
 public interface HistogramProcessor extends ActorBehavior {
     ActorKelpFunctions.KeyComparator<?> getKeyComparator();
 
-    /**
-     * process a completed data-tuple on the histogram
-     * @param self the processing actor
-     * @param m the mailbox of self
-     * @return true if successfully processed
-     */
-    boolean processHistogram(Actor self, MailboxKelp m);
-
     Object selectFromValue(Object value);
     Object extractKeyFromValue(Object value, Object position);
 

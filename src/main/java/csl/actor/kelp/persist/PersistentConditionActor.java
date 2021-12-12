@@ -216,10 +216,10 @@ public interface PersistentConditionActor {
 
         @Override
         public void updateActor(Actor self) { //timing : after all actors created and processed several samples
-            logger.setActor(self);
             if (!actorUpdateTiming.next()) {
                 return;
             }
+            logger.setActor(self);
 
             MailboxManageable mbox = null;
             if (self.getMailbox() instanceof MailboxKelp) {
