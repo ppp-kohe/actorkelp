@@ -207,6 +207,8 @@ public class PersistentFileManager {
         public static final long serialVersionUID = 1L;
     }
 
+    public static final PersistentFileEnd FILE_END = new PersistentFileEnd();
+
     public interface PersistentWriter extends Closeable {
         PersistentFileReaderSource createReaderSourceFromCurrentPosition();
         long position();
