@@ -149,7 +149,6 @@ public class KryoBuilderKelp extends KryoBuilderCluster {
                 ActorKelpStats.ActorKelpMessageHandledStats.class,
                 ActorKelpStats.ActorKelpMailboxTreeStats.class,
                 ActorKelpStats.ActorKelpProcessingStatsFileSplit.class,
-                ActorKelpStats.ActorKelpProcessingStatsMessageBundle.class,
                 ActorKelpStats.GetActorStatTask.class,
                 ActorKelpStats.ActorKelpStageEndStats.class,
 
