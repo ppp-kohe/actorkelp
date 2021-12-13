@@ -380,19 +380,8 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
     }
 
     public static void processMessageBundle(ActorKelp<?> self, MessageBundle<Object> mb) {
-        ActorKelpStats.ActorKelpProcessingStats prevStats = self.processingStats;
-        ActorKelpStats.ActorKelpProcessingStatsMessageBundle stats =
-                new ActorKelpStats.ActorKelpProcessingStatsMessageBundle(prevStats, mb.dataSize(), System.identityHashCode(mb));
-        self.processingStats = stats;
-        try {
-            int i = 0;
-            for (Object d : mb.getData()) {
-                self.processMessage(new MessageBundle.MessageAccepted<>(self, d));  //MessageBundle is already accepted by Dispatcher
-                stats.update(i);
-                ++i;
-            }
-        } finally {
-            self.processingStats = prevStats;
+        for (Object d : mb.getData()) {
+            self.processMessage(new MessageBundle.MessageAccepted<>(self, d));  //MessageBundle is already accepted by Dispatcher
         }
     }
 

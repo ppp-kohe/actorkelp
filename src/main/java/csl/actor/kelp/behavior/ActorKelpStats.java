@@ -198,47 +198,6 @@ public class ActorKelpStats implements Cloneable, Serializable {
         }
     }
 
-    public static class ActorKelpProcessingStatsMessageBundle extends ActorKelpProcessingStats {
-        public static final long serialVersionUID = 1;
-        public int code;
-        public int size;
-        public volatile int current;
-
-        public ActorKelpProcessingStatsMessageBundle() {}
-
-        public ActorKelpProcessingStatsMessageBundle(ActorKelpProcessingStats prev, int size, int code) {
-            this.code = code;
-            this.prev = prev;
-            this.size = size;
-        }
-
-        public void update(int index) {
-            this.current = index;
-        }
-
-        public double getRate() {
-            if (size == 0) {
-                return 1.0;
-            } else {
-                return current / (double) size;
-            }
-        }
-
-        @Override
-        public String toStringContentsInChain(ActorKelpProcessingStats past) {
-            String str = "";
-            if (past instanceof ActorKelpProcessingStatsMessageBundle) {
-                ActorKelpProcessingStatsMessageBundle pastBundle = (ActorKelpProcessingStatsMessageBundle) past;
-                if (pastBundle.code != code) {
-                    str = "*";
-                } else {
-                    str = String.format(" [+%,d]", current - pastBundle.current);
-                }
-            }
-            return String.format("msgBundle(%,d/%,d, %2.2f%%)%s", current, size, getRate() * 100.0, str);
-        }
-    }
-
     public static class ActorKelpStageEndStats implements Serializable, Cloneable {
         public static final long serialVersionUID = -1;
         public int mergeLoop;
