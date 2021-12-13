@@ -72,7 +72,7 @@ public class KeyHistograms {
         public HistogramTreeNodeLeaf createLeafWithCountUp(Object key) {
             HistogramTreeNodeLeaf l = createLeaf(key);
             l.putValue(this);
-            putTree.incrementLeafSize(1);
+            putTree.incrementLeafSize(1, l.isPersisted());
             return l;
         }
 

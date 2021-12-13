@@ -6,9 +6,9 @@ import com.esotericsoftware.kryo.io.Output;
 import csl.actor.ActorSystem;
 import csl.actor.ActorSystemDefault;
 import csl.actor.kelp.ActorKelpFunctions;
+import csl.actor.kelp.behavior.HistogramTree;
 import csl.actor.kelp.behavior.HistogramTreeNodeLeaf;
 import csl.actor.kelp.behavior.HistogramTreeNodeTable;
-import csl.actor.kelp.behavior.HistogramTree;
 import csl.actor.kelp.behavior.KeyHistograms;
 import csl.actor.kelp.persist.KeyHistogramsPersistable.HistogramPersistentOperationType;
 import csl.actor.persist.PersistentConditionMailbox;
@@ -253,8 +253,9 @@ public class HistogramTreePersistable extends HistogramTree implements KeyHistog
                 PersistentFileManager m = getPersistent();
                 if (m != null) {
                     logger(m).log(PersistentFileManager.logPersist, KeyHistogramsPersistable.logPersistColor,
-                            "Histogram(%h) restructure prevNodes=%,d leaves=%,d minTables=%,d ratio=%1.2f -> nodes=%,d leaves=%,d %s",
+                            "Histogram(%h) restructure persisted=%,d prevNodes=%,d leaves=%,d minTables=%,d ratio=%1.2f -> nodes=%,d leaves=%,d %s",
                             System.identityHashCode(this),
+                            getPersistedSize(),
                             prevNodes, prevLeaf, minTables, tableRatio,
                             getNodeSizeOnMemory(), getLeafSize(), op);
                 }

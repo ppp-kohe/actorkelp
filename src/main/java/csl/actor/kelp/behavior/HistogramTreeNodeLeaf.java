@@ -161,12 +161,12 @@ public abstract class HistogramTreeNodeLeaf implements KeyHistograms.HistogramTr
     public boolean prune(HistogramTree tree, boolean countUpLeafSize) {
         if (size == 0) {
             if (!countUpLeafSize) {
-                tree.incrementLeafSize(-1);
+                tree.incrementLeafSize(-1, isPersisted());
             }
             return true;
         } else {
             if (countUpLeafSize) {
-                tree.incrementLeafSize(1);
+                tree.incrementLeafSize(1, isPersisted());
                 tree.incrementLeafSizeNonZero(1);
             }
             return false;

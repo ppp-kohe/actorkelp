@@ -141,16 +141,10 @@ public class HistogramTreeNodeTable implements KeyHistograms.HistogramTreeNode, 
             }
             children.add(index, newNode);
             newNode.setParent(this);
-        } else { //upper tree
+        } else { //upper tree: newNode == null && height > 1
             index = selectChildTree(index, treeLimit, context.putTree);
             newNode = putChildAt(comparator, key, context, index, height);
-            KeyHistograms.HistogramTreeNode childTarget = children.get(index);
-            if (newNode != null && childTarget.isLeaf()) { //it can create a new sub-tree
-                newNode = createNodeTree(treeLimit, KeyHistograms.sort(comparator, childTarget, newNode));
-                context.putTree.addNodeSizeOnMemory(1);
-                children.set(index, newNode); //replace
-                newNode.setParent(this);
-            } else if (newNode != null) {
+            if (newNode != null) {
                 children.add(index, newNode); //tree.put always returns a new left sibling
                 newNode.setParent(this);
             }
@@ -174,7 +168,7 @@ public class HistogramTreeNodeTable implements KeyHistograms.HistogramTreeNode, 
         int index = search(comparator, leaf.getKey());
         //updatePutIndex(context, index);
         if (index >= 0) { //found
-            newNode = putChildAt(comparator, tree, leaf, index, height); //no persisted: putChildAt(comparator, key, context, index);
+            newNode = putChildAt(comparator, tree, leaf, index, height); //not persisted: putChildAt(comparator, key, context, index);
             if (newNode == null) {
                 return null;
             }
@@ -188,18 +182,14 @@ public class HistogramTreeNodeTable implements KeyHistograms.HistogramTreeNode, 
             }
             children.add(index, newNode);
             newNode.setParent(this);
+            putIncrement(tree, newNode);
         } else { //upper tree
             index = selectChildTree(index, treeLimit, tree);
             newNode = putChildAt(comparator, tree, leaf, index, height);
-            KeyHistograms.HistogramTreeNode childTarget = children.get(index);
-            if (newNode != null && childTarget.isLeaf()) { //it can create a new sub-tree
-                newNode = createNodeTree(treeLimit, KeyHistograms.sort(comparator, childTarget, newNode));
-                tree.addNodeSizeOnMemory(1);
-                children.set(index, newNode); //replace
-                newNode.setParent(this);
-            } else if (newNode != null) {
+            if (newNode != null) {
                 children.add(index, newNode); //tree.put always returns a new left sibling
                 newNode.setParent(this);
+                putIncrement(tree, newNode);
             }
         }
         if (children.size() > treeLimit) {
@@ -210,6 +200,17 @@ public class HistogramTreeNodeTable implements KeyHistograms.HistogramTreeNode, 
                 updateKeys();
             }
             return null;
+        }
+    }
+
+    private void putIncrement(HistogramTree tree, KeyHistograms.HistogramTreeNode newNode) {
+        if (newNode.isLeaf()) {
+            tree.incrementLeafSize(1, newNode.isPersisted());
+            if (newNode.size() > 0) {
+                tree.incrementLeafSizeNonZero(1);
+            }
+        } else if (!newNode.isPersisted()) {
+            tree.addNodeSizeOnMemory(1);
         }
     }
 
@@ -373,6 +374,11 @@ public class HistogramTreeNodeTable implements KeyHistograms.HistogramTreeNode, 
             if (!zero) {
                 updateKeys();
             }
+        }
+        if (zero && !countUpLeafSize) {
+            tree.addNodeSizeOnMemory(-1);
+        } else if (!zero && countUpLeafSize) {
+            tree.addNodeSizeOnMemory(1);
         }
         return zero;
     }
