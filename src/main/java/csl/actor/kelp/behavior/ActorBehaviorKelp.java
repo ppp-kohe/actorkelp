@@ -84,8 +84,8 @@ public class ActorBehaviorKelp {
         }
 
         @Override
-        protected HistogramTreeNodeLeaf createLeaf(Object key, int height) {
-            return new HistogramNodeLeaf1(key, this, height);
+        protected HistogramTreeNodeLeaf createLeaf(Object key) {
+            return new HistogramNodeLeaf1(key, this);
         }
 
         @SuppressWarnings("unchecked")
@@ -151,8 +151,8 @@ public class ActorBehaviorKelp {
 
         public HistogramNodeLeafN() {}
 
-        public HistogramNodeLeafN(Object key, KeyHistograms.HistogramPutContext context, int height) {
-            super(key, context, height);
+        public HistogramNodeLeafN(Object key, KeyHistograms.HistogramPutContext context) {
+            super(key, context);
         }
 
         @Override
@@ -168,8 +168,8 @@ public class ActorBehaviorKelp {
 
         public HistogramNodeLeaf1() {}
 
-        public HistogramNodeLeaf1(Object key, KeyHistograms.HistogramPutContext context, int height) {
-            super(key, context, height);
+        public HistogramNodeLeaf1(Object key, KeyHistograms.HistogramPutContext context) {
+            super(key, context);
         }
 
         @Override
@@ -238,8 +238,8 @@ public class ActorBehaviorKelp {
         }
 
         @Override
-        protected HistogramTreeNodeLeaf createLeaf(Object key, int height) {
-            return new HistogramNodeLeaf2(key, this, height);
+        protected HistogramTreeNodeLeaf createLeaf(Object key) {
+            return new HistogramNodeLeaf2(key, this);
         }
 
         @SuppressWarnings("unchecked")
@@ -312,8 +312,8 @@ public class ActorBehaviorKelp {
 
         public HistogramNodeLeaf2() {}
 
-        public HistogramNodeLeaf2(Object key, KeyHistograms.HistogramPutContext context, int height) {
-            super(key, context, height);
+        public HistogramNodeLeaf2(Object key, KeyHistograms.HistogramPutContext context) {
+            super(key, context);
         }
 
         @Override
@@ -394,8 +394,8 @@ public class ActorBehaviorKelp {
         }
 
         @Override
-        protected HistogramTreeNodeLeaf createLeaf(Object key, int height) {
-            return new HistogramNodeLeaf3(key, this, height);
+        protected HistogramTreeNodeLeaf createLeaf(Object key) {
+            return new HistogramNodeLeaf3(key, this);
         }
 
         @SuppressWarnings("unchecked")
@@ -477,8 +477,8 @@ public class ActorBehaviorKelp {
 
         public HistogramNodeLeaf3() {}
 
-        public HistogramNodeLeaf3(Object key, KeyHistograms.HistogramPutContext context, int height) {
-            super(key, context, height);
+        public HistogramNodeLeaf3(Object key, KeyHistograms.HistogramPutContext context) {
+            super(key, context);
         }
 
         @Override
@@ -571,8 +571,8 @@ public class ActorBehaviorKelp {
         }
 
         @Override
-        protected HistogramTreeNodeLeaf createLeaf(Object key, int height) {
-            return new HistogramNodeLeaf4(key, this, height);
+        protected HistogramTreeNodeLeaf createLeaf(Object key) {
+            return new HistogramNodeLeaf4(key, this);
         }
 
         @SuppressWarnings("unchecked")
@@ -662,8 +662,8 @@ public class ActorBehaviorKelp {
 
         public HistogramNodeLeaf4() {}
 
-        public HistogramNodeLeaf4(Object key, KeyHistograms.HistogramPutContext context, int height) {
-            super(key, context, height);
+        public HistogramNodeLeaf4(Object key, KeyHistograms.HistogramPutContext context) {
+            super(key, context);
         }
 
         @Override
@@ -751,8 +751,8 @@ public class ActorBehaviorKelp {
         }
 
         @Override
-        protected HistogramTreeNodeLeaf createLeaf(Object key, int height) {
-            return new HistogramNodeLeafList(key, this, height);
+        protected HistogramTreeNodeLeaf createLeaf(Object key) {
+            return new HistogramNodeLeafList(key, this);
         }
 
         @SuppressWarnings("unchecked")
@@ -808,8 +808,8 @@ public class ActorBehaviorKelp {
 
         public HistogramNodeLeafList() {}
 
-        public HistogramNodeLeafList(Object key, KeyHistograms.HistogramPutContext context, int height) {
-            super(key, context, height);
+        public HistogramNodeLeafList(Object key, KeyHistograms.HistogramPutContext context) {
+            super(key, context);
         }
 
         @Override
@@ -912,8 +912,8 @@ public class ActorBehaviorKelp {
         }
 
         @Override
-        protected HistogramTreeNodeLeaf createLeaf(Object key, int height) {
-            return new HistogramNodeLeafListReducible(key, this, height);
+        protected HistogramTreeNodeLeaf createLeaf(Object key) {
+            return new HistogramNodeLeafListReducible(key, this);
         }
 
         @Override
@@ -1054,8 +1054,8 @@ public class ActorBehaviorKelp {
 
         public HistogramNodeLeafListReducible() {}
 
-        public HistogramNodeLeafListReducible(Object key, KeyHistograms.HistogramPutContext context, int height) {
-            super(key, context, height);
+        public HistogramNodeLeafListReducible(Object key, KeyHistograms.HistogramPutContext context) {
+            super(key, context);
         }
 
         @Override
@@ -1259,8 +1259,8 @@ public class ActorBehaviorKelp {
         }
 
         @Override
-        protected HistogramTreeNodeLeaf createLeaf(Object key, int height) {
-            return new HistogramNodeLeafListReducibleForStageEnd(key, this, height);
+        protected HistogramTreeNodeLeaf createLeaf(Object key) {
+            return new HistogramNodeLeafListReducibleForStageEnd(key, this);
         }
 
         @SuppressWarnings({"unchecked", "rawtypes"})
@@ -1324,9 +1324,9 @@ public class ActorBehaviorKelp {
                                 if (tmpList != null && !key.equals(tmpList.keyStart())) {
                                     readKeys.incrementAndGet();
                                     processStageEndList(reducedSize, tmpList);
-                                    tmpList = (HistogramNodeLeafListReducibleForStageEnd) createLeaf(key, 0);
+                                    tmpList = (HistogramNodeLeafListReducibleForStageEnd) createLeaf(key);
                                 } else if (tmpList == null) {
-                                    tmpList = (HistogramNodeLeafListReducibleForStageEnd) createLeaf(key, 0);
+                                    tmpList = (HistogramNodeLeafListReducibleForStageEnd) createLeaf(key);
                                 }
                                 putPosition = mergeLoader.currentListPosition();
                                 Object value;
@@ -1379,8 +1379,8 @@ public class ActorBehaviorKelp {
 
         public HistogramNodeLeafListReducibleForStageEnd() {}
 
-        public HistogramNodeLeafListReducibleForStageEnd(Object key, KeyHistograms.HistogramPutContext context, int height) {
-            super(key, context, height);
+        public HistogramNodeLeafListReducibleForStageEnd(Object key, KeyHistograms.HistogramPutContext context) {
+            super(key, context);
         }
         @Override
         public HistogramNodeLeafListReducibleForStageEnd copy(Map<KeyHistograms.HistogramTreeNode, KeyHistograms.HistogramTreeNode> oldToNew) {

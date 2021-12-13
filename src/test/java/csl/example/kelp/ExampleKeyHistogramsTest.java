@@ -5,6 +5,7 @@ import csl.actor.kelp.ActorSystemKelp;
 import csl.actor.kelp.behavior.HistogramTreeNodeTable;
 import csl.actor.kelp.behavior.HistogramTree;
 import csl.actor.kelp.behavior.KeyHistograms;
+import csl.example.TestTool;
 
 import java.io.File;
 import java.util.*;
@@ -719,14 +720,16 @@ public class ExampleKeyHistogramsTest {
     }
 
     public void assertEquals(Object expected, Object actual) {
+        TestTool.assertEquals("", expected, actual);
         if (!Objects.equals(expected, actual)) {
-            throw new RuntimeException("not-equals: " + expected + " : " + actual);
+            new RuntimeException("not-equals: " + expected + " : " + actual).printStackTrace();
         }
     }
 
     public void assertTrue(boolean b) {
+        TestTool.assertTrue("", b);
         if (!b) {
-            throw new RuntimeException("expected true: " + b);
+            new RuntimeException("not true").printStackTrace();
         }
     }
 }

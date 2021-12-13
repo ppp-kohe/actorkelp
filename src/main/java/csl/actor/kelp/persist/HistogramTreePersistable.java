@@ -625,7 +625,6 @@ public class HistogramTreePersistable extends HistogramTree implements KeyHistog
                 data.leaf = leaf;
                 data.keyStart = node.keyStart();
                 data.keyEnd = node.keyEnd();
-                data.height = node.height();
                 data.size = node.size(); //suppose no on-memory cells
                 w.write(data); //NodeTreeData
 

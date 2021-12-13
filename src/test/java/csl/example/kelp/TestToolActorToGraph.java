@@ -244,6 +244,7 @@ public class TestToolActorToGraph extends ActorDefault {
             table.add(Arrays.asList("t" + i + ".leafSizeNZR", String.format("%1.2f", tree.getLeafSizeNonZeroRate())));
             table.add(Arrays.asList("t" + i + ".nodeSizeOnMem", String.format("%,d", tree.getNodeSizeOnMemory())));
             table.add(Arrays.asList("t" + i + ".leafSizeOnMem", String.format("%,d", tree.getLeafSizeOnMemory())));
+            table.add(Arrays.asList("t" + i + ".height", String.format("%,d", tree.getTreeHeight())));
             table.add(Arrays.asList("t" + i + ".completed", idStr(tree.getCompleted()) + " (" + tree.getCompleted().size() + ")"));
 
             GraphEdge e = createNodeHistNode(n, tree.getRoot());

@@ -17,7 +17,7 @@ public class HistogramTreeNodeLeafOnStorage extends HistogramTreeNodeLeaf implem
     }
 
     public HistogramTreeNodeLeafOnStorage(KeyHistogramsPersistable.NodeTreeData data, PersistentFileManager.PersistentFileReaderSource source) {
-        super(data.keyStart, null, data.height);
+        super(data.keyStart, null);
         this.source = source;
         this.size = data.size;
         this.sizePersisted = size;
@@ -45,7 +45,6 @@ public class HistogramTreeNodeLeafOnStorage extends HistogramTreeNodeLeaf implem
     public KeyHistogramsPersistable.NodeTreeData toData() {
         KeyHistogramsPersistable.NodeTreeData d = new KeyHistogramsPersistable.NodeTreeData();
         d.leaf = true;
-        d.height = height;
         d.keyStart = key;
         d.keyEnd = key;
         d.size = size;
@@ -112,7 +111,7 @@ public class HistogramTreeNodeLeafOnStorage extends HistogramTreeNodeLeaf implem
             long thisSibling = r.nextLong(); //long sibling
             KeyHistogramsPersistable.NodeTreeData thisData = (KeyHistogramsPersistable.NodeTreeData) r.next(); //NodeTreeData
             Class<?> leafType = (Class<?>) r.next(); //Class nodeType
-            HistogramTreeNodeLeaf leaf = context.createLeafPersisted(leafType, key, height);
+            HistogramTreeNodeLeaf leaf = context.createLeafPersisted(leafType, key);
             leaf.setSizeAsAllPersisted(size);
 
             int listCount = r.nextVarInt(true);

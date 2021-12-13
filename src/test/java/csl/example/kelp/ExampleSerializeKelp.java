@@ -98,7 +98,6 @@ public class ExampleSerializeKelp extends ExampleSerialize {
 
     private void runNodeTreeData() {
         KeyHistogramsPersistable.NodeTreeData d = new KeyHistogramsPersistable.NodeTreeData();
-        d.height = 123;
         d.leaf = false;
         d.keyStart = "hello";
         d.size = 123456789;
@@ -106,7 +105,6 @@ public class ExampleSerializeKelp extends ExampleSerialize {
 
         ts.writeRead(p, d, (a,b) ->
                 a != b &&
-                a.height == b.height &&
                         a.leaf == b.leaf &&
                         a.keyStart.equals(b.keyStart) &&
                         a.size == b.size &&

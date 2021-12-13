@@ -20,7 +20,7 @@ public class HistogramTreeNodeTableOnStorage extends HistogramTreeNodeTable impl
     }
 
     public HistogramTreeNodeTableOnStorage(KeyHistogramsPersistable.NodeTreeData data, PersistentFileManager.PersistentFileReaderSource source) {
-        super(data.height, Collections.emptyList());
+        super(Collections.emptyList());
         this.source = source;
         this.keyStart = data.keyStart;
         this.keyEnd = data.keyEnd;
@@ -49,7 +49,6 @@ public class HistogramTreeNodeTableOnStorage extends HistogramTreeNodeTable impl
     public KeyHistogramsPersistable.NodeTreeData toData() {
         KeyHistogramsPersistable.NodeTreeData d = new KeyHistogramsPersistable.NodeTreeData();
         d.leaf = false;
-        d.height = height;
         d.keyStart = keyStart;
         d.keyEnd = keyEnd;
         d.size = size;
@@ -77,9 +76,9 @@ public class HistogramTreeNodeTableOnStorage extends HistogramTreeNodeTable impl
     }
 
     @Override
-    public KeyHistograms.HistogramTreeNode put(ActorKelpFunctions.KeyComparator<?> comparator, Object key, KeyHistograms.HistogramPutContext context) {
+    public KeyHistograms.HistogramTreeNode put(ActorKelpFunctions.KeyComparator<?> comparator, Object key, KeyHistograms.HistogramPutContext context, int height) {
         load(context);
-        return super.put(comparator, key, context);
+        return super.put(comparator, key, context, height);
     }
 
     @Override
@@ -129,15 +128,16 @@ public class HistogramTreeNodeTableOnStorage extends HistogramTreeNodeTable impl
     protected void load(HistogramTree tree) {
         if (!loaded) {
             loaded = true;
+            int cap = 6;
             if (tree != null) {
                 tree.addNodeSizeOnMemory(1L); //onMemory means the node is loaded
+                cap = tree.getTreeHeight();
             }
-            ArrayList<KeyHistograms.HistogramTreeNode> cs = new ArrayList<>();
+            ArrayList<KeyHistograms.HistogramTreeNode> cs = new ArrayList<>(cap);
             getFileManager(); //setup manager for reading
             try (PersistentFileManager.PersistentFileReader r = source.createReader()) {
                 long thisSibling = r.nextLong(); //long sibling
                 KeyHistogramsPersistable.NodeTreeData thisData = (KeyHistogramsPersistable.NodeTreeData) r.next(); //NodeTreData
-                int heightDiff = thisData.height - this.height;
 
                 while (true) {
                     long pos = r.position();
@@ -156,7 +156,6 @@ public class HistogramTreeNodeTableOnStorage extends HistogramTreeNodeTable impl
                         }
                     } else { //leaf or node
                         KeyHistogramsPersistable.NodeTreeData child = (KeyHistogramsPersistable.NodeTreeData) childObj;
-                        child.height += heightDiff;
                         if (child.leaf) {
                             cs.add(new HistogramTreeNodeLeafOnStorage(child, source.newSource(pos)));
                         } else {
@@ -169,7 +168,6 @@ public class HistogramTreeNodeTableOnStorage extends HistogramTreeNodeTable impl
                         break;
                     }
                 }
-                cs.trimToSize();
                 this.children = cs;
                 updateChildren();
                 if (PersistentFileManager.logDebugPersist) r.getManager().getLogger().log(KeyHistogramsPersistable.logPersistColor, "close: %s", r);

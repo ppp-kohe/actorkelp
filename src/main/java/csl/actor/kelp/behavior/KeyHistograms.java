@@ -58,21 +58,19 @@ public class KeyHistograms {
         /**
          * creates a new leaf. called under put processes
          * @param key the key for the leaf
-         * @param height the height of the leaf
          * @return a new leaf
          */
-        protected abstract HistogramTreeNodeLeaf createLeaf(Object key, int height);
+        protected abstract HistogramTreeNodeLeaf createLeaf(Object key);
 
         /**
-         * creates a new leaf (by {@link #createLeaf(Object, int)})
+         * creates a new leaf (by {@link #createLeaf(Object)})
          * and puts the value set to this. called under put processes. 
          *  increments the size of {@link #putTree}
          * @param key the key for the leaf
-         * @param height the height of the leaf
          * @return a new leaf with a value
          */
-        public HistogramTreeNodeLeaf createLeafWithCountUp(Object key, int height) {
-            HistogramTreeNodeLeaf l = createLeaf(key, height);
+        public HistogramTreeNodeLeaf createLeafWithCountUp(Object key) {
+            HistogramTreeNodeLeaf l = createLeaf(key);
             l.putValue(this);
             putTree.incrementLeafSize(1);
             return l;
@@ -114,10 +112,10 @@ public class KeyHistograms {
             return false;
         }
 
-        public HistogramTreeNodeLeaf createLeafPersisted(Class<?> leafType, Object key, int height) throws Exception {
+        public HistogramTreeNodeLeaf createLeafPersisted(Class<?> leafType, Object key) throws Exception {
             return (HistogramTreeNodeLeaf) leafType
-                    .getConstructor(Object.class, KeyHistograms.HistogramPutContext.class, int.class)
-                    .newInstance(key, this, height);
+                    .getConstructor(Object.class, KeyHistograms.HistogramPutContext.class)
+                    .newInstance(key, this);
         }
     }
 
@@ -125,7 +123,7 @@ public class KeyHistograms {
     public interface HistogramTreeNode extends Serializable {
         long size();
         int height();
-        HistogramTreeNode increaseHeight(int heightDelta);
+        boolean isLeaf();
 
         default HistogramTreeNode load(HistogramPutContext context) {
             return this;
@@ -135,8 +133,8 @@ public class KeyHistograms {
             return false;
         }
 
-        HistogramTreeNode put(KeyComparator<?> comparator, Object key, HistogramPutContext context);
-        HistogramTreeNode put(KeyComparator<?> comparator, HistogramTree tree, HistogramTreeNodeLeaf leaf);
+        HistogramTreeNode put(KeyComparator<?> comparator, Object key, HistogramPutContext context, int height);
+        HistogramTreeNode put(KeyComparator<?> comparator, HistogramTree tree, HistogramTreeNodeLeaf leaf, int height);
 
         /**
          * @param comparator the comparator
@@ -191,8 +189,8 @@ public class KeyHistograms {
 
         public HistogramNodeLeafMap() {}
 
-        public HistogramNodeLeafMap(Object key, HistogramPutContext context, int height) {
-            super(key, context, height);
+        public HistogramNodeLeafMap(Object key, HistogramPutContext context) {
+            super(key, context);
         }
 
         @Override
@@ -319,8 +317,8 @@ public class KeyHistograms {
             putTree = tree;
         }
 
-        protected HistogramTreeNodeLeaf createLeaf(Object key, int height) {
-            return new HistogramNodeLeafMap(key, this, height);
+        protected HistogramTreeNodeLeaf createLeaf(Object key) {
+            return new HistogramNodeLeafMap(key, this);
         }
 
         public Comparable<?> position(HistogramTreeNodeLeaf leaf) {

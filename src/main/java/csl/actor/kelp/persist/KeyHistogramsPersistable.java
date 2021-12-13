@@ -208,7 +208,7 @@ public class KeyHistogramsPersistable extends KeyHistograms {
      * <pre>
      * node:
      *   long sibling,
-     *   NodeTreeData (false, keyStart, keyEnd, height, size)
+     *   NodeTreeData (false, keyStart, keyEnd, size)
      *   child0,
      *   ...
      *   0,
@@ -216,7 +216,7 @@ public class KeyHistogramsPersistable extends KeyHistograms {
      *
      * leaf:
      *   long sibling,
-     *   NodeTreeData (true, keyStart, keyEnd, height, size),
+     *   NodeTreeData (true, keyStart, keyEnd, size),
      *   Class nodeType,
      *   var int listCount,
      *   LeafCellHeader listPointer[0..listCount-1] {(&amp;list0, size0, maxDepth0), ...}
@@ -234,7 +234,6 @@ public class KeyHistogramsPersistable extends KeyHistograms {
     public static class NodeTreeData implements Serializable, KryoSerializable {
         public static final long serialVersionUID = 1L;
         public boolean leaf;
-        public int height;
         public long size;
         public Object keyStart;
         public Object keyEnd;
@@ -243,7 +242,6 @@ public class KeyHistogramsPersistable extends KeyHistograms {
         public String toString() {
             return getClass().getSimpleName() + "{" +
                     "leaf=" + leaf +
-                    ", height=" + height +
                     ", size=" + size +
                     ", keyStart=" + keyStart +
                     ", keyEnd=" + keyEnd +
@@ -253,7 +251,6 @@ public class KeyHistogramsPersistable extends KeyHistograms {
         @Override
         public void write(Kryo kryo, Output output) {
             output.writeBoolean(leaf);
-            output.writeVarInt(height, true);
             output.writeVarLong(size, true);
             kryo.writeClassAndObject(output, keyStart);
             if (!leaf) {
@@ -264,7 +261,6 @@ public class KeyHistogramsPersistable extends KeyHistograms {
         @Override
         public void read(Kryo kryo, Input input) {
             leaf = input.readBoolean();
-            height = input.readVarInt(true);
             size = input.readVarLong(true);
             keyStart = kryo.readClassAndObject(input);
             if (leaf) {

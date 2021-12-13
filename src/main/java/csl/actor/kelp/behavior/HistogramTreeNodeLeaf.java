@@ -11,16 +11,19 @@ public abstract class HistogramTreeNodeLeaf implements KeyHistograms.HistogramTr
     public HistogramTreeNodeTable parent;
     public Object key;
     public long size;
-    public int height;
     public long sizePersisted;
 
     public HistogramTreeNodeLeaf() {
     }
 
-    public HistogramTreeNodeLeaf(Object key, KeyHistograms.HistogramPutContext context, int height) {
+    public HistogramTreeNodeLeaf(Object key, KeyHistograms.HistogramPutContext context) {
         this.key = key;
-        this.height = height;
         initStruct(context);
+    }
+
+    @Override
+    public boolean isLeaf() {
+        return true;
     }
 
     public long sizeOnMemory() {
@@ -68,13 +71,7 @@ public abstract class HistogramTreeNodeLeaf implements KeyHistograms.HistogramTr
 
     @Override
     public int height() {
-        return height;
-    }
-
-    @Override
-    public KeyHistograms.HistogramTreeNode increaseHeight(int heightDelta) {
-        height += heightDelta;
-        return this;
+        return 0;
     }
 
     @Override
@@ -100,21 +97,20 @@ public abstract class HistogramTreeNodeLeaf implements KeyHistograms.HistogramTr
 
     @SuppressWarnings("unchecked")
     @Override
-    public KeyHistograms.HistogramTreeNode put(ActorKelpFunctions.KeyComparator<?> comparator, Object key, KeyHistograms.HistogramPutContext context) {
+    public KeyHistograms.HistogramTreeNode put(ActorKelpFunctions.KeyComparator<?> comparator, Object key, KeyHistograms.HistogramPutContext context, int height) {
         int c = ((ActorKelpFunctions.KeyComparator<Object>) comparator).compare(key, this.key);
         if (c == 0) {
             putValue(context);
             return null;
         } else {
-            return context.createLeafWithCountUp(key, height);
+            return context.createLeafWithCountUp(key);
         }
     }
 
     @SuppressWarnings("unchecked")
     @Override
-    public KeyHistograms.HistogramTreeNode put(ActorKelpFunctions.KeyComparator<?> comparator, HistogramTree tree, HistogramTreeNodeLeaf leaf) {
+    public KeyHistograms.HistogramTreeNode put(ActorKelpFunctions.KeyComparator<?> comparator, HistogramTree tree, HistogramTreeNodeLeaf leaf, int height) {
         //suppose all leaves have distinct key
-        leaf.height = height;
         return leaf;
     }
 

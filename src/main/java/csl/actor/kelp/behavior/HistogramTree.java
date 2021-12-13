@@ -21,6 +21,7 @@ public class HistogramTree implements Serializable, KryoSerializable, Cloneable 
     protected long leafSizeNonZero;
     protected long nodeSizeOnMemory;
     protected long leafSizeOnMemory;
+    protected int height;
 
     protected PersistentFileManager persistent;
 
@@ -63,18 +64,19 @@ public class HistogramTree implements Serializable, KryoSerializable, Cloneable 
         context.putIndexCurrentRangeStart = 0;
         context.putIndexCurrentRangeLength = 1;
         if (root == null) {
-            root = context.createLeafWithCountUp(key, 0);
+            root = context.createLeafWithCountUp(key);
         } else {
-            KeyHistograms.HistogramTreeNode l = root.put(comparator, key, context);
+            KeyHistograms.HistogramTreeNode l = root.put(comparator, key, context, height);
             if (l != null) {
-                root = createNodeTree(root.height() + 1, treeLimit, KeyHistograms.sort(comparator, l, root));
+                root = createNodeTree(treeLimit, KeyHistograms.sort(comparator, l, root));
+                height++;
                 addNodeSizeOnMemory(1);
             }
         }
     }
 
-    protected HistogramTreeNodeTable createNodeTree(int height, int treeLimit, KeyHistograms.HistogramTreeNode... children) {
-        return new HistogramTreeNodeTable(height, treeLimit, children);
+    protected HistogramTreeNodeTable createNodeTree(int treeLimit, KeyHistograms.HistogramTreeNode... children) {
+        return new HistogramTreeNodeTable(treeLimit, children);
     }
 
     /**
@@ -99,21 +101,31 @@ public class HistogramTree implements Serializable, KryoSerializable, Cloneable 
         updateNodeSize(root);
     }
 
-    protected void updateNodeSize(KeyHistograms.HistogramTreeNode node) {
-        if (node == root) {
+    protected int updateNodeSize(KeyHistograms.HistogramTreeNode node) {
+        boolean isRoot = node == root;
+        if (isRoot) {
             nodeSizeOnMemory = 0;
             leafSizeOnMemory = 0;
+            height = 0;
         }
         if (node instanceof HistogramTreeNodeTable) {
             if (!node.isPersisted()) {
                 addNodeSizeOnMemory(1L);
             }
-            ((HistogramTreeNodeTable) node).getChildrenOnMemory()
-                    .forEach(this::updateNodeSize);
-        } else if (node instanceof HistogramTreeNodeLeaf) {
+            int h = ((HistogramTreeNodeTable) node).getChildrenOnMemory().stream()
+                    .mapToInt(this::updateNodeSize)
+                    .max().orElse(0) + 1;
+            if (isRoot) {
+                height = h;
+            }
+            return h;
+        } else if (node != null) {
             if (!node.isPersisted()) {
                 addLeafSizeOnMemory(1L);
             }
+            return 0;
+        } else {
+            return 0;
         }
     }
 
@@ -126,13 +138,19 @@ public class HistogramTree implements Serializable, KryoSerializable, Cloneable 
         updateNodeSize(root);
         left.updateNodeSize(left.getRoot());
         Object rightKey = splitPointAsRightHandSide(left);
-        for (Iterator<HistogramTreeNodeLeaf> iter = completed.iterator(); iter.hasNext(); ) {
-            HistogramTreeNodeLeaf l = iter.next();
-            if (((ActorKelpFunctions.KeyComparator<Object>) comparator).compare(l.getKey(), rightKey) < 0) {
-                //move to left
-                left.complete(l);
-                iter.remove();
-            }
+        if (completed0 != null && completedMoveToLeft(left, completed0, rightKey)) {
+            completed0 = null;
+        }
+        completed.removeIf(l -> completedMoveToLeft(left, l, rightKey));
+    }
+    @SuppressWarnings("unchecked")
+    private boolean completedMoveToLeft(HistogramTree left, HistogramTreeNodeLeaf l, Object rightKey) {
+        if (((ActorKelpFunctions.KeyComparator<Object>) comparator).compare(l.getKey(), rightKey) < 0) {
+            //move to left
+            left.complete(l);
+            return true;
+        } else {
+            return false;
         }
     }
 
@@ -175,21 +193,16 @@ public class HistogramTree implements Serializable, KryoSerializable, Cloneable 
     }
 
     protected KeyHistograms.HistogramTreeNode merge(int treeLimit, ActorKelpFunctions.KeyComparator<?> comparator, KeyHistograms.HistogramTreeNode target, KeyHistograms.HistogramTreeNode merged) {
-        int height = target.height();
-
         HistogramTreeNodeTable targetNode;
-        if (target instanceof HistogramTreeNodeLeaf) {
-            targetNode = createNodeTree(
-                    (height > 0 ? height : 1),
-                    treeLimit,
-                    (height > 0 ? target.increaseHeight(-1) : target));
+        if (target.isLeaf()) {
+            targetNode = createNodeTree(treeLimit, target);
         } else {
             targetNode = (HistogramTreeNodeTable) target;
         }
 
         KeyHistograms.HistogramTreeNode newNode = targetNode.merge(this, treeLimit, comparator, merged);
         if (newNode != null) {
-            return createNodeTree(height + 1, treeLimit, KeyHistograms.sort(comparator, targetNode, newNode));
+            return createNodeTree(treeLimit, KeyHistograms.sort(comparator, targetNode, newNode));
         } else {
             return targetNode;
         }
@@ -231,7 +244,7 @@ public class HistogramTree implements Serializable, KryoSerializable, Cloneable 
     }
 
     public int getTreeHeight() {
-        return root == null ? 0 : root.height();
+        return height;
     }
 
     /**
@@ -338,6 +351,7 @@ public class HistogramTree implements Serializable, KryoSerializable, Cloneable 
         this.treeLimit = input.readVarInt(true);
         this.nodeSizeOnMemory = input.readVarLong(true);
         this.leafSizeOnMemory = input.readVarLong(true);
+        this.height = input.readVarInt(true);
     }
 
     @Override
@@ -351,6 +365,7 @@ public class HistogramTree implements Serializable, KryoSerializable, Cloneable 
         output.writeVarInt(this.treeLimit, true);
         output.writeVarLong(this.nodeSizeOnMemory, true);
         output.writeVarLong(this.leafSizeOnMemory, true);
+        output.writeVarInt(this.height, true);
     }
 
     public HistogramTree copy() {
@@ -400,6 +415,7 @@ public class HistogramTree implements Serializable, KryoSerializable, Cloneable 
         }
         RestructureIterator res = leafIterator(load);
         this.root = null;
+        height = 0;
         clearTree(false);
         HistogramTreeNodeLeaf leaf;
         while ((leaf = res.next()) != null) {
@@ -409,13 +425,13 @@ public class HistogramTree implements Serializable, KryoSerializable, Cloneable 
                 if (!leaf.isPersisted()) {
                     addLeafSizeOnMemory(1L);
                 }
-                leaf.height = 0;
                 if (root == null) {
                     root = leaf;
                 } else {
-                    KeyHistograms.HistogramTreeNode newNode = root.put(comparator, this, leaf);
+                    KeyHistograms.HistogramTreeNode newNode = root.put(comparator, this, leaf, 0);
                     if (newNode != null) {
-                        root = createNodeTree(root.height() + 1, treeLimit, KeyHistograms.sort(comparator, newNode, root));
+                        root = createNodeTree(treeLimit, KeyHistograms.sort(comparator, newNode, root));
+                        height++;
                         addNodeSizeOnMemory(1);
                     }
                 }

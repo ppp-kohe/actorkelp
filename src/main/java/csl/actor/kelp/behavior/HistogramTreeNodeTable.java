@@ -12,19 +12,16 @@ public class HistogramTreeNodeTable implements KeyHistograms.HistogramTreeNode, 
     public long size;
     public Object keyStart;
     public Object keyEnd;
-    public int height;
 
     public HistogramTreeNodeTable() {
     }
 
-    public HistogramTreeNodeTable(int height, List<KeyHistograms.HistogramTreeNode> children) {
-        this.height = height;
+    public HistogramTreeNodeTable(List<KeyHistograms.HistogramTreeNode> children) {
         this.children = children;
         updateChildren();
     }
 
-    public HistogramTreeNodeTable(int height, int capacity, KeyHistograms.HistogramTreeNode... children) {
-        this.height = height;
+    public HistogramTreeNodeTable(int capacity, KeyHistograms.HistogramTreeNode... children) {
         ArrayList<KeyHistograms.HistogramTreeNode> cs = new ArrayList<>(capacity);
         Collections.addAll(cs, children);
         this.children = cs;
@@ -79,14 +76,14 @@ public class HistogramTreeNodeTable implements KeyHistograms.HistogramTreeNode, 
 
     @Override
     public int height() {
-        return height;
+        return children.stream()
+                .mapToInt(KeyHistograms.HistogramTreeNode::height)
+                .max().orElse(0) + 1;
     }
 
     @Override
-    public KeyHistograms.HistogramTreeNode increaseHeight(int heightDelta) {
-        height += heightDelta;
-        children.forEach(c -> c.increaseHeight(heightDelta));
-        return this;
+    public boolean isLeaf() {
+        return false;
     }
 
     @Override
@@ -123,14 +120,14 @@ public class HistogramTreeNodeTable implements KeyHistograms.HistogramTreeNode, 
     }
 
     @Override
-    public KeyHistograms.HistogramTreeNode put(ActorKelpFunctions.KeyComparator<?> comparator, Object key, KeyHistograms.HistogramPutContext context) {
+    public KeyHistograms.HistogramTreeNode put(ActorKelpFunctions.KeyComparator<?> comparator, Object key, KeyHistograms.HistogramPutContext context, int height) {
         size++;
 
         KeyHistograms.HistogramTreeNode newNode = null;
         int index = search(comparator, key);
         updatePutIndex(context, index);
         if (index >= 0) { //found
-            newNode = putChildAt(comparator, key, context, index);
+            newNode = putChildAt(comparator, key, context, index, height);
             if (newNode == null) {
                 return null;
             }
@@ -140,17 +137,16 @@ public class HistogramTreeNodeTable implements KeyHistograms.HistogramTreeNode, 
         int treeLimit = context.putTreeLimit;
         if (newNode != null || height <= 1) { //appropriate range or bottom
             if (newNode == null) {
-                newNode = context.createLeafWithCountUp(key, height - 1);
+                newNode = context.createLeafWithCountUp(key);
             }
             children.add(index, newNode);
             newNode.setParent(this);
         } else { //upper tree
             index = selectChildTree(index, treeLimit, context.putTree);
-            newNode = putChildAt(comparator, key, context, index);
+            newNode = putChildAt(comparator, key, context, index, height);
             KeyHistograms.HistogramTreeNode childTarget = children.get(index);
-            if (newNode != null && childTarget instanceof HistogramTreeNodeLeaf) { //it can create a new sub-tree
-                newNode = createNodeTree(height - 1, treeLimit, KeyHistograms.sort(comparator,
-                        childTarget.increaseHeight(-1), newNode.increaseHeight(-1)));
+            if (newNode != null && childTarget.isLeaf()) { //it can create a new sub-tree
+                newNode = createNodeTree(treeLimit, KeyHistograms.sort(comparator, childTarget, newNode));
                 context.putTree.addNodeSizeOnMemory(1);
                 children.set(index, newNode); //replace
                 newNode.setParent(this);
@@ -171,14 +167,14 @@ public class HistogramTreeNodeTable implements KeyHistograms.HistogramTreeNode, 
     }
 
     @Override
-    public KeyHistograms.HistogramTreeNode put(ActorKelpFunctions.KeyComparator<?> comparator, HistogramTree tree, HistogramTreeNodeLeaf leaf) {
+    public KeyHistograms.HistogramTreeNode put(ActorKelpFunctions.KeyComparator<?> comparator, HistogramTree tree, HistogramTreeNodeLeaf leaf, int height) {
         size += leaf.size();
 
         KeyHistograms.HistogramTreeNode newNode = null;
         int index = search(comparator, leaf.getKey());
         //updatePutIndex(context, index);
         if (index >= 0) { //found
-            newNode = putChildAt(comparator, tree, leaf, index); //no persisted: putChildAt(comparator, key, context, index);
+            newNode = putChildAt(comparator, tree, leaf, index, height); //no persisted: putChildAt(comparator, key, context, index);
             if (newNode == null) {
                 return null;
             }
@@ -188,18 +184,16 @@ public class HistogramTreeNodeTable implements KeyHistograms.HistogramTreeNode, 
         int treeLimit = tree.getTreeLimit();
         if (newNode != null || height <= 1) { //appropriate range or bottom
             if (newNode == null) {
-                leaf.height = height - 1;
                 newNode = leaf;
             }
             children.add(index, newNode);
             newNode.setParent(this);
         } else { //upper tree
             index = selectChildTree(index, treeLimit, tree);
-            newNode = putChildAt(comparator, tree, leaf, index);
+            newNode = putChildAt(comparator, tree, leaf, index, height);
             KeyHistograms.HistogramTreeNode childTarget = children.get(index);
-            if (newNode != null && childTarget instanceof HistogramTreeNodeLeaf) { //it can create a new sub-tree
-                newNode = createNodeTree(height - 1, treeLimit, KeyHistograms.sort(comparator,
-                        childTarget.increaseHeight(-1), newNode.increaseHeight(-1)));
+            if (newNode != null && childTarget.isLeaf()) { //it can create a new sub-tree
+                newNode = createNodeTree(treeLimit, KeyHistograms.sort(comparator, childTarget, newNode));
                 tree.addNodeSizeOnMemory(1);
                 children.set(index, newNode); //replace
                 newNode.setParent(this);
@@ -219,22 +213,35 @@ public class HistogramTreeNodeTable implements KeyHistograms.HistogramTreeNode, 
         }
     }
 
-    protected KeyHistograms.HistogramTreeNode putChildAt(ActorKelpFunctions.KeyComparator<?> comparator, Object key, KeyHistograms.HistogramPutContext context, int index) {
+    protected KeyHistograms.HistogramTreeNode putChildAt(ActorKelpFunctions.KeyComparator<?> comparator, Object key, KeyHistograms.HistogramPutContext context,
+                                                         int index, int height) {
         KeyHistograms.HistogramTreeNode child = children.get(index);
         KeyHistograms.HistogramTreeNode newChild = child.load(context); // the child will be replaced with newChild in load() if child!=newChild
-        return newChild.put(comparator, key, context);
+        return newChild.put(comparator, key, context, height - 1);
     }
 
-    protected KeyHistograms.HistogramTreeNode putChildAt(ActorKelpFunctions.KeyComparator<?> comparator, HistogramTree tree, HistogramTreeNodeLeaf leaf, int index) {
-        return children.get(index).put(comparator, tree, leaf); //suppose no persisted nodes
+    protected KeyHistograms.HistogramTreeNode putChildAt(ActorKelpFunctions.KeyComparator<?> comparator, HistogramTree tree, HistogramTreeNodeLeaf leaf,
+                                                         int index, int height) {
+        return children.get(index).put(comparator, tree, leaf, height - 1); //suppose no persisted nodes
     }
 
     protected KeyHistograms.HistogramTreeNode splitWithCountUp(HistogramTree tree) {
+        int cap = tree.getTreeLimit();
         int n = children.size() / 2;
-        List<KeyHistograms.HistogramTreeNode> newChildren = new ArrayList<>(children.subList(n, children.size()));
-        KeyHistograms.HistogramTreeNode l = createNodeTree(height, new ArrayList<>(children.subList(0, n)));
+        ArrayList<KeyHistograms.HistogramTreeNode> right = new ArrayList<>(cap);
+        ArrayList<KeyHistograms.HistogramTreeNode> left = new ArrayList<>(cap);
+        int i = 0;
+        for (KeyHistograms.HistogramTreeNode child : children) {
+            if (i < n) {
+                left.add(child);
+            } else {
+                right.add(child);
+            }
+            ++i;
+        }
+        KeyHistograms.HistogramTreeNode l = createNodeTree(left);
         tree.addNodeSizeOnMemory(1L);
-        this.children = newChildren;
+        this.children = right;
         updateChildren();
         return l;
     }
@@ -277,7 +284,7 @@ public class HistogramTreeNodeTable implements KeyHistograms.HistogramTreeNode, 
     protected int selectChildTree(int index, int treeLimit, HistogramTree tree) {
         if (index - 1 < 0) {
             if (index >= children.size()) { //empty
-                HistogramTreeNodeTable childTarget = createNodeTree(height - 1, treeLimit);
+                HistogramTreeNodeTable childTarget = createNodeTree(treeLimit);
                 children.add(childTarget);
                 childTarget.setParent(this);
                 tree.addNodeSizeOnMemory(1);
@@ -299,12 +306,12 @@ public class HistogramTreeNodeTable implements KeyHistograms.HistogramTreeNode, 
         }
     }
 
-    protected HistogramTreeNodeTable createNodeTree(int height, int treeLimit, KeyHistograms.HistogramTreeNode... children) {
-        return new HistogramTreeNodeTable(height, treeLimit, children);
+    protected HistogramTreeNodeTable createNodeTree(int treeLimit, KeyHistograms.HistogramTreeNode... children) {
+        return new HistogramTreeNodeTable(treeLimit, children);
     }
 
-    protected HistogramTreeNodeTable createNodeTree(int height, List<KeyHistograms.HistogramTreeNode> children) {
-        return new HistogramTreeNodeTable(height, children);
+    protected HistogramTreeNodeTable createNodeTree(List<KeyHistograms.HistogramTreeNode> children) {
+        return new HistogramTreeNodeTable(children);
     }
 
     protected void updateChildren() {
@@ -339,7 +346,7 @@ public class HistogramTreeNodeTable implements KeyHistograms.HistogramTreeNode, 
                 this.children = rights;
                 updateChildren();
                 if (!lefts.isEmpty()) {
-                    return createNodeTree(height, lefts);
+                    return createNodeTree(lefts);
                 } else {
                     return null;
                 }
@@ -381,7 +388,7 @@ public class HistogramTreeNodeTable implements KeyHistograms.HistogramTreeNode, 
         int h2 = lowerNode.height();
         if (h1 == h2) {
             if (lowerNode instanceof HistogramTreeNodeLeaf) {
-                return merge(tree, treeLimit, comparator, lowerNode.increaseHeight(-1)); //always h2 > 0 because the height of a HistogramNodeTree always > 0
+                return merge(tree, treeLimit, comparator, lowerNode); //always h2 > 0 because the height of a HistogramNodeTree always > 0
             } else if (lowerNode instanceof HistogramTreeNodeTable) {
                 HistogramTreeNodeTable node = (HistogramTreeNodeTable) lowerNode;
                 int r = keyIn(comparator, node.keyEnd());
@@ -399,8 +406,7 @@ public class HistogramTreeNodeTable implements KeyHistograms.HistogramTreeNode, 
             }
         } else { //h1 > h2
             if (children.isEmpty()) {
-                int upHeight = h1 + 1 - h2;
-                children.add(lowerNode.increaseHeight(upHeight));
+                children.add(lowerNode);
                 updateChildren();
             } else {
                 int r = keyIn(comparator, lowerNode.keyEnd());
