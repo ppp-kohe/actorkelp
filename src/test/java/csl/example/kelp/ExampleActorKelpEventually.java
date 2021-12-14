@@ -10,11 +10,9 @@ import csl.actor.kelp.persist.HistogramTreePersistable;
 import csl.actor.kelp.persist.KeyHistogramsPersistable;
 import csl.actor.kelp.persist.PersistentConditionActor;
 import csl.actor.persist.PersistentConditionMailbox;
+import csl.example.TestTool;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.stream.IntStream;
 
 public class ExampleActorKelpEventually {
@@ -25,23 +23,29 @@ public class ExampleActorKelpEventually {
     public void run() throws Exception {
         ConfigKelp conf = new ConfigKelp();
         conf.shufflePartitions = 2;
+        conf.mailboxPath = "target/debug/%a";
         try (ActorSystemKelp.ActorSystemDefaultForKelp k = ActorSystemKelp.createLocal(conf)) {
             InputGen in = new InputGen(k, "in", conf);
             MyActor a = new MyActor(k, "test", conf);
-            in.connects(a);
+            var as = in.connects(a);
 
             int n = 100;
             in.stageGraph()
                     .startAwaitTell(n)
                     .get();
 
-            list.forEach(l -> System.out.println(l));
+            var res = as.merge().data;
+            TestTool.assertEquals("size", n, res.size());
+            for (int i = 0; i < n; ++i)  {
+                String ke = "v" + i;
+                TestTool.assertEquals(ke, Set.of(1,2,3), res.get(ke));
+            }
         }
     }
 
-    public static List<Map.Entry<String, List<Integer>>> list = Collections.synchronizedList(new ArrayList<>());
-
     public static class MyActor extends ActorKelp<MyActor> {
+        @TransferredState(mergeType = MergerOpType.Add)
+        public Map<String, Set<Integer>> data = new HashMap<>();
         public MyActor(ActorSystem system, String name, ConfigKelp config) {
             super(system, name, config);
         }
@@ -50,8 +54,12 @@ public class ExampleActorKelpEventually {
         protected ActorBehaviorBuilder initBehavior(ActorBehaviorBuilderKelp builder) {
             return builder.matchKey(this.<String,Integer>typeEntry(), Map.Entry::getKey, Map.Entry::getValue)
                     .eventually()
-                    .forEachKeyValue((k,v) -> System.out.println(k + ": " + v));
-                    //.forEachKeyList((k,v) -> System.out.println(k + ": " + v));
+                    .forEachKeyValue(this::receive);
+        }
+
+        protected void receive(String k, Integer v) {
+            getLogger().log("receive %s : %s", k, v);
+            data.computeIfAbsent(k, _k -> new HashSet<>()).add(v);
         }
 
         @Override

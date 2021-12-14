@@ -6,7 +6,8 @@ import csl.actor.remote.ActorRefRemote;
 
 import java.io.Serializable;
 
-public class ExampleActorSystemKelp {
+public class
+ExampleActorSystemKelp {
     public static void main(String[] args) throws Exception {
         ActorSystemKelp s1 = new ActorSystemKelp();
         ActorSystemKelp s2 = new ActorSystemKelp();

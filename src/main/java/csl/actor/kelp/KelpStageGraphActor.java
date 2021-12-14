@@ -641,11 +641,11 @@ public class KelpStageGraphActor extends ActorDefault {
 
         protected void checkStageActor(StageStatusKey key, GraphActorNode node) {
             ActorRef a = node.getActor();
-            Map<ActorAddress.ActorAddressRemote, Integer> clockTable = collectClockTable(graph.getSystem(), a, false);
+            //Map<ActorAddress.ActorAddressRemote, Integer> clockTable = collectClockTable(graph.getSystem(), a, false);
             ((StageStatus) stageStatusMap.computeIfAbsent(key, StageStatus::new))
                     .addIndex(node.getIndex());
 
-            a.tell(graph.createWatchTask(key, node.getIndex(), clockTable).withSender(graph));
+            a.tell(graph.createWatchTask(key, node.getIndex(), null).withSender(graph));
         }
 
         public synchronized StageStatusI getStageStatusImplAll() {
@@ -850,16 +850,23 @@ public class KelpStageGraphActor extends ActorDefault {
                 monitor.getStageStatusImplAll().format(monitor.getStageStartTime()),
                 String.format(fmt, args));
     }
-
+    static PersistentConditionMailbox.SampleTiming collectClockLogTiming = new PersistentConditionMailbox.SampleTiming();
     public static Map<ActorAddress.ActorAddressRemote, Integer> collectClockTable(ActorSystem system, ActorRef a, boolean sendUpdate) {
         Map<ActorAddress.ActorAddressRemote,Integer> hostToClock = new HashMap<>();
         ActorPlacement p = ActorPlacement.getPlacement(system);
         if (p instanceof ActorPlacement.ActorPlacementDefault) {
             List<ActorPlacement.AddressListEntry> cluster = ((ActorPlacement.ActorPlacementDefault) p).getCluster();
             //collect clock tables
+            boolean log = ActorKelp.logDebugKelp && collectClockLogTiming.next();
+            if (log) {
+                system.getLogger().log("collectClockTable for %s : cluster=%s", a, cluster);
+            }
             for (ActorPlacement.AddressListEntry e : cluster) {
                 try {
                     GetClockTask task = remoteClock(system, e.getPlacementActor(), a, sendUpdate).get();
+                    if (log) {
+                        system.getLogger().log("collectClockTable     host=%s : clock=%,d", task.targetHost, task.resultClock);
+                    }
                     if (task.isValid()) {
                         hostToClock.put(task.targetHost, task.resultClock);
                     }
@@ -1229,9 +1236,10 @@ public class KelpStageGraphActor extends ActorDefault {
             if (place.getSystem() instanceof ActorSystemRemote && target instanceof ActorRefRemote) {
                 target.tellMessage(new Message.MessageNone(target)); //update clock by sending an empty message from the host
 
+                ActorSystemRemote system = (ActorSystemRemote) place.getSystem();
                 ActorRefRemote remoteRef = (ActorRefRemote) target;
-                targetHost = remoteRef.getAddress().getHostAddress();
-                Integer c = ((ActorSystemRemote) place.getSystem()).getClockTable().get(remoteRef);
+                targetHost = system.getServerAddress().getHostAddress();
+                Integer c = system.getClockTable().get(remoteRef);
                 if (c != null) {
                     resultClock = c;
                 }
@@ -1258,12 +1266,14 @@ public class KelpStageGraphActor extends ActorDefault {
             this.key = key;
             this.actorNodeIndex = actorNodeIndex;
             this.graph = graph;
-            this.remoteClocks = remoteClocks;
+            this.remoteClocks = remoteClocks; //can be null
         }
 
         @Override
         public void accept(Actor self) {
             if (checkEmptyMailbox(self) && complete(self)) {
+                if (ActorKelp.logDebugKelp) self.getSystem().getLogger().log(ActorKelp.logDebugKelpColor,
+                        "%s complete %s", this, self);
                 this.graph.tell(new CompletedTask(key, actorNodeIndex).withSender(self));
             } else {
                 incrementRetryCount(self);
@@ -1271,12 +1281,12 @@ public class KelpStageGraphActor extends ActorDefault {
             }
         }
         protected void incrementRetryCount(Actor self) {
+            if ((retryCount % 1000 == 0) && ActorKelp.logDebugKelp) {
+                self.getSystem().getLogger().log(ActorKelp.logDebugKelpColor,
+                        "%s incrementRetryCount retryCount=%,d: %s empty?=%s, remoteClocks=%s",
+                        this, retryCount, self, checkEmptyMailbox(self), remoteClocks);
+            }
             if (retryCount >= 100) {
-                if (retryCount == 100 && ActorKelp.logDebugKelp) {
-                    self.getSystem().getLogger().log(ActorKelp.logDebugKelpColor,
-                            "%s incrementRetryCount > 100 : %s empty?=%s, remoteClocks=%s",
-                            this, self, checkEmptyMailbox(self), remoteClocks);
-                }
                 try {
                     Thread.sleep(10);
                 } catch (Exception ex) {
@@ -1292,8 +1302,8 @@ public class KelpStageGraphActor extends ActorDefault {
         }
 
         public boolean complete(Actor self) {
+            ActorRefShuffle.flush(self);
             if (checkCompleteClocks(self)) { //true if all task sent by remote hosts are completed
-                ActorRefShuffle.flush(self);
                 if (self instanceof Staging.StagingSupported) {
                     return ((Staging.StagingSupported) self).processStageExited(key);
                 } else {
@@ -1305,17 +1315,22 @@ public class KelpStageGraphActor extends ActorDefault {
         }
 
         protected boolean checkCompleteClocks(Actor self) {
+            if (remoteClocks == null) {
+                remoteClocks = collectClockTable(self.getSystem(), self, true);
+            }
             remoteClocks = new HashMap<>(remoteClocks);
             self.getClocks()
                     .forEach(this::complete);
             boolean b = remoteClocks.isEmpty();
-            if (!b && (retryCount % 100) == 0) {
-                self.getSystem().getLogger().log(10, "retry=%,d remainingClocks=%s collectClockTable for %s",
-                        retryCount, remoteClocks, self);
+            if (b) {
+                return true;
+            } else {
+                if (retryCount % 100 == 0) {
+                    self.getSystem().getLogger().log(10, "retry=%,d remainingClocks=%s localClocks=%s collectClockTable for %s",
+                            retryCount, remoteClocks, self.getClocks(), self);
+                }
                 remoteClocks = collectClockTable(self.getSystem(), self, true);
                 return false;
-            } else {
-                return true;
             }
         }
 

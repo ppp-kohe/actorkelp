@@ -209,7 +209,7 @@ public class ActorSystemRemote implements ActorSystem, KryoBuilder.SerializerFac
         if (target instanceof ActorRefRemote) {
             ActorAddress addrActor = ((ActorRefRemote) target).getAddress();
             ActorAddress addrHost = addrActor.getHostAddress();
-            ActorAddress local = getServerAddress();
+            ActorAddress local = getServerAddress().getHostAddress();
             if (local != null && local.equals(addrHost)) { //localhost
                 localSystem.send(message.renewTarget(localize(target)));
             } else {
@@ -867,8 +867,8 @@ public class ActorSystemRemote implements ActorSystem, KryoBuilder.SerializerFac
         protected void sendLocal(int clock, ActorAddress.ActorAddressRemote fromAddr, Message<?> msg) {
             ActorSystem localSys = remote.getLocalSystem();
             ActorRef target = remote.localize(msg.getTarget());
-            localSys.send(new Message<>(target, new Message.MessageDataClock<>(clock, fromAddr))); //send activation clock from the host: non-special
             localSys.send(msg.renewTarget(target));
+            localSys.send(new Message<>(target, new Message.MessageDataClock<>(clock, fromAddr))); //send activation clock from the host: non-special
         }
 
         protected void logMsg(String fmt, Object... args) {

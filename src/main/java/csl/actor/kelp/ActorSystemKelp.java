@@ -618,7 +618,7 @@ public class ActorSystemKelp extends ActorSystemRemote implements ActorKelpBuild
     public static class ConnectionActorKelp extends ConnectionActor implements AwaitLogHandler {
         protected ConnectionHost host;
 
-        protected volatile Instant previousLogTime = Instant.now();
+        protected volatile Instant previousUpdateTime = Instant.now();
         protected volatile ConnectionHostHistory history;
 
         protected AtomicLong updateCount = new AtomicLong();
@@ -646,39 +646,41 @@ public class ActorSystemKelp extends ActorSystemRemote implements ActorKelpBuild
         }
 
         public void log(String fmt, Object... args) {
-            ConfigBase.FormatAndArgs fa = new ConfigBase.FormatAndArgs("ConnectionActorKelp ")
-                    .append(new ConfigBase.FormatAndArgs(fmt, args)
-                    .append(new ConfigBase.FormatAndArgs(" @ %s", address)));
+            ConfigBase.FormatAndArgs fa = new ConfigBase.FormatAndArgs("ConnectionActorKelp [%s->%s] : ",
+                    getRemoteSystem().getServerAddress(), address)
+                    .append(new ConfigBase.FormatAndArgs(fmt, args));
             system.getLogger().log(debugLogColor, fa.format, fa.args);
         }
 
         public void update() {
-            updateCount.incrementAndGet();
-            Instant now = Instant.now();
-            Duration d = Duration.between(previousLogTime, now);
-            if (d.compareTo(host.getHostUpdateTime()) > 0) {
-                updateAndWait();
+            if (updateCount.incrementAndGet() % 1000 == 0) {
+                Instant now = Instant.now();
+                Duration d = Duration.between(previousUpdateTime, now);
+                if (d.compareTo(host.getHostUpdateTime()) > 0) {
+                    updateAndWait();
+                }
             }
         }
 
         protected synchronized void updateAndWait() {
             Instant now = Instant.now();
-            Instant prev = previousLogTime;
+            Instant prev = previousUpdateTime;
             Duration time = Duration.between(prev, now);
             if (time.compareTo(host.getHostUpdateTime()) <= 0) {
                 return; //multiple entering from update() and the first one already done
             }
-            previousLogTime = now;
+            previousUpdateTime = now;
 
             long bs = host.getTransferredBytes();
             long mbox = host.size();
             host.clearTransferredBytes();
             long totalBs = host.getTotalTransferredBytes();
 
-            if (host.checkLogTime()) { // in order to avoid log flooding
-                log("tells=%,7d transferredBytes=%,14d totalBytes=%,14d, pendingSize=%,7d, elapsed=%s",
-                        updateCount.get(), bs, totalBs, mbox, time);
-            }
+            log("tells=%,7d, transBytes=%,14d, totalBytes=%,14d, pendingSize=%,7d, elapsed=%s",
+                    updateCount.get(), bs, totalBs, mbox, time);
+
+            updateCount.set(1);
+
             ConnectionHostHistory newest = history;
             history = history.set(mbox, totalBs, time);
             //the current history has the oldest values
