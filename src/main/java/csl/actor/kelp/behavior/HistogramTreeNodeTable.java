@@ -22,7 +22,7 @@ public class HistogramTreeNodeTable implements KeyHistograms.HistogramTreeNode, 
     }
 
     public HistogramTreeNodeTable(int capacity, KeyHistograms.HistogramTreeNode... children) {
-        ArrayList<KeyHistograms.HistogramTreeNode> cs = new ArrayList<>(capacity);
+        ArrayList<KeyHistograms.HistogramTreeNode> cs = new ArrayList<>();
         Collections.addAll(cs, children);
         this.children = cs;
         updateChildren();
@@ -229,8 +229,8 @@ public class HistogramTreeNodeTable implements KeyHistograms.HistogramTreeNode, 
     protected KeyHistograms.HistogramTreeNode splitWithCountUp(HistogramTree tree) {
         int cap = tree.getTreeLimit();
         int n = children.size() / 2;
-        ArrayList<KeyHistograms.HistogramTreeNode> right = new ArrayList<>(cap);
-        ArrayList<KeyHistograms.HistogramTreeNode> left = new ArrayList<>(cap);
+        ArrayList<KeyHistograms.HistogramTreeNode> right = new ArrayList<>();
+        ArrayList<KeyHistograms.HistogramTreeNode> left = new ArrayList<>();
         int i = 0;
         for (KeyHistograms.HistogramTreeNode child : children) {
             if (i < n) {
