@@ -2,6 +2,7 @@ package csl.actor.kelp.persist;
 
 import csl.actor.kelp.ActorKelpFunctions;
 import csl.actor.kelp.behavior.HistogramTree;
+import csl.actor.kelp.behavior.HistogramTreeNodeLeaf;
 import csl.actor.kelp.behavior.HistogramTreeNodeTable;
 import csl.actor.kelp.behavior.KeyHistograms;
 import csl.actor.persist.PersistentFileManager;
@@ -19,8 +20,10 @@ public class HistogramTreeNodeTableOnStorage extends HistogramTreeNodeTable impl
     public HistogramTreeNodeTableOnStorage() {
     }
 
+    static ArrayList<KeyHistograms.HistogramTreeNode> empty = new ArrayList<>(0);
+
     public HistogramTreeNodeTableOnStorage(KeyHistogramsPersistable.NodeTreeData data, PersistentFileManager.PersistentFileReaderSource source) {
-        super(Collections.emptyList());
+        super(empty);
         this.source = source;
         this.keyStart = data.keyStart;
         this.keyEnd = data.keyEnd;
@@ -82,10 +85,11 @@ public class HistogramTreeNodeTableOnStorage extends HistogramTreeNodeTable impl
     }
 
     @Override
-    protected KeyHistograms.HistogramTreeNode splitWithCountUp(HistogramTree tree) {
+    public KeyHistograms.HistogramTreeNode put(ActorKelpFunctions.KeyComparator<?> comparator, HistogramTree tree, HistogramTreeNodeLeaf leaf, int height) {
         load(tree);
-        return super.splitWithCountUp(tree); //loaded children already have persistent
+        return super.put(comparator, tree, leaf, height);
     }
+
 
     @Override
     public KeyHistograms.HistogramTreeNode merge(HistogramTree tree, int treeLimit, ActorKelpFunctions.KeyComparator<?> comparator, KeyHistograms.HistogramTreeNode lowerNode) {
@@ -131,7 +135,7 @@ public class HistogramTreeNodeTableOnStorage extends HistogramTreeNodeTable impl
             int cap = 6;
             if (tree != null) {
                 tree.addNodeSizeOnMemory(1L); //onMemory means the node is loaded
-                cap = tree.getTreeHeight();
+                cap = tree.getTreeLimit();
             }
             ArrayList<KeyHistograms.HistogramTreeNode> cs = new ArrayList<>(cap);
             getFileManager(); //setup manager for reading

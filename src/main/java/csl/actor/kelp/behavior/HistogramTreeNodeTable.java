@@ -8,7 +8,7 @@ import java.util.*;
 public class HistogramTreeNodeTable implements KeyHistograms.HistogramTreeNode, Cloneable {
     public static final long serialVersionUID = 1L;
     public HistogramTreeNodeTable parent;
-    public List<KeyHistograms.HistogramTreeNode> children;
+    public ArrayList<KeyHistograms.HistogramTreeNode> children;
     public long size;
     public Object keyStart;
     public Object keyEnd;
@@ -16,13 +16,13 @@ public class HistogramTreeNodeTable implements KeyHistograms.HistogramTreeNode, 
     public HistogramTreeNodeTable() {
     }
 
-    public HistogramTreeNodeTable(List<KeyHistograms.HistogramTreeNode> children) {
+    public HistogramTreeNodeTable(ArrayList<KeyHistograms.HistogramTreeNode> children) {
         this.children = children;
         updateChildren();
     }
 
     public HistogramTreeNodeTable(int capacity, KeyHistograms.HistogramTreeNode... children) {
-        ArrayList<KeyHistograms.HistogramTreeNode> cs = new ArrayList<>();
+        ArrayList<KeyHistograms.HistogramTreeNode> cs = new ArrayList<>(capacity + 1); //+1: spill before splitting
         Collections.addAll(cs, children);
         this.children = cs;
         updateChildren();
@@ -227,19 +227,12 @@ public class HistogramTreeNodeTable implements KeyHistograms.HistogramTreeNode, 
     }
 
     protected KeyHistograms.HistogramTreeNode splitWithCountUp(HistogramTree tree) {
-        int cap = tree.getTreeLimit();
         int n = children.size() / 2;
-        ArrayList<KeyHistograms.HistogramTreeNode> right = new ArrayList<>();
-        ArrayList<KeyHistograms.HistogramTreeNode> left = new ArrayList<>();
-        int i = 0;
-        for (KeyHistograms.HistogramTreeNode child : children) {
-            if (i < n) {
-                left.add(child);
-            } else {
-                right.add(child);
-            }
-            ++i;
-        }
+        int cap = tree.getTreeLimit() + 1;
+        ArrayList<KeyHistograms.HistogramTreeNode> left = new ArrayList<>(cap);
+        left.addAll(children.subList(0, n));
+        ArrayList<KeyHistograms.HistogramTreeNode> right = new ArrayList<>(cap);
+        right.addAll(children.subList(n, children.size()));
         KeyHistograms.HistogramTreeNode l = createNodeTree(left);
         tree.addNodeSizeOnMemory(1L);
         this.children = right;
@@ -311,7 +304,7 @@ public class HistogramTreeNodeTable implements KeyHistograms.HistogramTreeNode, 
         return new HistogramTreeNodeTable(treeLimit, children);
     }
 
-    protected HistogramTreeNodeTable createNodeTree(List<KeyHistograms.HistogramTreeNode> children) {
+    protected HistogramTreeNodeTable createNodeTree(ArrayList<KeyHistograms.HistogramTreeNode> children) {
         return new HistogramTreeNodeTable(children);
     }
 
@@ -334,7 +327,7 @@ public class HistogramTreeNodeTable implements KeyHistograms.HistogramTreeNode, 
 
     @Override
     public KeyHistograms.HistogramTreeNode split(long halfSize, long currentLeft) {
-        List<KeyHistograms.HistogramTreeNode> lefts = new ArrayList<>(children.size());
+        ArrayList<KeyHistograms.HistogramTreeNode> lefts = new ArrayList<>(children.size());
         int i = 0;
         for (KeyHistograms.HistogramTreeNode n : children) {
             if (currentLeft + n.size() >= halfSize) {
@@ -342,7 +335,7 @@ public class HistogramTreeNodeTable implements KeyHistograms.HistogramTreeNode, 
                 if (nLeft != null) {
                     lefts.add(nLeft);
                 }
-                List<KeyHistograms.HistogramTreeNode> rights = new ArrayList<>(children.size());
+                ArrayList<KeyHistograms.HistogramTreeNode> rights = new ArrayList<>(children.size());
                 rights.addAll(children.subList(i, children.size())); //includes n
                 this.children = rights;
                 updateChildren();
