@@ -291,12 +291,14 @@ public class KeyHistogramsPersistable extends KeyHistograms {
             w.writeInt(maxLinkDepth);
         }
 
+        static final byte[] zeroData = new byte[8 + 8 + 4]; //listPtr+size+linkDep
+
         public void writeBeginZero(TreeWritings.TreeWriting w) throws IOException {
-            //pointer = w.position();
-            //w.dataStoreSeek(pointer + 8L + 8L + 4L); //longPtr + long + int
-            pointer = w.positionAndWriteLong(0);
-            w.writeLong(0);
-            w.writeInt(0);
+            pointer = w.position();
+            w.writeBytes(zeroData);
+//            pointer = w.positionAndWriteLong(0);
+//            w.writeLong(0);
+//            w.writeInt(0);
         }
 
         public void writeEnd(TreeWritings.TreeWriting w) throws IOException {

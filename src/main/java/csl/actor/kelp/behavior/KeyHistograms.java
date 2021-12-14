@@ -501,7 +501,7 @@ public class KeyHistograms {
                 kryo.writeClassAndObject(output, cell);
                 cell = cell.next;
             }
-            kryo.writeClassAndObject(output, new HistogramLeafCellSerializedEnd());
+            kryo.writeClassAndObject(output, CELL_SERIALIZED_END);
         }
 
         @Override
@@ -544,6 +544,8 @@ public class KeyHistograms {
             }
         }
     }
+
+    public static final HistogramLeafCellSerializedEnd CELL_SERIALIZED_END = new HistogramLeafCellSerializedEnd();
 
     public static class HistogramLeafCellSerializedEnd implements Serializable {
         public static final long serialVersionUID = 1L;

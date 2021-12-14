@@ -300,14 +300,15 @@ public class HistogramLeafCellOnStorage extends KeyHistograms.HistogramLeafCell 
         public HistogramLeafCellOnStorageWriting(HistogramTree tree,
                                                  HistogramTreeNodeLeaf leaf,
                                                  KeyHistograms.HistogramLeafCell persistedCellChain, PersistentFileManager.PersistentWriter writer) {
-            totalSize = 0;
-            persistedSize = 0;
+            long totalSize = 0;
+            long persistedSize = 0;
+            int maxLinkDepth = 0;
             try {
                 KeyHistograms.HistogramLeafCell next = persistedCellChain;
                 while (next != null) {
                     persistedSize += next.sizeOnMemory();
                     totalSize += next.size();
-                    if (next.getClass().equals(KeyHistograms.HistogramLeafCellArray.class)) {
+                    if (next instanceof  KeyHistograms.HistogramLeafCellArray) {
                         writeAsArray(tree, leaf, next, writer);
                     } else if (next instanceof HistogramLeafCellOnStorage) {
                         int max = ((HistogramLeafCellOnStorage) next).getMaxLinkDepth();
@@ -325,7 +326,10 @@ public class HistogramLeafCellOnStorage extends KeyHistograms.HistogramLeafCell 
                     next = next.next;
                 }
                 writer.writeByte(CELL_SEGMENT_END);
-                writer.write(new KeyHistograms.HistogramLeafCellSerializedEnd());
+                writer.write(KeyHistograms.CELL_SERIALIZED_END);
+                this.totalSize = totalSize;
+                this.persistedSize = persistedSize;
+                this.maxLinkDepth = maxLinkDepth;
             } catch (Exception ex) {
                 throw new RuntimeException(ex);
             }
@@ -363,7 +367,7 @@ public class HistogramLeafCellOnStorage extends KeyHistograms.HistogramLeafCell 
                 segment = loadSegment(reader);
             }
             writer.writeByte(CELL_SEGMENT_END);
-            writer.write(new KeyHistograms.HistogramLeafCellSerializedEnd());
+            writer.write(KeyHistograms.CELL_SERIALIZED_END);
         }
     }
 

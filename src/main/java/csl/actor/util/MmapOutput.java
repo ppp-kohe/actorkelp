@@ -444,7 +444,7 @@ public class MmapOutput extends Output {
     public void writeShort(int value) throws KryoException {
         byte b1 = (byte) value;
         byte b2 = (byte) (value >>> 8);
-        if (require(4)) {
+        if (require(2)) {
             ByteBuffer byteBuffer = state.current.buffer;
             byteBuffer.put(b1);
             byteBuffer.put(b2);
@@ -457,7 +457,7 @@ public class MmapOutput extends Output {
     public void writeChar(char value) throws KryoException {
         byte b1 = (byte) value;
         byte b2 = (byte) (value >>> 8);
-        if (require(4)) {
+        if (require(2)) {
             ByteBuffer byteBuffer = state.current.buffer;
             byteBuffer.put(b1);
             byteBuffer.put(b2);

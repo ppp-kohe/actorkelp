@@ -124,6 +124,10 @@ public class TreeWritings {
             serializer.write(out, obj);
         }
 
+        public void writeBytes(byte[] data) {
+            out.writeBytes(data, 0, data.length);
+        }
+
         public long positionAndWriteLong(long n) throws IOException {
             long p = position();
             writeLong(n);
