@@ -889,6 +889,7 @@ public class HistogramTreePersistable extends HistogramTree implements KeyHistog
                     session.length = w.position() - offset;
                     w.writePositionToPointer(pos);
                     session.runLogAfter();
+                    w.flush();
                 }
                 writeEnd();
             } finally {
@@ -1043,8 +1044,8 @@ public class HistogramTreePersistable extends HistogramTree implements KeyHistog
                 TreeWritings.TreeWriting w = session.writer;
                 //write all info of the tree except for nodes
                 KeyHistograms.HistogramTreeNode currentRoot = this.root;
-                this.root = null;
                 w.writeLong(getTreeSize()); //the size is from root, so it is not included in write(this)
+                this.root = null;
                 w.write(this);
 
                 persistTreeTraverse(currentRoot, w, new PersistTreeContext(true));

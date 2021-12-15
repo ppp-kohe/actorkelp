@@ -797,7 +797,8 @@ public class ActorSystemKelp extends ActorSystemRemote implements ActorKelpBuild
             HistoryType top = tail;
             for (int i = 0; i < size; ++i) {
                 HistoryType n = cons.get();
-                n.next = top;
+                tail.next = n;
+                tail = n;
             }
             tail.next = top;
             return top;

@@ -286,7 +286,7 @@ public class PersistentFileManager {
 
         @Override
         public void close() {
-            write(new PersistentFileEnd());
+            write(FILE_END);
             output.close();
             manager.close(filePath);
             if (serializer instanceof KryoBuilder.SerializerPoolCached) {

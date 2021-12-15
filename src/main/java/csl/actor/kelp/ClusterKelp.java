@@ -170,18 +170,8 @@ public class ClusterKelp<ConfigType extends ConfigKelp> extends ClusterDeploymen
     }
 
     @Override
-    public ActorSystemKelp deploy(String confFile) {
-        return (ActorSystemKelp) super.deploy(confFile);
-    }
-
-    @Override
-    public ActorSystemKelp deploy(String confFile, ConfigType mergedConf) {
-        return (ActorSystemKelp) super.deploy(confFile, mergedConf);
-    }
-
-    @Override
-    public ActorSystemKelp deploy(List<ClusterCommands.ClusterUnit<ConfigType>> clusterUnits) throws Exception {
-        return (ActorSystemKelp) super.deploy(clusterUnits);
+    public ActorSystemKelp deploy(ConfigDeployment mergedDeployConf) {
+        return (ActorSystemKelp) super.deploy(mergedDeployConf);
     }
 
     @Override
@@ -190,9 +180,44 @@ public class ClusterKelp<ConfigType extends ConfigKelp> extends ClusterDeploymen
     }
 
     @Override
+    public ActorSystemKelp deploy(String confFile) {
+        return (ActorSystemKelp) super.deploy(confFile);
+    }
+
+    @Override
+    public ActorSystemKelp deploy(String confFile, ConfigType mergedConf) {
+        return (ActorSystemKelp) super.deploy(confFile, mergedConf);
+    }
+    @Override
+    public ActorSystemKelp deploy(String confFile, ConfigDeployment mergedDeployConf) {
+        return (ActorSystemKelp) super.deploy(confFile, mergedDeployConf);
+    }
+
+    @Override
     public ActorSystemKelp deploy(String confFile, ConfigType mergedConf, ConfigDeployment mergedDeployConf) {
         return (ActorSystemKelp) super.deploy(confFile, mergedConf, mergedDeployConf);
     }
+
+    @Override
+    public ActorSystemKelp deploy(List<ClusterCommands.ClusterUnit<ConfigType>> clusterUnits) throws Exception {
+        return (ActorSystemKelp) super.deploy(clusterUnits);
+    }
+
+    @Override
+    public ActorSystemKelp deploy(ConfigType mergedConf, List<ClusterCommands.ClusterUnit<ConfigType>> clusterUnits) throws Exception {
+        return (ActorSystemKelp) super.deploy(mergedConf, clusterUnits);
+    }
+
+    @Override
+    public ActorSystemKelp deploy(ConfigDeployment mergedDeployConf, List<ClusterCommands.ClusterUnit<ConfigType>> clusterUnits) throws Exception {
+        return (ActorSystemKelp) super.deploy(mergedDeployConf, clusterUnits);
+    }
+
+    @Override
+    public ActorSystemKelp deploy(ConfigType mergedConf, ConfigDeployment mergedDeployConf, List<ClusterCommands.ClusterUnit<ConfigType>> clusterUnits) throws Exception {
+        return (ActorSystemKelp) super.deploy(mergedConf, mergedDeployConf, clusterUnits);
+    }
+
 
     ///////////// stats
 

@@ -2,6 +2,8 @@ package csl.actor.kelp;
 
 import csl.actor.util.ConfigBase;
 
+import java.util.function.Consumer;
+
 public class ConfigKelp extends ConfigBase {
     public static final long serialVersionUID = 1L;
     public static ConfigKelp CONFIG_DEFAULT = new ConfigKelp();
@@ -71,5 +73,23 @@ public class ConfigKelp extends ConfigBase {
         } else {
             return new FormatAndArgs("%s ", logHeader);
         }
+    }
+
+    public static ConfigKelp create() {
+        return new ConfigKelp();
+    }
+
+    public ConfigKelp readSystemProperties() {
+        return readSystemProperties("csl.actor");
+    }
+
+    public ConfigKelp readSystemProperties(String head) {
+        read(head, System.getProperties());
+        return this;
+    }
+
+    public ConfigKelp edit(Consumer<ConfigKelp> editor) {
+        editor.accept(this);
+        return this;
     }
 }

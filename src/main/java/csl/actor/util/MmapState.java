@@ -1,7 +1,10 @@
 package csl.actor.util;
 
+import com.esotericsoftware.kryo.io.Output;
+
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
@@ -163,6 +166,52 @@ public abstract class MmapState {
                 b.buffer.force();
             }
             super.close();
+        }
+    }
+
+    public static class MmapStateOutputStream extends OutputStream {
+        protected MmapStateWrite state;
+
+        public MmapStateOutputStream(MmapStateWrite state) {
+            this.state = state;
+        }
+
+        public void seek(long pos) {
+            state.seek(pos);
+        }
+
+        public long position() {
+            return state.current.position();
+        }
+
+        @Override
+        public void write(int b) throws IOException {
+            if (!state.current.buffer.hasRemaining()) {
+                state.nextBlock();
+            }
+            state.current.buffer.put((byte) b);
+        }
+
+        @Override
+        public void write(byte[] b, int off, int len) throws IOException {
+            while (len > 0) {
+                MappedByteBuffer buffer = state.current.buffer;
+                int rem = buffer.remaining();
+                int wLen = Math.min(len, rem);
+                buffer.put(b, off, wLen);
+                len -= wLen;
+                off += wLen;
+                if (len > 0) {
+                    state.nextBlock();
+                } else {
+                    break;
+                }
+            }
+        }
+
+        @Override
+        public void close() throws IOException {
+            state.close();
         }
     }
 

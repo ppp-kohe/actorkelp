@@ -8,6 +8,7 @@ import csl.actor.util.PathModifier;
 
 import java.io.File;
 import java.lang.reflect.Field;
+import java.util.function.Consumer;
 import java.util.function.Function;
 
 public class ConfigDeployment extends ConfigBase {
@@ -56,12 +57,30 @@ public class ConfigDeployment extends ConfigBase {
         this.configType = configType.getName();
     }
 
+    public static ConfigDeployment create() {
+        return new ConfigDeployment();
+    }
+
     public static ConfigDeployment createAndMerge(Class<? extends ConfigBase> configType, ConfigDeployment mergedConfOrNull) {
         ConfigDeployment conf = new ConfigDeployment(configType);
         if (mergedConfOrNull != null) {
             conf.mergeChangedFields(mergedConfOrNull);
         }
         return conf;
+    }
+
+    public ConfigDeployment readSystemProperties() {
+        return readSystemProperties("csl.actor");
+    }
+
+    public ConfigDeployment readSystemProperties(String head) {
+        read(head, System.getProperties());
+        return this;
+    }
+
+    public ConfigDeployment edit(Consumer<ConfigDeployment> editor) {
+        editor.accept(this);
+        return this;
     }
 
     public ConfigDeployment setKryoBuilderType(Class<? extends KryoBuilder> builderType) {

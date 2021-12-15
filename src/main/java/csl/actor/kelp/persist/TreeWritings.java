@@ -1,6 +1,7 @@
 package csl.actor.kelp.persist;
 
 import com.esotericsoftware.kryo.io.Input;
+import com.esotericsoftware.kryo.io.Output;
 import csl.actor.persist.PersistentFileManager;
 import csl.actor.remote.KryoBuilder;
 import csl.actor.util.MmapOutput;
@@ -44,7 +45,8 @@ public class TreeWritings {
         /**
          * buffer for obtaining bytes and total size
          */
-        protected MmapOutput out;
+        protected Output out;
+        protected MmapState.MmapStateOutputStream outMmap;
         protected Path filePath;
 
         public TreeWriting(PersistentFileManager manager, String pathExpanded, long offset) throws IOException {
@@ -70,7 +72,8 @@ public class TreeWritings {
         }
 
         protected void initDataStore(Path file) throws IOException {
-            this.out = new MmapOutput(new MmapState.MmapStateWrite(file));
+            outMmap = new MmapState.MmapStateOutputStream(new MmapState.MmapStateWrite(file));
+            this.out = new Output(outMmap);
         }
 
         public String getPathExpanded() {
@@ -83,7 +86,8 @@ public class TreeWritings {
 
         @Override
         public long position() {
-            return out.total();
+            //return out.total(); //reset by dataStoreSeek(n)
+            return outMmap.position() + out.position(); //mmap position plus out buffer position
         }
 
         @Override
@@ -95,6 +99,11 @@ public class TreeWritings {
                     ((KryoBuilder.SerializerPoolCached) serializer).close();
                 }
             }
+        }
+
+        public void flush() {
+            out.flush();
+            out.reset();
         }
 
         protected void closeDataStore() throws IOException {
@@ -175,7 +184,9 @@ public class TreeWritings {
         }
 
         protected void dataStoreSeek(long p) throws IOException {
-            out.getState().seek(p);
+            out.flush();
+            out.reset();
+            outMmap.seek(p);
         }
 
         public void writeEnd() throws IOException {

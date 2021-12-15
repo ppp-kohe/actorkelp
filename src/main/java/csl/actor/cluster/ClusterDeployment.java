@@ -297,6 +297,10 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         return deploy(NON_DRIVER_SYMBOL_CONF, mergedConf, mergedDeployConf);
     }
 
+    public ActorSystemRemote deploy(ConfigDeployment mergedDeployConf) {
+        return deploy(NON_DRIVER_SYMBOL_CONF, mergedDeployConf);
+    }
+
     /**
      * {@link #deploy(List)} with units from {@link #loadConfigFile(String)} which loads the confFile
      * @param confFile a cluster commands file parsed by {@link ClusterCommands#loadConfigFile(String)}, or
@@ -343,6 +347,15 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
             throw new RuntimeException(ex);
         }
     }
+
+    public ActorSystemRemote deploy(String confFile, ConfigDeployment mergedDeployConf) {
+        try {
+            return deploy(loadConfigFile(confFile, mergedDeployConf));
+        } catch (Exception ex) {
+            throw new RuntimeException(ex);
+        }
+    }
+
 
     /**
      * load specified config file by {@link ClusterCommands}.
@@ -420,6 +433,16 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         return loadConfigFile(confFile, mergedConf, null);
     }
 
+    public List<ClusterUnit<AppConfType>> mergeConfigToUnits(List<ClusterUnit<AppConfType>> units, AppConfType mergedConf, ConfigDeployment mergedDeployConf) {
+        if (mergedDeployConf != null) {
+            units.forEach(u -> u.getDeploymentConfig().mergeChangedFields(mergedDeployConf));
+        }
+        if (mergedConf != null) {
+            units.forEach(u -> u.getAppConfig().mergeChangedFields(mergedConf));
+        }
+        return units;
+    }
+
     public String getUnitMainType(ClusterUnit<AppConfType> unit) {
         if (unit.getDeploymentConfig().primary) {
             return primaryMainType;
@@ -438,6 +461,34 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         }
     }
 
+    @SafeVarargs
+    @SuppressWarnings("varargs")
+    public final ActorSystemRemote deployUnits(AppConfType mergedConf, ClusterCommands.ClusterUnit<AppConfType>... units) {
+        try {
+            return deploy(mergedConf, Arrays.asList(units));
+        } catch (Exception ex) {
+            throw new RuntimeException(ex);
+        }
+    }
+    @SafeVarargs
+    @SuppressWarnings("varargs")
+    public final ActorSystemRemote deployUnits(ConfigDeployment mergedDeployConf, ClusterCommands.ClusterUnit<AppConfType>... units) {
+        try {
+            return deploy(mergedDeployConf, Arrays.asList(units));
+        } catch (Exception ex) {
+            throw new RuntimeException(ex);
+        }
+    }
+    @SafeVarargs
+    @SuppressWarnings("varargs")
+    public final ActorSystemRemote deployUnits(AppConfType mergedConf, ConfigDeployment mergedDeployConf, ClusterCommands.ClusterUnit<AppConfType>... units) {
+        try {
+            return deploy(mergedConf, mergedDeployConf, Arrays.asList(units));
+        } catch (Exception ex) {
+            throw new RuntimeException(ex);
+        }
+    }
+
     /**
      *  {@link #deployPrimary(List)}, {@link #deployNode(ClusterUnit)},
      *   and {@link #awaitNodes()}.
@@ -450,6 +501,19 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         deployNodes(units);
         awaitNodes();
         return getSystem();
+    }
+
+    public ActorSystemRemote deploy(AppConfType mergedConf, List<ClusterCommands.ClusterUnit<AppConfType>> units) throws Exception {
+        return deploy(mergeConfigToUnits(units, mergedConf, null));
+    }
+
+    public ActorSystemRemote deploy(ConfigDeployment mergedDeployConf, List<ClusterCommands.ClusterUnit<AppConfType>> units) throws Exception {
+        return deploy(mergeConfigToUnits(units, null, mergedDeployConf));
+    }
+
+    public ActorSystemRemote deploy(AppConfType mergedConf, ConfigDeployment mergedDeployConf,
+                                    List<ClusterCommands.ClusterUnit<AppConfType>> units) throws Exception {
+        return deploy(mergeConfigToUnits(units, mergedConf, mergedDeployConf));
     }
 
     public void deployPrimary(List<ClusterUnit<AppConfType>> units) throws Exception {
@@ -906,8 +970,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         }
 
         protected void initConfigDeployment() {
-            configDeployment = new ConfigDeployment();
-            configDeployment.read("csl.actor", System.getProperties());
+            configDeployment = ConfigDeployment.create().readSystemProperties();
             setDefaultUncaughtHandler(configDeployment);
         }
 
@@ -932,7 +995,7 @@ public class ClusterDeployment<AppConfType extends ConfigBase,
         }
 
         protected String initKryoBuilderType() {
-            return System.getProperty("csl.actor.kryoBuilderType", defaultBuilderType().getName());
+            return configDeployment.kryoBuilderType;
         }
 
         protected ActorSystemRemote initSystem() {
