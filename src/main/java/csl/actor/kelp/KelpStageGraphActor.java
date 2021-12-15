@@ -4,7 +4,6 @@ import csl.actor.*;
 import csl.actor.cluster.ActorPlacement;
 import csl.actor.kelp.behavior.ActorKelpStats;
 import csl.actor.kelp.shuffle.ActorRefShuffle;
-import csl.actor.persist.PersistentConditionMailbox;
 import csl.actor.remote.ActorAddress;
 import csl.actor.remote.ActorRefRemote;
 import csl.actor.remote.ActorSystemRemote;
@@ -850,7 +849,7 @@ public class KelpStageGraphActor extends ActorDefault {
                 monitor.getStageStatusImplAll().format(monitor.getStageStartTime()),
                 String.format(fmt, args));
     }
-    static PersistentConditionMailbox.SampleTiming collectClockLogTiming = new PersistentConditionMailbox.SampleTiming();
+    static SampleTiming collectClockLogTiming = new SampleTiming();
     public static Map<ActorAddress.ActorAddressRemote, Integer> collectClockTable(ActorSystem system, ActorRef a, boolean sendUpdate) {
         Map<ActorAddress.ActorAddressRemote,Integer> hostToClock = new HashMap<>();
         ActorPlacement p = ActorPlacement.getPlacement(system);

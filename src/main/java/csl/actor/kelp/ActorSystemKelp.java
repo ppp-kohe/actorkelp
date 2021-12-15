@@ -9,6 +9,7 @@ import csl.actor.kelp.persist.PersistentConditionActor;
 import csl.actor.remote.ActorAddress;
 import csl.actor.remote.ActorSystemRemote;
 import csl.actor.util.ConfigBase;
+import csl.actor.util.SampleTiming;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -200,6 +201,9 @@ public class ActorSystemKelp extends ActorSystemRemote implements ActorKelpBuild
         protected AtomicReference<Double> memoryManagedActors = new AtomicReference<>(0.0);
         protected SystemLogger originalLogger;
 
+        protected int updateTiming;
+        protected AtomicLong updateCount = new AtomicLong();
+
         @Override
         public ActorSystem system() {
             return this;
@@ -275,6 +279,7 @@ public class ActorSystemKelp extends ActorSystemRemote implements ActorKelpBuild
         public ActorSystemDefaultForKelp withConfig(ConfigKelp config) {
             this.config = config;
             setLogger(new SystemLoggerKelp(originalLogger, configDeployment, config));
+            this.updateTiming = awaitTiming(config.systemPendingMessageSize);
             return this;
         }
 
@@ -340,14 +345,16 @@ public class ActorSystemKelp extends ActorSystemRemote implements ActorKelpBuild
         }
 
         public void updateAndWait(Actor target) {
-            Mailbox mb = target.getMailbox();
-            if (mb instanceof MailboxKelp && !isSpecialThread()) {
-                MailboxKelp kmb = (MailboxKelp) mb;
-                long size = kmb.getMailbox().getPreviousSizeOnMemory();
-                long pendingLimit = config().systemMailboxPendingMessageSize;
-                double factor = config().systemMailboxWaitMsFactor;
-                await(new ActorAwaitLogHandler(this, kmb, pendingLimit, target),
-                        kmb.getHistory(), size, pendingLimit, factor);
+            if (updateCount.incrementAndGet() % updateTiming == 0) {
+                Mailbox mb = target.getMailbox();
+                if (mb instanceof MailboxKelp && !isSpecialThread()) {
+                    MailboxKelp kmb = (MailboxKelp) mb;
+                    long size = kmb.getMailbox().getPreviousSizeOnMemory();
+                    long pendingLimit = config().systemMailboxPendingMessageSize;
+                    double factor = config().systemMailboxWaitMsFactor;
+                    await(new ActorAwaitLogHandler(this, kmb, pendingLimit, target),
+                            kmb.getHistory(), size, pendingLimit, factor);
+                }
             }
         }
 
@@ -598,6 +605,10 @@ public class ActorSystemKelp extends ActorSystemRemote implements ActorKelpBuild
         void logAfter(long waitMs, long mboxSize);
     }
 
+    public static int awaitTiming(long pendingSize) {
+        return (int) Math.max(0, Math.min(Integer.MAX_VALUE, pendingSize / 2));
+    }
+
     public static <HistType extends History<HistType>> void await(AwaitLogHandler log, HistType history, long mboxSize,
                                                                   long pendingMessageLimit, double waitMsFactor) {
         List<HistType> hs = history.toList(HISTORY_SIZE_OLDEST);
@@ -621,11 +632,13 @@ public class ActorSystemKelp extends ActorSystemRemote implements ActorKelpBuild
         protected volatile Instant previousUpdateTime = Instant.now();
         protected volatile ConnectionHostHistory history;
 
+        protected int updateTiming;
         protected AtomicLong updateCount = new AtomicLong();
 
         public ConnectionActorKelp(ActorSystem system, ActorSystemRemote remoteSystem, ConnectionHost host, ActorAddress.ActorAddressRemote address) throws InterruptedException {
             super(system, remoteSystem, address);
             this.host = host;
+            this.updateTiming = awaitTiming(host.getPendingMessageSize());
             this.mailbox = new MailboxForConnection(host);
             initHistory();
         }
@@ -653,7 +666,7 @@ public class ActorSystemKelp extends ActorSystemRemote implements ActorKelpBuild
         }
 
         public void update() {
-            if (updateCount.incrementAndGet() % 1000 == 0) {
+            if (updateCount.incrementAndGet() % updateTiming == 0) {
                 Instant now = Instant.now();
                 Duration d = Duration.between(previousUpdateTime, now);
                 if (d.compareTo(host.getHostUpdateTime()) > 0) {

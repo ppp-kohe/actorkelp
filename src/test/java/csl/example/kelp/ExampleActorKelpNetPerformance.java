@@ -7,7 +7,7 @@ import csl.actor.kelp.ActorKelp;
 import csl.actor.kelp.ClusterKelp;
 import csl.actor.kelp.ConfigKelp;
 import csl.actor.kelp.behavior.ActorBehaviorBuilderKelp;
-import csl.actor.persist.PersistentConditionMailbox;
+import csl.actor.util.SampleTiming;
 import csl.example.TestTool;
 
 import java.io.Serializable;
@@ -107,7 +107,7 @@ public class ExampleActorKelpNetPerformance {
     public static class TestDest extends ActorKelp<TestDest> {
         @TransferredState public long sum;
 
-        PersistentConditionMailbox.SampleTiming logTiming = new PersistentConditionMailbox.SampleTiming();
+        SampleTiming logTiming = new SampleTiming();
         public TestDest(ActorSystem system, String name, ConfigKelp config) {
             super(system, name, config);
         }

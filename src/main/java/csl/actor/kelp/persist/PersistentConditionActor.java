@@ -12,6 +12,7 @@ import csl.actor.persist.PersistentConditionMailbox;
 import csl.actor.persist.PersistentFileManager;
 import csl.actor.remote.ActorSystemRemote;
 import csl.actor.util.ConfigBase;
+import csl.actor.util.SampleTiming;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -167,7 +168,7 @@ public interface PersistentConditionActor {
         protected int treeNodeTableSize;
         protected SystemLoggerConditionActor logger;
         protected PersistentConditionMailbox.MailboxSampler sampler;
-        protected PersistentConditionMailbox.SampleTiming actorUpdateTiming = new PersistentConditionMailbox.SampleTiming(1 << 7, 1 << 23, 1 << 11, 4);
+        protected SampleTiming actorUpdateTiming = new SampleTiming(1 << 7, 1 << 23, 1 << 11, 4);
         protected RuntimeMemoryGuard memoryGuard;
 
         /**
@@ -407,7 +408,7 @@ public interface PersistentConditionActor {
         protected Instant lastTraversal = Instant.now();
         protected Duration lastDuration = Duration.ZERO; //for logging
 
-        protected PersistentConditionMailbox.SampleTiming logReduce = new PersistentConditionMailbox.SampleTiming(1 << 16, 1 << 30, 1 << 20, 2);
+        protected SampleTiming logReduce = new SampleTiming(1 << 16, 1 << 30, 1 << 20, 2);
 
         public ReducedSizeDefault() {
             this(null);
@@ -619,8 +620,8 @@ public interface PersistentConditionActor {
         protected volatile long sizeValuesLimit;
         protected volatile long sizeNodesLimit;
         protected ActorSystem.SystemLogger logger;
-        protected PersistentConditionMailbox.SampleTiming logTimingNeedToPersistFail = new PersistentConditionMailbox.SampleTiming(1 << 20, 1 << 30, 1 << 22, 2);
-        protected PersistentConditionMailbox.SampleTiming logTimingNeedToPersistSuccess = new PersistentConditionMailbox.SampleTiming(4, 128);
+        protected SampleTiming logTimingNeedToPersistFail = new SampleTiming(1 << 20, 1 << 30, 1 << 22, 2);
+        protected SampleTiming logTimingNeedToPersistSuccess = new SampleTiming(4, 128);
         protected RuntimeMemoryGuard memoryGuard;
 
         public PersistentConditionHistogramMemoryLimit(double memoryPersistThresholdFromChecked, long sizeNodesLimit, long sizeValuesLimit,

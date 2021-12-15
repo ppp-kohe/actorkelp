@@ -11,9 +11,9 @@ import csl.actor.kelp.behavior.HistogramTreeNodeLeaf;
 import csl.actor.kelp.behavior.HistogramTreeNodeTable;
 import csl.actor.kelp.behavior.KeyHistograms;
 import csl.actor.kelp.persist.KeyHistogramsPersistable.HistogramPersistentOperationType;
-import csl.actor.persist.PersistentConditionMailbox;
 import csl.actor.persist.PersistentFileManager;
 import csl.actor.util.ConfigBase;
+import csl.actor.util.SampleTiming;
 
 import java.io.IOException;
 import java.io.Serializable;
@@ -859,7 +859,7 @@ public class HistogramTreePersistable extends HistogramTree implements KeyHistog
         public static byte TREE_TAG_NODES = 2;
         public static byte TREE_TAG_FULL_TREE = 3;
 
-        protected PersistentConditionMailbox.SampleTiming logTiming = new PersistentConditionMailbox.SampleTiming(16, 1 << 16);
+        protected SampleTiming logTiming = new SampleTiming(16, 1 << 16);
         protected Duration persistTime = Duration.ZERO;
         protected ActorSystem.SystemLogger logger;
 

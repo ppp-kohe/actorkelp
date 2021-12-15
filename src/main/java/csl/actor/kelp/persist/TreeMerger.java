@@ -3,8 +3,8 @@ package csl.actor.kelp.persist;
 import csl.actor.ActorSystem;
 import csl.actor.kelp.ActorKelpFunctions;
 import csl.actor.kelp.behavior.HistogramTree;
-import csl.actor.persist.PersistentConditionMailbox;
 import csl.actor.persist.PersistentFileManager;
+import csl.actor.util.SampleTiming;
 
 import java.io.Closeable;
 import java.io.IOException;
@@ -43,8 +43,8 @@ public class TreeMerger {
     protected AtomicLong totalWriteBytes = new AtomicLong();
     protected AtomicInteger totalMergedLoaders = new AtomicInteger();
 
-    protected PersistentConditionMailbox.SampleTiming logTimingLoop = new PersistentConditionMailbox.SampleTiming(4, 1024);
-    protected PersistentConditionMailbox.SampleTiming logTiming = new PersistentConditionMailbox.SampleTiming(1 << 20, 1 << 30);
+    protected SampleTiming logTimingLoop = new SampleTiming(4, 1024);
+    protected SampleTiming logTiming = new SampleTiming(1 << 20, 1 << 30);
 
     public TreeMerger(PersistentFileManager manager) {
         this.manager = manager;

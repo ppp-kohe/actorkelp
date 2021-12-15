@@ -112,7 +112,10 @@ public class ActorSystemDefault implements ActorSystem {
     public void sendDeadLetter(Message<?> message) {
         Object data = message.getData();
         ActorRef sender;
-        if (data instanceof Message.MessageDataPacket<?> &&
+        if (data instanceof Message.MessageDataClock<?>) {
+            //ignore: clock is sent as a second part of a network message, but the target is already disappeared
+            return;
+        } else if (data instanceof Message.MessageDataPacket<?> &&
                 (sender = ((Message.MessageDataPacket<?>) data).getSender()) != null) {
             sender.tell(toDeadLetter(message));
         } else {
