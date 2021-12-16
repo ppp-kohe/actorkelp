@@ -1000,7 +1000,7 @@ public class ActorBehaviorKelp {
             if (reserved) {
                 return true;
             } else {
-                boolean allowPersist = reduceForPersist();
+                boolean allowPersist = reduceForPersistedData();
                 return reducedSize.needToReduceForTraversal(allowPersist, tree.getTreeSize(), tree.getTreeSizeOnMemory(), tree);
             }
         }
@@ -1038,10 +1038,19 @@ public class ActorBehaviorKelp {
         @Override
         public void complete(HistogramTreeNodeLeaf leaf) {
             if (!complete(leaf, false)) { //first try on memory
-                if (reduceForPersist()) {  //if failed, retry with persisted loading
+                if (reduceForPersistedData()) {  //if failed, retry with persisted loading
                     complete(leaf, true);
                 }
             }
+        }
+
+        @Override
+        @SuppressWarnings({"unchecked", "rawtypes"})
+        public boolean reduceOnMemory(HistogramTreeNodeLeaf leaf) {
+            HistogramNodeLeafListReducible list = leafToReducible(leaf, false);
+            return (list != null &&
+                    list.consume(putRequiredSize, keyValuesReducer.requiredSize(), putTree, 0, getReducedSize(), true,
+                            (BiFunction) keyValuesReducer, (BiConsumer) handler));
         }
 
         @SuppressWarnings({"unchecked", "rawtypes"})
@@ -1074,7 +1083,7 @@ public class ActorBehaviorKelp {
             }
         }
 
-        public boolean reduceForPersist() {
+        public boolean reduceForPersistedData() {
             return true;
         }
 
@@ -1160,13 +1169,17 @@ public class ActorBehaviorKelp {
         protected List<Object> poll(int requiredSize, HistogramTree tree, Object position, MailboxKelp.ReducedSize reducedSize,
                                     boolean onMemory) {
             int consuming = Math.max(requiredSize, reducedSize.nextReducedSize(size()));
-            List<Object> vs = new ArrayList<>(consuming);
+            Object[] vs = new Object[consuming];
             try {
-                values.polls(tree, position, this, consuming, vs, onMemory);
+                int len = values.polls(tree, position, this, consuming, vs, onMemory);
+                if (len < consuming) {
+                    return Arrays.asList(Arrays.copyOf(vs, len));
+                } else {
+                    return Arrays.asList(vs);
+                }
             } catch (Exception ex) {
-                throw new RuntimeException(String.format("size=%,d, consuming=%,d actual=%,d required=%,d", size(), consuming, vs.size(), requiredSize), ex);
+                throw new RuntimeException(String.format("size=%,d, consuming=%,d required=%,d", size(), consuming, requiredSize), ex);
             }
-            return vs;
         }
 
         protected ReduceResult reduceAndHandle(int requiredSize, int reduceRequiredSize,
@@ -1344,7 +1357,17 @@ public class ActorBehaviorKelp {
         }
 
         @Override
-        public boolean reduceForPersist() {
+        public boolean reduceOnMemory(HistogramTreeNodeLeaf leaf) {
+            if (keyValuesReducer instanceof KeyValuesReducerNone || //no handler at the time
+                    leaf.sizeOnMemory() < keyValuesReducer.requiredSize()) {
+                return false;
+            } else {
+                return super.reduceOnMemory(leaf);
+            }
+        }
+
+        @Override
+        public boolean reduceForPersistedData() {
             return false;
         }
 
@@ -1374,7 +1397,7 @@ public class ActorBehaviorKelp {
                                     new ActorKelpStats.ActorKelpStageEndStats(merger));
                         }
                         //the tree data will be cleared by full-tree-persist
-                        PersistentFileManager.PersistentFileReaderSource source = merger.mergeAllFromTree();
+                        PersistentFileManager.PersistentFileReaderSource source = merger.mergeAllFromTree(this);
                         if (source != null) {
                             long length = merger.getLastLength();
                             TreeMerger.MergeLoader mergeLoader = new TreeMerger.MergeLoader(source);

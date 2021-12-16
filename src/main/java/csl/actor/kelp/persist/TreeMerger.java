@@ -89,11 +89,11 @@ public class TreeMerger {
         return lastLength;
     }
 
-    public PersistentFileManager.PersistentFileReaderSource mergeAllFromTree() throws IOException {
+    public PersistentFileManager.PersistentFileReaderSource mergeAllFromTree(HistogramTreePersistable.ReducerBeforePersist reducer) throws IOException {
         PersistentFileManager.PersistentFileReaderSource source = null;
         if (tree instanceof HistogramTreePersistable) {
             if (tree.getRoot() != null) { //saving memory
-                source = ((HistogramTreePersistable) tree).persistTree();
+                source = ((HistogramTreePersistable) tree).persistTree(null);
             } else {
                 source = ((HistogramTreePersistable) tree).getPreviousFullTreeSource();
             }

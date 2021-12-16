@@ -268,7 +268,7 @@ public class ExampleKeyHistogramsPersistableTest {
 
             checkTreeSize(tree, ctx);
 
-            tree.persistTree(tree.getTreeSize());
+            tree.persistTree(tree.getTreeSize(), null);
             check(tree, ctx);
 
             checkTreeSize(tree, ctx);
@@ -287,7 +287,7 @@ public class ExampleKeyHistogramsPersistableTest {
             KeyHistograms.HistogramPutContextMap ctx = new KeyHistograms.HistogramPutContextMap();
             input(tree, ctx);
 
-            tree.persistLargeLeaves();
+            tree.persistLargeLeaves(null);
             check(tree, ctx);
 
             checkTreeSize(tree, ctx);

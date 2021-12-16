@@ -20,10 +20,7 @@ import java.io.IOException;
 import java.io.Serializable;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Map;
-import java.util.Random;
+import java.util.*;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
@@ -229,7 +226,7 @@ public class HistogramTreePersistable extends HistogramTree implements KeyHistog
     public void put(Object key, KeyHistograms.HistogramPutContext context) {
         super.put(key, context);
         updateHistory(context);
-        persistIfNeeded(context.allowFullTreePersist());
+        persistIfNeeded(context.allowFullTreePersist(), context);
     }
 
     protected void updateHistory(KeyHistograms.HistogramPutContext context) {
@@ -302,13 +299,17 @@ public class HistogramTreePersistable extends HistogramTree implements KeyHistog
         return Math.max(1, nodes);
     }
 
-    protected void persistIfNeeded(boolean allowFullTreePersist) {
+    public interface ReducerBeforePersist {
+        boolean reduceOnMemory(HistogramTreeNodeLeaf leaf);
+    }
+
+    protected void persistIfNeeded(boolean allowFullTreePersist, ReducerBeforePersist context) {
         KeyHistogramsPersistable.HistogramPersistentOperation op = checkPersist("afterPut");
         if (op.equals(HistogramPersistentOperationType.FullTree) &&
             !allowFullTreePersist) {
             op = new KeyHistogramsPersistable.HistogramPersistentOperationTree(getTreeSizeOnMemory());
         }
-        persist(op);
+        persist(op, context);
     }
 
     @Override
@@ -317,13 +318,13 @@ public class HistogramTreePersistable extends HistogramTree implements KeyHistog
         return !op.isNone();
     }
 
-    public void persist(KeyHistogramsPersistable.HistogramPersistentOperation op) {
+    public void persist(KeyHistogramsPersistable.HistogramPersistentOperation op, ReducerBeforePersist context) {
         if (op.equals(HistogramPersistentOperationType.LargeLeaves)) {
-            persistLargeLeaves();
+            persistLargeLeaves(context);
         } else if (op.equals(HistogramPersistentOperationType.FullTree)) {
-            persistTree();
+            persistTree(context);
         } else if (op instanceof KeyHistogramsPersistable.HistogramPersistentOperationTree) {
-            persistTree(((KeyHistogramsPersistable.HistogramPersistentOperationTree) op).getSizeLimit());
+            persistTree(((KeyHistogramsPersistable.HistogramPersistentOperationTree) op).getSizeLimit(), context);
         }
     }
 
@@ -343,11 +344,11 @@ public class HistogramTreePersistable extends HistogramTree implements KeyHistog
         }
     }
 
-    public void persistLargeLeaves() {
-        persistLargeLeaves(onMemorySize);
+    public void persistLargeLeaves(ReducerBeforePersist context) {
+        persistLargeLeaves(onMemorySize, context);
     }
 
-    public void persistLargeLeaves(long keepSize) {
+    public void persistLargeLeaves(long keepSize, ReducerBeforePersist context) {
         if (root != null) {
             writeTree(PersistentTreeManager.TREE_TAG_LEAVES, s -> {
                 long prevPersist = this.persistedSize;
@@ -365,7 +366,7 @@ public class HistogramTreePersistable extends HistogramTree implements KeyHistog
                     throw new RuntimeException(ex);
                 }
 
-                persistLargeLeaves(root, s.writer, keepSize);
+                persistLargeLeaves(root, s.writer, keepSize, context);
 
                 s.logAfter(() -> String.format("keep=%,d persisted=(%,d %+,d) nodes=(tblMem:%,d leafMem:%,d) valsMem=%,d",
                         keepSize, persistedSize, (persistedSize - prevPersist),
@@ -401,19 +402,22 @@ public class HistogramTreePersistable extends HistogramTree implements KeyHistog
         }
     }
 
-    public void persistLargeLeaves(KeyHistograms.HistogramTreeNode node, PersistentFileManager.PersistentWriter w, long keepSize) {
+    public void persistLargeLeaves(KeyHistograms.HistogramTreeNode node, PersistentFileManager.PersistentWriter w, long keepSize, ReducerBeforePersist context) {
         if (node.size() > keepSize) {
             if (node instanceof HistogramTreeNodeTable) {
                 for (KeyHistograms.HistogramTreeNode child : ((HistogramTreeNodeTable) node).getChildrenOnMemory()) {
-                    persistLargeLeaves(child, w, keepSize);
+                    persistLargeLeaves(child, w, keepSize, context);
                 }
             } else if (node instanceof HistogramTreeNodeLeaf) {
-                persistList((HistogramTreeNodeLeaf) node, w, keepSize);
+                persistList((HistogramTreeNodeLeaf) node, w, keepSize, context);
             }
         }
     }
 
-    public void persistList(HistogramTreeNodeLeaf leaf, PersistentFileManager.PersistentWriter w, long keepSize) {
+    public void persistList(HistogramTreeNodeLeaf leaf, PersistentFileManager.PersistentWriter w, long keepSize, ReducerBeforePersist context) {
+        if (context != null) {
+            context.reduceOnMemory(leaf);
+        }
         List<KeyHistograms.HistogramLeafList> valuesList = leaf.getStructList();
         int lists = valuesList.size();
         KeyHistograms.HistogramLeafCell[] persistedTop = new KeyHistograms.HistogramLeafCell[lists];
@@ -468,9 +472,9 @@ public class HistogramTreePersistable extends HistogramTree implements KeyHistog
         persistedSize--;
     }
 
-    public void persistTree(long sizeLimit) {
+    public void persistTree(long sizeLimit, ReducerBeforePersist context) {
         float[] ms = toPersistTreeDist(this.history.totalMean());
-        persistTree(Math.min(getTreeSizeOnMemory(), sizeLimit), ms);
+        persistTree(Math.min(getTreeSizeOnMemory(), sizeLimit), context, ms);
     }
 
     private float[] toPersistTreeDist(float[] ms) {
@@ -486,7 +490,7 @@ public class HistogramTreePersistable extends HistogramTree implements KeyHistog
      * @param persistingLimit the limit leaves for writing
      * @param distribution value distribution in the tree
      */
-    public void persistTree(long persistingLimit, float... distribution) {
+    public void persistTree(long persistingLimit, ReducerBeforePersist context, float... distribution) {
         //it does not check persistingLimit>0, persistTreeNode might save some sub-trees even under the condition
         writeTree(PersistentTreeManager.TREE_TAG_NODES, session -> {
             long prevPersisted = persistedSize;
@@ -506,7 +510,7 @@ public class HistogramTreePersistable extends HistogramTree implements KeyHistog
 
             Class<?> kt = finalKeyType();
             root = persistTreeNode( root, 0, 1f, distribution, persistingLimit, session.writer,
-                    new PersistTreeContext(false, kt, session.writer.serializer(kt)));
+                    new PersistTreeContext(false, kt, session.writer.serializer(kt), context));
 
             session.logAfter(() -> String.format("limit=%,d persisted=(%,d %+,d) nodes=(tblMem:%,d leafMem:%,d) valsMem=%,d dist=%s", persistingLimit,
                     persistedSize, (persistedSize - prevPersisted),
@@ -564,6 +568,7 @@ public class HistogramTreePersistable extends HistogramTree implements KeyHistog
             long nSize = node.size();
 
             try (TreeWritings.TreeWriting w = pw.subWriting()) {
+                boolean remove = false;
                 for (int i = 0; i < csSize; ++i) {
                     float p = rangeStart + (i / (float) csSize) * rangeLength;
                     float d = distribution[(int) Math.min(distribution.length - 1, Math.max(0, distribution.length * p))];
@@ -573,7 +578,11 @@ public class HistogramTreePersistable extends HistogramTree implements KeyHistog
                         persisted[i] = true;
 
                         long prevPersisted = this.persistedSize;
-                        cs.set(i, persistTreeNodeReplace(cs.get(i), w, context));
+                        KeyHistograms.HistogramTreeNode c = persistTreeNodeReplace(cs.get(i), w, context);
+                        if (c == null) {
+                            remove = true;
+                        }
+                        cs.set(i, c);
                         persistedSizeOfNode += this.persistedSize - prevPersisted;
                     }
                 }
@@ -588,9 +597,17 @@ public class HistogramTreePersistable extends HistogramTree implements KeyHistog
                             double sizeP = cSize / (double) nSize;
 
                             float p = rangeStart + (i / (float) csSize) * rangeLength;
-                            cs.set(i, persistTreeNode(cs.get(i), p, r, distribution, (long) (remaining * sizeP), w, context));
+                            KeyHistograms.HistogramTreeNode c = persistTreeNode(cs.get(i), p, r, distribution, (long) (remaining * sizeP), w, context);
+                            if (c == null) {
+                                remove = true;
+                            }
+                            cs.set(i, c);
                         }
                     }
+                }
+
+                if (remove) {
+                    cs.removeIf(Objects::isNull);
                 }
             } catch (Exception ex) {
                 throw new RuntimeException(ex);
@@ -614,11 +631,13 @@ public class HistogramTreePersistable extends HistogramTree implements KeyHistog
         private boolean fullTree;
         private Class<?> keyType;
         private Serializer<?> keySerializer;
+        private ReducerBeforePersist reducer;
 
-        public PersistTreeContext(boolean fullTree, Class<?> keyType, Serializer<?> keySerializer) {
+        public PersistTreeContext(boolean fullTree, Class<?> keyType, Serializer<?> keySerializer, ReducerBeforePersist reducer) {
             this.fullTree = fullTree;
             this.keyType = keyType;
             this.keySerializer = keySerializer;
+            this.reducer = reducer;
         }
 
         public Class<?> getKeyType() {
@@ -627,6 +646,10 @@ public class HistogramTreePersistable extends HistogramTree implements KeyHistog
 
         public Serializer<?> getKeySerializer() {
             return keySerializer;
+        }
+
+        public ReducerBeforePersist getReducer() {
+            return reducer;
         }
 
         public KeyHistogramsPersistable.NodeTreeData treeData() { //shared: the Kryo references are reset for each write: finally reset() in writeClassAndObject()
@@ -666,12 +689,26 @@ public class HistogramTreePersistable extends HistogramTree implements KeyHistog
 //                return persistTreeNodeReplaceMoveLeaf((HistogramTreeNodeLeafOnStorage) node, w, context);
             } else {
                 boolean leaf = (node instanceof HistogramTreeNodeLeaf);
+                if (leaf && context.getReducer() != null && ((HistogramTreeNodeLeaf) node).sizeOnMemory() >= 100) {
+                    context.getReducer().reduceOnMemory((HistogramTreeNodeLeaf) node);
+                }
+                long size = node.size();
+                if (size == 0) {
+                    if (!context.isFullTree()) {
+                        if (leaf) {
+                            addLeafSizeOnMemory(-1L);
+                        } else {
+                            addNodeSizeOnMemory(-1L);
+                        }
+                    }
+                    return null;
+                }
                 PersistentFileManager.PersistentFileReaderSource src = w.writeBegin(); //long sibling=0
                 KeyHistogramsPersistable.NodeTreeData data = context.treeData();
                 data.leaf = leaf;
                 data.keyStart = node.keyStart();
                 data.keyEnd = node.keyEnd();
-                data.size = node.size(); //suppose no on-memory cells
+                data.size = size; //suppose no on-memory cells
                 w.writeByte(KeyHistogramsPersistable.TAG_NODE);
                 data.write(w, context.getKeySerializer()); //NodeTreeData
 
@@ -736,7 +773,7 @@ public class HistogramTreePersistable extends HistogramTree implements KeyHistog
         if (fullTree) {
             return node;
         } else {
-            KeyHistograms.HistogramTreeNode newNode = null;
+            KeyHistograms.HistogramTreeNode newNode;
             if (node instanceof HistogramTreeNodeTable) {
                 addNodeSizeOnMemory(-1L);
                 newNode = new HistogramTreeNodeTableOnStorage(data, src);
@@ -1087,7 +1124,7 @@ public class HistogramTreePersistable extends HistogramTree implements KeyHistog
      * @return the saved source, set to {@link #getPreviousFullTreeSource()}
      * @see KeyHistogramsPersistable.NodeTreeData
      */
-    public PersistentFileManager.PersistentFileReaderSource persistTree() {
+    public PersistentFileManager.PersistentFileReaderSource persistTree(ReducerBeforePersist context) {
         previousFullTreeSource = writeTree(PersistentTreeManager.TREE_TAG_FULL_TREE, session -> {
             try {
                 long prevNodesOnMem = getNodeSizeOnMemory();
@@ -1106,7 +1143,7 @@ public class HistogramTreePersistable extends HistogramTree implements KeyHistog
                 w.write(this);
 
                 Class<?> kt = finalKeyType();
-                persistTreeTraverse(currentRoot, w, new PersistTreeContext(true, kt, w.serializer(kt)));
+                persistTreeTraverse(currentRoot, w, new PersistTreeContext(true, kt, w.serializer(kt), context));
 
                 w.writeLong(0L); //long sibling; invalid
                 w.write(PersistentFileManager.FILE_END); //PersistentFileEnd

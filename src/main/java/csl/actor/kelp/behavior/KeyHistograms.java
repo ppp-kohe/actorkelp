@@ -7,6 +7,7 @@ import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 import csl.actor.Actor;
 import csl.actor.kelp.ActorKelpFunctions.KeyComparator;
+import csl.actor.kelp.persist.HistogramTreePersistable;
 import csl.actor.persist.PersistentFileManager;
 
 import java.io.IOException;
@@ -39,7 +40,7 @@ public class KeyHistograms {
         return tree.init(persistent);
     }
 
-    public static abstract class HistogramPutContext {
+    public static abstract class HistogramPutContext implements HistogramTreePersistable.ReducerBeforePersist {
         /** set by actor caller*/
         public Actor putActor;
         /** (in most cases) fixed at construction */
@@ -119,6 +120,15 @@ public class KeyHistograms {
             return (HistogramTreeNodeLeaf) leafType
                     .getConstructor(Object.class, KeyHistograms.HistogramPutContext.class)
                     .newInstance(key, this);
+        }
+
+        /**
+         * reducing before persisting
+         * @param leaf the target leaf
+         * @return true if some values are processed
+         */
+        public boolean reduceOnMemory(HistogramTreeNodeLeaf leaf) {
+            return false;
         }
     }
 
@@ -427,14 +437,22 @@ public class KeyHistograms {
             return null;
         }
 
-        public void polls(HistogramTree tree, Object position, HistogramTreeNodeLeaf leaf, int consuming, List<Object> target, boolean onMemory) {
+        public int polls(HistogramTree tree, Object position, HistogramTreeNodeLeaf leaf, int consuming, Object[] target, boolean onMemory) {
             HistogramLeafCell cell = head;
+            int targetIndex = 0;
             while (cell != null && consuming > 0) {
-                long remain = onMemory ? cell.sizeOnMemory() : cell.size();
-                while (remain > 0 && consuming > 0) {
-                    target.add(cell.poll(tree, position, leaf));
-                    --remain;
-                    --consuming;
+                if (cell instanceof HistogramLeafCellArray) {
+                    int len = ((HistogramLeafCellArray) cell).polls(target, targetIndex, consuming);
+                    targetIndex += len;
+                    consuming -= len;
+                } else {
+                    long remain = onMemory ? cell.sizeOnMemory() : cell.size();
+                    while (remain > 0 && consuming > 0) {
+                        target[targetIndex] = cell.poll(tree, position, leaf);
+                        ++targetIndex;
+                        --remain;
+                        --consuming;
+                    }
                 }
                 if (!cell.isNonEmpty()) { //remove cell
                     HistogramLeafCell prev = cell.prev;
@@ -457,6 +475,7 @@ public class KeyHistograms {
                 }
                 cell = cell.next;
             }
+            return targetIndex;
         }
 
         public long count() {
@@ -752,6 +771,29 @@ public class KeyHistograms {
                     head++;
                     return v;
                 }
+            }
+        }
+
+        public int polls(Object[] target, int targetIndex, int targetLength) {
+            if (tail < 0) {
+                int cap = values.length;
+                int len = Math.min(cap - head, targetLength);
+                System.arraycopy(values, head, target, targetIndex, len);
+
+                int cap2 = -(tail+1);
+                int len2 = Math.min(cap2, targetLength - len);
+                System.arraycopy(values, 0, target, targetIndex + len, len2);
+                head += len;
+                if (head >= values.length) {
+                    head = len2;
+                    tail = cap2;
+                }
+                return len + len2;
+            } else {
+                int len = Math.min(tail - head, targetLength);
+                System.arraycopy(values, head, target, targetIndex, len);
+                head += len;
+                return len;
             }
         }
 
