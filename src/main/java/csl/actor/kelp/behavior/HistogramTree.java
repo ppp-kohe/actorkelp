@@ -4,10 +4,12 @@ import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.KryoSerializable;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
+import com.esotericsoftware.kryo.util.Util;
 import csl.actor.kelp.ActorKelpFunctions;
 import csl.actor.persist.PersistentFileManager;
 
 import java.io.Serializable;
+import java.lang.reflect.Modifier;
 import java.util.*;
 
 public class HistogramTree implements Serializable, KryoSerializable, Cloneable {
@@ -22,6 +24,11 @@ public class HistogramTree implements Serializable, KryoSerializable, Cloneable 
     protected long leafSizeOnMemory;
     protected long nodeSizeOnMemory; //onMemory means the node is loaded
     protected int height;
+    protected Class<?> keyType;
+    protected Map<Object,Class<?>> valueTypesForPositions;
+
+    protected transient Class<?> keyTypeFinal;
+    protected transient Map<Object,Class<?>> valueTypesForPositionsFinal = Collections.emptyMap();
 
     protected PersistentFileManager persistent;
 
@@ -47,6 +54,55 @@ public class HistogramTree implements Serializable, KryoSerializable, Cloneable 
     }
 
     public HistogramTree() {
+    }
+
+    public Class<?> getKeyType() {
+        return keyType;
+    }
+
+    public Map<Object, Class<?>> getValueTypesForPositions() {
+        return valueTypesForPositions;
+    }
+
+    public Class<?> finalValueTypeOrNull(Object position) {
+        return valueTypesForPositionsFinal.get(position);
+    }
+    public Class<?> finalKeyType() {
+        return keyTypeFinal;
+    }
+
+    public static Class<?> finalValueTypeOrNull(Map<Object,Class<?>> valueTypesForPositions, Object position) {
+        if (valueTypesForPositions == null) {
+            return null;
+        } else {
+            return finalTypeOrNull(valueTypesForPositions.get(position));
+        }
+    }
+
+    public static Class<?> finalTypeOrNull(Class<?> t) {
+        if (t == null) {
+            return null;
+        } else {
+            if ((t.isArray() && Modifier.isFinal(Util.getElementClass(t).getModifiers())) ||
+                    Modifier.isFinal(t.getModifiers())) {
+                return t;
+            } else {
+                return null;
+            }
+        }
+    }
+
+    public HistogramTree withTypes(Class<?> keyType, Map<Object,Class<?>> valueTypesForPositions) {
+        this.keyType = keyType;
+        this.valueTypesForPositions = valueTypesForPositions;
+        this.keyTypeFinal = finalTypeOrNull(keyType);
+        if (valueTypesForPositions != null) {
+            HashMap<Object, Class<?>> map = new HashMap<>(valueTypesForPositions.size());
+            valueTypesForPositions.forEach((k,v) ->
+                    map.put(k, finalTypeOrNull(v)));
+            this.valueTypesForPositionsFinal = map;
+        }
+        return this;
     }
 
     public boolean hasSufficientPoints() {
@@ -86,7 +142,7 @@ public class HistogramTree implements Serializable, KryoSerializable, Cloneable 
         if (root == null) {
             return createTree(null);
         } else {
-            HistogramTree left = createTree(root.split(root.size() / 2, 0));
+            HistogramTree left = createTree(root.split(this, root.size() / 2, 0));
             prune(true);
             left.prune(true);
 
@@ -95,7 +151,7 @@ public class HistogramTree implements Serializable, KryoSerializable, Cloneable 
         }
     }
 
-    public void fixNodeSIze() {
+    public void fixNodeSize() {
         updateNodeSize(root);
     }
 
@@ -128,7 +184,8 @@ public class HistogramTree implements Serializable, KryoSerializable, Cloneable 
     }
 
     public HistogramTree createTree(KeyHistograms.HistogramTreeNode root) {
-        return new HistogramTree(root, comparator, treeLimit, persistent);
+        return new HistogramTree(root, comparator, treeLimit, persistent)
+                .withTypes(keyType, valueTypesForPositions);
     }
 
     @SuppressWarnings("unchecked")
@@ -353,6 +410,9 @@ public class HistogramTree implements Serializable, KryoSerializable, Cloneable 
         this.nodeSizeOnMemory = input.readVarLong(true);
         this.leafSizeOnMemory = input.readVarLong(true);
         this.height = input.readVarInt(true);
+        this.keyType = (Class<?>) kryo.readClassAndObject(input);
+        this.valueTypesForPositions = (Map<Object,Class<?>>) kryo.readClassAndObject(input);
+        withTypes(keyType, valueTypesForPositions); //set final types
     }
 
     @Override
@@ -367,6 +427,8 @@ public class HistogramTree implements Serializable, KryoSerializable, Cloneable 
         output.writeVarLong(this.nodeSizeOnMemory, true);
         output.writeVarLong(this.leafSizeOnMemory, true);
         output.writeVarInt(this.height, true);
+        kryo.writeClassAndObject(output, this.keyType);
+        kryo.writeClassAndObject(output, this.valueTypesForPositions);
     }
 
     public HistogramTree copy() {

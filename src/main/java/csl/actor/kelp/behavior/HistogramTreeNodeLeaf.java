@@ -126,7 +126,7 @@ public abstract class HistogramTreeNodeLeaf implements KeyHistograms.HistogramTr
     }
 
     @Override
-    public KeyHistograms.HistogramTreeNode split(long halfSize, long currentLeft) {
+    public KeyHistograms.HistogramTreeNode split(HistogramTree tree, long halfSize, long currentLeft) {
         return null;
     }
 

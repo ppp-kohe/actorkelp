@@ -2,6 +2,7 @@ package csl.actor.kelp.persist;
 
 import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.KryoSerializable;
+import com.esotericsoftware.kryo.Serializer;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 import csl.actor.ActorSystem;
@@ -18,13 +19,14 @@ import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 import java.util.function.Function;
 
 /**
  * <ul>
  *    <li>{@link KeyHistogramsPersistable} : the tree factory
  *       <ul>
- *         <li>{@link #create(KeyComparator, int)} : creates {@link HistogramTreePersistable}</li>
+ *         <li>{@link #create(KeyComparator, int, Class, Map)} : creates {@link HistogramTreePersistable}</li>
  *       </ul>
  *    </li>
  *    <li> {@link HistogramTreePersistableConfig} : the config interface.
@@ -63,8 +65,9 @@ public class KeyHistogramsPersistable extends KeyHistograms {
     }
 
     @Override
-    public HistogramTreePersistable create(KeyComparator<?> comparator, int treeLimit) {
-        return new HistogramTreePersistable(comparator, treeLimit, config, persistent, condition);
+    public HistogramTreePersistable create(KeyComparator<?> comparator, int treeLimit, Class<?> keyType, Map<Object,Class<?>> valueTypesForPositions) {
+        return new HistogramTreePersistable(comparator, treeLimit, config, persistent, condition)
+                .withTypes(keyType, valueTypesForPositions);
     }
 
     public HistogramTreePersistableConfig getConfig() {
@@ -203,11 +206,15 @@ public class KeyHistogramsPersistable extends KeyHistograms {
         }
     }
 
+    public static final byte TAG_END = 0;
+    public static final byte TAG_NODE = 1;
+    public static final byte TAG_SOURCE = 2;
 
     /**
      * <pre>
      * node:
      *   long sibling,
+     *   byte tag = 1, //TAG_NODE
      *   NodeTreeData (false, keyStart, keyEnd, size)
      *   child0,
      *   ...
@@ -216,6 +223,7 @@ public class KeyHistogramsPersistable extends KeyHistograms {
      *
      * leaf:
      *   long sibling,
+     *   byte tag = 1, //TAG_NODE
      *   NodeTreeData (true, keyStart, keyEnd, size),
      *   Class nodeType,
      *   var int listCount,
@@ -227,11 +235,12 @@ public class KeyHistogramsPersistable extends KeyHistograms {
      *
      *  persisted:
      *   long sibling,
+     *   byte tag = 2, //TAG_SOURCE
      *   PersistentFileReaderSource(path, offset) //the order is intended for distinguishing persisted or not
      *   NodeTreeData
      *  </pre>
      */
-    public static class NodeTreeData implements Serializable, KryoSerializable {
+    public static class NodeTreeData implements Serializable {
         public static final long serialVersionUID = 1L;
         public boolean leaf;
         public long size;
@@ -248,25 +257,39 @@ public class KeyHistogramsPersistable extends KeyHistograms {
                     '}';
         }
 
-        @Override
-        public void write(Kryo kryo, Output output) {
-            output.writeBoolean(leaf);
-            output.writeVarLong(size, true);
-            kryo.writeClassAndObject(output, keyStart);
-            if (!leaf) {
-                kryo.writeClassAndObject(output, keyEnd);
+        public void write(PersistentFileManager.PersistentWriter writer, Serializer<?> serializer) throws IOException {
+            writer.writeByte((byte) (leaf ? 1 : 0));
+            writer.writeVarLong(size, true);
+            if (serializer == null) {
+                writer.write(keyStart);
+                if (!leaf) {
+                    writer.write(keyEnd);
+                }
+            } else {
+                writer.write(keyStart, serializer);
+                if (!leaf) {
+                    writer.write(keyEnd, serializer);
+                }
             }
         }
 
-        @Override
-        public void read(Kryo kryo, Input input) {
-            leaf = input.readBoolean();
-            size = input.readVarLong(true);
-            keyStart = kryo.readClassAndObject(input);
-            if (leaf) {
-                keyEnd = keyStart;
+        public void read(PersistentFileManager.PersistentReader reader, Class<?> keyType, Serializer<?> serializer) {
+            leaf = (reader.nextByte() != 0);
+            size = reader.nextVarLong(true);
+            if (serializer == null) {
+                keyStart = reader.next();
+                if (leaf) {
+                    keyEnd = keyStart;
+                } else {
+                    keyEnd = reader.next();
+                }
             } else {
-                keyEnd = kryo.readClassAndObject(input);
+                keyStart = reader.next(keyType, serializer);
+                if (leaf) {
+                    keyEnd = keyStart;
+                } else {
+                    keyEnd = reader.next(keyType, serializer);
+                }
             }
         }
     }
@@ -354,20 +377,25 @@ public class KeyHistogramsPersistable extends KeyHistograms {
             HistogramTree tree = (HistogramTree) r.next();
             long size = r.nextLong();
 
+            Class<?> kt = tree.finalKeyType();
+            Serializer<?> keySer = r.serializer(kt);
+
             r.nextLong(); //sibling
-            Object obj = r.next();
-            long rootPos = r.position();
-            if (obj instanceof NodeTreeData) {
-                NodeTreeData data = (NodeTreeData) obj;
+            byte nodeTag = r.nextByte(); //tag
+            if (nodeTag == KeyHistogramsPersistable.TAG_NODE) {
+                NodeTreeData data = new NodeTreeData();
+                data.read(r, kt, keySer);
+                long rootPos = r.position();
                 if (data.leaf) {
                     tree.setRoot(new HistogramTreeNodeLeafOnStorage(data, src.newSource(rootPos)));
                 } else {
                     tree.setRoot(new HistogramTreeNodeTableOnStorage(data, src.newSource(rootPos)));
                 }
-            } else if (obj instanceof PersistentFileManager.PersistentFileReaderSource) {
-                PersistentFileManager.PersistentFileReaderSource rootSrc = (PersistentFileManager.PersistentFileReaderSource) obj;
+            } else if (nodeTag == KeyHistogramsPersistable.TAG_SOURCE) {
+                PersistentFileManager.PersistentFileReaderSource rootSrc = (PersistentFileManager.PersistentFileReaderSource) r.next();
                 rootSrc.setManager(src.getManager());
-                NodeTreeData data = (NodeTreeData) r.next();
+                NodeTreeData data = new NodeTreeData();
+                data.read(r, kt, keySer);
                 if (data.leaf) {
                     tree.setRoot(new HistogramTreeNodeLeafOnStorage(data, rootSrc));
                 } else {
@@ -404,6 +432,9 @@ public class KeyHistogramsPersistable extends KeyHistograms {
         protected FullTreeLoaderData stack;
 
         protected boolean loaded = false;
+
+        protected Class<?> keyType;
+        protected Serializer<?> keySerializer;
         
         public FullTreeLoader(PersistentFileManager.PersistentFileReaderSource source) throws IOException {
             this.source = source;
@@ -421,6 +452,12 @@ public class KeyHistogramsPersistable extends KeyHistograms {
             return reader;
         }
 
+        /**
+         * reading tree-data saved {@link HistogramTreePersistable.PersistentTreeManager}
+         * and searching a fullTree-persisted data.
+         * @return true if found, and then the source is set to the top position of the found data
+         * @throws IOException  error by reader
+         */
         public boolean jumpToLastFullTree() throws IOException {
             TreeWritings.TreeReader reader = reader();
             long lastPointer = -1L;
@@ -464,6 +501,11 @@ public class KeyHistogramsPersistable extends KeyHistograms {
             return current;
         }
 
+        /**
+         * reading tree-data saved {@link HistogramTreePersistable.PersistentTreeManager}.
+         * suppose the source.offset is set the top of a full-tree persist data jumped by {@link #jumpToLastFullTree()}
+         * @throws IOException error by reader
+         */
         public void start() throws IOException {
             TreeWritings.TreeReader reader = reader();
             loaded = true;
@@ -475,6 +517,10 @@ public class KeyHistogramsPersistable extends KeyHistograms {
             current = (HistogramTreePersistable) reader.next();
             if (current != null && current.getPersistent() == null) {
                 current.init(source.getManager());
+            }
+            if (current != null) {
+                keyType = current.finalKeyType();
+                keySerializer = reader.serializer(keyType);
             }
             currentContext = new HistogramPutContextMap(current);
 
@@ -503,19 +549,21 @@ public class KeyHistogramsPersistable extends KeyHistograms {
 
         protected boolean enterToLeafSegment() throws IOException {
             long sibling = reader.nextLong();
-            Object obj = reader.next();
-            if (obj instanceof NodeTreeData) {
-                NodeTreeData treeData = (NodeTreeData) obj;
+            byte tag = reader.nextByte();
+            if (tag == KeyHistogramsPersistable.TAG_NODE) {
+                NodeTreeData treeData = new NodeTreeData();
+                treeData.read(reader, keyType, keySerializer);
                 if (treeData.leaf) {
                     return enterToLeafSegmentLeaf(sibling, treeData);
                 } else {
                     this.stack = new FullTreeLoaderDataTable(stack, sibling, treeData);
                     return enterToLeafSegment();
                 }
-            } else if (obj instanceof PersistentFileManager.PersistentFileReaderSource) {
-                PersistentFileManager.PersistentFileReaderSource src = (PersistentFileManager.PersistentFileReaderSource) obj;
+            } else if (tag == KeyHistogramsPersistable.TAG_SOURCE) {
+                PersistentFileManager.PersistentFileReaderSource src = (PersistentFileManager.PersistentFileReaderSource) reader.next();
                 src.setManager(source.getManager());
-                NodeTreeData treeData = (NodeTreeData) reader.next();
+                NodeTreeData treeData = new NodeTreeData();
+                treeData.read(reader, keyType, keySerializer);
                 if (treeData.leaf) {
                     stack = new FullTreeLoaderDataNodeLeaf(stack, sibling, new HistogramTreeNodeLeafOnStorage(treeData, src).load(currentContext));
                 } else {
@@ -542,7 +590,7 @@ public class KeyHistogramsPersistable extends KeyHistograms {
             stack.headers = headers;
             stack.headerIndex = 0;
 
-            FullTreeLoaderDataLeafSegment stackSeg = stack.nextList(reader);
+            FullTreeLoaderDataLeafSegment stackSeg = stack.nextList(tree(), reader);
             if (stackSeg != null) {
                 this.stack = stackSeg;
                 return true;
@@ -620,7 +668,7 @@ public class KeyHistogramsPersistable extends KeyHistograms {
                         stackSeg.nextSegment(); //load next segment
                     }
                 } else if (stack instanceof FullTreeLoaderDataLeaf) {
-                    FullTreeLoaderDataLeafSegment stackSeg = ((FullTreeLoaderDataLeaf) stack).nextList(reader);
+                    FullTreeLoaderDataLeafSegment stackSeg = ((FullTreeLoaderDataLeaf) stack).nextList(tree(), reader);
                     if (stackSeg != null) {
                         stack = stackSeg;
                     } else {
@@ -666,7 +714,8 @@ public class KeyHistogramsPersistable extends KeyHistograms {
                 FullTreeLoaderDataLeafSegment stackSeg = (FullTreeLoaderDataLeafSegment) stack;
                 HistogramLeafCellOnStorage.CellSegment segment = stackSeg.segment;
                 if (segment.isNonEmpty()) {
-                    return segment.pollWithReader(stackSeg.reader, stackSeg);
+                    return segment.pollWithReader(tree(), stackSeg.listPosition, stackSeg.reader, stackSeg,
+                            stackSeg.valueType, stackSeg.valueSerializer);
                 } else if (segment instanceof HistogramLeafCellOnStorage.CellSegmentEnd) {
                     return null;
                 } else {
@@ -715,15 +764,19 @@ public class KeyHistogramsPersistable extends KeyHistograms {
             this.treeData = treeData;
         }
 
-        public FullTreeLoaderDataLeafSegment nextList(TreeWritings.TreeReader reader) throws IOException {
+        public FullTreeLoaderDataLeafSegment nextList(HistogramTree tree, TreeWritings.TreeReader reader) throws IOException {
             int listPos = headerIndex;
             if (listPos < headers.size()) {
                 KeyHistogramsPersistable.LeafCellHeader h = headers.get(listPos);
                 reader.seek(h.listPointer);
                 headerIndex++;
 
+                Class<?> valueType = tree.finalValueTypeOrNull(listPos);
+                Serializer<?> valueSer = reader.serializer(valueType);
+
                 return new FullTreeLoaderDataLeafSegment(
-                        treeData.keyStart, listPos, this, reader);
+                        treeData.keyStart, listPos, this, reader,
+                        valueType, valueSer);
 
             } else {
                 return null;
@@ -747,12 +800,17 @@ public class KeyHistogramsPersistable extends KeyHistograms {
         public int listPosition;
         public TreeWritings.TreeReader reader;
         public HistogramLeafCellOnStorage.CellSegment segment;
+        public Class<?> valueType;
+        public Serializer<?> valueSerializer;
         public FullTreeLoaderDataLeafSegment(Object key, int listPosition, FullTreeLoaderDataLeaf parent,
-                                             TreeWritings.TreeReader reader) {
+                                             TreeWritings.TreeReader reader,
+                                             Class<?> valueType, Serializer<?> valueSer) {
             super(parent);
             this.key = key;
             this.listPosition = listPosition;
             this.reader = reader;
+            this.valueType = valueType;
+            this.valueSerializer = valueSer;
             segment = HistogramLeafCellOnStorage.loadSegment(reader);
         }
         @Override
@@ -851,7 +909,7 @@ public class KeyHistogramsPersistable extends KeyHistograms {
         }
 
         public Object next() {
-            Object v = list.poll(tree, leaf);
+            Object v = list.poll(tree, listIndex, leaf);
             if (v != null) {
                 --remaining;
             }

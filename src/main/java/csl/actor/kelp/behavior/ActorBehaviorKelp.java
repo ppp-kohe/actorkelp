@@ -28,11 +28,14 @@ public class ActorBehaviorKelp {
         protected int matchKeyEntryId;
         protected KeyComparator<KeyType> keyComparator;
         protected ActorKelpFunctions.DispatcherFactory dispatcher;
+        protected Class<KeyType> keyType;
 
-        public ActorBehaviorMatchKey(int matchKeyEntryId, int requiredSize, KeyComparator<KeyType> keyComparator) {
+        public ActorBehaviorMatchKey(int matchKeyEntryId, int requiredSize, KeyComparator<KeyType> keyComparator,
+                                     Class<KeyType> keyType) {
             this.putRequiredSize = requiredSize;
             this.matchKeyEntryId = matchKeyEntryId;
             this.keyComparator = keyComparator;
+            this.keyType = keyType;
         }
 
         protected void put(Actor self, KeyType key, Comparable<?> position, Object value) {
@@ -65,6 +68,24 @@ public class ActorBehaviorKelp {
             return new KelpDispatcher.SelectiveDispatcher((List<KeyExtractor<?,?>>) (List) getKeyExtractors(),
                     self.createDispatcher(getDispatcher()));
         }
+
+        @Override
+        public Class<?> keyType() {
+            return keyType == null ? Object.class : keyType;
+        }
+
+        protected Map<Object, Class<?>> createValueTypesForPositions(Class<?>... types) {
+            Map<Object,Class<?>> m = new HashMap<>();
+            for (int i = 0; i < types.length; ++i) {
+                Class<?> c = types[i];
+                if (c != null) {
+                    m.put(i, c);
+                } else {
+                    m.put(i, Object.class);
+                }
+            }
+            return m;
+        }
     }
 
     public static class ActorBehaviorMatchKey1<KeyType, ParamType1, ValueType1> extends ActorBehaviorMatchKey<KeyType> {
@@ -72,15 +93,23 @@ public class ActorBehaviorKelp {
         protected Function<ParamType1, ValueType1> valueExtractorFromValue1;
 
         protected BiConsumer<KeyType, ValueType1> handler;
+        protected Class<ValueType1> valueType;
+
 
         public ActorBehaviorMatchKey1(int matchKeyEntryId, KeyComparator<KeyType> keyComparator,
                                       KeyExtractor<KeyType, ParamType1> keyExtractorFromValue1,
                                       Function<ParamType1, ValueType1> valueExtractorFromValue1,
-                                      BiConsumer<KeyType, ValueType1> handler) {
-            super(matchKeyEntryId, 1, keyComparator);
+                                      BiConsumer<KeyType, ValueType1> handler, Class<KeyType> keyType, Class<ValueType1> valueType) {
+            super(matchKeyEntryId, 1, keyComparator, keyType);
             this.keyExtractorFromValue1 = keyExtractorFromValue1;
             this.valueExtractorFromValue1 = valueExtractorFromValue1;
             this.handler = handler;
+            this.valueType = valueType;
+        }
+
+        @Override
+        public Map<Object, Class<?>> valueTypesForPositions() {
+            return createValueTypesForPositions(valueType);
         }
 
         @Override
@@ -197,7 +226,7 @@ public class ActorBehaviorKelp {
         public boolean consume(HistogramTree tree, BiConsumer<Object, Object> handler) {
             if (completedAfterPut(null)) {  //currently, it can complete before consume, and then it might not be able to consume 2 or more times
                 afterTake(1, tree);
-                handler.accept(getKey(), values1.poll(tree, this));
+                handler.accept(getKey(), values1.poll(tree, 0, this));
                 return true;
             } else {
                 return false;
@@ -228,13 +257,18 @@ public class ActorBehaviorKelp {
                                       KeyExtractor<KeyType, ParamType2> keyExtractorFromValue2,
                                       Function<ParamType1, ValueType1> valueExtractorFromValue1,
                                       Function<ParamType2, ValueType2> valueExtractorFromValue2,
-                                      TriConsumer<KeyType, ValueType1, ValueType2> handler) {
-            super(matchKeyEntryId, 2, keyComparator);
+                                      TriConsumer<KeyType, ValueType1, ValueType2> handler, Class<KeyType> keyType) {
+            super(matchKeyEntryId, 2, keyComparator, keyType);
             this.keyExtractorFromValue1 = keyExtractorFromValue1;
             this.keyExtractorFromValue2 = keyExtractorFromValue2;
             this.valueExtractorFromValue1 = valueExtractorFromValue1;
             this.valueExtractorFromValue2 = valueExtractorFromValue2;
             this.handler = handler;
+        }
+
+        @Override
+        public Map<Object, Class<?>> valueTypesForPositions() {
+            return createValueTypesForPositions(null, null);
         }
 
         @Override
@@ -347,7 +381,7 @@ public class ActorBehaviorKelp {
         public boolean consume(HistogramTree tree, TriConsumer<Object, Object, Object> handler) {
             if (completedAfterPut(null)) {  //currently, it can complete before consume, and then it might not be able to consume 2 or more times
                 afterTake(2, tree);
-                handler.accept(getKey(), values1.poll(tree, this), values2.poll(tree, this));
+                handler.accept(getKey(), values1.poll(tree, 0, this), values2.poll(tree, 1, this));
                 return true;
             } else {
                 return false;
@@ -382,8 +416,8 @@ public class ActorBehaviorKelp {
                                       Function<ParamType1, ValueType1> valueExtractorFromValue1,
                                       Function<ParamType2, ValueType2> valueExtractorFromValue2,
                                       Function<ParamType3, ValueType3> valueExtractorFromValue3,
-                                      QuadConsumer<KeyType, ValueType1, ValueType2, ValueType3> handler) {
-            super(matchKeyEntryId, 3, keyComparator);
+                                      QuadConsumer<KeyType, ValueType1, ValueType2, ValueType3> handler, Class<KeyType> keyType) {
+            super(matchKeyEntryId, 3, keyComparator, keyType);
             this.keyExtractorFromValue1 = keyExtractorFromValue1;
             this.keyExtractorFromValue2 = keyExtractorFromValue2;
             this.keyExtractorFromValue3 = keyExtractorFromValue3;
@@ -391,6 +425,11 @@ public class ActorBehaviorKelp {
             this.valueExtractorFromValue2 = valueExtractorFromValue2;
             this.valueExtractorFromValue3 = valueExtractorFromValue3;
             this.handler = handler;
+        }
+
+        @Override
+        public Map<Object, Class<?>> valueTypesForPositions() {
+            return createValueTypesForPositions(null, null, null);
         }
 
         @Override
@@ -517,7 +556,7 @@ public class ActorBehaviorKelp {
         public boolean consume(HistogramTree tree, QuadConsumer<Object, Object, Object, Object> handler) {
             if (completedAfterPut(null)) {
                 afterTake(3, tree);
-                handler.accept(getKey(), values1.poll(tree, this), values2.poll(tree, this), values3.poll(tree, this));
+                handler.accept(getKey(), values1.poll(tree, 0, this), values2.poll(tree, 1, this), values3.poll(tree, 2,this));
                 return true;
             } else {
                 return false;
@@ -557,8 +596,9 @@ public class ActorBehaviorKelp {
                                       Function<ParamType2, ValueType2> valueExtractorFromValue2,
                                       Function<ParamType3, ValueType3> valueExtractorFromValue3,
                                       Function<ParamType4, ValueType4> valueExtractorFromValue4,
-                                      QuintConsumer<KeyType, ValueType1, ValueType2, ValueType3, ValueType4> handler) {
-            super(matchKeyEntryId, 4, keyComparator);
+                                      QuintConsumer<KeyType, ValueType1, ValueType2, ValueType3, ValueType4> handler,
+                                      Class<KeyType> keyType) {
+            super(matchKeyEntryId, 4, keyComparator, keyType);
             this.keyExtractorFromValue1 = keyExtractorFromValue1;
             this.keyExtractorFromValue2 = keyExtractorFromValue2;
             this.keyExtractorFromValue3 = keyExtractorFromValue3;
@@ -568,6 +608,11 @@ public class ActorBehaviorKelp {
             this.valueExtractorFromValue3 = valueExtractorFromValue3;
             this.valueExtractorFromValue4 = valueExtractorFromValue4;
             this.handler = handler;
+        }
+
+        @Override
+        public Map<Object, Class<?>> valueTypesForPositions() {
+            return createValueTypesForPositions(null, null, null, null);
         }
 
         @Override
@@ -706,7 +751,7 @@ public class ActorBehaviorKelp {
         public boolean consume(HistogramTree tree, QuintConsumer<Object, Object, Object, Object, Object> handler) {
             if (completedAfterPut(null)) {
                 afterTake(4, tree);
-                handler.accept(getKey(), values1.poll(tree, this), values2.poll(tree, this), values3.poll(tree, this), values4.poll(tree, this));
+                handler.accept(getKey(), values1.poll(tree, 0, this), values2.poll(tree, 1, this), values3.poll(tree, 2, this), values4.poll(tree, 3,this));
                 return true;
             } else {
                 return false;
@@ -731,14 +776,23 @@ public class ActorBehaviorKelp {
         protected Function<ParamType, ValueType> valueExtractorFromValue;
         protected BiConsumer<KeyType, List<ValueType>> handler;
 
+        protected Class<ValueType> valueType;
+
         public ActorBehaviorMatchKeyList(int matchKeyEntryId, int threshold, KeyComparator<KeyType> keyComparator,
                                          KeyExtractor<KeyType, ParamType> keyExtractorFromValue,
                                          Function<ParamType, ValueType> valueExtractorFromValue,
-                                         BiConsumer<KeyType, List<ValueType>> handler) {
-            super(matchKeyEntryId, threshold, keyComparator);
+                                         BiConsumer<KeyType, List<ValueType>> handler,
+                                         Class<KeyType> keyType, Class<ValueType> valueType) {
+            super(matchKeyEntryId, threshold, keyComparator, keyType);
             this.keyExtractorFromValue = keyExtractorFromValue;
             this.valueExtractorFromValue = valueExtractorFromValue;
             this.handler = handler;
+            this.valueType = valueType;
+        }
+
+        @Override
+        public Map<Object, Class<?>> valueTypesForPositions() {
+            return createValueTypesForPositions(valueType);
         }
 
         public ActorBehaviorMatchKey<KeyType> withKeyValuesReducers(List<KeyValuesReducer<KeyType,ValueType>> keyValuesReducers) {
@@ -746,7 +800,8 @@ public class ActorBehaviorKelp {
                 return this;
             } else {
                 return new ActorBehaviorMatchKeyListFuture<>(matchKeyEntryId, this.putRequiredSize, keyComparator,
-                        new KeyValuesReducerList<>(keyValuesReducers), keyExtractorFromValue, valueExtractorFromValue, handler);
+                        new KeyValuesReducerList<>(keyValuesReducers), keyExtractorFromValue, valueExtractorFromValue, handler,
+                        keyType, valueType);
             }
         }
 
@@ -773,7 +828,7 @@ public class ActorBehaviorKelp {
         @SuppressWarnings({"unchecked", "rawtypes"})
         @Override
         public void complete(HistogramTreeNodeLeaf leaf) {
-            ((HistogramNodeLeafList) leaf).consume(putRequiredSize, putTree, (BiConsumer) handler);
+            ((HistogramNodeLeafList) leaf).consume(putRequiredSize, putTree, 0, (BiConsumer) handler);
         }
 
         @Override
@@ -838,11 +893,11 @@ public class ActorBehaviorKelp {
             return r <= size;
         }
 
-        public boolean consume(int requiredSize, HistogramTree tree, BiConsumer<Object,List<Object>> handler) {
+        public boolean consume(int requiredSize, HistogramTree tree, Object position, BiConsumer<Object,List<Object>> handler) {
             if (completed(requiredSize)) {
                 List<Object> vs = new ArrayList<>(requiredSize);
                 for (int i = 0; i < requiredSize; ++i) {
-                    vs.add(values.poll(tree, this));
+                    vs.add(values.poll(tree, position, this));
                 }
                 afterTake(requiredSize, tree);
                 handler.accept(key, vs);
@@ -869,18 +924,26 @@ public class ActorBehaviorKelp {
         protected KeyExtractor<KeyType, ParamType> keyExtractorFromValue;
         protected Function<ParamType, ValueType> valueExtractorFromValue;
         protected BiConsumer<KeyType, List<ValueType>> handler;
+        protected Class<ValueType> valueType;
 
         public ActorBehaviorMatchKeyListFuture(int matchKeyEntryId, int requiredSize,
                                                KeyComparator<KeyType> keyComparator,
                                                KeyValuesReducer<KeyType, ValueType> keyValuesReducer,
                                                KeyExtractor<KeyType, ParamType> keyExtractorFromValue,
                                                Function<ParamType, ValueType> valueExtractorFromValue,
-                                               BiConsumer<KeyType, List<ValueType>> handler) {
-            super(matchKeyEntryId, requiredSize, keyComparator);
+                                               BiConsumer<KeyType, List<ValueType>> handler,
+                                               Class<KeyType> keyType, Class<ValueType> valueType) {
+            super(matchKeyEntryId, requiredSize, keyComparator, keyType);
             this.keyValuesReducer = keyValuesReducer;
             this.keyExtractorFromValue = keyExtractorFromValue;
             this.valueExtractorFromValue = valueExtractorFromValue;
             this.handler = handler;
+            this.valueType = valueType;
+        }
+
+        @Override
+        public Map<Object, Class<?>> valueTypesForPositions() {
+            return createValueTypesForPositions(valueType);
         }
 
         @Override
@@ -946,7 +1009,7 @@ public class ActorBehaviorKelp {
         @Override
         public void processTraversal(Actor self, MailboxKelp.ReducedSize reducedSize, HistogramTreeNodeLeaf leaf) {
             HistogramNodeLeafListReducible list = completedLeaf(putRequiredSize, getListType(), leaf);
-            if (list != null && list.consume(putRequiredSize, keyValuesReducer.requiredSize(), putTree, reducedSize, false, (BiFunction) keyValuesReducer, (BiConsumer) handler)) {
+            if (list != null && list.consume(putRequiredSize, keyValuesReducer.requiredSize(), putTree, 0, reducedSize, false, (BiFunction) keyValuesReducer, (BiConsumer) handler)) {
                 ((ActorKelp<?>) self).getMailboxAsKelp().reserveTraversal(self, matchKeyEntryId);
             }
         }
@@ -989,7 +1052,7 @@ public class ActorBehaviorKelp {
             if (reducedSize.needToReduceForComplete(allowPersist, sizeChecked, reduceReq)) {
                 HistogramNodeLeafListReducible list = leafToReducible(leaf, allowPersist);
                 if (list != null &&
-                        list.consume(putRequiredSize, keyValuesReducer.requiredSize(), putTree, reducedSize, !allowPersist,
+                        list.consume(putRequiredSize, keyValuesReducer.requiredSize(), putTree, 0, reducedSize, !allowPersist,
                                 (BiFunction) keyValuesReducer, (BiConsumer) handler)) {
                     if (putActor != null) {
                         ((ActorKelp<?>) putActor).getMailboxAsKelp().reserveTraversal(putActor, matchKeyEntryId);
@@ -1038,9 +1101,9 @@ public class ActorBehaviorKelp {
             long prevSize = leaf.size();
             HistogramNodeLeafListReducible list = completedLeaf(putRequiredSize, getListType(), leaf);
             if (list != null) {
-                list.consumeStageEndReduceAll(putRequiredSize, keyValuesReducer.requiredSize(), putTree, reducedSize, (BiFunction) keyValuesReducer, (BiConsumer) handler);
+                list.consumeStageEndReduceAll(putRequiredSize, keyValuesReducer.requiredSize(), putTree, 0, reducedSize, (BiFunction) keyValuesReducer, (BiConsumer) handler);
 
-                while (list.consumeStageEnd(putRequiredSize, keyValuesReducer.requiredSize(), putTree, reducedSize, (BiFunction) keyValuesReducer, (BiConsumer) handler)) {
+                while (list.consumeStageEnd(putRequiredSize, keyValuesReducer.requiredSize(), putTree, 0, reducedSize, (BiFunction) keyValuesReducer, (BiConsumer) handler)) {
                     if (prevSize <= leaf.size()) { //no consumption
                         break;
                     }
@@ -1072,12 +1135,13 @@ public class ActorBehaviorKelp {
         public boolean consume(int requiredSize,
                                int reduceRequiredSize,
                                HistogramTree tree,
+                               Object position,
                                MailboxKelp.ReducedSize reducedSize,
                                boolean onMemory,
                                BiFunction<Object, List<Object>, Iterable<Object>> keyValuesReducer,
                                BiConsumer<Object, List<Object>> handler) {
             if (completed(requiredSize)) {
-                List<Object> vs = poll(requiredSize, tree, reducedSize, onMemory);
+                List<Object> vs = poll(requiredSize, tree, position, reducedSize, onMemory);
                 int consuming = vs.size();
                 boolean changed;
                 try {
@@ -1093,12 +1157,12 @@ public class ActorBehaviorKelp {
             }
         }
 
-        protected List<Object> poll(int requiredSize, HistogramTree tree, MailboxKelp.ReducedSize reducedSize,
+        protected List<Object> poll(int requiredSize, HistogramTree tree, Object position, MailboxKelp.ReducedSize reducedSize,
                                     boolean onMemory) {
             int consuming = Math.max(requiredSize, reducedSize.nextReducedSize(size()));
             List<Object> vs = new ArrayList<>(consuming);
             try {
-                values.polls(tree, this, consuming, vs, onMemory);
+                values.polls(tree, position, this, consuming, vs, onMemory);
             } catch (Exception ex) {
                 throw new RuntimeException(String.format("size=%,d, consuming=%,d actual=%,d required=%,d", size(), consuming, vs.size(), requiredSize), ex);
             }
@@ -1143,15 +1207,17 @@ public class ActorBehaviorKelp {
         public void consumeStageEndReduceAll(int requiredSize,
                                              int reduceRequiredSize,
                                              HistogramTree tree,
+                                             Object position,
                                              MailboxKelp.ReducedSize reducedSize,
                                              BiFunction<Object, List<Object>, Iterable<Object>> keyValuesReducer,
                                              BiConsumer<Object, List<Object>> handler) {
-            consumeStageEndReduceAll(requiredSize, reduceRequiredSize, tree, reducedSize, keyValuesReducer, handler, true);
+            consumeStageEndReduceAll(requiredSize, reduceRequiredSize, tree, position, reducedSize,  keyValuesReducer, handler, true);
         }
 
         public void consumeStageEndReduceAll(int requiredSize,
                                              int reduceRequiredSize,
                                              HistogramTree tree,
+                                             Object position,
                                              MailboxKelp.ReducedSize reducedSize,
                                              BiFunction<Object, List<Object>, Iterable<Object>> keyValuesReducer,
                                              BiConsumer<Object, List<Object>> handler, boolean modifyTree) {
@@ -1161,7 +1227,7 @@ public class ActorBehaviorKelp {
             long startSize = currentSize;
             try {
                 while (currentSize >= reduceRequiredSize) {
-                    List<Object> vs = poll(requiredSize, tree, reducedSize, false);
+                    List<Object> vs = poll(requiredSize, tree, position, reducedSize, false);
                     ReduceResult res = reduce(reduceRequiredSize, tree, keyValuesReducer, vs);
                     totalConsumed += res.consumed;
                     sizeRemoved += res.sizeRemoved();
@@ -1180,19 +1246,21 @@ public class ActorBehaviorKelp {
         public boolean consumeStageEnd(int requiredSize,
                                        int reduceRequiredSize,
                                        HistogramTree tree,
+                                       Object position,
                                        MailboxKelp.ReducedSize reducedSize,
                                        BiFunction<Object, List<Object>, Iterable<Object>> keyValuesReducer,
                                        BiConsumer<Object, List<Object>> handler) {
-            return consumeStageEnd(requiredSize, reduceRequiredSize, tree, reducedSize, keyValuesReducer, handler, true);
+            return consumeStageEnd(requiredSize, reduceRequiredSize, tree, position, reducedSize, keyValuesReducer, handler, true);
         }
 
         public boolean consumeStageEnd(int requiredSize,
                                        int reduceRequiredSize,
                                        HistogramTree tree,
+                                       Object position,
                                        MailboxKelp.ReducedSize reducedSize,
                                        BiFunction<Object, List<Object>, Iterable<Object>> keyValuesReducer,
                                        BiConsumer<Object, List<Object>> handler, boolean modifyTree) {
-            List<Object> vs = poll(requiredSize, tree, reducedSize, false);
+            List<Object> vs = poll(requiredSize, tree, position, reducedSize, false);
             int consuming = vs.size();
             boolean changed = consuming > 0;
             try {
@@ -1254,8 +1322,9 @@ public class ActorBehaviorKelp {
                                                        KeyValuesReducer<KeyType, ValueType> keyValuesReducer,
                                                        KeyExtractor<KeyType, ParamType> keyExtractorFromValue,
                                                        Function<ParamType, ValueType> valueExtractorFromValue,
-                                                       BiConsumer<KeyType, List<ValueType>> handler) {
-            super(matchKeyEntryId, requiredSize, keyComparator, keyValuesReducer, keyExtractorFromValue, valueExtractorFromValue, handler);
+                                                       BiConsumer<KeyType, List<ValueType>> handler,
+                                                       Class<KeyType> keyType, Class<ValueType> valueType) {
+            super(matchKeyEntryId, requiredSize, keyComparator, keyValuesReducer, keyExtractorFromValue, valueExtractorFromValue, handler, keyType, valueType);
         }
 
         @Override
@@ -1269,7 +1338,7 @@ public class ActorBehaviorKelp {
             HistogramNodeLeafListReducible list = completedLeaf(putRequiredSize, getListType(), leaf);
             if (list != null &&
                     !(keyValuesReducer instanceof KeyValuesReducerNone) && //handler will never happen list.consume(...), so just
-                    list.consume(putRequiredSize, keyValuesReducer.requiredSize(), putTree, reducedSize, true, (BiFunction) keyValuesReducer, (BiConsumer) handler)) {
+                    list.consume(putRequiredSize, keyValuesReducer.requiredSize(), putTree, 0, reducedSize, true, (BiFunction) keyValuesReducer, (BiConsumer) handler)) {
                 ((ActorKelp<?>) self).getMailboxAsKelp().reserveTraversal(self, matchKeyEntryId);
             }
         }
@@ -1353,10 +1422,10 @@ public class ActorBehaviorKelp {
 
         @SuppressWarnings({"unchecked", "rawtypes"})
         protected void processStageEndList(MailboxKelp.ReducedSize reducedSize, HistogramNodeLeafListReducibleForStageEnd list) {
-            list.consumeStageEndReduceAll(putRequiredSize, keyValuesReducer.requiredSize(), putTree, reducedSize, (BiFunction) keyValuesReducer, (BiConsumer) handler, false);
+            list.consumeStageEndReduceAll(putRequiredSize, keyValuesReducer.requiredSize(), putTree, 0, reducedSize, (BiFunction) keyValuesReducer, (BiConsumer) handler, false);
 
             long prevSize = list.size();
-            while (list.consumeStageEnd(putRequiredSize, keyValuesReducer.requiredSize(), putTree, reducedSize, (BiFunction) keyValuesReducer, (BiConsumer) handler, false)) {
+            while (list.consumeStageEnd(putRequiredSize, keyValuesReducer.requiredSize(), putTree, 0, reducedSize, (BiFunction) keyValuesReducer, (BiConsumer) handler, false)) {
                 long nextSize = list.size();
                 if (prevSize <= nextSize) { //no consumption
                     break;

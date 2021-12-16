@@ -218,6 +218,9 @@ public class PersistentFileManager {
         void writeVarInt(int n, boolean optimizePositive) throws IOException;
         void writeInt(int i) throws IOException;
         void write(Object v) throws IOException;
+
+        Serializer<?> serializer(Class<?> type);
+        void write(Object v, Serializer<?> serializer);
     }
 
     public static class PersistentFileWriter implements PersistentWriter {
@@ -264,6 +267,21 @@ public class PersistentFileManager {
         @Override
         public void writeVarInt(int n, boolean optimizePositive) {
             output.writeVarInt(n, optimizePositive);
+        }
+
+        @Override
+        public Serializer<?> serializer(Class<?> type) {
+            return serializer.serializer(type);
+        }
+
+        @Override
+        public void write(Object v, Serializer<?> serializer) {
+            try {
+                this.serializer.write(output, v, serializer);
+            } catch (Exception ex) {
+                throw new RuntimeException(String.format("write: path=%s obj=%s serializer=%s",
+                        pathExpanded, manager.getLogger().toStringLimit(v), serializer), ex);
+            }
         }
 
         @Override
@@ -354,6 +372,9 @@ public class PersistentFileManager {
         int nextVarInt(boolean optimizePositive);
         Object next();
         void close();
+
+        Serializer<?> serializer(Class<?> type);
+        Object next(Class<?> type, Serializer<?> serializer);
     }
 
     public static class PersistentFileReader implements AutoCloseable, PersistentReader {
@@ -362,7 +383,6 @@ public class PersistentFileManager {
         protected KryoBuilder.SerializerFunction serializer;
         protected Input input;
         protected long offset;
-        protected long position;
         protected InputStream inputStream;
         protected int bufferSize = 50_000;
 
@@ -376,62 +396,61 @@ public class PersistentFileManager {
             inputStream = new FileInputStream(manager.getPathForExpandedPath(pathExpanded, false).toFile()); //Files.newInputStream(path).skip(n) is slow
             this.offset = offset;
             inputStream.skip(offset);
-            this.position = offset;
             input = new Input(inputStream, bufferSize);
+            input.setTotal(offset);
         }
+
+        @Override
+        public Serializer<?> serializer(Class<?> type) {
+            return serializer.serializer(type);
+        }
+
+        @Override
+        public Object next(Class<?> type, Serializer<?> serializer){
+            Object v = this.serializer.read(input, type, serializer);
+            return v;
+        }
+
         @Override
         public Object next()  {
-            long prev = input.total();
             Object v = serializer.read(input);
-            position += input.total() - prev;
             return v;
         }
         @Override
         public long nextLong() {
-            long prev = input.total();
             long v = input.readLong();
-            position += input.total() - prev;
             return v;
         }
 
         @Override
         public long nextVarLong(boolean optimizePositive) {
-            long prev = input.total();
             long v = input.readVarLong(optimizePositive);
-            position += input.total() - prev;
             return v;
         }
 
         @Override
         public int nextVarInt(boolean optimizePositive) {
-            long prev = input.total();
             int v = input.readVarInt(optimizePositive);
-            position += input.total() - prev;
             return v;
         }
 
         @Override
         public int nextInt() {
-            long prev = input.total();
             int v = input.readInt();
-            position += input.total() - prev;
             return v;
         }
         @Override
         public byte nextByte() {
-            long prev = input.total();
             byte v = input.readByte();
-            position += input.total() - prev;
             return v;
         }
         @Override
         public long position() {
-            return position;
+            return input.total();
         }
 
         public void position(long newPosition) {
             input.skip(newPosition - position());
-            position = newPosition;
         }
 
         @Override

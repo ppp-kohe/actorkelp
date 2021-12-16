@@ -126,7 +126,7 @@ public class ExampleSerializeKelp extends ExampleSerialize {
 
     private List<Object> toList(HistogramTree tree, KeyHistograms.HistogramLeafList l) {
         List<Object> os = new ArrayList<>();
-        l.iterator(tree, null).forEachRemaining(os::add);
+        l.iterator(tree, 0,null).forEachRemaining(os::add);
         return os;
     }
 

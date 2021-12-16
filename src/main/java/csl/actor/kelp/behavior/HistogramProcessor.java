@@ -4,11 +4,22 @@ import csl.actor.Actor;
 import csl.actor.ActorBehavior;
 import csl.actor.kelp.ActorKelpFunctions;
 
+import java.util.Collections;
+import java.util.Map;
+
 public interface HistogramProcessor extends ActorBehavior {
     ActorKelpFunctions.KeyComparator<?> getKeyComparator();
 
     Object selectFromValue(Object value);
     Object extractKeyFromValue(Object value, Object position);
+
+    default Class<?> keyType() {
+        return Object.class;
+    }
+
+    default Map<Object,Class<?>> valueTypesForPositions() {
+        return Collections.emptyMap();
+    }
 
     default boolean needToProcessTraversal(Actor self, HistogramTree tree, MailboxKelp.ReducedSize reducedSize, boolean reserved) {
         return false;

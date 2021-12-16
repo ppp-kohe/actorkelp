@@ -145,7 +145,7 @@ public class MailboxKelp implements Mailbox, Cloneable {
         for (int i = 0; i < size; ++i) {
             HistogramProcessor p = processors.get(i);
             entries[i] = new HistogramEntry(i, p,
-                    treeFactory.create(p.getKeyComparator(), getInitTreeSize(i)));
+                    treeFactory.create(p.getKeyComparator(), getInitTreeSize(i), p.keyType(), p.valueTypesForPositions()));
         }
     }
 

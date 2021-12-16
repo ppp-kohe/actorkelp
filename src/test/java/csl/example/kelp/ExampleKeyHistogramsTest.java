@@ -32,7 +32,7 @@ public class ExampleKeyHistogramsTest {
             assertTrue(tree.getRoot() instanceof KeyHistograms.HistogramNodeLeafMap);
             assertEquals("aaa", tree.getRoot().keyStart());
             assertEquals("<aaa>", ((KeyHistograms.HistogramNodeLeafMap) tree.getRoot()).getValues().get(0)
-                    .iterator(tree, (KeyHistograms.HistogramNodeLeafMap) tree.getRoot()).next());
+                    .iterator(tree, 0, (KeyHistograms.HistogramNodeLeafMap) tree.getRoot()).next());
             assertEquals(1L, tree.getRoot().size());
             assertEquals(0, tree.getRoot().height());
         }
@@ -57,13 +57,13 @@ public class ExampleKeyHistogramsTest {
             assertTrue(child1 instanceof KeyHistograms.HistogramNodeLeafMap);
             assertEquals("aaa", child0.keyStart());
             assertEquals("<aaa>", ((KeyHistograms.HistogramNodeLeafMap) child0).getValues().get(0)
-                    .iterator(tree, (KeyHistograms.HistogramNodeLeafMap) child0).next());
+                    .iterator(tree,0, (KeyHistograms.HistogramNodeLeafMap) child0).next());
             assertEquals(1L, child0.size());
             assertEquals(0, child0.height());
 
             assertEquals("bbb", child1.keyStart());
             assertEquals("<bbb>", ((KeyHistograms.HistogramNodeLeafMap) child1).getValues().get(0)
-                    .iterator(tree, (KeyHistograms.HistogramNodeLeafMap) child1).next());
+                    .iterator(tree, 0,(KeyHistograms.HistogramNodeLeafMap) child1).next());
             assertEquals(1L, child1.size());
             assertEquals(0, child1.height());
         }
@@ -90,19 +90,19 @@ public class ExampleKeyHistogramsTest {
             assertTrue(child2 instanceof KeyHistograms.HistogramNodeLeafMap);
             assertEquals("___", child0.keyStart());
             assertEquals("<___>", ((KeyHistograms.HistogramNodeLeafMap) child0).getValues().get(0)
-                    .iterator(tree, (KeyHistograms.HistogramNodeLeafMap) child0).next());
+                    .iterator(tree, 0, (KeyHistograms.HistogramNodeLeafMap) child0).next());
             assertEquals(1L, child0.size());
             assertEquals(0, child0.height());
 
             assertEquals("aaa", child1.keyStart());
             assertEquals("<aaa>", ((KeyHistograms.HistogramNodeLeafMap) child1).getValues().get(0)
-                    .iterator(tree, (KeyHistograms.HistogramNodeLeafMap) child1).next());
+                    .iterator(tree, 0, (KeyHistograms.HistogramNodeLeafMap) child1).next());
             assertEquals(1L, child1.size());
             assertEquals(0, child1.height());
 
             assertEquals("bbb", child2.keyStart());
             assertEquals("<bbb>", ((KeyHistograms.HistogramNodeLeafMap) child2).getValues().get(0)
-                    .iterator(tree, (KeyHistograms.HistogramNodeLeafMap) child2).next());
+                    .iterator(tree, 0, (KeyHistograms.HistogramNodeLeafMap) child2).next());
             assertEquals(1L, child2.size());
             assertEquals(0, child2.height());
         }
@@ -147,13 +147,13 @@ public class ExampleKeyHistogramsTest {
 
             assertEquals("___", child2.keyStart());
             assertEquals("<___>", ((KeyHistograms.HistogramNodeLeafMap) child2).getValues().get(0)
-                    .iterator(tree, (KeyHistograms.HistogramNodeLeafMap) child2).next());
+                    .iterator(tree, 0, (KeyHistograms.HistogramNodeLeafMap) child2).next());
             assertEquals(1L, child2.size());
             assertEquals(0, child2.height());
 
             assertEquals("aaa", child3.keyStart());
             assertEquals("<aaa>", ((KeyHistograms.HistogramNodeLeafMap) child3).getValues().get(0)
-                    .iterator(tree, (KeyHistograms.HistogramNodeLeafMap) child3).next());
+                    .iterator(tree, 0, (KeyHistograms.HistogramNodeLeafMap) child3).next());
             assertEquals(1L, child3.size());
             assertEquals(0, child3.height());
 
@@ -164,13 +164,13 @@ public class ExampleKeyHistogramsTest {
 
             assertEquals("ab", child4.keyStart());
             assertEquals("<ab>", ((KeyHistograms.HistogramNodeLeafMap) child4).getValues().get(0)
-                    .iterator(tree, (KeyHistograms.HistogramNodeLeafMap) child4).next());
+                    .iterator(tree, 0, (KeyHistograms.HistogramNodeLeafMap) child4).next());
             assertEquals(1L, child4.size());
             assertEquals(0, child4.height());
 
             assertEquals("bbb", child5.keyStart());
             assertEquals("<bbb>", ((KeyHistograms.HistogramNodeLeafMap) child5).getValues().get(0)
-                    .iterator(tree, (KeyHistograms.HistogramNodeLeafMap) child5).next());
+                    .iterator(tree, 0, (KeyHistograms.HistogramNodeLeafMap) child5).next());
             assertEquals(1L, child5.size());
             assertEquals(0, child5.height());
         }
@@ -710,7 +710,7 @@ public class ExampleKeyHistogramsTest {
         KeyHistograms.HistogramNodeLeafMap leaf = (KeyHistograms.HistogramNodeLeafMap) node;
         KeyHistograms.HistogramLeafList l = leaf.getValues().get(pos);
         if (l != null) {
-            l.iterator(tree, leaf).forEachRemaining(vs::add);
+            l.iterator(tree, 0, leaf).forEachRemaining(vs::add);
         }
         return vs;
     }

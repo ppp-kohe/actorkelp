@@ -326,12 +326,12 @@ public class HistogramTreeNodeTable implements KeyHistograms.HistogramTreeNode, 
     }
 
     @Override
-    public KeyHistograms.HistogramTreeNode split(long halfSize, long currentLeft) {
+    public KeyHistograms.HistogramTreeNode split(HistogramTree tree, long halfSize, long currentLeft) {
         ArrayList<KeyHistograms.HistogramTreeNode> lefts = new ArrayList<>(children.size());
         int i = 0;
         for (KeyHistograms.HistogramTreeNode n : children) {
             if (currentLeft + n.size() >= halfSize) {
-                KeyHistograms.HistogramTreeNode nLeft = n.split(halfSize, currentLeft);
+                KeyHistograms.HistogramTreeNode nLeft = n.split(tree, halfSize, currentLeft);
                 if (nLeft != null) {
                     lefts.add(nLeft);
                 }
@@ -392,9 +392,9 @@ public class HistogramTreeNodeTable implements KeyHistograms.HistogramTreeNode, 
                 HistogramTreeNodeTable node = (HistogramTreeNodeTable) lowerNode;
                 int r = keyIn(comparator, node.keyEnd());
                 if (r < 0) {
-                    children.addAll(0, node.getChildren(null));
+                    children.addAll(0, node.getChildren(tree));
                 } else { //r > 0: no r==0
-                    children.addAll(node.getChildren(null));
+                    children.addAll(node.getChildren(tree));
                 }
                 if (children.size() > treeLimit) {
                     return splitWithCountUp(tree);

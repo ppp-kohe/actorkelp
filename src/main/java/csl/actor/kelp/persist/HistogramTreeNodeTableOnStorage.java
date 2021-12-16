@@ -1,5 +1,6 @@
 package csl.actor.kelp.persist;
 
+import com.esotericsoftware.kryo.Serializer;
 import csl.actor.kelp.ActorKelpFunctions;
 import csl.actor.kelp.behavior.HistogramTree;
 import csl.actor.kelp.behavior.HistogramTreeNodeLeaf;
@@ -8,7 +9,6 @@ import csl.actor.kelp.behavior.KeyHistograms;
 import csl.actor.persist.PersistentFileManager;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -93,14 +93,14 @@ public class HistogramTreeNodeTableOnStorage extends HistogramTreeNodeTable impl
 
     @Override
     public KeyHistograms.HistogramTreeNode merge(HistogramTree tree, int treeLimit, ActorKelpFunctions.KeyComparator<?> comparator, KeyHistograms.HistogramTreeNode lowerNode) {
-        load((HistogramTree) null); //the caller tree has responsibility to update node-size
+        load(tree);
         return super.merge(tree, treeLimit, comparator, lowerNode);
     }
 
     @Override
-    public KeyHistograms.HistogramTreeNode split(long halfSize, long currentLeft) {
-        load((HistogramTree) null);
-        return super.split(halfSize, currentLeft);
+    public KeyHistograms.HistogramTreeNode split(HistogramTree tree, long halfSize, long currentLeft) {
+        load(tree);
+        return super.split(tree, halfSize, currentLeft);
     }
 
     @Override
@@ -126,45 +126,56 @@ public class HistogramTreeNodeTableOnStorage extends HistogramTreeNodeTable impl
 
     /**
      * load direct children as {@link HistogramTreeNodeLeafOnStorage} or {@link HistogramTreeNodeTableOnStorage}
-     * @param tree the tree for updating node-size or null
+     * @param tree the tree for updating node-size
      * @see KeyHistogramsPersistable.NodeTreeData
      */
     protected void load(HistogramTree tree) {
         if (!loaded) {
             loaded = true;
             int cap = 6;
-            if (tree != null) {
-                tree.addNodeSizeOnMemory(1L); //onMemory means the node is loaded
-                cap = tree.getTreeLimit();
-            }
+            tree.addNodeSizeOnMemory(1L); //onMemory means the node is loaded
+            cap = tree.getTreeLimit();
+
             ArrayList<KeyHistograms.HistogramTreeNode> cs = new ArrayList<>(cap);
             getFileManager(); //setup manager for reading
             try (PersistentFileManager.PersistentFileReader r = source.createReader()) {
-                long thisSibling = r.nextLong(); //long sibling
-                KeyHistogramsPersistable.NodeTreeData thisData = (KeyHistogramsPersistable.NodeTreeData) r.next(); //NodeTreData
+                Class<?> keyType = tree.finalKeyType();
+                Serializer<?> serializer = r.serializer(keyType);
 
-                while (true) {
+                //self info.
+                long thisSibling = r.nextLong(); //long sibling
+                r.nextByte(); //tag: TAG_NODE
+                KeyHistogramsPersistable.NodeTreeData thisData = new KeyHistogramsPersistable.NodeTreeData(); //NodeTreData
+                thisData.read(r, keyType, serializer);
+
+                while (true) { //children
                     long pos = r.position();
                     long sibling = r.nextLong(); //long sibling
-                    Object childObj = r.next(); //PersistentFileEnd | PersistentFileReaderSource | NodeTreeData
-                    if (childObj instanceof PersistentFileManager.PersistentFileEnd) { //no further child
+                    byte tag = r.nextByte();
+
+                    if (tag == KeyHistogramsPersistable.TAG_END) { //no further child
+                        r.next(); //PersistentFileEnd
                         break;
-                    } else if (childObj instanceof PersistentFileManager.PersistentFileReaderSource) { //persisted
-                        PersistentFileManager.PersistentFileReaderSource src = (PersistentFileManager.PersistentFileReaderSource) childObj;
+                    } else if (tag == KeyHistogramsPersistable.TAG_SOURCE) { //persisted
+                        PersistentFileManager.PersistentFileReaderSource src = (PersistentFileManager.PersistentFileReaderSource) r.next(); //PersistentFileReaderSource
                         src.setManager(source.getManager());
-                        KeyHistogramsPersistable.NodeTreeData child = (KeyHistogramsPersistable.NodeTreeData) r.next(); //NodeTreeData
+                        KeyHistogramsPersistable.NodeTreeData child = new KeyHistogramsPersistable.NodeTreeData(); //NodeTreeData
+                        child.read(r, keyType, serializer);
                         if (child.leaf) {
                             cs.add(new HistogramTreeNodeLeafOnStorage(child, src));
                         } else {
                             cs.add(new HistogramTreeNodeTableOnStorage(child, src));
                         }
-                    } else { //leaf or node
-                        KeyHistogramsPersistable.NodeTreeData child = (KeyHistogramsPersistable.NodeTreeData) childObj;
+                    } else if (tag == KeyHistogramsPersistable.TAG_NODE) { //leaf or node
+                        KeyHistogramsPersistable.NodeTreeData child = new KeyHistogramsPersistable.NodeTreeData(); //NodeTreeData
+                        child.read(r, keyType, serializer);
                         if (child.leaf) {
                             cs.add(new HistogramTreeNodeLeafOnStorage(child, source.newSource(pos)));
                         } else {
                             cs.add(new HistogramTreeNodeTableOnStorage(child, source.newSource(pos)));
                         }
+                    } else { //error
+                        break;
                     }
                     if (sibling > 0) {
                         r.position(sibling);

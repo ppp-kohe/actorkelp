@@ -128,7 +128,7 @@ public class KeyHistogramsPersistableLoadTest {
         long count = 0;
         for (KeyHistograms.HistogramLeafList list : al.getStructList()) {
             while (!list.isEmpty()) {
-                Object o = list.poll(tree, al);
+                Object o = list.poll(tree, 0, al);
                 if (o != null) {
                     count++;
                 }

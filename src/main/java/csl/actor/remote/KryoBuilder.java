@@ -443,6 +443,10 @@ public class KryoBuilder {
     }
 
     public interface SerializerFunction {
+        Serializer<?> serializer(Class<?> type);
+        Object read(Input input, Class<?> type, Serializer<?> serializer);
+        void write(Output out, Object o, Serializer<?> serializer);
+
         Object read(Input input);
         void write(Output out, Object o);
         Object copy(Object src);
@@ -492,6 +496,41 @@ public class KryoBuilder {
                 pool.free(k);
             } catch (Exception ex) {
                 log(ex, "Kryo error: write %s", getLogger().toStringLimit(o));
+                throw new RuntimeException(ex);
+            }
+        }
+
+        @Override
+        public Serializer<?> serializer(Class<?> cls) {
+            if (cls == null) {
+                return null;
+            } else {
+                Kryo k = pool.obtain();
+                return k.getSerializer(cls); //suppose the Serializer is stateless
+            }
+        }
+
+        @Override
+        public void write(Output out, Object o, Serializer<?> serializer) {
+            Kryo k = pool.obtain();
+            try {
+                k.writeObjectOrNull(out, o, serializer);
+                pool.free(k);
+            } catch (Exception ex) {
+                log(ex, "Kryo error: write serializer:%s %s", getLogger().toStringLimit(o), serializer);
+                throw new RuntimeException(ex);
+            }
+        }
+
+        @Override
+        public Object read(Input input, Class<?> type, Serializer<?> serializer) {
+            Kryo k = pool.obtain();
+            try {
+                Object o = k.readObjectOrNull(input, type, serializer);
+                pool.free(k);
+                return o;
+            } catch (Exception ex) {
+                log(ex, "Kryo error: read");
                 throw new RuntimeException(ex);
             }
         }
@@ -586,6 +625,25 @@ public class KryoBuilder {
             if (pool != null) {
                 pool.free(kryo);
             }
+        }
+
+        @Override
+        public Serializer<?> serializer(Class<?> type) {
+            if (type != null) {
+                return kryo.getSerializer(type);
+            } else {
+                return null;
+            }
+        }
+
+        @Override
+        public Object read(Input input, Class<?> type, Serializer<?> serializer) {
+            return kryo.readObjectOrNull(input, type, serializer);
+        }
+
+        @Override
+        public void write(Output out, Object o, Serializer<?> serializer) {
+            kryo.writeObjectOrNull(out, o, serializer);
         }
     }
 

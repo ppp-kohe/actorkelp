@@ -1,5 +1,6 @@
 package csl.actor.kelp.persist;
 
+import com.esotericsoftware.kryo.Serializer;
 import csl.actor.kelp.behavior.HistogramTreeNodeLeaf;
 import csl.actor.kelp.behavior.KeyHistograms;
 import csl.actor.persist.PersistentFileManager;
@@ -109,7 +110,12 @@ public class HistogramTreeNodeLeafOnStorage extends HistogramTreeNodeLeaf implem
         getFileManager();
         try (PersistentFileManager.PersistentFileReader r = source.createReader()) { //leaf
             long thisSibling = r.nextLong(); //long sibling
-            KeyHistogramsPersistable.NodeTreeData thisData = (KeyHistogramsPersistable.NodeTreeData) r.next(); //NodeTreeData
+            byte tag = r.nextByte(); //TAG_NODE
+            KeyHistogramsPersistable.NodeTreeData thisData = new KeyHistogramsPersistable.NodeTreeData(); //NodeTreeData
+            Class<?> keyType = context.putTree.finalKeyType();
+            Serializer<?> keySerializer = r.serializer(keyType);
+            thisData.read(r, keyType, keySerializer);
+
             Class<?> leafType = (Class<?>) r.next(); //Class nodeType
             HistogramTreeNodeLeaf leaf = context.createLeafPersisted(leafType, key);
             leaf.setSizeAsAllPersisted(size);

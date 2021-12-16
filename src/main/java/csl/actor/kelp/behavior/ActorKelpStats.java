@@ -18,7 +18,9 @@ import java.util.List;
 import java.util.Objects;
 
 public class ActorKelpStats implements Cloneable, Serializable {
+    public static final long serialVersionUID= -1;
     public static abstract class ActorKelpProcessingStats implements Cloneable, Serializable {
+        public static final long serialVersionUID= -1;
 
         public ActorKelpProcessingStats prev;
 

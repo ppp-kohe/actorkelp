@@ -74,14 +74,14 @@ public class ExampleKeyHistogramsPersistableTest {
             KryoBuilder.SerializerPool sp = new KryoBuilder.SerializerPoolDefault(sys);
             KeyHistogramsPersistable kh = new KeyHistogramsPersistable(new Conf(Long.MAX_VALUE), new PersistentFileManager("target/debug-persist",
                     sp, Paths::get, new ActorSystemDefault.SystemLoggerErr()));
-            HistogramTreePersistable tree = kh.create(new ActorKelpFunctions.KeyComparatorDefault<>(), 3);
+            HistogramTreePersistable tree = kh.create(new ActorKelpFunctions.KeyComparatorDefault<>(), 3, testKeyType(), testValueTypes());
 
             KeyHistograms.HistogramLeafList list = new KeyHistograms.HistogramLeafList();
             List<Object> added = listAdd(tree, list, "v", 1000);
 
             checkList(tree, list, added, "list");
             List<Object> vs = new ArrayList<>();
-            list.iterator(tree, null).forEachRemaining(vs::add);
+            list.iterator(tree, 0, null).forEachRemaining(vs::add);
             TestTool.assertEquals("list iter", added, vs);
             checkList(tree, list, added, "list after iterator(tree) ");
 
@@ -93,7 +93,7 @@ public class ExampleKeyHistogramsPersistableTest {
             TestTool.assertEquals("list polled", addedPolled, polled);
             List<Object> addedAfterPolled = added.subList(500, added.size());
             vs = new ArrayList<>();
-            list.iterator(tree, null).forEachRemaining(vs::add);
+            list.iterator(tree, 0, null).forEachRemaining(vs::add);
             TestTool.assertEquals("list polled iter", addedAfterPolled, vs);
 
             checkList(tree, listCopy, added, "list copy after polled");
@@ -120,9 +120,18 @@ public class ExampleKeyHistogramsPersistableTest {
     private List<Object> listPoll(HistogramTree tree, KeyHistograms.HistogramLeafList list, int size) {
         List<Object> added = new ArrayList<>();
         for (int i = 0; i < size; ++i) {
-            added.add(list.poll(tree, null));
+            added.add(list.poll(tree, 0,null));
         }
         return added;
+    }
+
+    public static Class<?> testKeyType() {
+        return String.class;
+    }
+    public static Map<Object,Class<?>> testValueTypes() {
+        HashMap<Object,Class<?>> t = new HashMap<>();
+        t.put(0, String.class);
+        return t;
     }
 
     public void runPersistList() {
@@ -131,7 +140,7 @@ public class ExampleKeyHistogramsPersistableTest {
             KryoBuilder.SerializerPool sp = new KryoBuilder.SerializerPoolDefault(sys);
             KeyHistogramsPersistable kh = new KeyHistogramsPersistable(new Conf(Long.MAX_VALUE), new PersistentFileManager("target/debug-persist",
                     sp, Paths::get, new ActorSystemDefault.SystemLoggerErr()));
-            HistogramTreePersistable tree = kh.create(new ActorKelpFunctions.KeyComparatorDefault<>(), 3);
+            HistogramTreePersistable tree = kh.create(new ActorKelpFunctions.KeyComparatorDefault<>(), 3, testKeyType(), testValueTypes());
 
             KeyHistograms.HistogramLeafList list = new KeyHistograms.HistogramLeafList();
             List<Object> added = listAdd(tree, list, "A", 500);
@@ -215,7 +224,7 @@ public class ExampleKeyHistogramsPersistableTest {
     private void listPersist(HistogramTree tree, KeyHistograms.HistogramLeafList list) {
         PersistentFileManager.PersistentFileWriter writer = tree.getPersistent().createWriterForHead("runPersistList");
         HistogramLeafCellOnStorage.HistogramLeafCellOnStorageWriting w = HistogramLeafCellOnStorage.HistogramLeafCellOnStorageWriting
-                .writeCell(tree, null, list.head, writer);
+                .writeCell(tree, null, 0, list.head, writer);
         writer.close();
         list.replaceRest(list.head, w.cell);
     }
@@ -235,14 +244,14 @@ public class ExampleKeyHistogramsPersistableTest {
                 HistogramLeafCellOnStorage s = (HistogramLeafCellOnStorage) cell;
                 System.err.printf("   %s maxLinkDepth=%d %s%n", s.getSource(), s.getMaxLinkDepth(), s.getCurrentSegment());
             }
-            cell.iterator(tree, null).forEachRemaining(fromCellIter::add);
+            cell.iterator(tree, 0, null).forEachRemaining(fromCellIter::add);
             cell = cell.next;
             ++i;
         }
         TestTool.assertEquals(msg + " values from cellIter", added, fromCellIter);
 
         List<Object> fromListIter = new ArrayList<>();
-        list.iterator(tree, null).forEachRemaining(fromListIter::add);
+        list.iterator(tree, 0, null).forEachRemaining(fromListIter::add);
         TestTool.assertEquals(msg + " values from cellIter", added, fromListIter);
     }
 
@@ -252,7 +261,7 @@ public class ExampleKeyHistogramsPersistableTest {
             KryoBuilder.SerializerPool sp = new KryoBuilder.SerializerPoolDefault(sys);
             KeyHistogramsPersistable kh = new KeyHistogramsPersistable(new Conf(Long.MAX_VALUE), new PersistentFileManager("target/debug-persist",
                     sp, Paths::get, new ActorSystemDefault.SystemLoggerErr()));
-            HistogramTreePersistable tree = kh.create(new ActorKelpFunctions.KeyComparatorDefault<>(), 3);
+            HistogramTreePersistable tree = kh.create(new ActorKelpFunctions.KeyComparatorDefault<>(), 3, testKeyType(), testValueTypes());
 
             KeyHistograms.HistogramPutContextMap ctx = new KeyHistograms.HistogramPutContextMap();
             input(tree, ctx);
@@ -273,7 +282,7 @@ public class ExampleKeyHistogramsPersistableTest {
 
             KeyHistogramsPersistable kh = new KeyHistogramsPersistable(new Conf(Long.MAX_VALUE), new PersistentFileManager("target/debug-persist",
                     sp, Paths::get, new ActorSystemDefault.SystemLoggerErr()));
-            HistogramTreePersistable tree = kh.create(new ActorKelpFunctions.KeyComparatorDefault<>(), 3);
+            HistogramTreePersistable tree = kh.create(new ActorKelpFunctions.KeyComparatorDefault<>(), 3, testKeyType(), testValueTypes());
 
             KeyHistograms.HistogramPutContextMap ctx = new KeyHistograms.HistogramPutContextMap();
             input(tree, ctx);
@@ -292,7 +301,7 @@ public class ExampleKeyHistogramsPersistableTest {
             KryoBuilder.SerializerPool sp = new KryoBuilder.SerializerPoolDefault(sys);
             KeyHistogramsPersistable kh = new KeyHistogramsPersistable(new Conf(1000), new PersistentFileManager("target/debug-persist",
                     sp, Paths::get, new ActorSystemDefault.SystemLoggerErr()));
-            HistogramTreePersistable tree = kh.create(new ActorKelpFunctions.KeyComparatorDefault<>(), 3);
+            HistogramTreePersistable tree = kh.create(new ActorKelpFunctions.KeyComparatorDefault<>(), 3, testKeyType(), testValueTypes());
 
             KeyHistograms.HistogramPutContextMap ctx = new KeyHistograms.HistogramPutContextMap();
             input(tree, ctx);
@@ -309,7 +318,7 @@ public class ExampleKeyHistogramsPersistableTest {
             KryoBuilder.SerializerPool sp = new KryoBuilder.SerializerPoolDefault(sys);
             KeyHistogramsPersistable kh = new KeyHistogramsPersistable(new Conf(1000), new PersistentFileManager("target/debug-persist",
                     sp, Paths::get, new ActorSystemDefault.SystemLoggerErr()));
-            HistogramTreePersistable tree = kh.create(new ActorKelpFunctions.KeyComparatorDefault<>(), 3);
+            HistogramTreePersistable tree = kh.create(new ActorKelpFunctions.KeyComparatorDefault<>(), 3, testKeyType(), testValueTypes());
 
             KeyHistograms.HistogramPutContextMap ctx = new KeyHistograms.HistogramPutContextMap();
             input(tree, ctx);

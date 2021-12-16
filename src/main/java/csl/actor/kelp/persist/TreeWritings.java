@@ -1,5 +1,6 @@
 package csl.actor.kelp.persist;
 
+import com.esotericsoftware.kryo.Serializer;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 import csl.actor.persist.PersistentFileManager;
@@ -126,6 +127,16 @@ public class TreeWritings {
             positionStart = position();
             writeLong(0L); //sibling pointer
             return new PersistentFileManager.PersistentFileReaderSource(pathExpanded, positionStart, manager);
+        }
+
+        @Override
+        public Serializer<?> serializer(Class<?> type) {
+            return serializer.serializer(type);
+        }
+
+        @Override
+        public void write(Object v, Serializer<?> serializer) {
+            this.serializer.write(out, v, serializer);
         }
 
         @Override
@@ -286,6 +297,16 @@ public class TreeWritings {
         @Override
         public int nextVarInt(boolean optimizePositive) {
             return input.readVarInt(optimizePositive);
+        }
+
+        @Override
+        public Serializer<?> serializer(Class<?> type) {
+            return serializer.serializer(type);
+        }
+
+        @Override
+        public Object next(Class<?> type, Serializer<?> serializer) {
+            return this.serializer.read(input, type, serializer);
         }
 
         @Override

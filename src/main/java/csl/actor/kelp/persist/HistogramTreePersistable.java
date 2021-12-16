@@ -1,6 +1,7 @@
 package csl.actor.kelp.persist;
 
 import com.esotericsoftware.kryo.Kryo;
+import com.esotericsoftware.kryo.Serializer;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 import csl.actor.ActorSystem;
@@ -21,6 +22,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
@@ -81,6 +83,13 @@ public class HistogramTreePersistable extends HistogramTree implements KeyHistog
         initConfig(config);
         this.condition = condition;
         initHistory();
+        withTypes(tree.getKeyType(), tree.getValueTypesForPositions());
+    }
+
+    @Override
+    public HistogramTreePersistable withTypes(Class<?> keyType, Map<Object,Class<?>> valueTypesForPositions) {
+        super.withTypes(keyType, valueTypesForPositions);
+        return this;
     }
 
     @Override
@@ -212,7 +221,8 @@ public class HistogramTreePersistable extends HistogramTree implements KeyHistog
 
     @Override
     public HistogramTree createTree(KeyHistograms.HistogramTreeNode root) {
-        return new HistogramTreePersistable(root, comparator, treeLimit, this, persistent, condition);
+        return new HistogramTreePersistable(root, comparator, treeLimit, this, persistent, condition)
+                .withTypes(keyType, valueTypesForPositions);
     }
 
     @Override
@@ -348,6 +358,13 @@ public class HistogramTreePersistable extends HistogramTree implements KeyHistog
                         keepSize, prevPersist,
                         prevNodeSize, prevLeafSize, prevTreeSize));
 
+                try {
+                    s.writer.write(keyType);
+                    s.writer.write(valueTypesForPositions);
+                } catch (Exception ex) {
+                    throw new RuntimeException(ex);
+                }
+
                 persistLargeLeaves(root, s.writer, keepSize);
 
                 s.logAfter(() -> String.format("keep=%,d persisted=(%,d %+,d) nodes=(tblMem:%,d leafMem:%,d) valsMem=%,d",
@@ -368,7 +385,7 @@ public class HistogramTreePersistable extends HistogramTree implements KeyHistog
 
     protected PersistentTreeManager getTreePersistent() {
         if (persistentTree == null) {
-            persistentTree = new PersistentTreeManager(getPersistent(), logger(getPersistent()));
+            persistentTree = new PersistentTreeManager(getKeyType(), getValueTypesForPositions(), getPersistent(), logger(getPersistent()));
         }
         return persistentTree;
     }
@@ -430,7 +447,7 @@ public class HistogramTreePersistable extends HistogramTree implements KeyHistog
         for (KeyHistograms.HistogramLeafCell top : persistedTop) {
             if (top != null) {
                 HistogramLeafCellOnStorage.HistogramLeafCellOnStorageWriting writing = HistogramLeafCellOnStorage.HistogramLeafCellOnStorageWriting
-                        .writeCell(this, leaf, top, w);
+                        .writeCell(this, leaf, li, top, w);
                 this.persistedSize += writing.persistedSize;
                 valuesList.get(li).replaceRest(top, writing.cell);
                 leaf.sizePersisted += writing.persistedSize;
@@ -463,6 +480,12 @@ public class HistogramTreePersistable extends HistogramTree implements KeyHistog
         return ms;
     }
 
+    /**
+     * writing nodes.
+     * at the top, it has keyType, valueTypesForPositions objects.
+     * @param persistingLimit the limit leaves for writing
+     * @param distribution value distribution in the tree
+     */
     public void persistTree(long persistingLimit, float... distribution) {
         //it does not check persistingLimit>0, persistTreeNode might save some sub-trees even under the condition
         writeTree(PersistentTreeManager.TREE_TAG_NODES, session -> {
@@ -474,7 +497,16 @@ public class HistogramTreePersistable extends HistogramTree implements KeyHistog
                     persistingLimit, prevPersisted,
                     prevNodeSize, prevLeafSize, prevTreeSize));
 
-            root = persistTreeNode( root, 0, 1f, distribution, persistingLimit, session.writer, new PersistTreeContext(false));
+            try {
+                session.writer.write(keyType);
+                session.writer.write(valueTypesForPositions);
+            } catch (Exception ex) {
+                throw new RuntimeException(ex);
+            }
+
+            Class<?> kt = finalKeyType();
+            root = persistTreeNode( root, 0, 1f, distribution, persistingLimit, session.writer,
+                    new PersistTreeContext(false, kt, session.writer.serializer(kt)));
 
             session.logAfter(() -> String.format("limit=%,d persisted=(%,d %+,d) nodes=(tblMem:%,d leafMem:%,d) valsMem=%,d dist=%s", persistingLimit,
                     persistedSize, (persistedSize - prevPersisted),
@@ -580,9 +612,21 @@ public class HistogramTreePersistable extends HistogramTree implements KeyHistog
         private final KeyHistogramsPersistable.NodeTreeData data = new KeyHistogramsPersistable.NodeTreeData();
         private KeyHistogramsPersistable.LeafCellHeader[] headers;
         private boolean fullTree;
+        private Class<?> keyType;
+        private Serializer<?> keySerializer;
 
-        public PersistTreeContext(boolean fullTree) {
+        public PersistTreeContext(boolean fullTree, Class<?> keyType, Serializer<?> keySerializer) {
             this.fullTree = fullTree;
+            this.keyType = keyType;
+            this.keySerializer = keySerializer;
+        }
+
+        public Class<?> getKeyType() {
+            return keyType;
+        }
+
+        public Serializer<?> getKeySerializer() {
+            return keySerializer;
         }
 
         public KeyHistogramsPersistable.NodeTreeData treeData() { //shared: the Kryo references are reset for each write: finally reset() in writeClassAndObject()
@@ -613,8 +657,9 @@ public class HistogramTreePersistable extends HistogramTree implements KeyHistog
             if (node.isPersisted()) { //HistogramNodeOnStorage
                 w.writeBegin();
                 HistogramNodeOnStorage nOnS = (HistogramNodeOnStorage) node;
+                w.writeByte(KeyHistogramsPersistable.TAG_SOURCE);
                 w.write(nOnS.getSource()); //PersistentFileReaderSource
-                w.write(nOnS.toData()); //NodeTreeData
+                nOnS.toData().write(w, context.getKeySerializer()); //NodeTreeData
                 w.writeEnd();
                 return node;
 //            } else if (node instanceof HistogramTreeNodeLeafOnStorage) { //loaded LeafOnStorage will be replaced. so here persisted, but the above branch covers it
@@ -627,7 +672,8 @@ public class HistogramTreePersistable extends HistogramTree implements KeyHistog
                 data.keyStart = node.keyStart();
                 data.keyEnd = node.keyEnd();
                 data.size = node.size(); //suppose no on-memory cells
-                w.write(data); //NodeTreeData
+                w.writeByte(KeyHistogramsPersistable.TAG_NODE);
+                data.write(w, context.getKeySerializer()); //NodeTreeData
 
                 if (leaf) {
                     HistogramTreeNodeLeaf leafNode = (HistogramTreeNodeLeaf) node;
@@ -644,7 +690,7 @@ public class HistogramTreePersistable extends HistogramTree implements KeyHistog
                         KeyHistogramsPersistable.LeafCellHeader header = headers[i];
                         header.listPointer = w.position();
                         HistogramLeafCellOnStorage.HistogramLeafCellOnStorageWriting writing = HistogramLeafCellOnStorage.HistogramLeafCellOnStorageWriting
-                                .write(this, leafNode, lists.get(i).head, w);
+                                .write(this, leafNode, i, lists.get(i).head, w);
                         header.size = writing.totalSize;
                         header.maxLinkDepth = writing.maxLinkDepth;
                         this.persistedSize += writing.persistedSize;
@@ -672,6 +718,7 @@ public class HistogramTreePersistable extends HistogramTree implements KeyHistog
                         }
                     }
                     w.writeLong(0L); //long sibling; invalid
+                    w.writeByte(KeyHistogramsPersistable.TAG_END);
                     w.write(PersistentFileManager.FILE_END); //PersistentFileEnd
                     return replaceEnd(node, data, src, w, context.isFullTree());
                 }
@@ -716,8 +763,13 @@ public class HistogramTreePersistable extends HistogramTree implements KeyHistog
         try (PersistentFileManager.PersistentFileReader r = leaf.getSource().createReader()) {
             PersistentFileManager.PersistentFileReaderSource src = w.writeBegin(); //write sibling
             long thisSibling = r.nextLong();
-            KeyHistogramsPersistable.NodeTreeData thisData = (KeyHistogramsPersistable.NodeTreeData) r.next();
-            w.write(thisData);
+            byte tag = r.nextByte(); //TAG_NODE
+            Class<?> kt = finalKeyType();
+            Serializer<?> keySer = r.serializer(kt);
+            KeyHistogramsPersistable.NodeTreeData thisData = new KeyHistogramsPersistable.NodeTreeData();
+            thisData.read(r, kt, keySer);
+            w.writeByte(KeyHistogramsPersistable.TAG_NODE);
+            thisData.write(w, context.getKeySerializer()); //NodeTreeData
 
             Class<?> leafType = (Class<?>) r.next();
             w.write(leafType);
@@ -736,7 +788,7 @@ public class HistogramTreePersistable extends HistogramTree implements KeyHistog
                 header.listPointer = w.position();
 
                 HistogramLeafCellOnStorage.HistogramLeafCellOnStorageWriting writing =
-                        new HistogramLeafCellOnStorage.HistogramLeafCellOnStorageWriting(r, w);
+                        new HistogramLeafCellOnStorage.HistogramLeafCellOnStorageWriting(this, r, w);
 
                 header.size = writing.totalSize;
                 header.maxLinkDepth = writing.maxLinkDepth;
@@ -845,6 +897,7 @@ public class HistogramTreePersistable extends HistogramTree implements KeyHistog
      *     long prevPointer, //-1, ...
      *     long nextPointer,
      *     byte tag, //TREE_TAG_LEAVES=1 | TREE_TAG_NODES=2 | TREE_TAG_FULL_TREE=3
+     *      //if tag is 1 or 2:   Class keyType, Map&lt;Object,Class&gt; valueTypesForPositions,
      *     ...
      * </pre>
      */
@@ -862,8 +915,12 @@ public class HistogramTreePersistable extends HistogramTree implements KeyHistog
         protected SampleTiming logTiming = new SampleTiming(16, 1 << 16);
         protected Duration persistTime = Duration.ZERO;
         protected ActorSystem.SystemLogger logger;
+        protected Class<?> keyType;
+        protected Map<Object,Class<?>> valueTypesForPositions;
 
-        public PersistentTreeManager(PersistentFileManager manager, ActorSystem.SystemLogger logger) {
+        public PersistentTreeManager(Class<?> keyType, Map<Object,Class<?>> valueTypesForPositions, PersistentFileManager manager, ActorSystem.SystemLogger logger) {
+            this.keyType = keyType;
+            this.valueTypesForPositions = valueTypesForPositions;
             this.manager = manager;
             this.logger = logger;
         }
@@ -1019,7 +1076,7 @@ public class HistogramTreePersistable extends HistogramTree implements KeyHistog
      * long treeSize, //the tree (this) is not contains the size. so write here
      * HistogramTreePersistable this, //root is null
      * long nextPointer0, //the flatten sorted entries
-     * ... //entire-leaves (NodeTreeData) or persisted-nodes
+     * ... //entire-leaves tag and NodeTreeData or persisted-nodes
      * long nextPointer1,
      * ...
      * long nextPointer2,
@@ -1048,7 +1105,8 @@ public class HistogramTreePersistable extends HistogramTree implements KeyHistog
                 this.root = null;
                 w.write(this);
 
-                persistTreeTraverse(currentRoot, w, new PersistTreeContext(true));
+                Class<?> kt = finalKeyType();
+                persistTreeTraverse(currentRoot, w, new PersistTreeContext(true, kt, w.serializer(kt)));
 
                 w.writeLong(0L); //long sibling; invalid
                 w.write(PersistentFileManager.FILE_END); //PersistentFileEnd

@@ -152,6 +152,7 @@ public class ActorKelpSubProcess extends ActorKelp<ActorKelpSubProcess> {
          *    </pre>
          */
         KeyValueLine {
+            @SuppressWarnings("rawtype")
             @Override
             public ActorBehaviorBuilder initBehavior(ActorKelpSubProcess self, ActorBehaviorBuilderKelp builder) {
                 return builder

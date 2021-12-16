@@ -28,8 +28,9 @@ public class KeyHistograms {
         return persistent;
     }
 
-    public HistogramTree create(KeyComparator<?> comparator, int treeLimit) {
-        return new HistogramTree(comparator, treeLimit, persistent);
+    public HistogramTree create(KeyComparator<?> comparator, int treeLimit, Class<?> keyType, Map<Object,Class<?>> valueTypes) {
+        return new HistogramTree(comparator, treeLimit, persistent)
+                .withTypes(keyType, valueTypes);
     }
 
     public HistogramTree init(HistogramTree tree) {
@@ -150,7 +151,7 @@ public class KeyHistograms {
          * @param currentLeft recursively summed up sizes of left siblings
          * @return a new left hand side sibling or null
          */
-        HistogramTreeNode split(long halfSize, long currentLeft);
+        HistogramTreeNode split(HistogramTree tree, long halfSize, long currentLeft);
 
         void setParent(HistogramTreeNodeTable node);
         HistogramTreeNodeTable getParent();
@@ -192,6 +193,7 @@ public class KeyHistograms {
         public HistogramNodeLeafMap(Object key, HistogramPutContext context) {
             super(key, context);
         }
+
 
         @Override
         public HistogramNodeLeafMap copy(Map<HistogramTreeNode, HistogramTreeNode> oldToNew) {
@@ -271,7 +273,7 @@ public class KeyHistograms {
                     Map.Entry<Comparable<?>, HistogramLeafList> e = ei.next();
                     HistogramLeafList ev = e.getValue();
                     if (!ev.isEmpty()) {
-                        res[i] = ev.poll(tree, this);
+                        res[i] = ev.poll(tree, i, this);
                         if (res[i] != null) {
                             ++i;
                         }
@@ -402,10 +404,10 @@ public class KeyHistograms {
             return true;
         }
 
-        public Object poll(HistogramTree tree, HistogramTreeNodeLeaf leaf) {
+        public Object poll(HistogramTree tree, Object position, HistogramTreeNodeLeaf leaf) {
             while (head != null) {
                 if (head.isNonEmpty()) {
-                    Object v = head.poll(tree, leaf);
+                    Object v = head.poll(tree, position, leaf);
                     if (!head.isNonEmpty()) {
                         head = head.next;
                         if (head != null) {
@@ -423,12 +425,12 @@ public class KeyHistograms {
             return null;
         }
 
-        public void polls(HistogramTree tree, HistogramTreeNodeLeaf leaf, int consuming, List<Object> target, boolean onMemory) {
+        public void polls(HistogramTree tree, Object position, HistogramTreeNodeLeaf leaf, int consuming, List<Object> target, boolean onMemory) {
             HistogramLeafCell cell = head;
             while (cell != null && consuming > 0) {
                 long remain = onMemory ? cell.sizeOnMemory() : cell.size();
                 while (remain > 0 && consuming > 0) {
-                    target.add(cell.poll(tree, leaf));
+                    target.add(cell.poll(tree, position, leaf));
                     --remain;
                     --consuming;
                 }
@@ -469,12 +471,12 @@ public class KeyHistograms {
             return n;
         }
 
-        public Iterator<Object> iterator(HistogramTree tree, HistogramTreeNodeLeaf leaf) {
+        public Iterator<Object> iterator(HistogramTree tree, Object position, HistogramTreeNodeLeaf leaf) {
             return new Iterator<Object>() {
                 HistogramLeafCell next = head;
                 Iterator<Object> nextIter = (head == null ?
                         Collections.emptyIterator() :
-                        head.iterator(tree, leaf));
+                        head.iterator(tree, position, leaf));
                 @Override
                 public boolean hasNext() {
                     return nextIter.hasNext();
@@ -486,7 +488,7 @@ public class KeyHistograms {
                     if (!nextIter.hasNext()) {
                         next = next.next;
                         if (next != null) {
-                            nextIter = next.iterator(tree, leaf);
+                            nextIter = next.iterator(tree, position, leaf);
                         }
                     }
                     return v;
@@ -583,23 +585,24 @@ public class KeyHistograms {
 //        public Object poll(HistogramTree tree) {
 //            return poll(tree, null);
 //        }
-        public abstract Object poll(HistogramTree tree, HistogramTreeNodeLeaf leaf);
+        public abstract Object poll(HistogramTree tree, Object position, HistogramTreeNodeLeaf leaf);
 
-        public abstract Object pollWithReader(Function<PersistentFileManager.PersistentFileReaderSource, PersistentFileManager.PersistentReader> readerFactory);
+        public abstract Object pollWithReader(HistogramTree tree, Object position, Function<PersistentFileManager.PersistentFileReaderSource, PersistentFileManager.PersistentReader> readerFactory);
 
         /**
          * @param v the appended value
          * @return true if successfully appended
          */
         public abstract boolean offer(Object v);
-        public abstract Iterator<Object> iterator(HistogramTree tree, HistogramTreeNodeLeaf leaf);
+        public abstract Iterator<Object> iterator(HistogramTree tree,
+                                                  Object position, HistogramTreeNodeLeaf leaf);
     }
 
     public static class HistogramLeafCellArray extends HistogramLeafCell implements Cloneable {
         public static final long serialVersionUID = 1L;
         private Object[] values;
         private int head;
-        private int tail; // >=0: [head,...,tail],   <0: [head,...,value.length-1]++[0,...,-tail+1]
+        private int tail; // >=0: [head,...,tail-1],   <0: [head,...,value.length-1]++[0,...,-(tail+1)-1]
 
         public HistogramLeafCellArray() {}
 
@@ -726,7 +729,8 @@ public class KeyHistograms {
             return sizeOnMemory();
         }
 
-        public Object poll(HistogramTree tree, HistogramTreeNodeLeaf leaf) {
+        @Override
+        public Object poll(HistogramTree tree, Object position, HistogramTreeNodeLeaf leaf) {
             if (tail < 0) {
                 int t = -(tail+1);
                 Object v = values[head];
@@ -750,12 +754,26 @@ public class KeyHistograms {
         }
 
         @Override
-        public Object pollWithReader(Function<PersistentFileManager.PersistentFileReaderSource, PersistentFileManager.PersistentReader> readerFactory) {
-            return poll(null, null);
+        public Object pollWithReader(HistogramTree tree, Object position, Function<PersistentFileManager.PersistentFileReaderSource, PersistentFileManager.PersistentReader> readerFactory) {
+            return poll(tree, null, null);
+        }
+
+        public interface Proc {
+            void process(Object[] values, int head, int endExclusive);
+        }
+
+        public void process(Proc task) {
+            int cap = capacity();
+            if (tail < 0) {
+                task.process(values, head, cap);
+                task.process(values, 0, -(tail+1));
+            } else {
+                task.process(values, head, tail);
+            }
         }
 
         @Override
-        public Iterator<Object> iterator(HistogramTree tree, HistogramTreeNodeLeaf leaf) {
+        public Iterator<Object> iterator(HistogramTree tree, Object position, HistogramTreeNodeLeaf leaf) {
             return new Iterator<Object>() {
                 int toCapacityIndex;
                 final int toCapacityEnd;

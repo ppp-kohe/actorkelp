@@ -43,6 +43,27 @@ public class ExampleActorKelpEventually {
         }
     }
 
+    public static final class Tuple {
+        final String key;
+        final int value;
+
+        public Tuple(String key, int value) {
+            this.key = key;
+            this.value = value;
+        }
+
+        public int getValue() {
+            return value;
+        }
+
+        public String getKey() {
+            return key;
+        }
+        public static Tuple entry(String k, int v) {
+            return new Tuple(k, v);
+        }
+    }
+
     public static class MyActor extends ActorKelp<MyActor> {
         @TransferredState(mergeType = MergerOpType.Add)
         public Map<String, Set<Integer>> data = new HashMap<>();
@@ -52,8 +73,9 @@ public class ExampleActorKelpEventually {
 
         @Override
         protected ActorBehaviorBuilder initBehavior(ActorBehaviorBuilderKelp builder) {
-            return builder.matchKey(this.<String,Integer>typeEntry(), Map.Entry::getKey, Map.Entry::getValue)
+            return builder.matchKey(Tuple.class, Tuple::getKey, Tuple::getValue)
                     .eventually()
+                    .keyType(String.class).valueType(Integer.class)
                     .forEachKeyValue(this::receive);
         }
 
@@ -92,9 +114,9 @@ public class ExampleActorKelpEventually {
         @Override
         protected ActorBehaviorBuilder initBehavior(ActorBehaviorBuilderKelp builder) {
             return builder.match(Integer.class, v -> {
-                IntStream.range(0, v).forEach(i -> nextStageTell(Map.entry("v" + i, 1)));
-                IntStream.range(0, v).forEach(i -> nextStageTell(Map.entry("v" + i, 2)));
-                IntStream.range(0, v).forEach(i -> nextStageTell(Map.entry("v" + i, 3)));
+                IntStream.range(0, v).forEach(i -> nextStageTell(Tuple.entry("v" + i, 1)));
+                IntStream.range(0, v).forEach(i -> nextStageTell(Tuple.entry("v" + i, 2)));
+                IntStream.range(0, v).forEach(i -> nextStageTell(Tuple.entry("v" + i, 3)));
             });
         }
     }

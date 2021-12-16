@@ -1,5 +1,6 @@
 package csl.actor.kelp.persist;
 
+import com.esotericsoftware.kryo.Serializer;
 import csl.actor.ActorSystem;
 import csl.actor.kelp.ActorKelpFunctions;
 import csl.actor.kelp.behavior.HistogramTree;
@@ -161,6 +162,8 @@ public class TreeMerger {
         init(topLoader, log);
         TreeWritings.lockWriter();
         try (MergeWriter mergeWriter = new MergeWriter(nextWriterForMerging())) {
+            mergeWriter.writeHeader(tree.getKeyType(), tree.getValueTypesForPositions());
+
             long prevCheckPos = mergeWriter.position();
             while (!currentKeyToLoaders.isEmpty()) {
                 Map.Entry<Object, Queue<KeyHistogramsPersistable.KeyValueLoader>> next = currentKeyToLoaders.firstEntry();
@@ -289,6 +292,9 @@ public class TreeMerger {
 
     /**
      * <pre>
+     *     Class keyType,
+     *     Map valueTypesForPositions,
+     *     int -1,
      *     key1,
      *     listPos1, valueCount, values...., //same listPosN may occur multiple times in same key
      *     listPos1, valueCount, values....,
@@ -297,7 +303,7 @@ public class TreeMerger {
      *     key2,
      *     listPos1, valueCount, values....,
      *     ...
-     *     int -1
+     *     int -2
      *     PersistentFileEnd
      * </pre>
      */
@@ -308,24 +314,49 @@ public class TreeMerger {
 
         long writtenValues;
 
+        Class<?> keyType;
+        Serializer<?> keyTypeSerializer;
+        Map<Object, Class<?>> valueTypesForPositions;
+
         public MergeWriter(PersistentFileManager.PersistentWriter writer) {
             this.writer = writer;
         }
 
+        public void writeHeader(Class<?> keyType, Map<Object,Class<?>> valueTypesForPositions) throws IOException {
+            writer.write(keyType);
+            writer.write(valueTypesForPositions);
+
+            this.keyType = HistogramTree.finalTypeOrNull(keyType);
+            this.keyTypeSerializer = writer.serializer(keyType);
+            this.valueTypesForPositions = valueTypesForPositions;
+        }
+
         public void write(Object key, int listPos, List<Object> buffer) throws IOException {
             if (!Objects.equals(key, lastKey)) {
-                if (lastKey != null) {
-                    writer.writeInt(-1);
+                writer.writeInt(-1);
+                if (keyTypeSerializer == null) {
+                    writer.write(key);
+                } else {
+                    writer.write(key, keyTypeSerializer);
                 }
-                writer.write(key);
                 this.lastKey = key;
             }
             this.lastListPos = listPos;
             writer.writeInt(listPos);
             writer.writeInt(buffer.size());
-            for (Object b : buffer) {
-                writer.write(b);
-                ++writtenValues;
+
+            Class<?> valType = HistogramTree.finalValueTypeOrNull(valueTypesForPositions, listPos);
+            Serializer<?> valSer = writer.serializer(valType);
+            if (valSer == null) {
+                for (Object b : buffer) {
+                    writer.write(b);
+                    ++writtenValues;
+                }
+            } else {
+                for (Object b : buffer) {
+                    writer.write(b, valSer);
+                    ++writtenValues;
+                }
             }
         }
 
@@ -334,8 +365,8 @@ public class TreeMerger {
         }
 
         public long writeEnd() throws IOException {
-            writer.writeInt(-1);
-            writer.write(new PersistentFileManager.PersistentFileEnd());
+            writer.writeInt(-2);
+            writer.write(PersistentFileManager.FILE_END);
             return writer.position();
         }
 
@@ -366,8 +397,26 @@ public class TreeMerger {
         protected int listPosition;
         protected int remaining;
 
+        protected Class<?> keyType;
+        protected Map<Object, Class<?>> valueTypesForPositions;
+
+        protected Serializer<?> keySerializer;
+        protected Class<?> currentValueType;
+        protected Serializer<?> currentValueSerializer;
+
+        @SuppressWarnings("unchecked")
         public MergeLoader(PersistentFileManager.PersistentFileReaderSource source) {
             this.reader = source.createReader();
+
+            keyType = HistogramTree.finalTypeOrNull((Class<?>) reader.next());
+            valueTypesForPositions = (Map<Object, Class<?>>) reader.next();
+            keySerializer = reader.serializer(keyType);
+
+            listPosition = reader.nextInt(); //top -1
+            if (listPosition == -2) { //finish
+                reader.close();
+                reader = null;
+            }
         }
 
         @Override
@@ -378,22 +427,17 @@ public class TreeMerger {
         @Override
         public Object nextKey() {
             if (reader != null && remaining <= 0) {
-                key = reader.next();
-                if (key instanceof PersistentFileManager.PersistentFileEnd) {
-                    reader.close();
-                    reader = null;
-                } else if (key != null) {
-                    loadList();
-                    if (listPosition == -1) {
-                        return nextKey();
-                    }
+                if (keySerializer == null) {
+                    key = reader.next();
+                } else {
+                    key = reader.next(keyType, keySerializer);
+                }
+                loadList();
+                if (listPosition == -1) { //never
+                    return nextKey();
                 }
             }
-            if (key instanceof PersistentFileManager.PersistentFileEnd) {
-                return null;
-            } else {
-                return key;
-            }
+            return key;
         }
 
         @Override
@@ -403,10 +447,17 @@ public class TreeMerger {
 
         private void loadList() {
             listPosition = reader.nextInt();
-            if (listPosition != -1) {
-                remaining = reader.nextInt();
-            } else {
+            if (listPosition == -1) { //nextKey
                 remaining = 0;
+            } else if (listPosition == -2) { //end
+                remaining = 0;
+                reader.close();
+                reader = null;
+                key = null;
+            } else {
+                remaining = reader.nextInt();
+                currentValueType = HistogramTree.finalValueTypeOrNull(valueTypesForPositions, listPosition);
+                currentValueSerializer = reader.serializer(currentValueType);
             }
         }
 
@@ -414,7 +465,12 @@ public class TreeMerger {
         public Object nextValue() {
             if (remaining > 0 && reader != null) {
                 --remaining;
-                Object v = reader.next();
+                Object v;
+                if (currentValueSerializer == null) {
+                    v = reader.next();
+                } else {
+                    v = reader.next(currentValueType, currentValueSerializer);
+                }
                 if (remaining == 0) {
                     loadList();
                 }
