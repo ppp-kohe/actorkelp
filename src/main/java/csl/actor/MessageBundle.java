@@ -57,8 +57,9 @@ public class MessageBundle<DataType> extends Message<List<DataType>> {
     }
 
     public static void processMessageBundle(Actor self, MessageBundle<Object> mb) {
-        mb.getData().forEach(d ->
-                self.processMessage(new MessageBundle.MessageAccepted<>(self, d))); //MessageBundle is already accepted by Dispatcher
+        for (Object d : mb.getData()) {
+            self.processMessage(new MessageBundle.MessageAccepted<>(self, d)); //MessageBundle is already accepted by Dispatcher
+        }
     }
 
     public static class MessageAccepted<T> extends Message<T> {

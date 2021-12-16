@@ -135,8 +135,9 @@ public class ActorRefShuffle implements ActorRef, Serializable, Cloneable, KryoS
     @Override
     public void tellMessage(Message<?> message) {
         if (message instanceof MessageBundle) {
-            ((MessageBundle<?>) message).getData()
-                    .forEach(this::tell);
+            for (Object m : ((MessageBundle<?>) message).getData()) {
+                tell(m);
+            }
         } else if (KelpStage.isMessageBroadcastedImpl(message)) {
             getMemberActors().forEach(a ->
                     a.tellMessage(message));

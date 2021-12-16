@@ -226,7 +226,13 @@ public class TreeMerger {
                 Iterable<Object> vs = reducer.apply(key, buffer);
                 if (vs != buffer) {
                     buffer.clear();
-                    vs.forEach(buffer::add);
+                    if (vs instanceof Collection<?>) {
+                        buffer.addAll((Collection<?>) vs);
+                    } else {
+                        for (Object v : vs) {
+                            buffer.add(v);
+                        }
+                    }
                 }
             }
             if (force || buffer.size() >= prevSize || buffer.size() > bufferMax) { //force or cannot reduce or still large buffer

@@ -372,29 +372,9 @@ public class HistogramLeafCellOnStorage extends KeyHistograms.HistogramLeafCell 
             long remain = next.sizeOnMemory();
             writer.writeVarLong(remain, true);
             if (valueSerializer == null) {
-                next.process(((values, head, endExclusive) -> writeAsArrayData(writer, values, head, endExclusive)));
+                next.write(writer);
             } else {
-                next.process(((values, head, endExclusive) -> writeAsArrayDataWithSerializer(writer, values, head, endExclusive, valueSerializer)));
-            }
-        }
-
-        private void writeAsArrayData(PersistentFileManager.PersistentWriter writer, Object[] values, int head, int endExclusive) {
-            try {
-                for (int i = head; i < endExclusive; ++i) {
-                    writer.write(values[i]);
-                }
-            } catch (Exception ex) {
-                throw new RuntimeException(ex);
-            }
-        }
-
-        private void writeAsArrayDataWithSerializer(PersistentFileManager.PersistentWriter writer, Object[] values, int head, int endExclusive, Serializer<?> valueSerializer) {
-            try {
-                for (int i = head; i < endExclusive; ++i) {
-                    writer.write(values[i], valueSerializer);
-                }
-            } catch (Exception ex) {
-                throw new RuntimeException(ex);
+                next.writeWithSerializer(writer, valueSerializer);
             }
         }
 

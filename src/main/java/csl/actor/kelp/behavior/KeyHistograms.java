@@ -2,12 +2,14 @@ package csl.actor.kelp.behavior;
 
 import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.KryoSerializable;
+import com.esotericsoftware.kryo.Serializer;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 import csl.actor.Actor;
 import csl.actor.kelp.ActorKelpFunctions.KeyComparator;
 import csl.actor.persist.PersistentFileManager;
 
+import java.io.IOException;
 import java.io.Serializable;
 import java.util.*;
 import java.util.function.Function;
@@ -758,17 +760,36 @@ public class KeyHistograms {
             return poll(tree, null, null);
         }
 
-        public interface Proc {
-            void process(Object[] values, int head, int endExclusive);
+        public void write(PersistentFileManager.PersistentWriter writer) throws IOException {
+            if (tail < 0) {
+                int cap = values.length;
+                for (int i = head; i < cap; ++i) {
+                    writer.write(values[i]);
+                }
+                for (int i = 0, e = -(tail+1); i < e; ++i) {
+                    writer.write(values[i]);
+                }
+            } else {
+                for (int i = head; i < tail; ++i) {
+                    writer.write(values[i]);
+                }
+            }
         }
 
-        public void process(Proc task) {
-            int cap = capacity();
+        public void writeWithSerializer(PersistentFileManager.PersistentWriter writer,
+                                        Serializer<?> serializer) throws IOException {
             if (tail < 0) {
-                task.process(values, head, cap);
-                task.process(values, 0, -(tail+1));
+                int cap = values.length;
+                for (int i = head; i < cap; ++i) {
+                    writer.write(values[i], serializer);
+                }
+                for (int i = 0, e = -(tail+1); i < e; ++i) {
+                    writer.write(values[i], serializer);
+                }
             } else {
-                task.process(values, head, tail);
+                for (int i = head; i < tail; ++i) {
+                    writer.write(values[i], serializer);
+                }
             }
         }
 

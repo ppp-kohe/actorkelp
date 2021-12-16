@@ -1127,8 +1127,9 @@ public class HistogramTreePersistable extends HistogramTree implements KeyHistog
         if (node.isPersisted()) {
             persistTreeNodeReplace(node, w, context);
         } else if (node instanceof HistogramTreeNodeTable) {
-            ((HistogramTreeNodeTable) node).getChildren(this)
-                    .forEach(n -> persistTreeTraverse(n, w, context));
+            for (KeyHistograms.HistogramTreeNode n : ((HistogramTreeNodeTable) node).getChildren(this)) {
+                persistTreeTraverse(n, w, context);
+            }
         } else if (node instanceof HistogramTreeNodeLeaf) {
             persistTreeNodeReplace(node, w, context);
         }
