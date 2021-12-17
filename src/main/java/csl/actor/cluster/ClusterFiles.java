@@ -28,9 +28,9 @@ public class ClusterFiles {
         Path appDir = Paths.get(appName);
         String header = unit.getDeploymentConfig().getAddress();
         unit.log("%s deployFiles %s: appDir=%s", appName, header, getTargetPath(appDir).toAbsolutePath());
-        if (Files.exists(appDir)) {
-            throw new RuntimeException("failed creation: " + appDir);
-        }
+//        if (Files.exists(appDir)) {
+//            throw new RuntimeException("failed creation: " + appDir);
+//        }
 
         Path jarDir = appDir.resolve("jars");
         createDirectories(jarDir);
