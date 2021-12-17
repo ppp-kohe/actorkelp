@@ -330,10 +330,9 @@ public class ActorSystemKelp extends ActorSystemRemote implements ActorKelpBuild
 
         @Override
         protected ProcessMessage getProcessMessageSubsequently(Actor target, boolean special, Message<?> msg) {
-            if (special && !(msg instanceof Message.MessageNone) &&
-                    !target.isDelayedMessage(msg)) { //DelayedMessage are not awaited
-                updateAndWait(target);
-            }
+//            if (!special) {
+//                updateAndWait(target, msg);
+//            }
             return super.getProcessMessageSubsequently(target, special, msg);
         }
 
@@ -344,16 +343,18 @@ public class ActorSystemKelp extends ActorSystemRemote implements ActorKelpBuild
                     new ProcessMessageSubsequently(this, target);
         }
 
-        public void updateAndWait(Actor target) {
-            if (updateCount.incrementAndGet() % updateTiming == 0) {
+        public void updateAndWait(Actor target, Message<?> msg) {
+            if (updateTiming > 0 && updateCount.incrementAndGet() % updateTiming == 0 &&
+                    !(msg instanceof Message.MessageNone) && !target.isDelayedMessage(msg)) { //DelayedMessage are not awaited) {
                 Mailbox mb = target.getMailbox();
                 if (mb instanceof MailboxKelp && !isSpecialThread()) {
                     MailboxKelp kmb = (MailboxKelp) mb;
-                    long size = kmb.getMailbox().getPreviousSizeOnMemory();
+                    long size = kmb.getMailbox().getSize();
+                    KelpHistory history = kmb.updateHistory();
                     long pendingLimit = config().systemMailboxPendingMessageSize;
                     double factor = config().systemMailboxWaitMsFactor;
                     await(new ActorAwaitLogHandler(this, kmb, pendingLimit, target),
-                            kmb.getHistory(), size, pendingLimit, factor);
+                            history, size, pendingLimit, factor);
                 }
             }
         }
@@ -606,7 +607,11 @@ public class ActorSystemKelp extends ActorSystemRemote implements ActorKelpBuild
     }
 
     public static int awaitTiming(long pendingSize) {
-        return (int) Math.max(0, Math.min(Integer.MAX_VALUE, pendingSize / 2));
+        if (pendingSize < 0) {
+            return -1;
+        } else {
+            return (int) Math.max(0, Math.min(Integer.MAX_VALUE, pendingSize / 8));
+        }
     }
 
     public static <HistType extends History<HistType>> void await(AwaitLogHandler log, HistType history, long mboxSize,
@@ -666,7 +671,7 @@ public class ActorSystemKelp extends ActorSystemRemote implements ActorKelpBuild
         }
 
         public void update() {
-            if (updateCount.incrementAndGet() % updateTiming == 0) {
+            if (updateTiming > 0 && updateCount.incrementAndGet() % updateTiming == 0) {
                 Instant now = Instant.now();
                 Duration d = Duration.between(previousUpdateTime, now);
                 if (d.compareTo(host.getHostUpdateTime()) > 0) {
@@ -786,7 +791,7 @@ public class ActorSystemKelp extends ActorSystemRemote implements ActorKelpBuild
     }
 
     public static int HISTORY_SIZE = 100;
-    public static int HISTORY_SIZE_OLDEST = 7;
+    public static int HISTORY_SIZE_OLDEST = 4;
 
     public static abstract class History<SelfType extends History<SelfType>> {
         public long size;

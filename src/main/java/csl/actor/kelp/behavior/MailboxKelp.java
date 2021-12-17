@@ -29,7 +29,7 @@ public class MailboxKelp implements Mailbox, Cloneable {
         this.mailbox = mailbox;
         this.treeFactory = treeFactory;
 
-        history = ActorSystemKelp.KelpHistory.create(ActorSystemKelp.HISTORY_SIZE_OLDEST * 2);
+        history = ActorSystemKelp.KelpHistory.create(ActorSystemKelp.HISTORY_SIZE_OLDEST);
     }
 
     public MailboxManageable getMailbox() {
@@ -63,8 +63,12 @@ public class MailboxKelp implements Mailbox, Cloneable {
 
     @Override
     public void offer(Message<?> message) {
-        history = history.set(mailbox.getPreviousSizeOnMemory());
         mailbox.offer(message);
+    }
+
+    public ActorSystemKelp.KelpHistory updateHistory() {
+        history = history.set(mailbox.getSize());
+        return history;
     }
 
     public boolean isMessageControl(Message<?> message) {

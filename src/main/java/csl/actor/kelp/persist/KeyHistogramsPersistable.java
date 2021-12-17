@@ -357,7 +357,7 @@ public class KeyHistogramsPersistable extends KeyHistograms {
     //////////
 
     /**
-     * @param src the offset is saved by {@link HistogramTreePersistable#persistTree()} with {@link HistogramTreePersistable.PersistentTreeManager}
+     * @param src the offset is saved by {@link HistogramTreePersistable#persistTree(HistogramTreePersistable.ReducerBeforePersist)} with {@link HistogramTreePersistable.PersistentTreeManager}
      * @return the loaded tree
      */
     public HistogramTree loadFullTree(PersistentFileManager.PersistentFileReaderSource src) {
