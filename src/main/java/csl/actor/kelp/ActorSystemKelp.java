@@ -330,9 +330,9 @@ public class ActorSystemKelp extends ActorSystemRemote implements ActorKelpBuild
 
         @Override
         protected ProcessMessage getProcessMessageSubsequently(Actor target, boolean special, Message<?> msg) {
-//            if (!special) {
-//                updateAndWait(target, msg);
-//            }
+            if (!special) {
+                updateAndWait(target, msg);
+            }
             return super.getProcessMessageSubsequently(target, special, msg);
         }
 
