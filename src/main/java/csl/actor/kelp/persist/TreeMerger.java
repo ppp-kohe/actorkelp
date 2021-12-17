@@ -333,8 +333,8 @@ public class TreeMerger {
             writer.write(valueTypesForPositions);
 
             this.keyType = HistogramTree.finalTypeOrNull(keyType);
-            this.keyTypeSerializer = writer.serializer(keyType);
-            this.valueTypesForPositions = valueTypesForPositions;
+            this.keyTypeSerializer = writer.serializer(this.keyType); //final
+            this.valueTypesForPositions = HistogramTree.finalValueTypes(valueTypesForPositions);
         }
 
         public void write(Object key, int listPos, List<Object> buffer) throws IOException {
@@ -351,7 +351,7 @@ public class TreeMerger {
             writer.writeInt(listPos);
             writer.writeInt(buffer.size());
 
-            Class<?> valType = HistogramTree.finalValueTypeOrNull(valueTypesForPositions, listPos);
+            Class<?> valType = valueTypesForPositions.get(listPos);
             Serializer<?> valSer = writer.serializer(valType);
             if (valSer == null) {
                 for (Object b : buffer) {

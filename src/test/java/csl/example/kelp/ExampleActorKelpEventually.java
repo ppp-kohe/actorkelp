@@ -18,7 +18,11 @@ import java.util.stream.IntStream;
 public class ExampleActorKelpEventually {
     public static void main(String[] args) throws Exception {
         new ExampleActorKelpEventually().run();
+        serializerFlag = true;
+        new ExampleActorKelpEventually().run();
     }
+
+    static boolean serializerFlag = false;
 
     public void run() throws Exception {
         ConfigKelp conf = new ConfigKelp();
@@ -73,9 +77,13 @@ public class ExampleActorKelpEventually {
 
         @Override
         protected ActorBehaviorBuilder initBehavior(ActorBehaviorBuilderKelp builder) {
-            return builder.matchKey(Tuple.class, Tuple::getKey, Tuple::getValue)
-                    .eventually()
-                    .keyType(String.class).valueType(Integer.class)
+            var b = builder.matchKey(Tuple.class, Tuple::getKey, Tuple::getValue)
+                    .eventually();
+            if (serializerFlag) {
+                b = b
+                        .keyType(String.class).valueType(Integer.class);
+            }
+            return b
                     .forEachKeyValue(this::receive);
         }
 

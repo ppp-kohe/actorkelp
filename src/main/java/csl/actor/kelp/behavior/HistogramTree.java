@@ -92,16 +92,27 @@ public class HistogramTree implements Serializable, KryoSerializable, Cloneable 
         }
     }
 
+    public static Map<Object,Class<?>> finalValueTypes(Map<Object,Class<?>> valueTypesForPositions) {
+        if (valueTypesForPositions != null) {
+            HashMap<Object, Class<?>> map = new HashMap<>(valueTypesForPositions.size());
+            valueTypesForPositions.forEach((k, v) -> {
+                Class<?> t = finalTypeOrNull(v);
+                if (t != null) {
+                    map.put(k, t);
+                }
+            });
+            return map;
+        } else {
+            return Collections.emptyMap();
+        }
+    }
+
     public HistogramTree withTypes(Class<?> keyType, Map<Object,Class<?>> valueTypesForPositions) {
         this.keyType = keyType;
         this.valueTypesForPositions = valueTypesForPositions;
+
         this.keyTypeFinal = finalTypeOrNull(keyType);
-        if (valueTypesForPositions != null) {
-            HashMap<Object, Class<?>> map = new HashMap<>(valueTypesForPositions.size());
-            valueTypesForPositions.forEach((k,v) ->
-                    map.put(k, finalTypeOrNull(v)));
-            this.valueTypesForPositionsFinal = map;
-        }
+        this.valueTypesForPositionsFinal = finalValueTypes(valueTypesForPositions);
         return this;
     }
 
