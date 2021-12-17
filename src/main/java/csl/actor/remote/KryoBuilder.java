@@ -14,10 +14,7 @@ import com.esotericsoftware.kryo.util.Pool;
 import csl.actor.*;
 import csl.actor.persist.MailboxPersistableReplacement;
 import csl.actor.persist.PersistentFileManager;
-import csl.actor.util.ConfigBase;
-import csl.actor.util.FileSplitter;
-import csl.actor.util.ResponsiveCalls;
-import csl.actor.util.Staging;
+import csl.actor.util.*;
 import org.objenesis.instantiator.basic.ObjectStreamClassInstantiator;
 import org.objenesis.strategy.StdInstantiatorStrategy;
 
@@ -435,6 +432,7 @@ public class KryoBuilder {
                 FileSplitter.FileSplit.class,
                 ResponsiveCalls.DeadLetterException.class,
                 Staging.ActorRefCombined.class,
+                ObjectsList.class,
 
                 //persist
                 MailboxPersistableReplacement.MessageOnStorage.class,

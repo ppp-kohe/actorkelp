@@ -211,15 +211,6 @@ public class ActorKelpStats implements Cloneable, Serializable {
 
         public ActorKelpStageEndStats() {}
 
-        public ActorKelpStageEndStats(TreeMerger m) {
-            mergeLoop = m.getLoadLoopCount();
-            mergingLoaders = m.getTotalMergedLoaders();
-            mergingReadKeys = m.getTotalKeys();
-            mergingReadValues = m.getTotalValues();
-            mergingMergedValues = m.getTotalMergedValues();
-            mergedBytes = m.getTotalWriteBytes();
-        }
-
         public ActorKelpStageEndStats copy(long keys, long values) {
             try {
                 ActorKelpStageEndStats s = (ActorKelpStageEndStats) super.clone();

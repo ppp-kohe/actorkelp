@@ -3,8 +3,11 @@ package csl.actor.kelp.persist;
 import com.esotericsoftware.kryo.Serializer;
 import csl.actor.ActorSystem;
 import csl.actor.kelp.ActorKelpFunctions;
+import csl.actor.kelp.behavior.ActorKelpStats;
 import csl.actor.kelp.behavior.HistogramTree;
+import csl.actor.kelp.persist.KeyHistogramsPersistable.KeyValueLoader;
 import csl.actor.persist.PersistentFileManager;
+import csl.actor.util.ObjectsList;
 import csl.actor.util.SampleTiming;
 
 import java.io.Closeable;
@@ -20,7 +23,7 @@ public class TreeMerger {
     protected PersistentFileManager manager;
     protected HistogramTree tree;
 
-    protected TreeMap<Object, Queue<KeyHistogramsPersistable.KeyValueLoader>> currentKeyToLoaders;
+    protected TreeMap<Object, LoaderQueue> currentKeyToLoaders;
     protected KeyHistogramsPersistable.FullTreeLoader remainingLoader;
 
     protected int bufferMax = 500_000;
@@ -37,12 +40,7 @@ public class TreeMerger {
 
     public static boolean logMerge = System.getProperty("csl.actor.persist.merge", "true").equals("true");
 
-    protected AtomicInteger loadLoopCount = new AtomicInteger();
-    protected AtomicLong totalKeys = new AtomicLong();
-    protected AtomicLong totalValues = new AtomicLong();
-    protected AtomicLong totalMergedValues = new AtomicLong();
-    protected AtomicLong totalWriteBytes = new AtomicLong();
-    protected AtomicInteger totalMergedLoaders = new AtomicInteger();
+    protected ActorKelpStats.ActorKelpStageEndStats stats = new ActorKelpStats.ActorKelpStageEndStats();
 
     protected SampleTiming logTimingLoop = new SampleTiming(4, 1024);
     protected SampleTiming logTiming = new SampleTiming(1 << 20, 1 << 30);
@@ -75,6 +73,10 @@ public class TreeMerger {
     public TreeMerger withLoaderMax(int loaderMax) {
         this.loaderMax = loaderMax;
         return this;
+    }
+
+    public ActorKelpStats.ActorKelpStageEndStats getStats() {
+        return stats;
     }
 
     protected String logHeader() {
@@ -136,8 +138,8 @@ public class TreeMerger {
             loader = loader.copyForPreviousOrNull();
         }
         remainingLoader = loader;
-        loadLoopCount.incrementAndGet();
-        totalMergedLoaders.set(currentKeyToLoaders.size());
+        stats.mergeLoop++;
+        stats.mergingLoaders = currentKeyToLoaders.size();
         if (log) {
             logger.log(logMerge, KeyHistogramsPersistable.logPersistColor, "%s timing=%,d init %,d loaders%s",
                     logHeader(), logTimingLoop.getLast(), currentKeyToLoaders.size(),
@@ -165,29 +167,34 @@ public class TreeMerger {
             mergeWriter.writeHeader(tree.getKeyType(), tree.getValueTypesForPositions());
 
             long prevCheckPos = mergeWriter.position();
+            List<List<Object>> buffers = new ArrayList<>(4);
+            long keys = stats.mergingReadKeys;
             while (!currentKeyToLoaders.isEmpty()) {
-                Map.Entry<Object, Queue<KeyHistogramsPersistable.KeyValueLoader>> next = currentKeyToLoaders.firstEntry();
-                KeyHistogramsPersistable.KeyValueLoader loader;
+                Map.Entry<Object, LoaderQueue> next = currentKeyToLoaders.firstEntry();
+                KeyValueLoader loader;
 
                 Object key = next.getKey();
-                List<List<Object>> buffers = new ArrayList<>();
+                bufferClear(buffers);
 
-                totalKeys.incrementAndGet();
+                keys++;
+                long values =  stats.mergingReadValues;
                 while ((loader = next.getValue().poll()) != null) {
                     int listPos = loader.currentListPosition();
                     List<Object> buffer = bufferGet(buffers, listPos);
                     Object val = loader.nextValue();
                     while (val != null) {
-                        totalValues.incrementAndGet();
+                        values++;
                         if (logTiming.next()) {
-                            totalMergedValues.addAndGet(mergeWriter.getWrittenValues());
-                            totalWriteBytes.addAndGet(mergeWriter.position() - prevCheckPos);
+                            stats.mergingReadKeys = keys;
+                            stats.mergingReadValues = values;
+                            stats.mergingMergedValues += mergeWriter.takeWrittenValues();
+                            stats.mergedBytes += mergeWriter.position() - prevCheckPos;
                             prevCheckPos = mergeWriter.position();
                             logger.log(logMerge, KeyHistogramsPersistable.logPersistColor,
                                     "%s timing=%,d merging %s read=(key:%,d values:%,d) merged=(values:%,d size=%s)",
                                     logHeader(), logTiming.getLast(),
-                                    Duration.between(start, Instant.now()), totalKeys.get(), totalValues.get(), totalMergedValues.get(),
-                                    PersistentConditionActor.bytesString(totalWriteBytes.get()));
+                                    Duration.between(start, Instant.now()), stats.mergingReadKeys, values, stats.mergingReadValues,
+                                    PersistentConditionActor.bytesString(stats.mergedBytes));
                         }
                         buffer.add(val);
                         bufferWrite(key, listPos, buffer, false, mergeWriter);
@@ -195,6 +202,7 @@ public class TreeMerger {
                     }
                     putNextKeyToLoader(loader);
                 }
+                stats.mergingReadValues = values;
                 int listPos = 0;
                 for (List<Object> buffer : buffers) {
                     bufferWrite(key, listPos, buffer, true, mergeWriter);
@@ -204,15 +212,16 @@ public class TreeMerger {
                 currentKeyToLoaders.remove(key); //delete the entry
             }
             lastLength = mergeWriter.writeEnd();
-            totalMergedValues.addAndGet(mergeWriter.getWrittenValues());
-            totalWriteBytes.addAndGet(mergeWriter.position() - prevCheckPos);
+            stats.mergingReadKeys = keys;
+            stats.mergingMergedValues += mergeWriter.takeWrittenValues();
+            stats.mergedBytes += mergeWriter.position() - prevCheckPos;
         } finally {
             TreeWritings.unlockWriter();
             if (log) {
                 logger.log(logMerge, KeyHistogramsPersistable.logPersistColor,
                         "%s timing=%,d merged %s read=(key:%,d values:%,d) merged=(values:%,d size=%s %s)",
                         logHeader(), logTimingLoop.getLast(),
-                        Duration.between(start, Instant.now()), totalKeys.get(), totalValues.get(), totalMergedValues.get(),
+                        Duration.between(start, Instant.now()), stats.mergingReadKeys, stats.mergingReadValues, stats.mergingMergedValues,
                         PersistentConditionActor.bytesString(lastLength),
                         lastSource);
             }
@@ -235,7 +244,8 @@ public class TreeMerger {
                     }
                 }
             }
-            if (force || buffer.size() >= prevSize || buffer.size() > bufferMax) { //force or cannot reduce or still large buffer
+            if (!buffer.isEmpty() &&
+                    (force || buffer.size() >= prevSize || buffer.size() > bufferMax)) { //force or cannot reduce or still large buffer
                 mergeWriter.write(key, listPos, buffer);
                 buffer.clear();
             }
@@ -259,15 +269,15 @@ public class TreeMerger {
         }
     }
 
-    protected void putNextKeyToLoader(KeyHistogramsPersistable.KeyValueLoader loader) throws IOException {
+    protected void putNextKeyToLoader(KeyValueLoader loader) throws IOException {
         Object k = loader.nextKey();
         if (k != null) {
-            currentKeyToLoaders.computeIfAbsent(k, _k -> new LinkedBlockingQueue<>())
+            currentKeyToLoaders.computeIfAbsent(k, _k -> new LoaderQueue())
                     .offer(loader);
         }
     }
 
-    protected void putNextKeyToLoaderWithProcessedFile(KeyHistogramsPersistable.KeyValueLoader loader) throws IOException {
+    protected void putNextKeyToLoaderWithProcessedFile(KeyValueLoader loader) throws IOException {
         putNextKeyToLoader(loader);
         ++mergedLoaders;
         PersistentFileManager.PersistentFileReaderSource source = loader.getSource();
@@ -276,24 +286,71 @@ public class TreeMerger {
         }
     }
 
-    public int getLoadLoopCount() {
-        return loadLoopCount.get();
-    }
-    public long getTotalKeys() {
-        return totalKeys.get();
-    }
-    public long getTotalValues() {
-        return totalValues.get();
-    }
-    public long getTotalMergedValues() {
-        return totalMergedValues.get();
-    }
-    public long getTotalWriteBytes() {
-        return totalWriteBytes.get();
+    public static final class LoaderQueueEntry {
+        public final KeyValueLoader value;
+        LoaderQueueEntry next;
+
+        public LoaderQueueEntry(KeyValueLoader value) {
+            this.value = value;
+        }
     }
 
-    public int getTotalMergedLoaders() {
-        return totalMergedLoaders.get();
+    public static final class LoaderQueue {
+        private LoaderQueueEntry head;
+        private LoaderQueueEntry tail;
+        public void offer(KeyValueLoader loader) {
+            LoaderQueueEntry e = new LoaderQueueEntry(loader);
+            if (head == null) {
+                head = e;
+            } else {
+                tail.next = e;
+            }
+            tail = e;
+        }
+        public KeyValueLoader poll() {
+            if (head == null) {
+                return null;
+            } else {
+                KeyValueLoader v = head.value;
+                head = head.next;
+                return v;
+            }
+        }
+        /*
+        private KeyValueLoader[] buffer = new KeyValueLoader[10];
+        private int head;
+        private int tail; //exclusive
+
+        public void offer(KeyValueLoader loader) {
+            KeyValueLoader[] buffer = this.buffer;
+            int bufferLength = buffer.length;
+            int tail = this.tail;
+            if (tail >= bufferLength) {
+                int head = this.head;
+                if (head > bufferLength / 2) {
+                    int len = tail - head;
+                    System.arraycopy(buffer, head, buffer, 0, len); //move remaining to top
+                    Arrays.fill(buffer, len, bufferLength, null);
+                    this.head = 0;
+                    this.tail = len;
+                } else {
+                    this.buffer = Arrays.copyOf(buffer, bufferLength * 2);
+                }
+            }
+            this.buffer[this.tail++] = loader;
+        }
+
+        public KeyValueLoader poll() {
+            int head = this.head;
+            if (head >= tail) {
+                return null;
+            } else {
+                KeyValueLoader v = this.buffer[head];
+                this.buffer[head] = null;
+                this.head++;
+                return v;
+            }
+        }*/
     }
 
     /**
@@ -366,8 +423,10 @@ public class TreeMerger {
             }
         }
 
-        public long getWrittenValues() {
-            return writtenValues;
+        public long takeWrittenValues() {
+            long v = writtenValues;
+            writtenValues = 0;
+            return v;
         }
 
         public long writeEnd() throws IOException {
@@ -386,9 +445,15 @@ public class TreeMerger {
         }
     }
 
+    private void bufferClear(List<List<Object>> values) {
+        for (List<Object> vs : values) {
+            vs.clear();
+        }
+    }
+
     private List<Object> bufferGet(List<List<Object>> values, int listPos) {
         while (listPos >= values.size()) {
-            values.add(new ArrayList<>());
+            values.add(new ObjectsList(100));
         }
         return values.get(listPos);
     }
@@ -396,7 +461,7 @@ public class TreeMerger {
     /**
      * loader saved by {@link MergeWriter}
      */
-    public static class MergeLoader implements KeyHistogramsPersistable.KeyValueLoader {
+    public static class MergeLoader implements KeyValueLoader {
         protected PersistentFileManager.PersistentFileReaderSource source;
         protected PersistentFileManager.PersistentFileReader reader;
         protected Object key;

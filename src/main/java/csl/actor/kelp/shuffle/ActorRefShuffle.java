@@ -324,11 +324,15 @@ public class ActorRefShuffle implements ActorRef, Serializable, Cloneable, KryoS
                     }
                     buffer.add(data);
                     if (buffer.size() >= bufferSize) { //suppose the ref is not shared
-                        actor.tellMessage(new MessageBundle<>(actor, Arrays.asList(buffer.toArray())));
-                        buffer.clear();
+                        flushSend();
                     }
                 }
             }
+        }
+
+        private void flushSend() {
+            actor.tellMessage(new MessageBundle<>(actor, Arrays.asList(buffer.toArray())));
+            buffer.clear();
         }
 
         @Override
@@ -339,8 +343,7 @@ public class ActorRefShuffle implements ActorRef, Serializable, Cloneable, KryoS
         @Override
         public void flush() {
             if (buffer != null && !buffer.isEmpty()) {
-                actor.tellMessage(new MessageBundle<>(actor, buffer));
-                buffer.clear();
+                flushSend();
             }
         }
 

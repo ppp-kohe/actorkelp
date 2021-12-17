@@ -11,9 +11,9 @@ import csl.actor.kelp.persist.KeyHistogramsPersistable;
 import csl.actor.kelp.persist.PersistentConditionActor;
 import csl.actor.kelp.persist.TreeMerger;
 import csl.actor.persist.PersistentFileManager;
+import csl.actor.util.ObjectsList;
 
 import java.util.*;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.Function;
@@ -895,7 +895,7 @@ public class ActorBehaviorKelp {
 
         public boolean consume(int requiredSize, HistogramTree tree, Object position, BiConsumer<Object,List<Object>> handler) {
             if (completed(requiredSize)) {
-                List<Object> vs = new ArrayList<>(requiredSize);
+                ObjectsList vs = new ObjectsList(requiredSize);
                 for (int i = 0; i < requiredSize; ++i) {
                     vs.add(values.poll(tree, position, this));
                 }
@@ -1172,11 +1172,7 @@ public class ActorBehaviorKelp {
             Object[] vs = new Object[consuming];
             try {
                 int len = values.polls(tree, position, this, consuming, vs, onMemory);
-                if (len < consuming) {
-                    return Arrays.asList(Arrays.copyOf(vs, len));
-                } else {
-                    return Arrays.asList(vs);
-                }
+                return new ObjectsList(vs, len);
             } catch (Exception ex) {
                 throw new RuntimeException(String.format("size=%,d, consuming=%,d required=%,d", size(), consuming, requiredSize), ex);
             }
@@ -1393,8 +1389,7 @@ public class ActorBehaviorKelp {
                                 .withReducer((KeyValuesReducer<Object, Object>) keyValuesReducer)
                                 .withLoaderMax(getLoaderMax(self));
                         if (self instanceof ActorKelp<?>) {
-                            ((ActorKelp<?>) self).setStageEndStats(() ->
-                                    new ActorKelpStats.ActorKelpStageEndStats(merger));
+                            ((ActorKelp<?>) self).setStageEndStats(merger::getStats);
                         }
                         //the tree data will be cleared by full-tree-persist
                         PersistentFileManager.PersistentFileReaderSource source = merger.mergeAllFromTree(this);
@@ -1403,18 +1398,11 @@ public class ActorBehaviorKelp {
                             TreeMerger.MergeLoader mergeLoader = new TreeMerger.MergeLoader(source);
                             HistogramNodeLeafListReducibleForStageEnd tmpList = null;
                             Object key;
-                            ActorKelpStats.ActorKelpStageEndStats baseStats = new ActorKelpStats.ActorKelpStageEndStats(merger);
-                            AtomicLong readKeys = new AtomicLong(baseStats.mergingReadKeys);
-                            AtomicLong readValues = new AtomicLong(baseStats.mergingReadValues);
-
-                            if (self instanceof ActorKelp<?>) {
-                                ((ActorKelp<?>) self).setStageEndStats(() ->
-                                        baseStats.copy(readKeys.get(), readValues.get()));
-                            }
+                            ActorKelpStats.ActorKelpStageEndStats stats = merger.getStats();
 
                             while ((key = mergeLoader.nextKey()) != null) {
                                 if (tmpList != null && !key.equals(tmpList.keyStart())) {
-                                    readKeys.incrementAndGet();
+                                    stats.mergingReadKeys++;
                                     processStageEndList(reducedSize, tmpList);
                                     tmpList = (HistogramNodeLeafListReducibleForStageEnd) createLeaf(key);
                                 } else if (tmpList == null) {
@@ -1422,14 +1410,16 @@ public class ActorBehaviorKelp {
                                 }
                                 putPosition = mergeLoader.currentListPosition();
                                 Object value;
+                                long putCount = 0;
                                 while ((value = mergeLoader.nextValue()) != null) {
                                     putValue = value;
-                                    readValues.incrementAndGet();
                                     tmpList.putValueForStageEnd(this); //TODO memory overflow
+                                    ++putCount;
                                 }
+                                stats.mergingReadValues += putCount;
                             }
                             if (tmpList != null) {
-                                readKeys.incrementAndGet();
+                                stats.mergingReadKeys++;
                                 processStageEndList(reducedSize, tmpList);
                             }
                         }
