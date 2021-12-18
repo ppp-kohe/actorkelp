@@ -36,6 +36,13 @@ public class ActorRefShuffleSingle<ActorType extends Actor> implements KelpStage
         this.name = Staging.stageNameArray(Staging.name(ref), "single");
     }
 
+    public ActorRefShuffleSingle(ActorSystem system, Class<ActorType> actorType, ActorRefShuffle.ShuffleEntry entry) {
+        this.system = system;
+        this.actorType = actorType;
+        this.entry = entry;
+        this.name = Staging.stageNameArray(Staging.name(entry.getActor()), "single");
+    }
+
     @Override
     public Class<ActorType> getActorType() {
         return actorType;

@@ -9,6 +9,7 @@ public class ConfigKelp extends ConfigBase {
     public static ConfigKelp CONFIG_DEFAULT = new ConfigKelp();
     public String mailboxPath = "%l/%a/mbox";
     public String outputDir = "%a";
+    public String checkpointPath = ""; //if empty, use mailboxPath
     public int mailboxOnMemorySize = 1_000;
     public int logColor = 33;
     public boolean logSplit = true;

@@ -14,10 +14,7 @@ import csl.actor.kelp.behavior.KeyHistograms;
 import csl.actor.kelp.behavior.MailboxKelp;
 import csl.actor.kelp.persist.KeyHistogramsPersistable;
 import csl.actor.kelp.persist.PersistentConditionActor;
-import csl.actor.kelp.shuffle.ActorKelpStateSharing;
-import csl.actor.kelp.shuffle.ActorRefCombinedKelp;
-import csl.actor.kelp.shuffle.ActorRefShuffle;
-import csl.actor.kelp.shuffle.ActorRefShuffleKelp;
+import csl.actor.kelp.shuffle.*;
 import csl.actor.persist.MailboxManageable;
 import csl.actor.persist.MailboxPersistableIncoming;
 import csl.actor.persist.PersistentConditionMailbox;
@@ -141,10 +138,21 @@ public class ActorKelpInternalFactory {
                                                                                                  List<KelpDispatcher.SelectiveDispatcher> extractorsAndDispatchers, int bufferSize) {
         return new ActorRefShuffleKelp<>(
                 self.getSystem(),
-                ActorRefShuffle.createDispatchUnits(entries, bufferSize),
+                self.isCheckpoint() ?
+                        ShuffleEntryAsCheckpoint.createDispatchUnits(entries, bufferSize, self.getSystem(), self.getCheckpointPath(), self.getName()) :
+                        ActorRefShuffle.createDispatchUnits(entries, bufferSize),
                 extractorsAndDispatchers,
                 bufferSize, (Class<SelfType>) self.getClass(), self.getConfig(), self.getName());
     }
+
+    @SuppressWarnings("unchecked")
+    public <SelfType extends ActorKelp<SelfType>> ActorRefShuffleSingle<SelfType> createShuffleSingle(ActorKelp<?> self, ActorRef ref, int bufferSize) {
+        return self.isCheckpoint() ?
+            new ActorRefShuffleSingle<>(self.getSystem(), (Class<SelfType>) self.getClass(),
+                    new ShuffleEntryAsCheckpoint(ref, bufferSize, 0, self.getSystem(), self.getCheckpointPath(), self.getName())) :
+            new ActorRefShuffleSingle<>(self.getSystem(), (Class<SelfType>) self.getClass(), ref, bufferSize);
+    }
+
 
     public KelpDispatcher.DispatchUnit createShuffleEntryEmpty(ActorKelp<?> self) {
         return new ActorKelp.SelfDispatcher(self);

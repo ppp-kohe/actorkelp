@@ -31,7 +31,7 @@ public class ExampleActorKelpEventually {
         try (ActorSystemKelp.ActorSystemDefaultForKelp k = ActorSystemKelp.createLocal(conf)) {
             InputGen in = new InputGen(k, "in", conf);
             MyActor a = new MyActor(k, "test", conf);
-            var as = in.connects(a);
+            var as = in.connects(a.asCheckpoint());
 
             int n = 100;
             in.stageGraph()

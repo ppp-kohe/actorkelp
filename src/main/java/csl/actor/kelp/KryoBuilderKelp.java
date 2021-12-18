@@ -108,6 +108,8 @@ public class KryoBuilderKelp extends KryoBuilderCluster {
                 ActorRefCombinedKelp.class,
                 ActorRefCombinedKelp.DispatchUnitMember.class,
 
+                ShuffleEntryAsCheckpoint.class,
+
                 //behavior
                 ActorBehaviorKelp.HistogramNodeLeaf1.class,
                 ActorBehaviorKelp.HistogramNodeLeaf2.class,

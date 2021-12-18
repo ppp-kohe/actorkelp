@@ -44,6 +44,8 @@ public class KelpStageSerializer extends ActorRefRemoteSerializer<ActorRef> {
                     ((KelpStage<?>) r).setSystemBySerializer(getRemoteSystem());
                 } else if (r instanceof ActorRefShuffle) {
                     ((ActorRefShuffle) r).setSystemBySerializer(getRemoteSystem());
+                } else if (r instanceof ShuffleEntryAsCheckpoint) {
+                    ((ShuffleEntryAsCheckpoint) r).setSystemBySerializer(getRemoteSystem());
                 }
             }
             return r;

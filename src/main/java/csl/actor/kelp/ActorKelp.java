@@ -44,6 +44,7 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
     protected Set<ActorRef> shuffleOriginals = new HashSet<>(1);
     protected List<KelpDispatcher.SelectiveDispatcher> selectiveDispatchers = null; //initialized by initBehavior
     protected List<KelpDispatcher.DispatchUnit> selfDispatcher;
+    protected boolean checkpoint;
     
     protected volatile ActorKelpStats.ActorKelpProcessingStats processingStats;
     protected ActorKelpStats.ActorKelpMessageHandledStats handledStats = new ActorKelpStats.ActorKelpMessageHandledStats();
@@ -140,6 +141,20 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
     public SelfType asUnit() {
         setUnit(true);
         return (SelfType) this;
+    }
+
+    @SuppressWarnings("unchecked")
+    public SelfType asCheckpoint() {
+        setCheckpoint(true);
+        return (SelfType) this;
+    }
+
+    public void setCheckpoint(boolean checkpoint) {
+        this.checkpoint = checkpoint;
+    }
+
+    public boolean isCheckpoint() {
+        return checkpoint;
     }
 
     public ActorSystem.SystemLogger getLogger() {
@@ -272,6 +287,14 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
     }
     public double getMemoryPersistThreshold() {
         return config.memoryPersistThreshold;
+    }
+
+    public String getCheckpointPath() {
+        if (config.checkpointPath.isEmpty()) {
+            return config.mailboxPath;
+        } else {
+            return config.checkpointPath;
+        }
     }
 
     ///////////////
@@ -801,13 +824,17 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
 
     @SuppressWarnings("unchecked")
     public ActorRefShuffleKelp<SelfType> shuffle(int bufferSizeMax) {
+        return shuffle(getShufflePartitions(), bufferSizeMax);
+    }
+
+    @SuppressWarnings("unchecked")
+    public ActorRefShuffleKelp<SelfType> shuffle(int partitions, int bufferSizeMax) {
         ActorKelpStateSharing.StateSharingActor sharingActor = internalFactory.createSharingActor(this);
         shuffleOriginals.add(sharingActor);
 
         ActorKelpSerializable<SelfType> serialized = toSerializable(false);
         ActorPlacement place = getPlacement();
 
-        int partitions = getShufflePartitions();
         int bufferSize = Math.min(bufferSizeMax, getShuffleBufferSize());
 
         List<ActorRef> entries =
@@ -821,8 +848,8 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
                 getSystem(),
                 entries,
                 getSelectiveDispatchers().stream()
-                    .map(KelpDispatcher.SelectiveDispatcher::copy)
-                    .collect(Collectors.toList()),
+                        .map(KelpDispatcher.SelectiveDispatcher::copy)
+                        .collect(Collectors.toList()),
                 bufferSize,
                 (Class<SelfType>) getClass());
     }
@@ -833,7 +860,21 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
         return internalFactory.createShuffle(this, entries, extractorsAndDispatchers, bufferSize);
     }
 
+    public ActorRefShuffleSingle<SelfType> shuffleSingle() {
+        return shuffleSingle(Integer.MAX_VALUE);
+    }
 
+    public ActorRefShuffleSingle<SelfType> shuffleSingle(int bufferSizeMax) {
+        ActorKelpSerializable<SelfType> serialized = toSerializable(false);
+        ActorPlacement place = getPlacement();
+        int bufferSize = Math.min(bufferSizeMax, getShuffleBufferSize());
+        ActorRef ref = createAndPlaceShuffle(place, serialized, 0);
+        return internalFactory.createShuffleSingle(this, ref, bufferSize);
+    }
+
+    public ActorRefShuffleSingle<SelfType> toShuffleSingle(int bufferSize) {
+        return internalFactory.createShuffleSingle(this, this, bufferSize);
+    }
 
     @Deprecated
     @SuppressWarnings("unchecked")
@@ -929,7 +970,12 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
         if (ref instanceof ActorRefShuffleKelp<?>) {
             return (KelpStage<NextActorType>) ref;
         } else {
-            return new ActorRefShuffleSingle<>(system, actorType, ref, bufferSizeForSingle);
+            if (ref instanceof ActorKelp<?>) {
+                ActorKelp<?> self = (ActorKelp<?>) ref;
+                return (KelpStage<NextActorType>) self.toShuffleSingle(bufferSizeForSingle);
+            } else {
+                return new ActorRefShuffleSingle<>(system, actorType, ref, bufferSizeForSingle);
+            }
         }
     }
 
