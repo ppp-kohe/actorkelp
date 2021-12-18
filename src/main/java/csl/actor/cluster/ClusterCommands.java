@@ -682,6 +682,8 @@ public class ClusterCommands<AppConfType extends ConfigBase> {
             int len = indentLength(indent);
             if (this.indentLevel < len) {
                 return super.parse(indent, tokens);
+            } else if (match(tokens, CommandTokenType.LineEnd)) {
+                return this;
             } else {
                 tokens.addFirst(indent);
                 return parent.parse(tokens);
