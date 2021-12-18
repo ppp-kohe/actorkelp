@@ -878,9 +878,17 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
     }
 
     /**
-     * called when creation as a shuffle member
+     * called when creation as a shuffle member.
      */
-    public void initRestoreShuffle() { }
+    public void initRestoreUnit() { }
+
+    /**
+     * called when creation as a shuffle member.
+     * by default, it calls {@link #initRestoreUnit()}
+     */
+    public void initRestoreShuffle() {
+        initRestoreUnit();
+    }
 
     /**
      * called when creation as a merged state
@@ -888,13 +896,17 @@ public abstract class ActorKelp<SelfType extends ActorKelp<SelfType>> extends Ac
     public void initRestoreMerge() { }
 
     /**
-     * called when creation as a placement process
+     * called when creation as a placement process.
+     * by default, it calls {@link #initRestoreUnit()}
      */
-    public void initRestorePlace() { }
-
-    public void initRestorePlaceLocal() {
-        initRestorePlace();
+    public void initRestorePlace() {
+        initRestoreUnit();
     }
+
+    /**
+     * called when the actor is placed at same process.
+     */
+    public void initRestorePlaceLocal() { }
 
     @Override
     public <NextActorType extends Actor> KelpStage<NextActorType> connects(Class<NextActorType> actorType, ActorRef ref) {

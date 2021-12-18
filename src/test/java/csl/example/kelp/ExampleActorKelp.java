@@ -79,7 +79,7 @@ public class ExampleActorKelp {
         }
 
         @Override
-        public void initRestoreShuffle() {
+        public void initRestoreUnit() {
             record = new LinkedHashMap<>();
             count = 0;
         }
